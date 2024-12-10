@@ -65,6 +65,28 @@
         let usuarioActual = '';
         let rolActual = '';
         let baseDatos = JSON.parse(localStorage.getItem('baseDatos')) || [];
+                function mostrarBarraCargando() {
+            var loadingBar = document.getElementById("loading-bar");
+            var loadingBarFill = document.getElementById("loading-bar-fill");
+            loadingBar.style.display = "block";
+            loadingBarFill.style.width = "0%";
+            var width = 0;
+            var interval = setInterval(function() {
+                if (width >= 100) {
+                    clearInterval(interval);
+                    loadingBar.style.display = "none";
+                } else {
+                    width++;
+                    loadingBarFill.style.width = width + "%";
+                    loadingBarFill.innerText = width + "%";
+                }
+            }, 20); // Ajusta la velocidad de carga aquí
+        }
+
+        function guardarEnBaseDeDatos(datos) {
+            baseDatos.push(datos);
+            localStorage.setItem('baseDatos', JSON.stringify(baseDatos));
+        }
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
@@ -87,31 +109,6 @@
             baseDatos.push(datos);
             localStorage.setItem('baseDatos', JSON.stringify(baseDatos));
         }
-        function enviarFormulario() {
-            mostrarBarraCargando();
-
-            let fechaHora = new Date().toLocaleString();
-            let codigoUnico = 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-
-            let datos = {
-                fecha_hora: fechaHora,
-                codigo_unico: codigoUnico,
-                cliente: document.querySelector('input[name="cliente"]').value,
-                referencia: document.querySelector('textarea[name="referencia"]').value, // Cambiado a textarea
-                asesor: usuarioActual, // Usar el usuario registrado como asesor
-                num_pares: document.querySelector('input[name="num_pares"]').value,
-                valor_total: document.querySelector('input[name="valor_total"]').value,
-                observaciones: document.querySelector('textarea[name="observaciones"]').value,
-                saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                abonos: document.querySelector('input[name="abonos"]').value
-            };
-
-            guardarEnBaseDeDatos(datos);
-            mostrarRegistros();
-
-            document.querySelector('form').reset(); // Limpiar el formulario
-            return false; // Evitar recargar la página
-        }
         function mostrarRegistros() {
             let registrosHTML = '';
             baseDatos.forEach((registro, index) => {
@@ -128,6 +125,8 @@
                         <p>Observaciones: ${registro.observaciones}</p>
                         <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
                         <p>Abonos: ${registro.abonos}</p>
+                        <button onclick="modificarRegistro(${index})">Modificar</button>
+                        <button onclick="eliminarRegistro(${index})">Eliminar</button>
                         <hr>
                     </div>`;
                 }
@@ -140,6 +139,42 @@
             } else {
                 document.getElementById('exportar').classList.add('hidden');
             }
+        }
+        function eliminarRegistro(index) {
+            if (confirm('¿Estás seguro de que deseas eliminar este registro?')) {
+                baseDatos.splice(index, 1); // Eliminar el registro del array
+                localStorage.setItem('baseDatos', JSON.stringify(baseDatos)); // Actualizar el almacenamiento local
+                mostrarRegistros(); // Actualizar la visualización
+                alert('Registro eliminado con éxito.');
+            }
+        }
+        function modificarRegistro(index) {
+            let registro = baseDatos[index];
+            let nuevoCliente = prompt('Modificar Nombre del Cliente:', registro.cliente);
+            if (nuevoCliente !== null) registro.cliente = nuevoCliente;
+
+            let nuevaReferencia = prompt('Modificar Referencia, Color, Talla, Precio:', registro.referencia);
+            if (nuevaReferencia !== null) registro.referencia = nuevaReferencia;
+
+            let nuevoNumPares = prompt('Modificar Número de Pares:', registro.num_pares);
+            if (nuevoNumPares !== null) registro.num_pares = nuevoNumPares;
+
+            let nuevoValorTotal = prompt('Modificar Valor Total del Pedido:', registro.valor_total);
+            if (nuevoValorTotal !== null) registro.valor_total = nuevoValorTotal;
+
+            let nuevasObservaciones = prompt('Modificar Observaciones:', registro.observaciones);
+            if (nuevasObservaciones !== null) registro.observaciones = nuevasObservaciones;
+
+            let nuevoSaldoAFavor = prompt('Modificar Saldo a Favor:', registro.saldo_a_favor);
+            if (nuevoSaldoAFavor !== null) registro.saldo_a_favor = nuevoSaldoAFavor;
+
+            let nuevosAbonos = prompt('Modificar Abonos:', registro.abonos);
+            if (nuevosAbonos !== null) registro.abonos = nuevosAbonos;
+
+            // Guardar cambios en el almacenamiento local
+            localStorage.setItem('baseDatos', JSON.stringify(baseDatos));
+            mostrarRegistros(); // Actualizar la visualización
+            alert('Registro modificado con éxito.');
         }
         function registrarUsuario() {
             let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
@@ -159,7 +194,6 @@
             document.getElementById('registro').classList.add('hidden');
             document.getElementById('login').classList.remove('hidden');
         }
-
         function iniciarSesion() {
             let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
             let usuario = document.getElementById('login_usuario').value;
@@ -177,7 +211,6 @@
                 alert('Usuario o contraseña incorrectos.');
             }
         }
-
         function mostrarRegistro() {
             document.getElementById('login').classList.add('hidden');
             document.getElementById('registro').classList.remove('hidden');
@@ -274,7 +307,6 @@
                 </div>
                 <input type="submit" value="Agregar">
             </form>
-
             <!-- Barra de carga -->
             <div id="loading-bar">
                 <div id="loading-bar-fill">0%</div>
