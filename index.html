@@ -1,120 +1,40 @@
-<!DOCTYPE html>
-<html>
 <head>
-    <title>Base de Datos con Autenticación</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f9f9f9;
-            color: #333;
-        }
-        h1, h2 {
-            color: #4CAF50;
-            text-align: center;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #fff;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-            font-weight: bold;
-        }
-        .form-field {
-            margin-bottom: 15px;
-        }
-        input, textarea, select {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        input[type="submit"], button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 15px;
-            margin: 10px 0;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        input[type="submit"]:hover, button:hover {
-            background-color: #45a049;
-        }
-        .hidden {
-            display: none;
-        }
-        .record {
-            background-color: #f2f2f2;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-bottom: 10px;
-        }
-    </style>
-    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script> <!-- Biblioteca SheetJS -->
+    <!-- Firebase Configuration -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database.js"></script>
     <script>
-        let usuarioActual = '';
-        let rolActual = '';
-        let baseDatos = JSON.parse(localStorage.getItem('baseDatos')) || [];
-                function mostrarBarraCargando() {
-            var loadingBar = document.getElementById("loading-bar");
-            var loadingBarFill = document.getElementById("loading-bar-fill");
-            loadingBar.style.display = "block";
-            loadingBarFill.style.width = "0%";
-            var width = 0;
-            var interval = setInterval(function() {
-                if (width >= 100) {
-                    clearInterval(interval);
-                    loadingBar.style.display = "none";
-                } else {
-                    width++;
-                    loadingBarFill.style.width = width + "%";
-                    loadingBarFill.innerText = width + "%";
-                }
-            }, 20); // Ajusta la velocidad de carga aquí
-        }
-
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
+            authDomain: "lazapateria-ce24f.firebaseapp.com",
+            projectId: "lazapateria-ce24f",
+            storageBucket: "lazapateria-ce24f.firebasestorage.app",
+            messagingSenderId: "642571845821",
+            appId: "1:642571845821:web:45858a0abc0df728fd77d4",
+            measurementId: "G-6JCF33H0K1"
+        };
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+    </script>
+</head>
         function guardarEnBaseDeDatos(datos) {
-            baseDatos.push(datos);
-            localStorage.setItem('baseDatos', JSON.stringify(baseDatos));
-        }
-        function mostrarBarraCargando() {
-            var loadingBar = document.getElementById("loading-bar");
-            var loadingBarFill = document.getElementById("loading-bar-fill");
-            loadingBar.style.display = "block";
-            loadingBarFill.style.width = "0%";
-            var width = 0;
-            var interval = setInterval(function() {
-                if (width >= 100) {
-                    clearInterval(interval);
-                    loadingBar.style.display = "none";
+            const registrosRef = firebase.database().ref('registros');
+            registrosRef.push(datos, function(error) {
+                if (error) {
+                    console.error('Error al guardar el registro:', error);
                 } else {
-                    width++;
-                    loadingBarFill.style.width = width + "%";
-                    loadingBarFill.innerText = width + "%";
+                    console.log('Registro guardado exitosamente.');
                 }
-            }, 20); // Ajusta la velocidad de carga aquí
-        }
-
-        function guardarEnBaseDeDatos(datos) {
-            baseDatos.push(datos);
-            localStorage.setItem('baseDatos', JSON.stringify(baseDatos));
+            });
         }
         function mostrarRegistros() {
-            let registrosHTML = '';
-            baseDatos.forEach((registro, index) => {
-                if (registro.asesor === usuarioActual || rolActual === 'Administrador') {
+            const registrosRef = firebase.database().ref('registros');
+            registrosRef.on('value', function(snapshot) {
+                let registrosHTML = '';
+                snapshot.forEach(function(childSnapshot) {
+                    let registro = childSnapshot.val();
                     registrosHTML += `<div class="record">
-                        <p><strong>Registro ${index + 1}</strong></p>
+                        <p><strong>Registro</strong></p>
                         <p>Fecha y Hora: ${registro.fecha_hora}</p>
                         <p>Código Único: ${registro.codigo_unico}</p>
                         <p>Cliente: ${registro.cliente}</p>
@@ -125,198 +45,158 @@
                         <p>Observaciones: ${registro.observaciones}</p>
                         <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
                         <p>Abonos: ${registro.abonos}</p>
-                        <button onclick="modificarRegistro(${index})">Modificar</button>
-                        <button onclick="eliminarRegistro(${index})">Eliminar</button>
+                        <button onclick="modificarRegistro('${childSnapshot.key}')">Modificar</button>
+                        <button onclick="eliminarRegistro('${childSnapshot.key}')">Eliminar</button>
                         <hr>
                     </div>`;
+                });
+                document.getElementById('registros').innerHTML = registrosHTML;
+
+                // Mostrar el botón de exportar a Excel si el usuario es administrador
+                if (rolActual === 'Administrador') {
+                    document.getElementById('exportar').classList.remove('hidden');
+                } else {
+                    document.getElementById('exportar').classList.add('hidden');
                 }
             });
-            document.getElementById('registros').innerHTML = registrosHTML;
-
-            // Mostrar el botón de exportar a Excel si el usuario es administrador
-            if (rolActual === 'Administrador') {
-                document.getElementById('exportar').classList.remove('hidden');
-            } else {
-                document.getElementById('exportar').classList.add('hidden');
-            }
         }
-        function eliminarRegistro(index) {
+        function eliminarRegistro(key) {
             if (confirm('¿Estás seguro de que deseas eliminar este registro?')) {
-                baseDatos.splice(index, 1); // Eliminar el registro del array
-                localStorage.setItem('baseDatos', JSON.stringify(baseDatos)); // Actualizar el almacenamiento local
-                mostrarRegistros(); // Actualizar la visualización
-                alert('Registro eliminado con éxito.');
+                const registroRef = firebase.database().ref('registros/' + key);
+                registroRef.remove()
+                .then(function() {
+                    alert('Registro eliminado con éxito.');
+                })
+                .catch(function(error) {
+                    console.error('Error al eliminar el registro:', error);
+                });
             }
         }
-        function modificarRegistro(index) {
-            let registro = baseDatos[index];
-            let nuevoCliente = prompt('Modificar Nombre del Cliente:', registro.cliente);
-            if (nuevoCliente !== null) registro.cliente = nuevoCliente;
+        function modificarRegistro(key) {
+            const registroRef = firebase.database().ref('registros/' + key);
+            registroRef.once('value', function(snapshot) {
+                let registro = snapshot.val();
+                let nuevoCliente = prompt('Modificar Nombre del Cliente:', registro.cliente);
+                if (nuevoCliente !== null) registro.cliente = nuevoCliente;
 
-            let nuevaReferencia = prompt('Modificar Referencia, Color, Talla, Precio:', registro.referencia);
-            if (nuevaReferencia !== null) registro.referencia = nuevaReferencia;
+                let nuevaReferencia = prompt('Modificar Referencia, Color, Talla, Precio:', registro.referencia);
+                if (nuevaReferencia !== null) registro.referencia = nuevaReferencia;
 
-            let nuevoNumPares = prompt('Modificar Número de Pares:', registro.num_pares);
-            if (nuevoNumPares !== null) registro.num_pares = nuevoNumPares;
+                let nuevoNumPares = prompt('Modificar Número de Pares:', registro.num_pares);
+                if (nuevoNumPares !== null) registro.num_pares = nuevoNumPares;
 
-            let nuevoValorTotal = prompt('Modificar Valor Total del Pedido:', registro.valor_total);
-            if (nuevoValorTotal !== null) registro.valor_total = nuevoValorTotal;
+                let nuevoValorTotal = prompt('Modificar Valor Total del Pedido:', registro.valor_total);
+                if (nuevoValorTotal !== null) registro.valor_total = nuevoValorTotal;
 
-            let nuevasObservaciones = prompt('Modificar Observaciones:', registro.observaciones);
-            if (nuevasObservaciones !== null) registro.observaciones = nuevasObservaciones;
+                let nuevasObservaciones = prompt('Modificar Observaciones:', registro.observaciones);
+                if (nuevasObservaciones !== null) registro.observaciones = nuevasObservaciones;
 
-            let nuevoSaldoAFavor = prompt('Modificar Saldo a Favor:', registro.saldo_a_favor);
-            if (nuevoSaldoAFavor !== null) registro.saldo_a_favor = nuevoSaldoAFavor;
+                let nuevoSaldoAFavor = prompt('Modificar Saldo a Favor:', registro.saldo_a_favor);
+                if (nuevoSaldoAFavor !== null) registro.saldo_a_favor = nuevoSaldoAFavor;
 
-            let nuevosAbonos = prompt('Modificar Abonos:', registro.abonos);
-            if (nuevosAbonos !== null) registro.abonos = nuevosAbonos;
+                let nuevosAbonos = prompt('Modificar Abonos:', registro.abonos);
+                if (nuevosAbonos !== null) registro.abonos = nuevosAbonos;
 
-            // Guardar cambios en el almacenamiento local
-            localStorage.setItem('baseDatos', JSON.stringify(baseDatos));
-            mostrarRegistros(); // Actualizar la visualización
-            alert('Registro modificado con éxito.');
+                registroRef.update(registro, function(error) {
+                    if (error) {
+                        console.error('Error al modificar el registro:', error);
+                    } else {
+                        alert('Registro modificado con éxito.');
+                    }
+                });
+            });
+        }
+        function iniciarSesion() {
+            let usuariosRef = firebase.database().ref('usuarios');
+            let usuario = document.getElementById('login_usuario').value;
+            let contrasena = document.getElementById('login_contrasena').value;
+
+            usuariosRef.orderByChild('usuario').equalTo(usuario).once('value', function(snapshot) {
+                if (snapshot.exists()) {
+                    snapshot.forEach(function(childSnapshot) {
+                        let usuarioEncontrado = childSnapshot.val();
+                        if (usuarioEncontrado.contrasena === contrasena) {
+                            usuarioActual = usuario; // Guardar el usuario actual
+                            rolActual = usuarioEncontrado.rol; // Guardar el rol del usuario actual
+                            localStorage.setItem('usuarioActual', usuarioActual); // Guardar en localStorage
+                            localStorage.setItem('rolActual', rolActual); // Guardar en localStorage
+                            document.getElementById('login').classList.add('hidden');
+                            document.getElementById('formulario').classList.remove('hidden');
+                            document.querySelector('input[name="asesor"]').value = usuarioActual; // Asignar usuario como asesor
+                            mostrarRegistros();
+                        } else {
+                            alert('Contraseña incorrecta.');
+                        }
+                    });
+                } else {
+                    alert('Usuario no encontrado.');
+                }
+            });
         }
         function registrarUsuario() {
-            let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+            let usuariosRef = firebase.database().ref('usuarios');
             let usuario = document.getElementById('reg_usuario').value;
             let contrasena = document.getElementById('reg_contrasena').value;
             let rol = document.getElementById('reg_rol').value; // Capturar el rol del usuario
 
-            if (usuarios.some(u => u.usuario === usuario)) {
-                alert('El usuario ya existe.');
-                return;
-            }
-
-            usuarios.push({ usuario: usuario, contrasena: contrasena, rol: rol });
-            localStorage.setItem('usuarios', JSON.stringify(usuarios));
-            alert('Usuario registrado con éxito. Ahora puedes iniciar sesión.');
-            document.getElementById('registro-form').reset();
-            document.getElementById('registro').classList.add('hidden');
-            document.getElementById('login').classList.remove('hidden');
+            usuariosRef.orderByChild('usuario').equalTo(usuario).once('value', function(snapshot) {
+                if (snapshot.exists()) {
+                    alert('El usuario ya existe.');
+                } else {
+                    let nuevoUsuarioRef = usuariosRef.push();
+                    nuevoUsuarioRef.set({
+                        usuario: usuario,
+                        contrasena: contrasena,
+                        rol: rol
+                    }, function(error) {
+                        if (error) {
+                            console.error('Error al registrar el usuario:', error);
+                        } else {
+                            alert('Usuario registrado con éxito. Ahora puedes iniciar sesión.');
+                            document.getElementById('registro-form').reset();
+                            document.getElementById('registro').classList.add('hidden');
+                            document.getElementById('login').classList.remove('hidden');
+                        }
+                    });
+                }
+            });
         }
-        function iniciarSesion() {
-            let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-            let usuario = document.getElementById('login_usuario').value;
-            let contrasena = document.getElementById('login_contrasena').value;
+        window.onload = function() {
+            // Restaurar la sesión del usuario si existe
+            usuarioActual = localStorage.getItem('usuarioActual') || '';
+            rolActual = localStorage.getItem('rolActual') || '';
 
-            let usuarioEncontrado = usuarios.find(u => u.usuario === usuario && u.contrasena === contrasena);
-            if (usuarioEncontrado) {
-                usuarioActual = usuario; // Guardar el usuario actual
-                rolActual = usuarioEncontrado.rol; // Guardar el rol del usuario actual
+            if (usuarioActual && rolActual) {
                 document.getElementById('login').classList.add('hidden');
                 document.getElementById('formulario').classList.remove('hidden');
                 document.querySelector('input[name="asesor"]').value = usuarioActual; // Asignar usuario como asesor
                 mostrarRegistros();
             } else {
-                alert('Usuario o contraseña incorrectos.');
+                document.getElementById('login').classList.remove('hidden');
             }
         }
-        function mostrarRegistro() {
-            document.getElementById('login').classList.add('hidden');
-            document.getElementById('registro').classList.remove('hidden');
+        function enviarFormulario() {
+            mostrarBarraCargando();
+
+            let fechaHora = new Date().toLocaleString();
+            let codigoUnico = 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+
+            let datos = {
+                fecha_hora: fechaHora,
+                codigo_unico: codigoUnico,
+                cliente: document.querySelector('input[name="cliente"]').value,
+                referencia: document.querySelector('textarea[name="referencia"]').value,
+                asesor: usuarioActual, // Usar el usuario registrado como asesor
+                num_pares: document.querySelector('input[name="num_pares"]').value,
+                valor_total: document.querySelector('input[name="valor_total"]').value,
+                observaciones: document.querySelector('textarea[name="observaciones"]').value,
+                saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
+                abonos: document.querySelector('input[name="abonos"]').value
+            };
+
+            guardarEnBaseDeDatos(datos);
+            mostrarRegistros();
+
+            document.querySelector('form').reset(); // Limpiar el formulario
+            return false; // Evitar recargar la página
         }
-
-        function exportarAExcel() {
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.json_to_sheet(baseDatos, {
-                header: ["fecha_hora", "codigo_unico", "cliente", "referencia", "asesor", "num_pares", "valor_total", "observaciones", "saldo_a_favor", "abonos"]
-            });
-
-            XLSX.utils.book_append_sheet(wb, ws, "Registros");
-            XLSX.writeFile(wb, "registros.xlsx");
-        }
-
-        window.onload = function() {
-            document.getElementById('login').classList.remove('hidden');
-        }
-    </script>
-</head>
-<body>
-    <div class="container">
-        <h1>Base de Datos con Autenticación</h1>
-        <div id="login" class="hidden">
-            <h2>Iniciar Sesión</h2>
-            <form onsubmit="iniciarSesion(); return false;">
-                <div class="form-field">
-                    <label>Usuario:</label>
-                    <input type="text" id="login_usuario" required>
-                </div>
-                <div class="form-field">
-                    <label>Contraseña:</label>
-                    <input type="password" id="login_contrasena" required>
-                </div>
-                <input type="submit" value="Iniciar Sesión">
-                <button type="button" onclick="mostrarRegistro()">Registrar</button>
-            </form>
-        </div>
-        <div id="registro" class="hidden">
-            <h2>Registrar Usuario</h2>
-            <form id="registro-form" onsubmit="registrarUsuario(); return false;">
-                <div class="form-field">
-                    <label>Usuario:</label>
-                    <input type="text" id="reg_usuario" required>
-                </div>
-                <div class="form-field">
-                    <label>Contraseña:</label>
-                    <input type="password" id="reg_contrasena" required>
-                </div>
-                <div class="form-field">
-                    <label>Rol:</label>
-                    <select id="reg_rol" required>
-                        <option value="Operario">Operario</option>
-                        <option value="Administrador">Administrador</option>
-                    </select>
-                </div>
-                <input type="submit" value="Registrar">
-            </form>
-        </div>
-        <div id="formulario" class="hidden">
-            <h2>Agregar Registro</h2>
-            <form onsubmit="return enviarFormulario();">
-                <div class="form-field">
-                    <label>Nombre del Cliente:</label>
-                    <input type="text" name="cliente" required>
-                </div>
-                <div class="form-field">
-                    <label>Referencia, Color, Talla, Precio:</label>
-                    <textarea name="referencia" rows="4" required></textarea> <!-- Cambiado a textarea -->
-                </div>
-                <div class="form-field">
-                    <label>Nombre del Asesor:</label>
-                    <input type="text" name="asesor" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Número de Pares:</label>
-                    <input type="number" name="num_pares" required>
-                </div>
-                <div class="form-field">
-                    <label>Valor Total del Pedido:</label>
-                    <input type="number" name="valor_total" required>
-                </div>
-                <div class="form-field">
-                    <label>Observaciones:</label>
-                    <textarea name="observaciones"></textarea>
-                </div>
-                <div class="form-field">
-                    <label>Saldo a Favor:</label>
-                    <input type="number" name="saldo_a_favor" required>
-                </div>
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <input type="number" name="abonos" required>
-                </div>
-                <input type="submit" value="Agregar">
-            </form>
-            <!-- Barra de carga -->
-            <div id="loading-bar">
-                <div id="loading-bar-fill">0%</div>
-            </div>
-
-            <h2>Registros</h2>
-            <button id="exportar" class="hidden" onclick="exportarAExcel()">Exportar a Excel</button>
-            <div id="registros"></div>
-        </div>
-    </div>
-</body>
-</html>
-
