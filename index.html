@@ -60,11 +60,25 @@
             margin-bottom: 10px;
         }
     </style>
-    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script> <!-- Biblioteca SheetJS -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database.js"></script>
     <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
+            authDomain: "lazapateria-ce24f.firebaseapp.com",
+            projectId: "lazapateria-ce24f",
+            storageBucket: "lazapateria-ce24f.firebasestorage.app",
+            messagingSenderId: "642571845821",
+            appId: "1:642571845821:web:45858a0abc0df728fd77d4",
+            measurementId: "G-6JCF33H0K1"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
         let usuarioActual = '';
         let rolActual = '';
-        let baseDatos = JSON.parse(localStorage.getItem('baseDatos')) || [];
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
@@ -82,9 +96,16 @@
                 }
             }, 20); // Ajusta la velocidad de carga aquí
         }
+
         function guardarEnBaseDeDatos(datos) {
-            baseDatos.push(datos);
-            localStorage.setItem('baseDatos', JSON.stringify(baseDatos));
+            const registrosRef = firebase.database().ref('registros');
+            registrosRef.push(datos, function(error) {
+                if (error) {
+                    console.error('Error al guardar el registro:', error);
+                } else {
+                    console.log('Registro guardado exitosamente.');
+                }
+            });
         }
 
         function enviarFormulario() {
@@ -113,11 +134,14 @@
             return false; // Evitar recargar la página
         }
         function mostrarRegistros() {
-            let registrosHTML = '';
-            baseDatos.forEach((registro, index) => {
-                if (registro.asesor === usuarioActual || rolActual === 'Administrador') {
+            const registrosRef = firebase.database().ref('registros');
+            registrosRef.on('value', function(snapshot) {
+                let registrosHTML = '';
+                snapshot.forEach(function(childSnapshot) {
+                    let registro = childSnapshot.val();
+                    let registroKey = childSnapshot.key;
                     registrosHTML += `<div class="record">
-                        <p><strong>Registro ${index + 1}</strong></p>
+                        <p><strong>Registro</strong></p>
                         <p>Fecha y Hora: ${registro.fecha_hora}</p>
                         <p>Código Único: ${registro.codigo_unico}</p>
                         <p>Cliente: ${registro.cliente}</p>
@@ -130,60 +154,79 @@
                         <p>Abonos: ${registro.abonos}</p>`;
                     if (rolActual === 'Administrador') {
                         registrosHTML += `
-                        <button onclick="modificarRegistro(${index})">Modificar</button>
-                        <button onclick="eliminarRegistro(${index})">Eliminar</button>`;
+                        <button onclick="modificarRegistro('${registroKey}')">Modificar</button>
+                        <button onclick="eliminarRegistro('${registroKey}')">Eliminar</button>`;
                     }
                     registrosHTML += `<hr>
                     </div>`;
+                });
+                document.getElementById('registros').innerHTML = registrosHTML;
+
+                // Mostrar el botón de exportar a Excel si el usuario es administrador
+                if (rolActual === 'Administrador') {
+                    document.getElementById('exportar').classList.remove('hidden');
+                } else {
+                    document.getElementById('exportar').classList.add('hidden');
                 }
             });
-            document.getElementById('registros').innerHTML = registrosHTML;
-
-            // Mostrar el botón de exportar a Excel si el usuario es administrador
-            if (rolActual === 'Administrador') {
-                document.getElementById('exportar').classList.remove('hidden');
-            } else {
-                document.getElementById('exportar').classList.add('hidden');
-            }
         }
 
         function registrarUsuario() {
-            let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+            let usuariosRef = firebase.database().ref('usuarios');
             let usuario = document.getElementById('reg_usuario').value;
             let contrasena = document.getElementById('reg_contrasena').value;
-            let rol = document.getElementById('reg_rol').value; // Capturar el rol del usuario
+            let rol = document.getElementById('reg_rol').value;
 
-            if (usuarios.some(u => u.usuario === usuario)) {
-                alert('El usuario ya existe.');
-                return;
-            }
-
-            usuarios.push({ usuario: usuario, contrasena: contrasena, rol: rol });
-            localStorage.setItem('usuarios', JSON.stringify(usuarios));
-            alert('Usuario registrado con éxito. Ahora puedes iniciar sesión.');
-            document.getElementById('registro-form').reset();
-            document.getElementById('registro').classList.add('hidden');
-            document.getElementById('login').classList.remove('hidden');
+            usuariosRef.orderByChild('usuario').equalTo(usuario).once('value', function(snapshot) {
+                if (snapshot.exists()) {
+                    alert('El usuario ya existe.');
+                } else {
+                    let nuevoUsuarioRef = usuariosRef.push();
+                    nuevoUsuarioRef.set({
+                        usuario: usuario,
+                        contrasena: contrasena,
+                        rol: rol
+                    }, function(error) {
+                        if (error) {
+                            console.error('Error al registrar el usuario:', error);
+                        } else {
+                            alert('Usuario registrado con éxito. Ahora puedes iniciar sesión.');
+                            document.getElementById('registro-form').reset();
+                            document.getElementById('registro').classList.add('hidden');
+                            document.getElementById('login').classList.remove('hidden');
+                        }
+                    });
+                }
+            });
         }
 
         function iniciarSesion() {
-            let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+            let usuariosRef = firebase.database().ref('usuarios');
             let usuario = document.getElementById('login_usuario').value;
             let contrasena = document.getElementById('login_contrasena').value;
 
-            let usuarioEncontrado = usuarios.find(u => u.usuario === usuario && u.contrasena === contrasena);
-            if (usuarioEncontrado) {
-                usuarioActual = usuario; // Guardar el usuario actual
-                rolActual = usuarioEncontrado.rol; // Guardar el rol del usuario actual
-                document.getElementById('login').classList.add('hidden');
-                document.getElementById('formulario').classList.remove('hidden');
-                document.querySelector('input[name="asesor"]').value = usuarioActual; // Asignar usuario como asesor
-                mostrarRegistros();
-            } else {
-                alert('Usuario o contraseña incorrectos.');
-            }
+            usuariosRef.orderByChild('usuario').equalTo(usuario).once('value', function(snapshot) {
+                if (snapshot.exists()) {
+                    snapshot.forEach(function(childSnapshot) {
+                        let usuarioEncontrado = childSnapshot.val();
+                        if (usuarioEncontrado.contrasena === contrasena) {
+                            usuarioActual = usuario;
+                            rolActual = usuarioEncontrado.rol;
+                            localStorage.setItem('usuarioActual', usuarioActual);
+                            localStorage.setItem('rolActual', rolActual);
+                            document.getElementById('login').classList.add('hidden');
+                            document.getElementById('formulario').classList.remove('hidden');
+                            document.querySelector('input[name="asesor"]').value = usuarioActual;
+                            mostrarRegistros();
+                        } else {
+                            alert('Contraseña incorrecta.');
+                        }
+                    });
+                } else {
+                    alert('Usuario no encontrado.');
+                }
+            });
         }
-
         function mostrarRegistro() {
             document.getElementById('login').classList.add('hidden');
             document.getElementById('registro').classList.remove('hidden');
@@ -197,6 +240,54 @@
 
             XLSX.utils.book_append_sheet(wb, ws, "Registros");
             XLSX.writeFile(wb, "registros.xlsx");
+        }
+
+        function eliminarRegistro(key) {
+            if (confirm('¿Estás seguro de que deseas eliminar este registro?')) {
+                const registroRef = firebase.database().ref('registros/' + key);
+                registroRef.remove()
+                .then(function() {
+                    alert('Registro eliminado con éxito.');
+                })
+                .catch(function(error) {
+                    console.error('Error al eliminar el registro:', error);
+                });
+            }
+        }
+
+        function modificarRegistro(key) {
+            const registroRef = firebase.database().ref('registros/' + key);
+            registroRef.once('value', function(snapshot) {
+                let registro = snapshot.val();
+                let nuevoCliente = prompt('Modificar Nombre del Cliente:', registro.cliente);
+                if (nuevoCliente !== null) registro.cliente = nuevoCliente;
+
+                let nuevaReferencia = prompt('Modificar Referencia, Color, Talla, Precio:', registro.referencia);
+                if (nuevaReferencia !== null) registro.referencia = nuevaReferencia;
+
+                let nuevoNumPares = prompt('Modificar Número de Pares:', registro.num_pares);
+                if (nuevoNumPares !== null) registro.num_pares = nuevoNumPares;
+
+                let nuevoValorTotal = prompt('Modificar Valor Total del Pedido:', registro.valor_total);
+                if (nuevoValorTotal !== null) registro.valor_total = nuevoValorTotal;
+
+                let nuevasObservaciones = prompt('Modificar Observaciones:', registro.observaciones);
+                if (nuevasObservaciones !== null) registro.observaciones = nuevasObservaciones;
+
+                let nuevoSaldoAFavor = prompt('Modificar Saldo a Favor:', registro.saldo_a_favor);
+                if (nuevoSaldoAFavor !== null) registro.saldo_a_favor = nuevoSaldoAFavor;
+
+                let nuevosAbonos = prompt('Modificar Abonos:', registro.abonos);
+                if (nuevosAbonos !== null) registro.abonos = nuevosAbonos;
+
+                registroRef.update(registro, function(error) {
+                    if (error) {
+                        console.error('Error al modificar el registro:', error);
+                    } else {
+                        alert('Registro modificado con éxito.');
+                    }
+                });
+            });
         }
 
         window.onload = function() {
@@ -293,4 +384,3 @@
     </div>
 </body>
 </html>
-
