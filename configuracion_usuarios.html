@@ -1,11 +1,14 @@
+npm install firebase
 <!DOCTYPE html>
 <html>
 <head>
     <title>Configuración de Usuarios</title>
     <!-- Importar Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/9.1.2/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.1.2/firebase-database.js"></script>
-    <script>
+    <script type="module">
+        // Importar funciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getDatabase, ref, set, get, child, remove, update } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
         // Configuración de Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
@@ -18,8 +21,8 @@
         };
 
         // Inicializar Firebase
-        const app = firebase.initializeApp(firebaseConfig);
-        const database = firebase.database(app);
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
 
         window.onload = function() {
             document.getElementById('estadoFirebase').textContent = "Firebase inicializado correctamente.";
@@ -35,14 +38,15 @@
 </body>
 </html>
     <script>
-        function cargarUsuarios() {
+        // Función para cargar usuarios
+        async function cargarUsuarios() {
             document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
-            const usuariosRef = database.ref('usuarios');
-            usuariosRef.once('value')
-            .then(function(snapshot) {
+            const dbRef = ref(database);
+            try {
+                const snapshot = await get(child(dbRef, 'usuarios'));
                 const usuarioSelect = document.getElementById('usuarioSelect');
                 usuarioSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
-                snapshot.forEach(function(childSnapshot) {
+                snapshot.forEach(childSnapshot => {
                     const usuario = childSnapshot.val().usuario;
                     const option = document.createElement('option');
                     option.value = childSnapshot.key;
@@ -50,10 +54,9 @@
                     usuarioSelect.appendChild(option);
                 });
                 document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
-            })
-            .catch(function(error) {
+            } catch (error) {
                 document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
-            });
+            }
         }
     </script>
 </head>
@@ -68,7 +71,8 @@
 </body>
 </html>
     <script>
-        function agregarUsuario() {
+        // Función para agregar un nuevo usuario
+        async function agregarUsuario() {
             document.getElementById('estadoAccion').textContent = "Intentando agregar usuario...";
             const usuario = document.getElementById('nuevoUsuario').value;
             const contrasena = document.getElementById('nuevaContrasena').value;
@@ -76,23 +80,17 @@
 
             if (usuario && contrasena && rol) {
                 document.getElementById('estadoAccion').textContent = "Datos del nuevo usuario: " + usuario + ", " + contrasena + ", " + rol;
-                const usuariosRef = database.ref('usuarios');
-                const nuevoUsuarioRef = usuariosRef.push();
-                nuevoUsuarioRef.set({
-                    usuario: usuario,
-                    contrasena: contrasena,
-                    rol: rol
-                })
-                .then(function() {
+                const newUserRef = ref(database, 'usuarios/' + Date.now());
+                try {
+                    await set(newUserRef, { usuario, contrasena, rol });
                     document.getElementById('estadoAccion').textContent = 'Usuario agregado con éxito.';
                     cargarUsuarios();
                     document.getElementById('nuevoUsuario').value = '';
                     document.getElementById('nuevaContrasena').value = '';
                     document.getElementById('nuevoRol').value = '';
-                })
-                .catch(function(error) {
+                } catch (error) {
                     document.getElementById('estadoAccion').textContent = 'Error al agregar el usuario: ' + error.message;
-                });
+                }
             } else {
                 document.getElementById('estadoAccion').textContent = "Por favor, complete todos los campos.";
             }
@@ -124,117 +122,21 @@
 </body>
 </html>
     <script>
-        function eliminarUsuario() {
+        // Función para eliminar un usuario
+        async function eliminarUsuario() {
             document.getElementById('estadoAccion').textContent = "Intentando eliminar usuario...";
             const usuarioKey = document.getElementById('usuarioSelect').value;
             if (usuarioKey) {
-                const usuarioRef = database.ref('usuarios/' + usuarioKey);
-                usuarioRef.remove()
-                .then(function() {
+                const userRef = ref(database, 'usuarios/' + usuarioKey);
+                try {
+                    await remove(userRef);
                     document.getElementById('estadoAccion').textContent = 'Usuario eliminado con éxito.';
                     cargarUsuarios();
-                })
-                .catch(function(error) {
+                } catch (error) {
                     document.getElementById('estadoAccion').textContent = 'Error al eliminar el usuario: ' + error.message;
-                });
+                }
             } else {
                 document.getElementById('estadoAccion').textContent = "Por favor, seleccione un usuario.";
-            }
-        }
-    </script>
-</head>
-<body>
-    <h1>Configuración de Usuarios</h1>
-    <p id="estadoFirebase">Inicializando Firebase...</p>
-    <p id="estadoUsuarios"></p>
-    <p id="estadoAccion"></p>
-
-    <!-- Formulario para agregar un nuevo usuario -->
-    <h2>Agregar Nuevo Usuario</h2>
-    <label for="nuevoUsuario">Usuario:</label>
-    <input type="text" id="nuevoUsuario">
-    <br>
-    <label for="nuevaContrasena">Contraseña:</label>
-    <input type="password" id="nuevaContrasena">
-    <br>
-    <label for="nuevoRol">Rol:</label>
-    <select id="nuevoRol">
-        <option value="">Seleccionar Rol</option>
-        <option value="Operario">Operario</option>
-        <option value="Administrador">Administrador</option>
-    </select>
-    <br>
-    <button onclick="agregarUsuario()">Agregar Usuario</button>
-    <br><br>
-
-    <!-- Formulario para seleccionar y modificar/eliminar un usuario existente -->
-    <h2>Usuarios Registrados</h2>
-    <select id="usuarioSelect" onchange="cargarDatosUsuario()">
-        <option value="">Seleccionar Usuario</option>
-    </select>
-    <br>
-    <h2>Modificar Usuario</h2>
-    <label for="modificarContrasena">Nueva Contraseña:</label>
-    <input type="password" id="modificarContrasena">
-    <br>
-    <label for="modificarRol">Nuevo Rol:</label>
-    <select id="modificarRol">
-        <option value="">Seleccionar Rol</option>
-        <option value="Operario">Operario</option>
-        <option value="Administrador">Administrador</option>
-    </select>
-    <br>
-    <button onclick="modificarUsuario()">Modificar Usuario</button>
-    <br><br>
-    <button onclick="eliminarUsuario()">Eliminar Usuario</button>
-</body>
-</html>
-    <script>
-        function modificarUsuario() {
-            document.getElementById('estadoAccion').textContent = "Intentando modificar usuario...";
-            const usuarioKey = document.getElementById('usuarioSelect').value;
-            const nuevaContrasena = document.getElementById('modificarContrasena').value;
-            const nuevoRol = document.getElementById('modificarRol').value;
-
-            if (usuarioKey && nuevaContrasena && nuevoRol) {
-                document.getElementById('estadoAccion').textContent = "Datos para modificar usuario: " + usuarioKey + ", " + nuevaContrasena + ", " + nuevoRol;
-                const usuarioRef = database.ref('usuarios/' + usuarioKey);
-                usuarioRef.update({
-                    contrasena: nuevaContrasena,
-                    rol: nuevoRol
-                })
-                .then(function() {
-                    document.getElementById('estadoAccion').textContent = 'Usuario modificado con éxito.';
-                    document.getElementById('modificarContrasena').value = '';
-                    document.getElementById('modificarRol').value = '';
-                })
-                .catch(function(error) {
-                    document.getElementById('estadoAccion').textContent = 'Error al modificar el usuario: ' + error.message;
-                });
-            } else {
-                document.getElementById('estadoAccion').textContent = "Por favor, complete todos los campos.";
-            }
-        }
-
-        function cargarDatosUsuario() {
-            document.getElementById('estadoAccion').textContent = "Cargando datos del usuario seleccionado...";
-            const usuarioKey = document.getElementById('usuarioSelect').value;
-            if (usuarioKey) {
-                const usuarioRef = database.ref('usuarios/' + usuarioKey);
-                usuarioRef.once('value')
-                .then(function(snapshot) {
-                    const usuario = snapshot.val();
-                    document.getElementById('modificarContrasena').value = usuario.contrasena;
-                    document.getElementById('modificarRol').value = usuario.rol;
-                    document.getElementById('estadoAccion').textContent = "Datos del usuario cargados: " + JSON.stringify(usuario);
-                })
-                .catch(function(error) {
-                    document.getElementById('estadoAccion').textContent = "Error al cargar datos del usuario: " + error.message;
-                });
-            } else {
-                document.getElementById('modificarContrasena').value = '';
-                document.getElementById('modificarRol').value = '';
-                document.getElementById('estadoAccion').textContent = "No se seleccionó ningún usuario.";
             }
         }
     </script>
