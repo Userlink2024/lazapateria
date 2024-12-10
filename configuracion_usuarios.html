@@ -1,40 +1,136 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Configuración de Usuariiiiios</title>
+    <title>Configuración de Usuarios</title>
     <!-- Importar Firebase -->
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script>
-        // Verificar si Firebase está cargado
-        if (typeof firebase === "undefined") {
-            document.addEventListener("DOMContentLoaded", function() {
-                document.getElementById('estadoFirebase').textContent = "Error al cargar los scripts de Firebase.";
-            });
-        } else {
-            // Configuración de Firebase
-            const firebaseConfig = {
-                apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
-                authDomain: "lazapateria-ce24f.firebaseapp.com",
-                projectId: "lazapateria-ce24f",
-                storageBucket: "lazapateria-ce24f.firebasestorage.app",
-                messagingSenderId: "642571845821",
-                appId: "1:642571845821:web:45858a0abc0df728fd77d4",
-                measurementId: "G-6JCF33H0K1"
-            };
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
+            authDomain: "lazapateria-ce24f.firebaseapp.com",
+            projectId: "lazapateria-ce24f",
+            storageBucket: "lazapateria-ce24f.firebasestorage.app",
+            messagingSenderId: "642571845821",
+            appId: "1:642571845821:web:45858a0abc0df728fd77d4",
+            measurementId: "G-6JCF33H0K1"
+        };
 
-            // Inicializar Firebase
-            try {
-                const app = firebase.initializeApp(firebaseConfig);
-                const database = firebase.database(app);
+        // Inicializar Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database(app);
 
-                window.onload = function() {
-                    document.getElementById('estadoFirebase').textContent = "Firebase inicializado correctamente.";
-                }
-            } catch (error) {
-                document.addEventListener("DOMContentLoaded", function() {
-                    document.getElementById('estadoFirebase').textContent = "Error al inicializar Firebase: " + error.message;
+        // Cargar usuarios al cargar la página
+        window.onload = function() {
+            document.getElementById('estadoFirebase').textContent = "Firebase inicializado correctamente.";
+            cargarUsuarios();
+        }
+
+        // Función para cargar usuarios en el select
+        function cargarUsuarios() {
+            const usuariosRef = database.ref('usuarios');
+            usuariosRef.once('value', function(snapshot) {
+                const usuarioSelect = document.getElementById('usuarioSelect');
+                usuarioSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
+                snapshot.forEach(function(childSnapshot) {
+                    const usuario = childSnapshot.val().usuario;
+                    const option = document.createElement('option');
+                    option.value = childSnapshot.key;
+                    option.textContent = usuario;
+                    usuarioSelect.appendChild(option);
                 });
+                document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
+            }, function(error) {
+                document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
+            });
+        }
+
+        // Función para agregar un nuevo usuario
+        function agregarUsuario() {
+            const usuario = document.getElementById('nuevoUsuario').value;
+            const contrasena = document.getElementById('nuevaContrasena').value;
+            const rol = document.getElementById('nuevoRol').value;
+
+            if (usuario && contrasena && rol) {
+                const usuariosRef = database.ref('usuarios');
+                const nuevoUsuarioRef = usuariosRef.push();
+                nuevoUsuarioRef.set({
+                    usuario: usuario,
+                    contrasena: contrasena,
+                    rol: rol
+                }, function(error) {
+                    if (error) {
+                        alert('Error al agregar el usuario: ' + error.message);
+                    } else {
+                        alert('Usuario agregado con éxito.');
+                        cargarUsuarios();
+                        document.getElementById('nuevoUsuario').value = '';
+                        document.getElementById('nuevaContrasena').value = '';
+                        document.getElementById('nuevoRol').value = '';
+                    }
+                });
+            } else {
+                alert('Por favor, complete todos los campos.');
+            }
+        }
+
+        // Función para eliminar un usuario
+        function eliminarUsuario() {
+            const usuarioKey = document.getElementById('usuarioSelect').value;
+            if (usuarioKey) {
+                const usuarioRef = database.ref('usuarios/' + usuarioKey);
+                usuarioRef.remove()
+                .then(function() {
+                    alert('Usuario eliminado con éxito.');
+                    cargarUsuarios();
+                })
+                .catch(function(error) {
+                    alert('Error al eliminar el usuario: ' + error.message);
+                });
+            } else {
+                alert('Por favor, seleccione un usuario.');
+            }
+        }
+
+        // Función para modificar un usuario
+        function modificarUsuario() {
+            const usuarioKey = document.getElementById('usuarioSelect').value;
+            const nuevaContrasena = document.getElementById('modificarContrasena').value;
+            const nuevoRol = document.getElementById('modificarRol').value;
+
+            if (usuarioKey && nuevaContrasena && nuevoRol) {
+                const usuarioRef = database.ref('usuarios/' + usuarioKey);
+                usuarioRef.update({
+                    contrasena: nuevaContrasena,
+                    rol: nuevoRol
+                }, function(error) {
+                    if (error) {
+                        alert('Error al modificar el usuario: ' + error.message);
+                    } else {
+                        alert('Usuario modificado con éxito.');
+                        document.getElementById('modificarContrasena').value = '';
+                        document.getElementById('modificarRol').value = '';
+                    }
+                });
+            } else {
+                alert('Por favor, complete todos los campos.');
+            }
+        }
+
+        // Función para cargar datos del usuario seleccionado
+        function cargarDatosUsuario() {
+            const usuarioKey = document.getElementById('usuarioSelect').value;
+            if (usuarioKey) {
+                const usuarioRef = database.ref('usuarios/' + usuarioKey);
+                usuarioRef.once('value', function(snapshot) {
+                    const usuario = snapshot.val();
+                    document.getElementById('modificarContrasena').value = usuario.contrasena;
+                    document.getElementById('modificarRol').value = usuario.rol;
+                });
+            } else {
+                document.getElementById('modificarContrasena').value = '';
+                document.getElementById('modificarRol').value = '';
             }
         }
     </script>
@@ -42,5 +138,45 @@
 <body>
     <h1>Configuración de Usuarios</h1>
     <p id="estadoFirebase">Inicializando Firebase...</p>
+    <p id="estadoUsuarios"></p>
+    
+    <!-- Formulario para agregar un nuevo usuario -->
+    <h2>Agregar Nuevo Usuario</h2>
+    <label for="nuevoUsuario">Usuario:</label>
+    <input type="text" id="nuevoUsuario">
+    <br>
+    <label for="nuevaContrasena">Contraseña:</label>
+    <input type="password" id="nuevaContrasena">
+    <br>
+    <label for="nuevoRol">Rol:</label>
+    <select id="nuevoRol">
+        <option value="">Seleccionar Rol</option>
+        <option value="Operario">Operario</option>
+        <option value="Administrador">Administrador</option>
+    </select>
+    <br>
+    <button onclick="agregarUsuario()">Agregar Usuario</button>
+    <br><br>
+
+    <!-- Formulario para seleccionar y modificar/eliminar un usuario existente -->
+    <h2>Usuarios Registrados</h2>
+    <select id="usuarioSelect" onchange="cargarDatosUsuario()">
+        <option value="">Seleccionar Usuario</option>
+    </select>
+    <br>
+    <h2>Modificar Usuario</h2>
+    <label for="modificarContrasena">Nueva Contraseña:</label>
+    <input type="password" id="modificarContrasena">
+    <br>
+    <label for="modificarRol">Nuevo Rol:</label>
+    <select id="modificarRol">
+        <option value="">Seleccionar Rol</option>
+        <option value="Operario">Operario</option>
+        <option value="Administrador">Administrador</option>
+    </select>
+    <br>
+    <button onclick="modificarUsuario()">Modificar Usuario</button>
+    <br><br>
+    <button onclick="eliminarUsuario()">Eliminar Usuario</button>
 </body>
 </html>
