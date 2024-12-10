@@ -37,19 +37,23 @@
 
         const empresas = ["Empresa 1", "Empresa 2", "Empresa 3"];
 
-        function mostrarRegistro() {
-            document.getElementById('registerForm').classList.remove('hidden');
-        }
-
-        function filtrarEmpresas(inputId, datalistId) {
-            const input = document.getElementById(inputId).value.toLowerCase();
-            const listaEmpresas = document.getElementById(datalistId);
-            listaEmpresas.innerHTML = '';
-            empresas.filter(e => e.toLowerCase().includes(input)).forEach(e => {
-                const option = document.createElement('option');
-                option.value = e;
-                listaEmpresas.appendChild(option);
-            });
+        async function cargarUsuarios() {
+            document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
+            try {
+                const snapshot = await db.collection('usuarios').get();
+                const usuariosSelect = document.getElementById('usuariosSelect');
+                usuariosSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
+                snapshot.forEach(doc => {
+                    const usuario = doc.data().nombreCompleto;
+                    const option = document.createElement('option');
+                    option.value = doc.id;
+                    option.textContent = usuario;
+                    usuariosSelect.appendChild(option);
+                });
+                document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
+            } catch (error) {
+                document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
+            }
         }
 
         async function registrarUsuario() {
@@ -89,46 +93,23 @@
                     usuario
                 });
                 alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
+                cargarUsuarios();
             } catch (error) {
                 console.error("Error registrando usuario: ", error);
             }
         }
 
-        function suscribirActualizaciones() {
-            db.collection('usuarios').onSnapshot((snapshot) => {
-                const users = snapshot.docs.map(doc => doc.data());
-                console.log('Usuarios actualizados:', users);
-                mostrarUsuarios(users);
-            });
-        }
-
-        function mostrarUsuarios(users) {
-            const usersList = document.getElementById('usersList');
-            usersList.innerHTML = '';
-            users.forEach(user => {
-                const listItem = document.createElement('li');
-                listItem.textContent = `Nombre: ${user.nombreCompleto}, Empresa: ${user.empresa}, Usuario: ${user.usuario}`;
-                usersList.appendChild(listItem);
-            });
-        }
-
-        function mostrarListaUsuarios() {
-            db.collection('usuarios').get().then((snapshot) => {
-                const users = snapshot.docs.map(doc => doc.data());
-                mostrarUsuarios(users);
-            }).catch((error) => {
-                console.error("Error obteniendo usuarios: ", error);
-            });
-        }
-
         window.onload = function() {
-            suscribirActualizaciones();
+            cargarUsuarios();
         };
     </script>
 </head>
 <body>
+    <h1>Configuración de Usuarios</h1>
+    <p id="estadoUsuarios"></p>
+
     <div id="registerForm">
-        <h1>Registrar un nuevo usuario</h1>
+        <h2>Registrar un nuevo usuario</h2>
         <form onsubmit="event.preventDefault(); registrarUsuario();">
             <label for="usuarioRegistro">Usuario:</label>
             <input type="text" id="usuarioRegistro" name="usuarioRegistro">
@@ -172,11 +153,14 @@
             <datalist id="listaEmpresasRegistro"></datalist>
 
             <button type="submit">Registrar</button>
-            <button type="button" onclick="mostrarListaUsuarios()">Mostrar Usuarios Registrados</button>
         </form>
-
-        <!-- Lista de usuarios registrados -->
-        <ul id="usersList"></ul>
     </div>
+
+    <h2>Usuarios Registrados</h2>
+    <select id="usuariosSelect">
+        <option value="">Seleccionar Usuario</option>
+    </select>
+
+    <ul id="usersList"></ul>
 </body>
 </html>
