@@ -35,8 +35,6 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        const empresas = ["Empresa 1", "Empresa 2", "Empresa 3"];
-
         async function cargarUsuarios() {
             document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
             try {
@@ -53,6 +51,21 @@
                 document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
             } catch (error) {
                 document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
+            }
+        }
+
+        async function cargarEmpresas() {
+            const listaEmpresasRegistro = document.getElementById('listaEmpresasRegistro');
+            listaEmpresasRegistro.innerHTML = '';
+            try {
+                const snapshot = await db.collection('empresas').get();
+                snapshot.forEach(doc => {
+                    const option = document.createElement('option');
+                    option.value = doc.data().nombre;
+                    listaEmpresasRegistro.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error cargando empresas: ", error);
             }
         }
 
@@ -75,8 +88,8 @@
                 return;
             }
 
-            if (nuevaEmpresa && !empresas.includes(nuevaEmpresa)) {
-                empresas.push(nuevaEmpresa);
+            if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
+                await db.collection('empresas').add({ nombre: nuevaEmpresa });
             }
 
             try {
@@ -94,13 +107,44 @@
                 });
                 alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
                 cargarUsuarios();
+                cargarEmpresas();
             } catch (error) {
                 console.error("Error registrando usuario: ", error);
             }
         }
 
+        async function empresaExiste(nombreEmpresa) {
+            const snapshot = await db.collection('empresas').where('nombre', '==', nombreEmpresa).get();
+            return !snapshot.empty;
+        }
+
+        async function mostrarDatosUsuario() {
+            const usuarioId = document.getElementById('usuariosSelect').value;
+            if (usuarioId) {
+                try {
+                    const usuarioDoc = await db.collection('usuarios').doc(usuarioId).get();
+                    if (usuarioDoc.exists) {
+                        const usuario = usuarioDoc.data();
+                        document.getElementById('usuarioRegistro').value = usuario.usuario;
+                        document.getElementById('nombreCompleto').value = usuario.nombreCompleto;
+                        document.getElementById('tipoDocumento').value = usuario.tipoDocumento;
+                        document.getElementById('celular').value = usuario.celular;
+                        document.getElementById('correo').value = usuario.correo;
+                        document.getElementById('direccion').value = usuario.direccion;
+                        document.getElementById('municipio').value = usuario.municipio;
+                        document.getElementById('tipoContrato').value = usuario.tipoContrato;
+                        document.getElementById('permisos').value = usuario.permisos;
+                        document.getElementById('empresaSeleccionadaRegistro').value = usuario.empresa;
+                    }
+                } catch (error) {
+                    console.error("Error obteniendo datos del usuario: ", error);
+                }
+            }
+        }
+
         window.onload = function() {
             cargarUsuarios();
+            cargarEmpresas();
         };
     </script>
 </head>
@@ -157,10 +201,8 @@
     </div>
 
     <h2>Usuarios Registrados</h2>
-    <select id="usuariosSelect">
+    <select id="usuariosSelect" onchange="mostrarDatosUsuario()">
         <option value="">Seleccionar Usuario</option>
     </select>
-
-    <ul id="usersList"></ul>
 </body>
 </html>
