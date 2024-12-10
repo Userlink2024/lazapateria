@@ -1,70 +1,83 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Configuración de Usuarios - La Zapatería</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f2f2f2;
-        }
-        .container {
-            text-align: center;
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            width: 300px;
-        }
-        h1 {
-            color: #4CAF50;
-        }
-        .form-field {
-            margin-bottom: 15px;
-        }
-        input, select, button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-    </style>
+    <title>Configuración de Usuarios</title>
+</head>
+<body>
+    <h1>Configuración de Usuarios</h1>
+    
+    <!-- Formulario para agregar un nuevo usuario -->
+    <h2>Agregar Nuevo Usuario</h2>
+    <label for="nuevoUsuario">Usuario:</label>
+    <input type="text" id="nuevoUsuario">
+    <br>
+    <label for="nuevaContrasena">Contraseña:</label>
+    <input type="password" id="nuevaContrasena">
+    <br>
+    <label for="nuevoRol">Rol:</label>
+    <select id="nuevoRol">
+        <option value="">Seleccionar Rol</option>
+        <option value="Operario">Operario</option>
+        <option value="Administrador">Administrador</option>
+    </select>
+    <br>
+    <button onclick="agregarUsuario()">Agregar Usuario</button>
+    <br><br>
+
+    <!-- Formulario para seleccionar y modificar/eliminar un usuario existente -->
+    <h2>Usuarios Registrados</h2>
+    <select id="usuarioSelect" onchange="cargarDatosUsuario()">
+        <option value="">Seleccionar Usuario</option>
+    </select>
+    <br>
+    <h2>Modificar Usuario</h2>
+    <label for="modificarContrasena">Nueva Contraseña:</label>
+    <input type="password" id="modificarContrasena">
+    <br>
+    <label for="modificarRol">Nuevo Rol:</label>
+    <select id="modificarRol">
+        <option value="">Seleccionar Rol</option>
+        <option value="Operario">Operario</option>
+        <option value="Administrador">Administrador</option>
+    </select>
+    <br>
+    <button onclick="modificarUsuario()">Modificar Usuario</button>
+    <br><br>
+    <button onclick="eliminarUsuario()">Eliminar Usuario</button>
+
     <!-- Importar Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.1.2/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.2/firebase-database.js"></script>
-    <script src="firebaseConfig.js"></script>
     <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
+            authDomain: "lazapateria-ce24f.firebaseapp.com",
+            projectId: "lazapateria-ce24f",
+            storageBucket: "lazapateria-ce24f.firebasestorage.app",
+            messagingSenderId: "642571845821",
+            appId: "1:642571845821:web:45858a0abc0df728fd77d4",
+            measurementId: "G-6JCF33H0K1"
+        };
+
         // Inicializar Firebase
         const app = firebase.initializeApp(firebaseConfig);
         const database = firebase.database(app);
 
+        // Cargar usuarios al cargar la página
         window.onload = function() {
             cargarUsuarios();
         }
 
+        // Función para cargar usuarios en el select
         function cargarUsuarios() {
-            let usuariosRef = database.ref('usuarios');
+            const usuariosRef = database.ref('usuarios');
             usuariosRef.once('value', function(snapshot) {
-                let usuarioSelect = document.getElementById('usuarioSelect');
+                const usuarioSelect = document.getElementById('usuarioSelect');
                 usuarioSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
                 snapshot.forEach(function(childSnapshot) {
-                    let usuario = childSnapshot.val().usuario;
-                    let option = document.createElement('option');
+                    const usuario = childSnapshot.val().usuario;
+                    const option = document.createElement('option');
                     option.value = childSnapshot.key;
                     option.textContent = usuario;
                     usuarioSelect.appendChild(option);
@@ -72,21 +85,22 @@
             });
         }
 
+        // Función para agregar un nuevo usuario
         function agregarUsuario() {
-            let usuario = document.getElementById('nuevoUsuario').value;
-            let contrasena = document.getElementById('nuevaContrasena').value;
-            let rol = document.getElementById('nuevoRol').value;
+            const usuario = document.getElementById('nuevoUsuario').value;
+            const contrasena = document.getElementById('nuevaContrasena').value;
+            const rol = document.getElementById('nuevoRol').value;
 
             if (usuario && contrasena && rol) {
-                let usuariosRef = database.ref('usuarios');
-                let nuevoUsuarioRef = usuariosRef.push();
+                const usuariosRef = database.ref('usuarios');
+                const nuevoUsuarioRef = usuariosRef.push();
                 nuevoUsuarioRef.set({
                     usuario: usuario,
                     contrasena: contrasena,
                     rol: rol
                 }, function(error) {
                     if (error) {
-                        alert('Error al agregar el usuario.');
+                        alert('Error al agregar el usuario: ' + error.message);
                     } else {
                         alert('Usuario agregado con éxito.');
                         cargarUsuarios();
@@ -100,36 +114,38 @@
             }
         }
 
+        // Función para eliminar un usuario
         function eliminarUsuario() {
-            let usuarioKey = document.getElementById('usuarioSelect').value;
+            const usuarioKey = document.getElementById('usuarioSelect').value;
             if (usuarioKey) {
-                let usuarioRef = database.ref('usuarios/' + usuarioKey);
+                const usuarioRef = database.ref('usuarios/' + usuarioKey);
                 usuarioRef.remove()
                 .then(function() {
                     alert('Usuario eliminado con éxito.');
                     cargarUsuarios();
                 })
                 .catch(function(error) {
-                    alert('Error al eliminar el usuario.');
+                    alert('Error al eliminar el usuario: ' + error.message);
                 });
             } else {
                 alert('Por favor, seleccione un usuario.');
             }
         }
 
+        // Función para modificar un usuario
         function modificarUsuario() {
-            let usuarioKey = document.getElementById('usuarioSelect').value;
-            let nuevaContrasena = document.getElementById('modificarContrasena').value;
-            let nuevoRol = document.getElementById('modificarRol').value;
+            const usuarioKey = document.getElementById('usuarioSelect').value;
+            const nuevaContrasena = document.getElementById('modificarContrasena').value;
+            const nuevoRol = document.getElementById('modificarRol').value;
 
             if (usuarioKey && nuevaContrasena && nuevoRol) {
-                let usuarioRef = database.ref('usuarios/' + usuarioKey);
+                const usuarioRef = database.ref('usuarios/' + usuarioKey);
                 usuarioRef.update({
                     contrasena: nuevaContrasena,
                     rol: nuevoRol
                 }, function(error) {
                     if (error) {
-                        alert('Error al modificar el usuario.');
+                        alert('Error al modificar el usuario: ' + error.message);
                     } else {
                         alert('Usuario modificado con éxito.');
                         document.getElementById('modificarContrasena').value = '';
@@ -141,12 +157,13 @@
             }
         }
 
+        // Función para cargar datos del usuario seleccionado
         function cargarDatosUsuario() {
-            let usuarioKey = document.getElementById('usuarioSelect').value;
+            const usuarioKey = document.getElementById('usuarioSelect').value;
             if (usuarioKey) {
-                let usuarioRef = database.ref('usuarios/' + usuarioKey);
+                const usuarioRef = database.ref('usuarios/' + usuarioKey);
                 usuarioRef.once('value', function(snapshot) {
-                    let usuario = snapshot.val();
+                    const usuario = snapshot.val();
                     document.getElementById('modificarContrasena').value = usuario.contrasena;
                     document.getElementById('modificarRol').value = usuario.rol;
                 });
@@ -156,37 +173,5 @@
             }
         }
     </script>
-</head>
-<body>
-    <div class="container">
-        <h1>Configuración de Usuarios</h1>
-        <div class="form-field">
-            <label for="usuarioSelect">Usuarios Registrados:</label>
-            <select id="usuarioSelect" onchange="cargarDatosUsuario()"></select>
-        </div>
-        <div class="form-field">
-            <input type="password" id="modificarContrasena" placeholder="Nueva Contraseña">
-            <select id="modificarRol">
-                <option value="">Seleccionar Rol</option>
-                <option value="Operario">Operario</option>
-                <option value="Administrador">Administrador</option>
-            </select>
-            <button onclick="modificarUsuario()">Modificar Usuario</button>
-        </div>
-        <div class="form-field">
-            <button onclick="eliminarUsuario()">Eliminar Usuario</button>
-        </div>
-        <div class="form-field">
-            <h2>Agregar Nuevo Usuario</h2>
-            <input type="text" id="nuevoUsuario" placeholder="Nuevo Usuario">
-            <input type="password" id="nuevaContrasena" placeholder="Nueva Contraseña">
-            <select id="nuevoRol">
-                <option value="">Seleccionar Rol</option>
-                <option value="Operario">Operario</option>
-                <option value="Administrador">Administrador</option>
-            </select>
-            <button onclick="agregarUsuario()">Agregar Usuario</button>
-        </div>
-    </div>
 </body>
 </html>
