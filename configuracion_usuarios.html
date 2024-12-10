@@ -4,19 +4,22 @@ npm install firebase
 <head>
     <title>Configuración de Usuarios</title>
     <script type="module">
+        // Importar funciones de Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
         import { getDatabase, ref, set, get, remove, update } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
 
+        // Configuración de Firebase
         const firebaseConfig = {
-            apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
-            authDomain: "lazapateria-ce24f.firebaseapp.com",
-            projectId: "lazapateria-ce24f",
-            storageBucket: "lazapateria-ce24f.firebasestorage.app",
-            messagingSenderId: "642571845821",
-            appId: "1:642571845821:web:45858a0abc0df728fd77d4",
-            measurementId: "G-6JCF33H0K1"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID",
+            measurementId: "YOUR_MEASUREMENT_ID"
         };
 
+        // Inicializar Firebase
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
 
@@ -24,22 +27,12 @@ npm install firebase
             document.getElementById('estadoFirebase').textContent = "Firebase inicializado correctamente.";
             cargarUsuarios();
         }
-    </script>
-</head>
-<body>
-    <h1>Configuración de Usuarios</h1>
-    <p id="estadoFirebase">Inicializando Firebase...</p>
-    <p id="estadoUsuarios"></p>
-    <p id="estadoAccion"></p>
-</body>
-</html>
-    <script>
-        // Función para cargar usuarios
+
         async function cargarUsuarios() {
             document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
-            const dbRef = ref(database, 'usuarios');
+            const usuariosRef = ref(database, 'usuarios');
             try {
-                const snapshot = await get(dbRef);
+                const snapshot = await get(usuariosRef);
                 const usuarioSelect = document.getElementById('usuarioSelect');
                 usuarioSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
                 snapshot.forEach(childSnapshot => {
@@ -54,20 +47,7 @@ npm install firebase
                 document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
             }
         }
-    </script>
-</head>
-<body>
-    <h1>Configuración de Usuarios</h1>
-    <p id="estadoFirebase">Inicializando Firebase...</p>
-    <p id="estadoUsuarios"></p>
-    <p id="estadoAccion"></p>
-    <select id="usuarioSelect" onchange="cargarDatosUsuario()">
-        <option value="">Seleccionar Usuario</option>
-    </select>
-</body>
-</html>
-    <script>
-        // Función para agregar un nuevo usuario
+
         async function agregarUsuario() {
             document.getElementById('estadoAccion').textContent = "Intentando agregar usuario...";
             const usuario = document.getElementById('nuevoUsuario').value;
@@ -90,34 +70,7 @@ npm install firebase
                 document.getElementById('estadoAccion').textContent = "Por favor, complete todos los campos.";
             }
         }
-    </script>
-</head>
-<body>
-    <h1>Configuración de Usuarios</h1>
-    <p id="estadoFirebase">Inicializando Firebase...</p>
-    <p id="estadoUsuarios"></p>
-    <p id="estadoAccion"></p>
 
-    <!-- Formulario para agregar un nuevo usuario -->
-    <h2>Agregar Nuevo Usuario</h2>
-    <label for="nuevoUsuario">Usuario:</label>
-    <input type="text" id="nuevoUsuario">
-    <br>
-    <label for="nuevaContrasena">Contraseña:</label>
-    <input type="password" id="nuevaContrasena">
-    <br>
-    <label for="nuevoRol">Rol:</label>
-    <select id="nuevoRol">
-        <option value="">Seleccionar Rol</option>
-        <option value="Operario">Operario</option>
-        <option value="Administrador">Administrador</option>
-    </select>
-    <br>
-    <button onclick="agregarUsuario()">Agregar Usuario</button>
-</body>
-</html>
-    <script>
-        // Función para eliminar un usuario
         async function eliminarUsuario() {
             document.getElementById('estadoAccion').textContent = "Intentando eliminar usuario...";
             const usuarioKey = document.getElementById('usuarioSelect').value;
@@ -132,6 +85,48 @@ npm install firebase
                 }
             } else {
                 document.getElementById('estadoAccion').textContent = "Por favor, seleccione un usuario.";
+            }
+        }
+
+        async function modificarUsuario() {
+            document.getElementById('estadoAccion').textContent = "Intentando modificar usuario...";
+            const usuarioKey = document.getElementById('usuarioSelect').value;
+            const nuevaContrasena = document.getElementById('modificarContrasena').value;
+            const nuevoRol = document.getElementById('modificarRol').value;
+
+            if (usuarioKey && nuevaContrasena && nuevoRol) {
+                const userRef = ref(database, 'usuarios/' + usuarioKey);
+                try {
+                    await update(userRef, { contrasena: nuevaContrasena, rol: nuevoRol });
+                    document.getElementById('estadoAccion').textContent = 'Usuario modificado con éxito.';
+                    document.getElementById('modificarContrasena').value = '';
+                    document.getElementById('modificarRol').value = '';
+                } catch (error) {
+                    document.getElementById('estadoAccion').textContent = 'Error al modificar el usuario: ' + error.message;
+                }
+            } else {
+                document.getElementById('estadoAccion').textContent = "Por favor, complete todos los campos.";
+            }
+        }
+
+        async function cargarDatosUsuario() {
+            document.getElementById('estadoAccion').textContent = "Cargando datos del usuario seleccionado...";
+            const usuarioKey = document.getElementById('usuarioSelect').value;
+            if (usuarioKey) {
+                const userRef = ref(database, 'usuarios/' + usuarioKey);
+                try {
+                    const snapshot = await get(userRef);
+                    const usuario = snapshot.val();
+                    document.getElementById('modificarContrasena').value = usuario.contrasena;
+                    document.getElementById('modificarRol').value = usuario.rol;
+                    document.getElementById('estadoAccion').textContent = "Datos del usuario cargados: " + JSON.stringify(usuario);
+                } catch (error) {
+                    document.getElementById('estadoAccion').textContent = "Error al cargar datos del usuario: " + error.message;
+                }
+            } else {
+                document.getElementById('modificarContrasena').value = '';
+                document.getElementById('modificarRol').value = '';
+                document.getElementById('estadoAccion').textContent = "No se seleccionó ningún usuario.";
             }
         }
     </script>
@@ -182,3 +177,4 @@ npm install firebase
     <button onclick="eliminarUsuario()">Eliminar Usuario</button>
 </body>
 </html>
+
