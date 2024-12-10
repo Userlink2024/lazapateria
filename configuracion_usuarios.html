@@ -162,6 +162,10 @@
         <select id="empresaSeleccionadaRegistro" name="empresaSeleccionadaRegistro">
             <option value="">Seleccionar Empresa</option>
         </select>
+
+        <label for="contraseña">Contraseña:</label>
+        <input type="password" id="contraseña" name="contraseña">
+
         <div class="actions">
             <button type="submit">Registrar</button>
             <button type="button" onclick="modificarUsuario()">Modificar</button>
@@ -169,6 +173,57 @@
         </div>
     </form>
     <script>
+        async function registrarUsuario() {
+            const nombreCompleto = document.getElementById("nombreCompleto").value;
+            const tipoDocumento = document.getElementById("tipoDocumento").value;
+            const celular = document.getElementById("celular").value;
+            const correo = document.getElementById("correo").value;
+            const direccion = document.getElementById("direccion").value;
+            const municipio = document.getElementById("municipio").value;
+            const tipoContrato = document.getElementById("tipoContrato").value;
+            const permisos = document.getElementById("permisos").value;
+            const nuevaEmpresa = document.getElementById("nuevaEmpresa").value;
+            const empresaSeleccionada = document.getElementById("empresaSeleccionadaRegistro").value;
+            const usuario = document.getElementById("usuarioRegistro").value;
+            const contraseña = document.getElementById("contraseña").value;
+            const empresa = nuevaEmpresa || empresaSeleccionada;
+
+            if (!nombreCompleto || !empresa || !usuario || !contraseña) {
+                alert("Por favor, complete todos los campos obligatorios.");
+                return;
+            }
+
+            if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
+                await db.collection('empresas').add({ nombre: nuevaEmpresa });
+            }
+
+            try {
+                await db.collection('usuarios').add({
+                    nombreCompleto,
+                    tipoDocumento,
+                    celular,
+                    correo,
+                    direccion,
+                    municipio,
+                    tipoContrato,
+                    permisos,
+                    empresa,
+                    usuario,
+                    contraseña // Agregando contraseña a la colección
+                });
+                alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
+                cargarUsuarios();
+                cargarEmpresas();
+            } catch (error) {
+                console.error("Error registrando usuario: ", error);
+            }
+        }
+
+        async function empresaExiste(nombreEmpresa) {
+            const snapshot = await db.collection('empresas').where('nombre', '==', nombreEmpresa).get();
+            return !snapshot.empty;
+        }
+
         async function modificarUsuario() {
             const usuarioId = document.getElementById('usuariosSelect').value;
             const nombreCompleto = document.getElementById("nombreCompleto").value;
@@ -180,8 +235,9 @@
             const tipoContrato = document.getElementById("tipoContrato").value;
             const permisos = document.getElementById("permisos").value;
             const empresa = document.getElementById("empresaSeleccionadaRegistro").value;
+            const contraseña = document.getElementById("contraseña").value;
 
-            if (!nombreCompleto || !empresa || !usuarioId) {
+            if (!nombreCompleto || !empresa || !usuarioId || !contraseña) {
                 alert("Por favor, complete todos los campos obligatorios.");
                 return;
             }
@@ -196,7 +252,8 @@
                     municipio,
                     tipoContrato,
                     permisos,
-                    empresa
+                    empresa,
+                    contraseña // Agregando contraseña a la actualización
                 });
                 alert("Usuario modificado con éxito.");
                 cargarUsuarios();
@@ -240,6 +297,7 @@
                         document.getElementById('tipoContrato').value = usuario.tipoContrato;
                         document.getElementById('permisos').value = usuario.permisos;
                         document.getElementById('empresaSeleccionadaRegistro').value = usuario.empresa;
+                        document.getElementById('contraseña').value = usuario.contraseña; // Mostrar la contraseña
                     }
                 } catch (error) {
                     console.error("Error obteniendo datos del usuario: ", error);
