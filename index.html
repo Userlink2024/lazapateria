@@ -1,395 +1,105 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Base de Datos con Autenticación</title>
+    <title>Página de Inicio de Sesión</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f9f9f9;
-            color: #333;
-        }
-        h1, h2 {
-            color: #4CAF50;
-            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f2f2f2;
         }
         .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
+            text-align: center;
             background-color: #fff;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
             border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        label {
-            display: block;
-            margin-top: 10px;
-            font-weight: bold;
+        h1 {
+            color: #4CAF50;
         }
         .form-field {
             margin-bottom: 15px;
         }
-        input, textarea, select {
+        input {
             width: 100%;
-            padding: 8px;
+            padding: 10px;
             margin-top: 5px;
             border: 1px solid #ccc;
             border-radius: 4px;
             box-sizing: border-box;
         }
-        input[type="submit"], button {
+        button {
             background-color: #4CAF50;
             color: white;
             padding: 10px 15px;
-            margin: 10px 0;
             border: none;
             border-radius: 4px;
             cursor: pointer;
         }
-        input[type="submit"]:hover, button:hover {
+        button:hover {
             background-color: #45a049;
-        }
-        .hidden {
-            display: none;
-        }
-        .record {
-            background-color: #f2f2f2;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-bottom: 10px;
         }
     </style>
     <!-- Agregar scripts de Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database.js"></script>
     <script>
-        // Tu configuración de Firebase
+        // Configuración de Firebase
         const firebaseConfig = {
-            apiKey: "TU_API_KEY",
-            authDomain: "TU_AUTH_DOMAIN",
-            databaseURL: "TU_DATABASE_URL",
-            projectId: "TU_PROJECT_ID",
-            storageBucket: "TU_STORAGE_BUCKET",
-            messagingSenderId: "TU_MESSAGING_SENDER_ID",
-            appId: "TU_APP_ID"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            databaseURL: "YOUR_DATABASE_URL",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
         };
 
         // Inicializar Firebase
         const app = firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
         
-        let usuarioActual = '';
-        let rolActual = '';
-
-        function mostrarBarraCargando() {
-            var loadingBar = document.getElementById("loading-bar");
-            var loadingBarFill = document.getElementById("loading-bar-fill");
-            loadingBar.style.display = "block";
-            loadingBarFill.style.width = "0%";
-            var width = 0;
-            var interval = setInterval(function() {
-                if (width >= 100) {
-                    clearInterval(interval);
-                    loadingBar.style.display = "none";
-                } else {
-                    width++;
-                    loadingBarFill.style.width = width + "%";
-                    loadingBarFill.innerText = width + "%";
-                }
-            }, 20);
-        }
-        function guardarEnBaseDeDatos(datos) {
-            const registrosRef = firebase.database().ref('registros');
-            registrosRef.push(datos, function(error) {
-                if (error) {
-                    console.error('Error al guardar el registro:', error);
-                } else {
-                    console.log('Registro guardado exitosamente.');
-                }
-            });
-        }
-
-        function enviarFormulario() {
-            mostrarBarraCargando();
-
-            let fechaHora = new Date().toLocaleString();
-            let codigoUnico = 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-
-            let datos = {
-                fecha_hora: fechaHora,
-                codigo_unico: codigoUnico,
-                cliente: document.querySelector('input[name="cliente"]').value,
-                referencia: document.querySelector('textarea[name="referencia"]').value,
-                asesor: usuarioActual,
-                num_pares: document.querySelector('input[name="num_pares"]').value,
-                valor_total: document.querySelector('input[name="valor_total"]').value,
-                observaciones: document.querySelector('textarea[name="observaciones"]').value,
-                saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                abonos: document.querySelector('input[name="abonos"]').value
-            };
-
-            guardarEnBaseDeDatos(datos);
-            mostrarRegistros();
-
-            document.querySelector('form').reset(); // Limpiar el formulario
-            return false; // Evitar recargar la página
-        }
-
-        function mostrarRegistros() {
-            const registrosRef = firebase.database().ref('registros');
-            registrosRef.on('value', function(snapshot) {
-                let registrosHTML = '';
-                snapshot.forEach(function(childSnapshot) {
-                    let registro = childSnapshot.val();
-                    let registroKey = childSnapshot.key;
-                    registrosHTML += `<div class="record">
-                        <p><strong>Registro</strong></p>
-                        <p>Fecha y Hora: ${registro.fecha_hora}</p>
-                        <p>Código Único: ${registro.codigo_unico}</p>
-                        <p>Cliente: ${registro.cliente}</p>
-                        <p>Referencia: ${registro.referencia.replace(/\n/g, '<br>')}</p>
-                        <p>Asesor: ${registro.asesor}</p>
-                        <p>Número de Pares: ${registro.num_pares}</p>
-                        <p>Valor Total: ${registro.valor_total}</p>
-                        <p>Observaciones: ${registro.observaciones}</p>
-                        <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
-                        <p>Abonos: ${registro.abonos}</p>`;
-                    if (rolActual === 'Administrador') {
-                        registrosHTML += `
-                        <button onclick="modificarRegistro('${registroKey}')">Modificar</button>
-                        <button onclick="eliminarRegistro('${registroKey}')">Eliminar</button>`;
-                    }
-                    registrosHTML += `<hr>
-                    </div>`;
-                });
-                document.getElementById('registros').innerHTML = registrosHTML;
-
-                // Mostrar el botón de exportar a Excel si el usuario es administrador
-                if (rolActual === 'Administrador') {
-                    document.getElementById('exportar').classList.remove('hidden');
-                } else {
-                    document.getElementById('exportar').classList.add('hidden');
-                }
-            });
-        }
-        function registrarUsuario() {
-            let usuariosRef = firebase.database().ref('usuarios');
-            let usuario = document.getElementById('reg_usuario').value;
-            let contrasena = document.getElementById('reg_contrasena').value;
-            let rol = document.getElementById('reg_rol').value;
-
-            usuariosRef.orderByChild('usuario').equalTo(usuario).once('value', function(snapshot) {
-                if (snapshot.exists()) {
-                    alert('El usuario ya existe.');
-                } else {
-                    let nuevoUsuarioRef = usuariosRef.push();
-                    nuevoUsuarioRef.set({
-                        usuario: usuario,
-                        contrasena: contrasena,
-                        rol: rol
-                    }, function(error) {
-                        if (error) {
-                            console.error('Error al registrar el usuario:', error);
-                        } else {
-                            alert('Usuario registrado con éxito. Ahora puedes iniciar sesión.');
-                            document.getElementById('registro-form').reset();
-                            document.getElementById('registro').classList.add('hidden');
-                            document.getElementById('login').classList.remove('hidden');
-                        }
-                    });
-                }
-            });
-        }
-
         function iniciarSesion() {
-            let usuariosRef = firebase.database().ref('usuarios');
-            let usuario = document.getElementById('login_usuario').value;
-            let contrasena = document.getElementById('login_contrasena').value;
+            let usuario = document.getElementById('usuario').value;
+            let contrasena = document.getElementById('contrasena').value;
 
+            let usuariosRef = firebase.database().ref('usuarios');
             usuariosRef.orderByChild('usuario').equalTo(usuario).once('value', function(snapshot) {
                 if (snapshot.exists()) {
                     snapshot.forEach(function(childSnapshot) {
                         let usuarioEncontrado = childSnapshot.val();
                         if (usuarioEncontrado.contrasena === contrasena) {
-                            usuarioActual = usuario;
-                            rolActual = usuarioEncontrado.rol;
-                            localStorage.setItem('usuarioActual', usuarioActual);
-                            localStorage.setItem('rolActual', rolActual);
-                            document.getElementById('login').classList.add('hidden');
-                            document.getElementById('formulario').classList.remove('hidden');
-                            document.querySelector('input[name="asesor"]').value = usuarioActual;
-                            mostrarRegistros();
+                            alert('Inicio de sesión exitoso');
+                            // Aquí puedes redirigir al usuario a otra página o realizar otras acciones
                         } else {
-                            alert('Contraseña incorrecta.');
+                            alert('Contraseña incorrecta');
                         }
                     });
                 } else {
-                    alert('Usuario no encontrado.');
+                    alert('Usuario no encontrado');
                 }
             });
         }
-
-        function mostrarRegistro() {
-            document.getElementById('login').classList.add('hidden');
-            document.getElementById('registro').classList.remove('hidden');
-        }
-
-        function regresarLogin() {
-            document.getElementById('registro').classList.add('hidden');
-            document.getElementById('login').classList.remove('hidden');
-        }
-
-        function exportarAExcel() {
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.json_to_sheet(baseDatos, {
-                header: ["fecha_hora", "codigo_unico", "cliente", "referencia", "asesor", "num_pares", "valor_total", "observaciones", "saldo_a_favor", "abonos"]
-            });
-
-            XLSX.utils.book_append_sheet(wb, ws, "Registros");
-            XLSX.writeFile(wb, "registros.xlsx");
-        }
-
-        function eliminarRegistro(key) {
-            if (confirm('¿Estás seguro de que deseas eliminar este registro?')) {
-                const registroRef = firebase.database().ref('registros/' + key);
-                registroRef.remove()
-                .then(function() {
-                    alert('Registro eliminado con éxito.');
-                })
-                .catch(function(error) {
-                    console.error('Error al eliminar el registro:', error);
-                });
-            }
-        }
-
-        function modificarRegistro(key) {
-            const registroRef = firebase.database().ref('registros/' + key);
-            registroRef.once('value', function(snapshot) {
-                let registro = snapshot.val();
-                let nuevoCliente = prompt('Modificar Nombre del Cliente:', registro.cliente);
-                if (nuevoCliente !== null) registro.cliente = nuevoCliente;
-
-                let nuevaReferencia = prompt('Modificar Referencia, Color, Talla, Precio:', registro.referencia);
-                if (nuevaReferencia !== null) registro.referencia = nuevaReferencia;
-
-                let nuevoNumPares = prompt('Modificar Número de Pares:', registro.num_pares);
-                if (nuevoNumPares !== null) registro.num_pares = nuevoNumPares;
-
-                let nuevoValorTotal = prompt('Modificar Valor Total del Pedido:', registro.valor_total);
-                if (nuevoValorTotal !== null) registro.valor_total = nuevoValorTotal;
-
-                let nuevasObservaciones = prompt('Modificar Observaciones:', registro.observaciones);
-                if (nuevasObservaciones !== null) registro.observaciones = nuevasObservaciones;
-
-                let nuevoSaldoAFavor = prompt('Modificar Saldo a Favor:', registro.saldo_a_favor);
-                if (nuevoSaldoAFavor !== null) registro.saldo_a_favor = nuevoSaldoAFavor;
-
-                let nuevosAbonos = prompt('Modificar Abonos:', registro.abonos);
-                if (nuevosAbonos !== null) registro.abonos = nuevosAbonos;
-
-                registroRef.update(registro, function(error) {
-                    if (error) {
-                        console.error('Error al modificar el registro:', error);
-                    } else {
-                        alert('Registro modificado con éxito.');
-                    }
-                });
-            });
-        }
-
-        window.onload = function() {
-            document.getElementById('login').classList.remove('hidden');
-        }
     </script>
+</head>
 <body>
     <div class="container">
-        <h1>Base de Datos con Autenticación</h1>
-        <div id="login">
-            <h2>Iniciar Sesión</h2>
-            <form onsubmit="iniciarSesion(); return false;">
-                <div class="form-field">
-                    <label>Usuario:</label>
-                    <input type="text" id="login_usuario" required>
-                </div>
-                <div class="form-field">
-                    <label>Contraseña:</label>
-                    <input type="password" id="login_contrasena" required>
-                </div>
-                <input type="submit" value="Iniciar Sesión">
-                <button type="button" onclick="mostrarRegistro()">Registrar</button>
-            </form>
+        <h1>Bienvenido</h1>
+        <div class="form-field">
+            <label for="usuario">Usuario:</label>
+            <input type="text" id="usuario" required>
         </div>
-        <div id="registro" class="hidden">
-            <h2>Registrar Usuario</h2>
-            <form id="registro-form" onsubmit="registrarUsuario(); return false;">
-                <div class="form-field">
-                    <label>Usuario:</label>
-                    <input type="text" id="reg_usuario" required>
-                </div>
-                <div class="form-field">
-                    <label>Contraseña:</label>
-                    <input type="password" id="reg_contrasena" required>
-                </div>
-                <div class="form-field">
-                    <label>Rol:</label>
-                    <select id="reg_rol" required>
-                        <option value="Operario">Operario</option>
-                        <option value="Administrador">Administrador</option>
-                    </select>
-                </div>
-                <input type="submit" value="Registrar">
-                <button type="button" onclick="regresarLogin()">Regresar</button>
-            </form>
+        <div class="form-field">
+            <label for="contrasena">Contraseña:</label>
+            <input type="password" id="contrasena" required>
         </div>
-        <div id="formulario" class="hidden">
-            <h2>Agregar Registro</h2>
-            <form onsubmit="return enviarFormulario();">
-                <div class="form-field">
-                    <label>Nombre del Cliente:</label>
-                    <input type="text" name="cliente" required>
-                </div>
-                <div class="form-field">
-                    <label>Referencia, Color, Talla, Precio:</label>
-                    <textarea name="referencia" rows="4" required></textarea>
-                </div>
-                <div class="form-field">
-                    <label>Nombre del Asesor:</label>
-                    <input type="text" name="asesor" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Número de Pares:</label>
-                    <input type="number" name="num_pares" required>
-                </div>
-                <div class="form-field">
-                    <label>Valor Total del Pedido:</label>
-                    <input type="number" name="valor_total" required>
-                </div>
-                <div class="form-field">
-                    <label>Observaciones:</label>
-                    <textarea name="observaciones"></textarea>
-                </div>
-                <div class="form-field">
-                    <label>Saldo a Favor:</label>
-                    <input type="number" name="saldo_a_favor" required>
-                </div>
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <input type="number" name="abonos" required>
-                </div>
-                <input type="submit" value="Agregar">
-            </form>
-
-            <!-- Barra de carga -->
-            <div id="loading-bar">
-                <div id="loading-bar-fill">0%</div>
-            </div>
-
-            <h2>Registros</h2>
-            <button id="exportar" class="hidden" onclick="exportarAExcel()">Exportar a Excel</button>
-            <div id="registros"></div>
-            <button type="button" onclick="regresarLogin()">Regresar</button>
-        </div>
+        <button onclick="iniciarSesion()">Iniciar Sesión</button>
     </div>
 </body>
 </html>
+
