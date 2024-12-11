@@ -116,28 +116,12 @@
         let abonos = [];
         let valorTotal = 0;
 
-        function mostrarModalProducto() {
-            document.getElementById('modal_producto').style.display = 'block';
+        function mostrarModal(modalId) {
+            document.getElementById(modalId).style.display = 'block';
         }
 
-        function cerrarModalProducto() {
-            document.getElementById('modal_producto').style.display = 'none';
-        }
-
-        function mostrarModalAbono() {
-            document.getElementById('modal_abono').style.display = 'block';
-        }
-
-        function cerrarModalAbono() {
-            document.getElementById('modal_abono').style.display = 'none';
-        }
-
-        function mostrarModalPedidos() {
-            document.getElementById('modal_pedidos').style.display = 'block';
-        }
-
-        function cerrarModalPedidos() {
-            document.getElementById('modal_pedidos').style.display = 'none';
+        function cerrarModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
         }
 
         function agregarProducto() {
@@ -148,80 +132,58 @@
 
             if (referencia && color && talla && precio) {
                 productos.push({ referencia, color, talla, precio: parseFloat(precio) });
-                valorTotal += parseFloat(precio); // Sumar el precio al valor total
-                actualizarListaProductos();
+                valorTotal += parseFloat(precio);
+                actualizarLista('productos', productos);
                 actualizarValorTotal();
-                cerrarModalProducto();
+                cerrarModal('modal_producto');
             } else {
                 alert('Por favor, complete todos los campos del producto.');
             }
         }
 
-        function actualizarListaProductos() {
-            let productosHTML = '';
-            productos.forEach((producto, index) => {
-                productosHTML += `<div class="record">
-                    <p><strong>Producto ${index + 1}</strong></p>
-                    <p>Referencia: ${producto.referencia}</p>
-                    <p>Color: ${producto.color}</p>
-                    <p>Talla: ${producto.talla}</p>
-                    <p>Precio: ${producto.precio}</p>
-                </div>`;
-            });
-            document.getElementById('lista_productos').innerHTML = productosHTML;
-        }
-
-        function actualizarValorTotal() {
-            document.getElementById('valor_total').value = Math.round(valorTotal); // Sin decimales
-            document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + Math.round(valorTotal).toLocaleString('es-CO'); // En pesos colombianos
-        }
         function agregarAbono() {
             const fecha = document.getElementById('abono_fecha').value;
             const monto = document.getElementById('abono_monto').value;
 
             if (fecha && monto) {
                 abonos.push({ fecha, monto: parseFloat(monto) });
-                actualizarListaAbonos();
-                cerrarModalAbono();
+                actualizarLista('abonos', abonos);
+                cerrarModal('modal_abono');
             } else {
                 alert('Por favor, complete todos los campos del abono.');
             }
         }
 
-        function actualizarListaAbonos() {
-            let abonosHTML = '';
-            abonos.forEach((abono, index) => {
-                abonosHTML += `<div class="record">
-                    <p><strong>Abono ${index + 1}</strong></p>
-                    <p>Fecha: ${abono.fecha}</p>
-                    <p>Monto: ${abono.monto}</p>
-                </div>`;
-            });
-            document.getElementById('lista_abonos').innerHTML = abonosHTML;
-        }
-
-        function mostrarBarraCargando() {
-            var loadingBar = document.getElementById("loading-bar");
-            var loadingBarFill = document.getElementById("loading-bar-fill");
-            loadingBar.style.display = "block";
-            loadingBarFill.style.width = "0%";
-            var width = 0;
-            var interval = setInterval(function() {
-                if (width >= 100) {
-                    clearInterval(interval);
-                    loadingBar.style.display = "none";
-                } else {
-                    width++;
-                    loadingBarFill.style.width = width + "%";
-                    loadingBarFill.innerText = width + "%";
+        function actualizarLista(tipo, lista) {
+            let html = '';
+            lista.forEach((item, index) => {
+                if (tipo === 'productos') {
+                    html += `<div class="record">
+                        <p><strong>Producto ${index + 1}</strong></p>
+                        <p>Referencia: ${item.referencia}</p>
+                        <p>Color: ${item.color}</p>
+                        <p>Talla: ${item.talla}</p>
+                        <p>Precio: ${item.precio}</p>
+                    </div>`;
+                } else if (tipo === 'abonos') {
+                    html += `<div class="record">
+                        <p><strong>Abono ${index + 1}</strong></p>
+                        <p>Fecha: ${item.fecha}</p>
+                        <p>Monto: ${item.monto}</p>
+                    </div>`;
                 }
-            }, 20); // Ajusta la velocidad de carga aquí
+            });
+            document.getElementById(`lista_${tipo}`).innerHTML = html;
         }
 
+        function actualizarValorTotal() {
+            document.getElementById('valor_total').value = Math.round(valorTotal);
+            document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + Math.round(valorTotal).toLocaleString('es-CO');
+        }
         async function guardarEnBaseDeDatos(datos) {
             try {
                 await db.collection('registros').add(datos);
-                console.log("Datos guardados en Firebase", datos); // Depuración
+                console.log("Datos guardados en Firebase", datos);
             } catch (error) {
                 console.error("Error guardando en Firebase:", error);
             }
@@ -230,32 +192,29 @@
         async function enviarFormulario() {
             mostrarBarraCargando();
 
-            let fechaHora = new Date().toLocaleString();
-            let codigoUnico = 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-
-            let datos = {
-                fecha_hora: fechaHora,
-                codigo_unico: codigoUnico,
+            const datos = {
+                fecha_hora: new Date().toLocaleString(),
+                codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
                 cliente: document.querySelector('input[name="cliente"]').value,
-                productos: productos, // Incluir productos agregados
+                productos,
                 num_pares: document.querySelector('input[name="num_pares"]').value,
-                valor_total: Math.round(valorTotal), // Asignar el valor total calculado sin decimales
+                valor_total: Math.round(valorTotal),
                 observaciones: document.querySelector('textarea[name="observaciones"]').value,
                 saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                abonos: abonos // Incluir abonos agregados
+                abonos
             };
 
             await guardarEnBaseDeDatos(datos);
             mostrarRegistros();
 
-            document.querySelector('form').reset(); // Limpiar el formulario
-            productos = []; // Reiniciar la lista de productos
-            abonos = []; // Reiniciar la lista de abonos
-            valorTotal = 0; // Reiniciar el valor total
-            actualizarListaProductos(); // Limpiar la lista de productos visualmente
-            actualizarListaAbonos(); // Limpiar la lista de abonos visualmente
-            actualizarValorTotal(); // Limpiar el valor total visualmente
-            return false; // Evitar recargar la página
+            document.querySelector('form').reset();
+            productos = [];
+            abonos = [];
+            valorTotal = 0;
+            actualizarLista('productos', productos);
+            actualizarLista('abonos', abonos);
+            actualizarValorTotal();
+            return false;
         }
 
         async function mostrarRegistros() {
@@ -301,6 +260,7 @@
             }
             document.getElementById('registros').innerHTML = registrosHTML;
         }
+
         async function exportarAExcel() {
             try {
                 const querySnapshot = await db.collection('registros').get();
@@ -363,7 +323,25 @@
                 console.error("Error al ver pedidos:", error);
             }
             document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
-            mostrarModalPedidos();
+            mostrarModal('modal_pedidos');
+        }
+
+        function mostrarBarraCargando() {
+            var loadingBar = document.getElementById("loading-bar");
+            var loadingBarFill = document.getElementById("loading-bar-fill");
+            loadingBar.style.display = "block";
+            loadingBarFill.style.width = "0%";
+            var width = 0;
+            var interval = setInterval(function() {
+                if (width >= 100) {
+                    clearInterval(interval);
+                    loadingBar.style.display = "none";
+                } else {
+                    width++;
+                    loadingBarFill.style.width = width + "%";
+                    loadingBarFill.innerText = width + "%";
+                }
+            }, 20);
         }
 
         window.onload = function() {
@@ -383,14 +361,14 @@
                 </div>
                 <div class="form-field">
                     <label>Productos:</label>
-                    <button type="button" onclick="mostrarModalProducto()">Agregar Producto</button>
+                    <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
                 </div>
                 <div id="lista_productos" class="form-field">
                     <!-- Lista de productos se actualizará aquí -->
                 </div>
                 <div class="form-field">
                     <label>Abonos:</label>
-                    <button type="button" onclick="mostrarModalAbono()">Agregar Abono</button>
+                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button>
                 </div>
                 <div id="lista_abonos" class="form-field">
                     <!-- Lista de abonos se actualizará aquí -->
@@ -427,7 +405,7 @@
     <!-- Modal para agregar productos -->
     <div id="modal_producto" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="cerrarModalProducto()">&times;</span>
+            <span class="close" onclick="cerrarModal('modal_producto')">&times;</span>
             <h2>Agregar Producto</h2>
             <div class="form-field">
                 <label>Referencia:</label>
@@ -452,7 +430,7 @@
     <!-- Modal para agregar abonos -->
     <div id="modal_abono" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="cerrarModalAbono()">&times;</span>
+            <span class="close" onclick="cerrarModal('modal_abono')">&times;</span>
             <h2>Agregar Abono</h2>
             <div class="form-field">
                 <label>Fecha:</label>
@@ -469,7 +447,7 @@
     <!-- Modal para ver pedidos -->
     <div id="modal_pedidos" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="cerrarModalPedidos()">&times;</span>
+            <span class="close" onclick="cerrarModal('modal_pedidos')">&times;</span>
             <h2>Pedidos</h2>
             <div id="lista_pedidos" class="form-field">
                 <!-- Lista de pedidos se actualizará aquí -->
@@ -478,3 +456,4 @@
     </div>
 </body>
 </html>
+    
