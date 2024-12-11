@@ -3,63 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configuración de Usuarios</title>
+    <title>La Zapatería</title>
     <style>
         body {
-            font-family: 'Roboto', sans-serif;
-            background-color: #f0f2f5;
-            margin: 0;
+            font-family: Arial, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
+            height: 100vh;
+            margin: 0;
+            background-color: #f2f2f2;
         }
         .container {
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            padding: 20px;
-            width: 100%;
-            max-width: 600px;
-        }
-        h1, h2 {
-            color: #333;
             text-align: center;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        label {
-            margin-top: 10px;
-            font-weight: bold;
-            color: #555;
+        h1 {
+            color: #4CAF50;
         }
-        input, select, button {
+        .form-field {
+            margin-bottom: 15px;
+        }
+        input {
             width: 100%;
             padding: 10px;
             margin-top: 5px;
-            border: 1px solid #ddd;
+            border: 1px solid #ccc;
             border-radius: 4px;
+            box-sizing: border-box;
         }
         button {
-            background-color: #28a745;
+            background-color: #4CAF50;
             color: white;
+            padding: 10px 15px;
             border: none;
+            border-radius: 4px;
             cursor: pointer;
-            margin-top: 10px;
         }
         button:hover {
-            background-color: #218838;
+            background-color: #45a049;
         }
-        .actions {
-            display: flex;
-            justify-content: space-between;
-            flex-wrap: wrap;
-        }
-        .actions button {
-            flex: 1 1 auto;
-            margin: 5px;
+        .error {
+            color: red;
+            margin-top: 10px;
         }
     </style>
+    <!-- Importar Firebase y configuración -->
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script>
@@ -78,118 +70,62 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        async function registrarUsuario() {
-            const nombreCompleto = document.getElementById("nombreCompleto").value;
-            const tipoDocumento = document.getElementById("tipoDocumento").value;
-            const celular = document.getElementById("celular").value;
-            const correo = document.getElementById("correo").value;
-            const direccion = document.getElementById("direccion").value;
-            const municipio = document.getElementById("municipio").value;
-            const tipoContrato = document.getElementById("tipoContrato").value;
-            const permisos = document.getElementById("permisos").value;
-            const nuevaEmpresa = document.getElementById("nuevaEmpresa").value;
-            const empresaSeleccionada = document.getElementById("empresaSeleccionadaRegistro").value;
-            const usuario = document.getElementById("usuarioRegistro").value;
-            const contraseña = document.getElementById("contraseña").value;
-            const empresa = nuevaEmpresa || empresaSeleccionada;
+        async function iniciarSesion() {
+            let usuario = document.getElementById('usuario').value.trim();
+            let contrasena = document.getElementById('contrasena').value.trim();
+            let errorMensaje = document.getElementById('error-mensaje');
 
-            if (!nombreCompleto || !empresa || !usuario || !contraseña) {
-                alert("Por favor, complete todos los campos obligatorios.");
+            if (!usuario || !contrasena) {
+                errorMensaje.textContent = 'Por favor, complete todos los campos.';
                 return;
             }
 
-            if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
-                await db.collection('empresas').add({ nombre: nuevaEmpresa });
-            }
-
             try {
-                await db.collection('usuarios').add({
-                    nombreCompleto,
-                    tipoDocumento,
-                    celular,
-                    correo,
-                    direccion,
-                    municipio,
-                    tipoContrato,
-                    permisos,
-                    empresa,
-                    usuario,
-                    contraseña // Asegurarse de que la contraseña se almacene correctamente
-                });
-                alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
-                cargarUsuarios();
-                cargarEmpresas();
+                console.log('Buscando usuario:', usuario);
+                const snapshot = await db.collection('usuarios').where('usuario', '==', usuario).get();
+                if (!snapshot.empty) {
+                    let loginExitoso = false;
+                    snapshot.forEach(doc => {
+                        const usuarioEncontrado = doc.data();
+                        console.log('Usuario encontrado:', usuarioEncontrado);
+                        console.log('Contraseña proporcionada:', contrasena);
+                        console.log('Contraseña almacenada:', usuarioEncontrado.contrasena);
+
+                        // Asegurarse de que la contraseña está definida y compararla
+                        if (usuarioEncontrado.contrasena && usuarioEncontrado.contrasena === contrasena) {
+                            loginExitoso = true;
+                        }
+                    });
+
+                    if (loginExitoso) {
+                        alert('Inicio de sesión exitoso');
+                        window.location.href = 'tablero.html';
+                    } else {
+                        errorMensaje.textContent = 'Usuario o contraseña incorrectos.';
+                    }
+                } else {
+                    errorMensaje.textContent = 'Usuario o contraseña incorrectos.';
+                }
             } catch (error) {
-                console.error("Error registrando usuario: ", error);
+                errorMensaje.textContent = 'Error al iniciar sesión: ' + error.message;
+                console.error('Error al iniciar sesión:', error);
             }
         }
-
-        async function empresaExiste(nombreEmpresa) {
-            const snapshot = await db.collection('empresas').where('nombre', '==', nombreEmpresa).get();
-            return !snapshot.empty;
-        }
-
-        window.onload = function() {
-            cargarUsuarios();
-            cargarEmpresas();
-        };
     </script>
 </head>
 <body>
     <div class="container">
-        <h1>Configuración de Usuarios</h1>
-        <p id="estadoUsuarios"></p>
-        <h2>Registrar un nuevo usuario</h2>
-        <form onsubmit="event.preventDefault(); registrarUsuario();">
-            <label for="usuarioRegistro">Usuario:</label>
-            <input type="text" id="usuarioRegistro" name="usuarioRegistro">
-
-            <label for="nombreCompleto">Nombre completo:</label>
-            <input type="text" id="nombreCompleto" name="nombreCompleto">
-
-            <label for="tipoDocumento">Tipo de documento:</label>
-            <input type="text" id="tipoDocumento" name="tipoDocumento">
-
-            <label for="celular">Celular:</label>
-            <input type="text" id="celular" name="celular">
-
-            <label for="correo">Correo:</label>
-            <input type="email" id="correo" name="correo">
-
-            <label for="direccion">Dirección:</label>
-            <input type="text" id="direccion" name="direccion">
-
-            <label for="municipio">Municipio:</label>
-            <input type="text" id="municipio" name="municipio">
-
-            <label for="tipoContrato">Tipo de contrato:</label>
-            <select id="tipoContrato" name="tipoContrato">
-                <option value="Fijo">Fijo</option>
-                <option value="Temporal">Temporal</option>
-                <option value="Indefinido">Indefinido</option>
-            </select>
-
-            <label for="permisos">Permisos:</label>
-            <select id="permisos" name="permisos">
-                <option value="Administrador">Administrador</option>
-                <option value="Operador">Operador</option>
-            </select>
-
-            <label for="nuevaEmpresa">Nueva Empresa (si no está en la lista):</label>
-            <input type="text" id="nuevaEmpresa" name="nuevaEmpresa">
-
-            <label for="empresaSeleccionadaRegistro">Seleccionar Empresa:</label>
-            <select id="empresaSeleccionadaRegistro" name="empresaSeleccionadaRegistro">
-                <option value="">Seleccionar Empresa</option>
-            </select>
-
-            <label for="contraseña">Contraseña:</label>
-            <input type="password" id="contraseña" name="contraseña">
-
-            <div class="actions">
-                <button type="submit">Registrar</button>
-            </div>
-        </form>
+        <h1>Bienvenido a La Zapatería</h1>
+        <div class="form-field">
+            <label for="usuario">Usuario:</label>
+            <input type="text" id="usuario" required>
+        </div>
+        <div class="form-field">
+            <label for="contrasena">Contraseña:</label>
+            <input type="password" id="contrasena" required>
+        </div>
+        <button onclick="iniciarSesion()">Iniciar Sesión</button>
+        <p id="error-mensaje" class="error"></p>
     </div>
 </body>
 </html>
