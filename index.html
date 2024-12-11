@@ -50,11 +50,16 @@
             color: red;
             margin-top: 10px;
         }
+        .info {
+            color: green;
+            margin-top: 10px;
+        }
     </style>
+    <!-- Importar Firebase y configuración -->
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script>
+        // Configuración de Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBVtSkeQe1WZna6nKC4vGxd4ISaRBQ5SVY",
             authDomain: "facba-a160c.firebaseapp.com",
@@ -65,14 +70,15 @@
             measurementId: "G-S29LSYM8TQ"
         };
 
+        // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
         const db = firebase.firestore();
 
         async function iniciarSesion() {
             let usuario = document.getElementById('usuario').value.trim();
             let contrasena = document.getElementById('contrasena').value.trim();
             let errorMensaje = document.getElementById('error-mensaje');
+            let infoMensaje = document.getElementById('info-mensaje');
 
             if (!usuario || !contrasena) {
                 errorMensaje.textContent = 'Por favor, complete todos los campos.';
@@ -80,28 +86,37 @@
             }
 
             try {
+                console.log('Buscando usuario:', usuario);
                 const snapshot = await db.collection('usuarios').where('usuario', '==', usuario).get();
                 if (!snapshot.empty) {
-                    snapshot.forEach(async (doc) => {
+                    let loginExitoso = false;
+                    snapshot.forEach(doc => {
                         const usuarioEncontrado = doc.data();
+                        console.log('Usuario encontrado:', usuarioEncontrado);
+                        console.log('Campos del usuario encontrado:', Object.keys(usuarioEncontrado));
+                        console.log('Contraseña proporcionada:', contrasena);
+                        console.log('Contraseña almacenada:', usuarioEncontrado.contraseña);
+
+                        // Asegurarse de que la contraseña está definida y compararla
                         if (usuarioEncontrado.contraseña && usuarioEncontrado.contraseña === contrasena) {
-                            try {
-                                await auth.signInWithEmailAndPassword(usuarioEncontrado.correo, contrasena);
-                                localStorage.setItem('rolUsuario', usuarioEncontrado.permisos); // Guardar el rol en localStorage
-                                alert('Inicio de sesión exitoso');
-                                window.location.href = 'tablero.html';
-                            } catch (error) {
-                                errorMensaje.textContent = 'Error de autenticación: ' + error.message;
-                            }
-                        } else {
-                            errorMensaje.textContent = 'Usuario o contraseña incorrectos.';
+                            loginExitoso = true;
+                            localStorage.setItem('rolUsuario', usuarioEncontrado.permisos); // Guardar el rol en localStorage
+                            infoMensaje.textContent = `Tipo de usuario: ${usuarioEncontrado.permisos}`;
                         }
                     });
+
+                    if (loginExitoso) {
+                        alert('Inicio de sesión exitoso');
+                        window.location.href = 'TABLERO.HTML';
+                    } else {
+                        errorMensaje.textContent = 'Usuario o contraseña incorrectos.';
+                    }
                 } else {
                     errorMensaje.textContent = 'Usuario o contraseña incorrectos.';
                 }
             } catch (error) {
                 errorMensaje.textContent = 'Error al iniciar sesión: ' + error.message;
+                console.error('Error al iniciar sesión:', error);
             }
         }
     </script>
@@ -119,6 +134,7 @@
         </div>
         <button onclick="iniciarSesion()">Iniciar Sesión</button>
         <p id="error-mensaje" class="error"></p>
+        <p id="info-mensaje" class="info"></p>
     </div>
 </body>
 </html>
