@@ -113,13 +113,22 @@
         const db = firebase.firestore();
         
         let productos = [];
+        let abonos = [];
 
-        function mostrarModal() {
-            document.getElementById('modal').style.display = 'block';
+        function mostrarModalProducto() {
+            document.getElementById('modal_producto').style.display = 'block';
         }
 
-        function cerrarModal() {
-            document.getElementById('modal').style.display = 'none';
+        function cerrarModalProducto() {
+            document.getElementById('modal_producto').style.display = 'none';
+        }
+
+        function mostrarModalAbono() {
+            document.getElementById('modal_abono').style.display = 'block';
+        }
+
+        function cerrarModalAbono() {
+            document.getElementById('modal_abono').style.display = 'none';
         }
 
         function agregarProducto() {
@@ -131,7 +140,7 @@
             if (referencia && color && talla && precio) {
                 productos.push({ referencia, color, talla, precio });
                 actualizarListaProductos();
-                cerrarModal();
+                cerrarModalProducto();
             } else {
                 alert('Por favor, complete todos los campos del producto.');
             }
@@ -150,6 +159,31 @@
             });
             document.getElementById('lista_productos').innerHTML = productosHTML;
         }
+        function agregarAbono() {
+            const fecha = document.getElementById('abono_fecha').value;
+            const monto = document.getElementById('abono_monto').value;
+
+            if (fecha && monto) {
+                abonos.push({ fecha, monto });
+                actualizarListaAbonos();
+                cerrarModalAbono();
+            } else {
+                alert('Por favor, complete todos los campos del abono.');
+            }
+        }
+
+        function actualizarListaAbonos() {
+            let abonosHTML = '';
+            abonos.forEach((abono, index) => {
+                abonosHTML += `<div class="record">
+                    <p><strong>Abono ${index + 1}</strong></p>
+                    <p>Fecha: ${abono.fecha}</p>
+                    <p>Monto: ${abono.monto}</p>
+                </div>`;
+            });
+            document.getElementById('lista_abonos').innerHTML = abonosHTML;
+        }
+
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
@@ -192,7 +226,7 @@
                 valor_total: document.querySelector('input[name="valor_total"]').value,
                 observaciones: document.querySelector('textarea[name="observaciones"]').value,
                 saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                abonos: document.querySelector('input[name="abonos"]').value
+                abonos: abonos // Incluir abonos agregados
             };
 
             await guardarEnBaseDeDatos(datos);
@@ -200,7 +234,9 @@
 
             document.querySelector('form').reset(); // Limpiar el formulario
             productos = []; // Reiniciar la lista de productos
+            abonos = []; // Reiniciar la lista de abonos
             actualizarListaProductos(); // Limpiar la lista de productos visualmente
+            actualizarListaAbonos(); // Limpiar la lista de abonos visualmente
             return false; // Evitar recargar la página
         }
 
@@ -220,17 +256,25 @@
                             <p>Precio: ${producto.precio}</p>
                         </div>`;
                     });
+                    let abonosHTML = '';
+                    registro.abonos.forEach((abono, j) => {
+                        abonosHTML += `<div>
+                            <p><strong>Abono ${j + 1}</strong></p>
+                            <p>Fecha: ${abono.fecha}</p>
+                            <p>Monto: ${abono.monto}</p>
+                        </div>`;
+                    });
                     registrosHTML += `<div class="record">
                         <p><strong>Registro ${index + 1}</strong></p>
                         <p>Fecha y Hora: ${registro.fecha_hora}</p>
                         <p>Código Único: ${registro.codigo_unico}</p>
                         <p>Cliente: ${registro.cliente}</p>
                         ${productosHTML}
+                        ${abonosHTML}
                         <p>Número de Pares: ${registro.num_pares}</p>
                         <p>Valor Total: ${registro.valor_total}</p>
                         <p>Observaciones: ${registro.observaciones}</p>
                         <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
-                        <p>Abonos: ${registro.abonos}</p>
                         <hr>
                     </div>`;
                 });
@@ -277,10 +321,17 @@
                 </div>
                 <div class="form-field">
                     <label>Productos:</label>
-                    <button type="button" onclick="mostrarModal()">Agregar Producto</button>
+                    <button type="button" onclick="mostrarModalProducto()">Agregar Producto</button>
                 </div>
                 <div id="lista_productos" class="form-field">
                     <!-- Lista de productos se actualizará aquí -->
+                </div>
+                <div class="form-field">
+                    <label>Abonos:</label>
+                    <button type="button" onclick="mostrarModalAbono()">Agregar Abono</button>
+                </div>
+                <div id="lista_abonos" class="form-field">
+                    <!-- Lista de abonos se actualizará aquí -->
                 </div>
                 <div class="form-field">
                     <label>Número de Pares:</label>
@@ -298,10 +349,6 @@
                     <label>Saldo a Favor:</label>
                     <input type="number" name="saldo_a_favor" required>
                 </div>
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <input type="number" name="abonos" required>
-                </div>
                 <input type="submit" value="Agregar">
             </form>
             <!-- Barra de carga -->
@@ -314,11 +361,10 @@
             <div id="registros"></div>
         </div>
     </div>
-
     <!-- Modal para agregar productos -->
-    <div id="modal" class="modal">
+    <div id="modal_producto" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="cerrarModal()">&times;</span>
+            <span class="close" onclick="cerrarModalProducto()">&times;</span>
             <h2>Agregar Producto</h2>
             <div class="form-field">
                 <label>Referencia:</label>
@@ -337,6 +383,23 @@
                 <input type="number" id="producto_precio" required>
             </div>
             <button type="button" onclick="agregarProducto()">Agregar Producto</button>
+        </div>
+    </div>
+
+    <!-- Modal para agregar abonos -->
+    <div id="modal_abono" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModalAbono()">&times;</span>
+            <h2>Agregar Abono</h2>
+            <div class="form-field">
+                <label>Fecha:</label>
+                <input type="date" id="abono_fecha" required>
+            </div>
+            <div class="form-field">
+                <label>Monto:</label>
+                <input type="number" id="abono_monto" required>
+            </div>
+            <button type="button" onclick="agregarAbono()">Agregar Abono</button>
         </div>
     </div>
 </body>
