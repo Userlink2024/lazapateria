@@ -58,38 +58,45 @@
 
         auth.onAuthStateChanged(async (user) => {
             if (user) {
-                console.log("Usuario autenticado:", user.uid); // Depuración
-                const usuarioActual = user.uid;
-                try {
-                    const usuarioDoc = await db.collection('usuarios').doc(usuarioActual).get();
-                    if (usuarioDoc.exists) {
-                        const usuarioData = usuarioDoc.data();
-                        console.log("Rol del usuario:", usuarioData.permisos); // Depuración
-                        mostrarOpcionesSegunRol(usuarioData.permisos);
-                    } else {
-                        console.error("Usuario no encontrado.");
-                        window.location.href = 'index.html'; // Redirigir a la página de inicio de sesión si el usuario no se encuentra
-                    }
-                } catch (error) {
-                    console.error("Error obteniendo el rol del usuario:", error);
-                    window.location.href = 'index.html'; // Redirigir a la página de inicio de sesión en caso de error
-                }
+                console.log("Usuario autenticado:", user.uid);
+                await obtenerRolUsuario(user.uid);
             } else {
                 console.error("No hay usuario autenticado.");
-                window.location.href = 'index.html'; // Redirigir a la página de inicio de sesión si no hay usuario autenticado
+                redirigirInicioSesion(); // Redirigir a la página de inicio de sesión si no hay usuario autenticado
             }
         });
 
+        async function obtenerRolUsuario(uid) {
+            try {
+                const usuarioDoc = await db.collection('usuarios').doc(uid).get();
+                if (usuarioDoc.exists) {
+                    const usuarioData = usuarioDoc.data();
+                    console.log("Rol del usuario:", usuarioData.permisos);
+                    mostrarOpcionesSegunRol(usuarioData.permisos);
+                } else {
+                    console.error("Usuario no encontrado.");
+                    redirigirInicioSesion(); // Redirigir a la página de inicio de sesión si el usuario no se encuentra
+                }
+            } catch (error) {
+                console.error("Error obteniendo el rol del usuario:", error);
+                redirigirInicioSesion(); // Redirigir a la página de inicio de sesión en caso de error
+            }
+        }
+
         function mostrarOpcionesSegunRol(rol) {
             if (rol === "Operador") {
-                console.log("Usuario es Operador, ocultando opciones de administrador."); // Depuración
+                console.log("Usuario es Operador, ocultando opciones de administrador.");
                 document.getElementById('adminButton').style.display = 'none';
                 document.getElementById('configButton').style.display = 'none';
             } else if (rol === "Administrador") {
-                console.log("Usuario es Administrador, mostrando todas las opciones."); // Depuración
+                console.log("Usuario es Administrador, mostrando todas las opciones.");
             } else {
-                console.log("Rol desconocido:", rol); // Depuración
+                console.log("Rol desconocido:", rol);
             }
+        }
+
+        function redirigirInicioSesion() {
+            window.location.href = 'index.html'; // Redirigir a la página de inicio de sesión
         }
 
         function generarPedidos() {
