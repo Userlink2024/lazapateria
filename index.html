@@ -5,54 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>La Zapatería</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f2f2f2;
-        }
-        .container {
-            text-align: center;
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #4CAF50;
-        }
-        .form-field {
-            margin-bottom: 15px;
-        }
-        input {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .error {
-            color: red;
-            margin-top: 10px;
-        }
+        /* Estilos CSS */
     </style>
-    <!-- Importar Firebase y configuración -->
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script>
         // Configuración de Firebase
@@ -66,8 +22,8 @@
             measurementId: "G-S29LSYM8TQ"
         };
 
-        // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
         const db = firebase.firestore();
 
         async function iniciarSesion() {
@@ -81,35 +37,27 @@
             }
 
             try {
-                console.log('Buscando usuario:', usuario);
                 const snapshot = await db.collection('usuarios').where('usuario', '==', usuario).get();
                 if (!snapshot.empty) {
-                    let loginExitoso = false;
-                    snapshot.forEach(doc => {
+                    snapshot.forEach(async (doc) => {
                         const usuarioEncontrado = doc.data();
-                        console.log('Usuario encontrado:', usuarioEncontrado);
-                        console.log('Campos del usuario encontrado:', Object.keys(usuarioEncontrado));
-                        console.log('Contraseña proporcionada:', contrasena);
-                        console.log('Contraseña almacenada:', usuarioEncontrado.contraseña);
-
-                        // Asegurarse de que la contraseña está definida y compararla
                         if (usuarioEncontrado.contraseña && usuarioEncontrado.contraseña === contrasena) {
-                            loginExitoso = true;
+                            try {
+                                await auth.signInWithEmailAndPassword(usuarioEncontrado.correo, contrasena);
+                                alert('Inicio de sesión exitoso');
+                                window.location.href = 'TABLERO.HTML';
+                            } catch (error) {
+                                errorMensaje.textContent = 'Error de autenticación: ' + error.message;
+                            }
+                        } else {
+                            errorMensaje.textContent = 'Usuario o contraseña incorrectos.';
                         }
                     });
-
-                    if (loginExitoso) {
-                        alert('Inicio de sesión exitoso');
-                        window.location.href = 'TABLERO.HTML';
-                    } else {
-                        errorMensaje.textContent = 'Usuario o contraseña incorrectos.';
-                    }
                 } else {
                     errorMensaje.textContent = 'Usuario o contraseña incorrectos.';
                 }
             } catch (error) {
                 errorMensaje.textContent = 'Error al iniciar sesión: ' + error.message;
-                console.error('Error al iniciar sesión:', error);
             }
         }
     </script>
@@ -130,3 +78,4 @@
     </div>
 </body>
 </html>
+
