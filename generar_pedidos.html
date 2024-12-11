@@ -59,6 +59,40 @@
             border-radius: 4px;
             margin-bottom: 10px;
         }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0,0,0);
+            background-color: rgba(0,0,0,0.4);
+            padding-top: 60px;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.25);
+            border-radius: 8px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
@@ -77,7 +111,45 @@
         // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        
+        let productos = [];
 
+        function mostrarModal() {
+            document.getElementById('modal').style.display = 'block';
+        }
+
+        function cerrarModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function agregarProducto() {
+            const referencia = document.getElementById('producto_referencia').value;
+            const color = document.getElementById('producto_color').value;
+            const talla = document.getElementById('producto_talla').value;
+            const precio = document.getElementById('producto_precio').value;
+
+            if (referencia && color && talla && precio) {
+                productos.push({ referencia, color, talla, precio });
+                actualizarListaProductos();
+                cerrarModal();
+            } else {
+                alert('Por favor, complete todos los campos del producto.');
+            }
+        }
+
+        function actualizarListaProductos() {
+            let productosHTML = '';
+            productos.forEach((producto, index) => {
+                productosHTML += `<div class="record">
+                    <p><strong>Producto ${index + 1}</strong></p>
+                    <p>Referencia: ${producto.referencia}</p>
+                    <p>Color: ${producto.color}</p>
+                    <p>Talla: ${producto.talla}</p>
+                    <p>Precio: ${producto.precio}</p>
+                </div>`;
+            });
+            document.getElementById('lista_productos').innerHTML = productosHTML;
+        }
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
@@ -104,6 +176,7 @@
                 console.error("Error guardando en Firebase:", error);
             }
         }
+
         async function enviarFormulario() {
             mostrarBarraCargando();
 
@@ -114,7 +187,7 @@
                 fecha_hora: fechaHora,
                 codigo_unico: codigoUnico,
                 cliente: document.querySelector('input[name="cliente"]').value,
-                referencia: document.querySelector('textarea[name="referencia"]').value,
+                productos: productos, // Incluir productos agregados
                 num_pares: document.querySelector('input[name="num_pares"]').value,
                 valor_total: document.querySelector('input[name="valor_total"]').value,
                 observaciones: document.querySelector('textarea[name="observaciones"]').value,
@@ -126,6 +199,8 @@
             mostrarRegistros();
 
             document.querySelector('form').reset(); // Limpiar el formulario
+            productos = []; // Reiniciar la lista de productos
+            actualizarListaProductos(); // Limpiar la lista de productos visualmente
             return false; // Evitar recargar la página
         }
 
@@ -135,12 +210,22 @@
                 const querySnapshot = await db.collection('registros').get();
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
+                    let productosHTML = '';
+                    registro.productos.forEach((producto, i) => {
+                        productosHTML += `<div>
+                            <p><strong>Producto ${i + 1}</strong></p>
+                            <p>Referencia: ${producto.referencia}</p>
+                            <p>Color: ${producto.color}</p>
+                            <p>Talla: ${producto.talla}</p>
+                            <p>Precio: ${producto.precio}</p>
+                        </div>`;
+                    });
                     registrosHTML += `<div class="record">
                         <p><strong>Registro ${index + 1}</strong></p>
                         <p>Fecha y Hora: ${registro.fecha_hora}</p>
                         <p>Código Único: ${registro.codigo_unico}</p>
                         <p>Cliente: ${registro.cliente}</p>
-                        <p>Referencia: ${registro.referencia.replace(/\n/g, '<br>')}</p>
+                        ${productosHTML}
                         <p>Número de Pares: ${registro.num_pares}</p>
                         <p>Valor Total: ${registro.valor_total}</p>
                         <p>Observaciones: ${registro.observaciones}</p>
@@ -165,7 +250,7 @@
 
                 const wb = XLSX.utils.book_new();
                 const ws = XLSX.utils.json_to_sheet(registros, {
-                    header: ["fecha_hora", "codigo_unico", "cliente", "referencia", "num_pares", "valor_total", "observaciones", "saldo_a_favor", "abonos"]
+                    header: ["fecha_hora", "codigo_unico", "cliente", "productos", "num_pares", "valor_total", "observaciones", "saldo_a_favor", "abonos"]
                 });
 
                 XLSX.utils.book_append_sheet(wb, ws, "Registros");
@@ -191,8 +276,11 @@
                     <input type="text" name="cliente" required>
                 </div>
                 <div class="form-field">
-                    <label>Referencia, Color, Talla, Precio:</label>
-                    <textarea name="referencia" rows="4" required></textarea>
+                    <label>Productos:</label>
+                    <button type="button" onclick="mostrarModal()">Agregar Producto</button>
+                </div>
+                <div id="lista_productos" class="form-field">
+                    <!-- Lista de productos se actualizará aquí -->
                 </div>
                 <div class="form-field">
                     <label>Número de Pares:</label>
@@ -224,6 +312,31 @@
             <h2>Registros</h2>
             <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
             <div id="registros"></div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar productos -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal()">&times;</span>
+            <h2>Agregar Producto</h2>
+            <div class="form-field">
+                <label>Referencia:</label>
+                <input type="text" id="producto_referencia" required>
+            </div>
+            <div class="form-field">
+                <label>Color:</label>
+                <input type="text" id="producto_color" required>
+            </div>
+            <div class="form-field">
+                <label>Talla:</label>
+                <input type="text" id="producto_talla" required>
+            </div>
+            <div class="form-field">
+                <label>Precio:</label>
+                <input type="number" id="producto_precio" required>
+            </div>
+            <button type="button" onclick="agregarProducto()">Agregar Producto</button>
         </div>
     </div>
 </body>
