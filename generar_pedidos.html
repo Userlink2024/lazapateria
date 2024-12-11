@@ -95,6 +95,7 @@
         }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script>
         // Configuración de Firebase
@@ -111,10 +112,23 @@
         // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        const auth = firebase.auth();
         
         let productos = [];
         let abonos = [];
         let valorTotal = 0;
+        let currentUser = null;
+
+        // Autenticación
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUser = user;
+                mostrarRegistros();
+            } else {
+                currentUser = null;
+                // Manejar usuario no autenticado
+            }
+        });
 
         function mostrarModalProducto() {
             document.getElementById('modal_producto').style.display = 'block';
@@ -242,7 +256,8 @@
                 valor_total: Math.round(valorTotal), // Asignar el valor total calculado sin decimales
                 observaciones: document.querySelector('textarea[name="observaciones"]').value,
                 saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                abonos: abonos // Incluir abonos agregados
+                abonos: abonos, // Incluir abonos agregados
+                usuario_id: currentUser ? currentUser.uid : null // Añadir ID del usuario
             };
 
             await guardarEnBaseDeDatos(datos);
@@ -261,7 +276,9 @@
         async function mostrarRegistros() {
             let registrosHTML = '';
             try {
-                const querySnapshot = await db.collection('registros').get();
+                const querySnapshot = await db.collection('registros')
+                    .where('usuario_id', '==', currentUser ? currentUser.uid : '')
+                    .get();
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
                     let productosHTML = '';
@@ -303,7 +320,9 @@
         }
         async function exportarAExcel() {
             try {
-                const querySnapshot = await db.collection('registros').get();
+                const querySnapshot = await db.collection('registros')
+                    .where('usuario_id', '==', currentUser ? currentUser.uid : '')
+                    .get();
                 const registros = [];
                 querySnapshot.forEach((doc) => {
                     registros.push(doc.data());
@@ -324,7 +343,9 @@
         async function verPedidos() {
             let pedidosHTML = '';
             try {
-                const querySnapshot = await db.collection('registros').get();
+                const querySnapshot = await db.collection('registros')
+                    .where('usuario_id', '==', currentUser ? currentUser.uid : '')
+                    .get();
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
                     let productosHTML = '';
@@ -367,7 +388,9 @@
         }
 
         window.onload = function() {
-            mostrarRegistros();
+            if (currentUser) {
+                mostrarRegistros();
+            }
         }
     </script>
 </head>
