@@ -40,7 +40,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script>
-        // Configuración de Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBVtSkeQe1WZna6nKC4vGxd4ISaRBQ5SVY",
             authDomain: "facba-a160c.firebaseapp.com",
@@ -51,7 +50,6 @@
             measurementId: "G-S29LSYM8TQ"
         };
 
-        // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
@@ -59,29 +57,29 @@
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 console.log("Usuario autenticado:", user.uid);
-                await obtenerRolUsuario(user.uid);
+                const usuarioActual = user.uid;
+                try {
+                    const usuarioDoc = await db.collection('usuarios').doc(usuarioActual).get();
+                    if (usuarioDoc.exists) {
+                        const usuarioData = usuarioDoc.data();
+                        console.log("Rol del usuario:", usuarioData.permisos);
+                        mostrarOpcionesSegunRol(usuarioData.permisos);
+                    } else {
+                        console.error("Usuario no encontrado.");
+                        // Puedes añadir un mensaje de error en la página en lugar de redirigir
+                        document.getElementById('error-mensaje').textContent = 'Usuario no encontrado.';
+                    }
+                } catch (error) {
+                    console.error("Error obteniendo el rol del usuario:", error);
+                    // Puedes añadir un mensaje de error en la página en lugar de redirigir
+                    document.getElementById('error-mensaje').textContent = 'Error obteniendo el rol del usuario: ' + error.message;
+                }
             } else {
                 console.error("No hay usuario autenticado.");
-                redirigirInicioSesion(); // Redirigir a la página de inicio de sesión si no hay usuario autenticado
+                // Puedes añadir un mensaje de error en la página en lugar de redirigir
+                document.getElementById('error-mensaje').textContent = 'No hay usuario autenticado.';
             }
         });
-
-        async function obtenerRolUsuario(uid) {
-            try {
-                const usuarioDoc = await db.collection('usuarios').doc(uid).get();
-                if (usuarioDoc.exists) {
-                    const usuarioData = usuarioDoc.data();
-                    console.log("Rol del usuario:", usuarioData.permisos);
-                    mostrarOpcionesSegunRol(usuarioData.permisos);
-                } else {
-                    console.error("Usuario no encontrado.");
-                    redirigirInicioSesion(); // Redirigir a la página de inicio de sesión si el usuario no se encuentra
-                }
-            } catch (error) {
-                console.error("Error obteniendo el rol del usuario:", error);
-                redirigirInicioSesion(); // Redirigir a la página de inicio de sesión en caso de error
-            }
-        }
 
         function mostrarOpcionesSegunRol(rol) {
             if (rol === "Operador") {
@@ -93,10 +91,6 @@
             } else {
                 console.log("Rol desconocido:", rol);
             }
-        }
-
-        function redirigirInicioSesion() {
-            window.location.href = 'index.html'; // Redirigir a la página de inicio de sesión
         }
 
         function generarPedidos() {
@@ -118,6 +112,7 @@
         <button onclick="generarPedidos()">Generar Pedidos</button>
         <button id="adminButton" onclick="administrar()">Administrar</button>
         <button id="configButton" onclick="configuracionUsuarios()">Configuración de Usuarios</button>
+        <p id="error-mensaje" style="color: red;"></p>
     </div>
 </body>
 </html>
