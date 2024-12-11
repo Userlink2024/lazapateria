@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Base de Datos con Autenticación</title>
+    <title>Generar Pedidos</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -60,10 +60,24 @@
             margin-bottom: 10px;
         }
     </style>
-    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script> <!-- Biblioteca SheetJS -->
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script>
-        let baseDatos = JSON.parse(localStorage.getItem('baseDatos')) || [];
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBVtSkeQe1WZna6nKC4vGxd4ISaRBQ5SVY",
+            authDomain: "facba-a160c.firebaseapp.com",
+            projectId: "facba-a160c",
+            storageBucket: "facba-a160c.appspot.com",
+            messagingSenderId: "585530132394",
+            appId: "1:585530132394:web:a25cda63f883f786804dd3",
+            measurementId: "G-S29LSYM8TQ"
+        };
 
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
@@ -82,12 +96,15 @@
             }, 20); // Ajusta la velocidad de carga aquí
         }
 
-        function guardarEnBaseDeDatos(datos) {
-            baseDatos.push(datos);
-            localStorage.setItem('baseDatos', JSON.stringify(baseDatos));
+        async function guardarEnBaseDeDatos(datos) {
+            try {
+                await db.collection('registros').add(datos);
+                console.log("Datos guardados en Firebase", datos); // Depuración
+            } catch (error) {
+                console.error("Error guardando en Firebase:", error);
+            }
         }
-
-        function enviarFormulario() {
+        async function enviarFormulario() {
             mostrarBarraCargando();
 
             let fechaHora = new Date().toLocaleString();
@@ -97,7 +114,7 @@
                 fecha_hora: fechaHora,
                 codigo_unico: codigoUnico,
                 cliente: document.querySelector('input[name="cliente"]').value,
-                referencia: document.querySelector('textarea[name="referencia"]').value, // Cambiado a textarea
+                referencia: document.querySelector('textarea[name="referencia"]').value,
                 num_pares: document.querySelector('input[name="num_pares"]').value,
                 valor_total: document.querySelector('input[name="valor_total"]').value,
                 observaciones: document.querySelector('textarea[name="observaciones"]').value,
@@ -105,41 +122,57 @@
                 abonos: document.querySelector('input[name="abonos"]').value
             };
 
-            guardarEnBaseDeDatos(datos);
+            await guardarEnBaseDeDatos(datos);
             mostrarRegistros();
 
             document.querySelector('form').reset(); // Limpiar el formulario
             return false; // Evitar recargar la página
         }
 
-        function mostrarRegistros() {
+        async function mostrarRegistros() {
             let registrosHTML = '';
-            baseDatos.forEach((registro, index) => {
-                registrosHTML += `<div class="record">
-                    <p><strong>Registro ${index + 1}</strong></p>
-                    <p>Fecha y Hora: ${registro.fecha_hora}</p>
-                    <p>Código Único: ${registro.codigo_unico}</p>
-                    <p>Cliente: ${registro.cliente}</p>
-                    <p>Referencia: ${registro.referencia.replace(/\n/g, '<br>')}</p>
-                    <p>Número de Pares: ${registro.num_pares}</p>
-                    <p>Valor Total: ${registro.valor_total}</p>
-                    <p>Observaciones: ${registro.observaciones}</p>
-                    <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
-                    <p>Abonos: ${registro.abonos}</p>
-                    <hr>
-                </div>`;
-            });
+            try {
+                const querySnapshot = await db.collection('registros').get();
+                querySnapshot.forEach((doc, index) => {
+                    const registro = doc.data();
+                    registrosHTML += `<div class="record">
+                        <p><strong>Registro ${index + 1}</strong></p>
+                        <p>Fecha y Hora: ${registro.fecha_hora}</p>
+                        <p>Código Único: ${registro.codigo_unico}</p>
+                        <p>Cliente: ${registro.cliente}</p>
+                        <p>Referencia: ${registro.referencia.replace(/\n/g, '<br>')}</p>
+                        <p>Número de Pares: ${registro.num_pares}</p>
+                        <p>Valor Total: ${registro.valor_total}</p>
+                        <p>Observaciones: ${registro.observaciones}</p>
+                        <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
+                        <p>Abonos: ${registro.abonos}</p>
+                        <hr>
+                    </div>`;
+                });
+            } catch (error) {
+                console.error("Error al mostrar registros:", error);
+            }
             document.getElementById('registros').innerHTML = registrosHTML;
         }
 
-        function exportarAExcel() {
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.json_to_sheet(baseDatos, {
-                header: ["fecha_hora", "codigo_unico", "cliente", "referencia", "num_pares", "valor_total", "observaciones", "saldo_a_favor", "abonos"]
-            });
+        async function exportarAExcel() {
+            try {
+                const querySnapshot = await db.collection('registros').get();
+                const registros = [];
+                querySnapshot.forEach((doc) => {
+                    registros.push(doc.data());
+                });
 
-            XLSX.utils.book_append_sheet(wb, ws, "Registros");
-            XLSX.writeFile(wb, "registros.xlsx");
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(registros, {
+                    header: ["fecha_hora", "codigo_unico", "cliente", "referencia", "num_pares", "valor_total", "observaciones", "saldo_a_favor", "abonos"]
+                });
+
+                XLSX.utils.book_append_sheet(wb, ws, "Registros");
+                XLSX.writeFile(wb, "registros.xlsx");
+            } catch (error) {
+                console.error("Error al exportar a Excel:", error);
+            }
         }
 
         window.onload = function() {
@@ -149,7 +182,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Base de Datos con Autenticación</h1>
+        <h1>Generar Pedidos</h1>
         <div id="formulario">
             <h2>Agregar Registro</h2>
             <form onsubmit="return enviarFormulario();">
@@ -159,7 +192,7 @@
                 </div>
                 <div class="form-field">
                     <label>Referencia, Color, Talla, Precio:</label>
-                    <textarea name="referencia" rows="4" required></textarea> <!-- Cambiado a textarea -->
+                    <textarea name="referencia" rows="4" required></textarea>
                 </div>
                 <div class="form-field">
                     <label>Número de Pares:</label>
@@ -183,9 +216,8 @@
                 </div>
                 <input type="submit" value="Agregar">
             </form>
-
             <!-- Barra de carga -->
-            <div id="loading-bar">
+            <div id="loading-bar" style="display: none;">
                 <div id="loading-bar-fill">0%</div>
             </div>
 
