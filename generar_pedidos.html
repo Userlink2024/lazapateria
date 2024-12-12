@@ -231,64 +231,74 @@
             actualizarLista('abonos', abonos);
             actualizarValorTotal();
         }
+
+        function resetearComboBoxAsesor() {
+            const filtroAsesor = document.getElementById('filtro_asesor');
+            filtroAsesor.innerHTML = '<option value="">Todos</option>'; // Reiniciar opciones
+        }
+
         async function verPedidos() {
             console.log("Ver pedidos...");
+            resetearComboBoxAsesor(); // Resetear opciones del combobox
             let pedidosHTML = '';
             let asesores = new Set();
             const querySnapshot = await db.collection('registros').get();
             querySnapshot.forEach((doc, index) => {
                 const registro = doc.data();
-                asesores.add(registro.asesor); // Agregar asesor al set
 
-                let productosHTML = '';
-                if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                    registro.productos.forEach((producto, i) => {
-                        productosHTML += `<div>
-                            <p><strong>Producto ${i + 1}</strong></p>
-                            <p>Referencia: ${producto.referencia}</p>
-                            <p>Color: ${producto.color}</p>
-                            <p>Talla: ${producto.talla}</p>
-                            <p>Precio: ${producto.precio}</p>
-                        </div>`;
-                    });
-                } else {
-                    productosHTML = 'Sin productos';
+                if (datosUsuario.permisos === 'administrador' || registro.usuario === datosUsuario.usuario) {
+                    asesores.add(registro.asesor); // Agregar asesor al set
+
+                    let productosHTML = '';
+                    if (Array.isArray(registro.productos) && registro.productos.length > 0) {
+                        registro.productos.forEach((producto, i) => {
+                            productosHTML += `<div>
+                                <p><strong>Producto ${i + 1}</strong></p>
+                                <p>Referencia: ${producto.referencia}</p>
+                                <p>Color: ${producto.color}</p>
+                                <p>Talla: ${producto.talla}</p>
+                                <p>Precio: ${producto.precio}</p>
+                            </div>`;
+                        });
+                    } else {
+                        productosHTML = 'Sin productos';
+                    }
+
+                    let abonosHTML = '';
+                    if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
+                        registro.abonos.forEach((abono, j) => {
+                            abonosHTML += `<div>
+                                <p><strong>Abono ${j + 1}</strong></p>
+                                <p>Fecha: ${abono.fecha}</p>
+                                <p>Monto: ${abono.monto}</p>
+                            </div>`;
+                        });
+                    } else {
+                        abonosHTML = 'Sin abonos';
+                    }
+
+                    pedidosHTML += `<div class="record" data-asesor="${registro.asesor}">
+                        <p><strong>Registro ${index + 1}</strong></p>
+                        <p>Fecha y Hora: ${registro.fecha_hora}</p>
+                        <p>Código Único: ${registro.codigo_unico}</p>
+                        <p>Cliente: ${registro.cliente}</p>
+                        <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                        ${productosHTML}
+                        ${abonosHTML}
+                        <p>Número de Pares: ${registro.num_pares}</p>
+                        <p>Valor Total: ${registro.valor_total}</p>
+                        <p>Observaciones: ${registro.observaciones}</p>
+                        <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
+                        <button onclick="modificarPedido('${doc.id}')">Modificar</button>
+                        <button onclick="eliminarPedido('${doc.id}')">Eliminar</button>
+                        <hr>
+                    </div>`;
                 }
-
-                let abonosHTML = '';
-                if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                    registro.abonos.forEach((abono, j) => {
-                        abonosHTML += `<div>
-                            <p><strong>Abono ${j + 1}</strong></p>
-                            <p>Fecha: ${abono.fecha}</p>
-                            <p>Monto: ${abono.monto}</p>
-                        </div>`;
-                    });
-                } else {
-                    abonosHTML = 'Sin abonos';
-                }
-
-                pedidosHTML += `<div class="record" data-asesor="${registro.asesor}">
-                    <p><strong>Registro ${index + 1}</strong></p>
-                    <p>Fecha y Hora: ${registro.fecha_hora}</p>
-                    <p>Código Único: ${registro.codigo_unico}</p>
-                    <p>Cliente: ${registro.cliente}</p>
-                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                    ${productosHTML}
-                    ${abonosHTML}
-                    <p>Número de Pares: ${registro.num_pares}</p>
-                    <p>Valor Total: ${registro.valor_total}</p>
-                    <p>Observaciones: ${registro.observaciones}</p>
-                    <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
-                    <button onclick="modificarPedido('${doc.id}')">Modificar</button>
-                    <button onclick="eliminarPedido('${doc.id}')">Eliminar</button>
-                    <hr>
-                </div>`;
             });
 
             document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
 
-            // Agregar opciones de asesores al combobox
+            // Evitar duplicados al cargar el combobox
             const filtroAsesor = document.getElementById('filtro_asesor');
             asesores.forEach(asesor => {
                 const option = document.createElement('option');
@@ -311,24 +321,93 @@
                 }
             });
         }
-
         async function modificarPedido(id) {
-            // Lógica para modificar el pedido
-            console.log("Modificando pedido:", id);
+            // Recuperar datos del pedido
+            const doc = await db.collection('registros').doc(id).get();
+            const registro = doc.data();
+
+            // Cargar datos en el modal
+            document.getElementById('modificar_cliente').value = registro.cliente;
+            document.getElementById('modificar_num_pares').value = registro.num_pares;
+            document.getElementById('modificar_valor_total').value = registro.valor_total;
+            document.getElementById('modificar_observaciones').value = registro.observaciones;
+            document.getElementById('modificar_saldo_a_favor').value = registro.saldo_a_favor;
+
+            let productosHTML = '';
+            if (Array.isArray(registro.productos) && registro.productos.length > 0) {
+                registro.productos.forEach((producto, i) => {
+                    productosHTML += `<div>
+                        <p><strong>Producto ${i + 1}</strong></p>
+                        <p>Referencia: ${producto.referencia}</p>
+                        <p>Color: ${producto.color}</p>
+                        <p>Talla: ${producto.talla}</p>
+                        <p>Precio: ${producto.precio}</p>
+                    </div>`;
+                });
+            } else {
+                productosHTML = 'Sin productos';
+            }
+
+            let abonosHTML = '';
+            if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
+                registro.abonos.forEach((abono, j) => {
+                    abonosHTML += `<div>
+                        <p><strong>Abono ${j + 1}</strong></p>
+                        <p>Fecha: ${abono.fecha}</p>
+                        <p>Monto: ${abono.monto}</p>
+                    </div>`;
+                });
+            } else {
+                abonosHTML = 'Sin abonos';
+            }
+
+            document.getElementById('modificar_productos').innerHTML = productosHTML;
+            document.getElementById('modificar_abonos').innerHTML = abonosHTML;
+
+            mostrarModal('modal_modificar');
         }
 
-        async function eliminarPedido(id) {
-            // Lógica para eliminar el pedido
-            console.log("Eliminando pedido:", id);
-            if (confirm("¿Estás seguro de que deseas eliminar este pedido?")) {
-                try {
-                    await db.collection('registros').doc(id).delete();
-                    alert("Pedido eliminado correctamente.");
-                    verPedidos(); // Volver a cargar los pedidos
-                } catch (error) {
-                    console.error("Error al eliminar el pedido:", error);
-                    alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
-                }
+        async function guardarCambios(id) {
+            const cliente = document.getElementById('modificar_cliente').value;
+            const num_pares = document.getElementById('modificar_num_pares').value;
+            const valor_total = document.getElementById('modificar_valor_total').value;
+            const observaciones = document.getElementById('modificar_observaciones').value;
+            const saldo_a_favor = document.getElementById('modificar_saldo_a_favor').value;
+
+            const productos = [];
+            const productosElements = document.querySelectorAll('#modificar_productos div');
+            productosElements.forEach((el) => {
+                const referencia = el.querySelector('p:nth-child(2)').textContent.replace('Referencia: ', '');
+                const color = el.querySelector('p:nth-child(3)').textContent.replace('Color: ', '');
+                const talla = el.querySelector('p:nth-child(4)').textContent.replace('Talla: ', '');
+                const precio = parseFloat(el.querySelector('p:nth-child(5)').textContent.replace('Precio: ', ''));
+                productos.push({ referencia, color, talla, precio });
+            });
+
+            const abonos = [];
+            const abonosElements = document.querySelectorAll('#modificar_abonos div');
+            abonosElements.forEach((el) => {
+                const fecha = el.querySelector('p:nth-child(2)').textContent.replace('Fecha: ', '');
+                const monto = parseFloat(el.querySelector('p:nth-child(3)').textContent.replace('Monto: ', ''));
+                abonos.push({ fecha, monto });
+            });
+
+            try {
+                await db.collection('registros').doc(id).update({
+                    cliente,
+                    num_pares,
+                    valor_total,
+                    observaciones,
+                    saldo_a_favor,
+                    productos,
+                    abonos
+                });
+                alert("Pedido modificado exitosamente.");
+                cerrarModal('modal_modificar');
+                verPedidos(); // Volver a cargar los pedidos
+            } catch (error) {
+                console.error("Error al modificar el pedido:", error);
+                alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
             }
         }
 
@@ -358,7 +437,6 @@
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Agregar asesor automáticamente
         }
     </script>
-</head>
 <body>
     <div class="container">
         <h1>Generar Pedidos</h1>
@@ -454,6 +532,49 @@
                 <input type="number" id="abono_monto" required>
             </div>
             <button type="button" onclick="agregarAbono()">Agregar Abono</button>
+        </div>
+    </div>
+
+    <!-- Modal para modificar pedidos -->
+    <div id="modal_modificar" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_modificar')">&times;</span>
+            <h2>Modificar Pedido</h2>
+            <div class="form-field">
+                <label>Nombre del Cliente:</label>
+                <input type="text" id="modificar_cliente" required>
+            </div>
+            <div class="form-field">
+                <label>Productos:</label>
+                <div id="modificar_productos">
+                    <!-- Lista de productos se actualizará aquí -->
+                </div>
+                <button type="button" onclick="mostrarModal('modal_producto_modificar')">Agregar Producto</button>
+            </div>
+            <div class="form-field">
+                <label>Abonos:</label>
+                <div id="modificar_abonos">
+                    <!-- Lista de abonos se actualizará aquí -->
+                </div>
+                <button type="button" onclick="mostrarModal('modal_abono_modificar')">Agregar Abono</button>
+            </div>
+            <div class="form-field">
+                <label>Número de Pares:</label>
+                <input type="number" id="modificar_num_pares" required>
+            </div>
+            <div class="form-field">
+                <label>Valor Total:</label>
+                <input type="number" id="modificar_valor_total" required readonly>
+            </div>
+            <div class="form-field">
+                <label>Observaciones:</label>
+                <textarea id="modificar_observaciones"></textarea>
+            </div>
+            <div class="form-field">
+                <label>Saldo a Favor:</label>
+                <input type="number" id="modificar_saldo_a_favor" required>
+            </div>
+            <button type="button" onclick="guardarCambios('${doc.id}')">Guardar Cambios</button>
         </div>
     </div>
 
