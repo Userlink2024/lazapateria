@@ -9,10 +9,6 @@
             background-color: #f9f9f9;
             color: #333;
         }
-        h1, h2 {
-            color: #4CAF50;
-            text-align: center;
-        }
         .container {
             max-width: 800px;
             margin: 0 auto;
@@ -21,27 +17,25 @@
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
         }
-        label {
-            display: block;
-            margin-top: 10px;
-            font-weight: bold;
+        h1, h2 {
+            color: #4CAF50;
+            text-align: center;
         }
-        .form-field {
-            margin-bottom: 15px;
+        label, input, textarea, select, button {
+            display: block;
+            width: 100%;
+            margin-top: 10px;
         }
         input, textarea, select {
-            width: 100%;
             padding: 8px;
-            margin-top: 5px;
             border: 1px solid #ccc;
             border-radius: 4px;
             box-sizing: border-box;
         }
         input[type="submit"], button {
+            padding: 10px;
             background-color: #4CAF50;
             color: white;
-            padding: 10px 15px;
-            margin: 10px 0;
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -67,31 +61,26 @@
             top: 0;
             width: 100%;
             height: 100%;
-            overflow: auto;
-            background-color: rgb(0,0,0);
             background-color: rgba(0,0,0,0.4);
             padding-top: 60px;
         }
         .modal-content {
-            background-color: #fefefe;
+            background-color: #fff;
             margin: 5% auto;
             padding: 20px;
             border: 1px solid #888;
             width: 80%;
-            box-shadow: 0 0 10px rgba(0,0,0,0.25);
             border-radius: 8px;
         }
         .close {
             color: #aaa;
             float: right;
             font-size: 28px;
-            font-weight: bold;
+            cursor: pointer;
         }
-        .close:hover,
-        .close:focus {
+        .close:hover, .close:focus {
             color: black;
             text-decoration: none;
-            cursor: pointer;
         }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
@@ -112,50 +101,32 @@
         const db = firebase.firestore();
         console.log("Firebase configurado correctamente.");
 
-        let productos = [];
-        let abonos = [];
-        let valorTotal = 0;
+        let productos = [], abonos = [], valorTotal = 0;
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
         console.log("Datos del usuario:", datosUsuario);
 
-        function mostrarModal(modalId) {
-            console.log("Mostrando modal:", modalId);
-            document.getElementById(modalId).style.display = 'block';
-        }
-
-        function cerrarModal(modalId) {
-            console.log("Cerrando modal:", modalId);
-            document.getElementById(modalId).style.display = 'none';
-        }
+        const mostrarModal = id => document.getElementById(id).style.display = 'block';
+        const cerrarModal = id => document.getElementById(id).style.display = 'none';
 
         function agregarProducto() {
-            const referencia = document.getElementById('producto_referencia').value;
-            const color = document.getElementById('producto_color').value;
-            const talla = document.getElementById('producto_talla').value;
-            const precio = document.getElementById('producto_precio').value;
-
-            if (referencia && color && talla && precio) {
-                productos.push({ referencia, color, talla, precio: parseFloat(precio) });
-                valorTotal += parseFloat(precio);
+            const ref = id => document.getElementById(id).value;
+            const producto = { referencia: ref('producto_referencia'), color: ref('producto_color'), talla: ref('producto_talla'), precio: parseFloat(ref('producto_precio')) };
+            if (Object.values(producto).every(val => val)) {
+                productos.push(producto);
+                valorTotal += producto.precio;
                 actualizarLista('productos', productos);
                 actualizarValorTotal();
                 cerrarModal('modal_producto');
-            } else {
-                alert('Por favor, complete todos los campos del producto.');
-            }
+            } else alert('Por favor, complete todos los campos del producto.');
         }
 
         function agregarAbono() {
-            const fecha = document.getElementById('abono_fecha').value;
-            const monto = document.getElementById('abono_monto').value;
-
-            if (fecha && monto) {
-                abonos.push({ fecha, monto: parseFloat(monto) });
+            const abono = { fecha: document.getElementById('abono_fecha').value, monto: parseFloat(document.getElementById('abono_monto').value) };
+            if (abono.fecha && abono.monto) {
+                abonos.push(abono);
                 actualizarLista('abonos', abonos);
                 cerrarModal('modal_abono');
-            } else {
-                alert('Por favor, complete todos los campos del abono.');
-            }
+            } else alert('Por favor, complete todos los campos del abono.');
         }
         function actualizarLista(tipo, lista) {
             let html = '';
@@ -314,11 +285,7 @@
             const filtroAsesor = document.getElementById('filtro_asesor').value;
             const registros = document.querySelectorAll('#lista_pedidos .record');
             registros.forEach(registro => {
-                if (filtroAsesor === '' || registro.dataset.asesor === filtroAsesor) {
-                    registro.style.display = 'block';
-                } else {
-                    registro.style.display = 'none';
-                }
+                registro.style.display = filtroAsesor === '' || registro.dataset.asesor === filtroAsesor ? 'block' : 'none';
             });
         }
         async function modificarPedido(id) {
@@ -327,81 +294,59 @@
             const registro = doc.data();
 
             // Cargar datos en el modal
-            document.getElementById('modificar_cliente').value = registro.cliente;
-            document.getElementById('modificar_num_pares').value = registro.num_pares;
-            document.getElementById('modificar_valor_total').value = registro.valor_total;
-            document.getElementById('modificar_observaciones').value = registro.observaciones;
-            document.getElementById('modificar_saldo_a_favor').value = registro.saldo_a_favor;
+            const ref = id => document.getElementById(id);
+            ref('modificar_cliente').value = registro.cliente;
+            ref('modificar_num_pares').value = registro.num_pares;
+            ref('modificar_valor_total').value = registro.valor_total;
+            ref('modificar_observaciones').value = registro.observaciones;
+            ref('modificar_saldo_a_favor').value = registro.saldo_a_favor;
 
-            let productosHTML = '';
-            if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                registro.productos.forEach((producto, i) => {
-                    productosHTML += `<div>
-                        <p><strong>Producto ${i + 1}</strong></p>
-                        <p>Referencia: ${producto.referencia}</p>
-                        <p>Color: ${producto.color}</p>
-                        <p>Talla: ${producto.talla}</p>
-                        <p>Precio: ${producto.precio}</p>
+            const generarHTML = (items, tipo) => {
+                let html = '';
+                items.forEach((item, i) => {
+                    html += `<div>
+                        <p><strong>${tipo} ${i + 1}</strong></p>
+                        <p>Referencia: ${item.referencia}</p>
+                        <p>Color: ${item.color}</p>
+                        <p>Talla: ${item.talla}</p>
+                        <p>Precio: ${item.precio}</p>
                     </div>`;
                 });
-            } else {
-                productosHTML = 'Sin productos';
-            }
+                return html || `Sin ${tipo.toLowerCase()}`;
+            };
 
-            let abonosHTML = '';
-            if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                registro.abonos.forEach((abono, j) => {
-                    abonosHTML += `<div>
-                        <p><strong>Abono ${j + 1}</strong></p>
-                        <p>Fecha: ${abono.fecha}</p>
-                        <p>Monto: ${abono.monto}</p>
-                    </div>`;
-                });
-            } else {
-                abonosHTML = 'Sin abonos';
-            }
-
-            document.getElementById('modificar_productos').innerHTML = productosHTML;
-            document.getElementById('modificar_abonos').innerHTML = abonosHTML;
+            ref('modificar_productos').innerHTML = generarHTML(registro.productos, 'Producto');
+            ref('modificar_abonos').innerHTML = generarHTML(registro.abonos, 'Abono');
 
             mostrarModal('modal_modificar');
         }
 
         async function guardarCambios(id) {
-            const cliente = document.getElementById('modificar_cliente').value;
-            const num_pares = document.getElementById('modificar_num_pares').value;
-            const valor_total = document.getElementById('modificar_valor_total').value;
-            const observaciones = document.getElementById('modificar_observaciones').value;
-            const saldo_a_favor = document.getElementById('modificar_saldo_a_favor').value;
+            const ref = id => document.getElementById(id).value;
+            const productos = Array.from(document.querySelectorAll('#modificar_productos div')).map(el => ({
+                referencia: el.querySelector('p:nth-child(2)').textContent.replace('Referencia: ', ''),
+                color: el.querySelector('p:nth-child(3)').textContent.replace('Color: ', ''),
+                talla: el.querySelector('p:nth-child(4)').textContent.replace('Talla: ', ''),
+                precio: parseFloat(el.querySelector('p:nth-child(5)').textContent.replace('Precio: ', ''))
+            }));
 
-            const productos = [];
-            const productosElements = document.querySelectorAll('#modificar_productos div');
-            productosElements.forEach((el) => {
-                const referencia = el.querySelector('p:nth-child(2)').textContent.replace('Referencia: ', '');
-                const color = el.querySelector('p:nth-child(3)').textContent.replace('Color: ', '');
-                const talla = el.querySelector('p:nth-child(4)').textContent.replace('Talla: ', '');
-                const precio = parseFloat(el.querySelector('p:nth-child(5)').textContent.replace('Precio: ', ''));
-                productos.push({ referencia, color, talla, precio });
-            });
+            const abonos = Array.from(document.querySelectorAll('#modificar_abonos div')).map(el => ({
+                fecha: el.querySelector('p:nth-child(2)').textContent.replace('Fecha: ', ''),
+                monto: parseFloat(el.querySelector('p:nth-child(3)').textContent.replace('Monto: ', ''))
+            }));
 
-            const abonos = [];
-            const abonosElements = document.querySelectorAll('#modificar_abonos div');
-            abonosElements.forEach((el) => {
-                const fecha = el.querySelector('p:nth-child(2)').textContent.replace('Fecha: ', '');
-                const monto = parseFloat(el.querySelector('p:nth-child(3)').textContent.replace('Monto: ', ''));
-                abonos.push({ fecha, monto });
-            });
+            const datos = {
+                cliente: ref('modificar_cliente'),
+                num_pares: ref('modificar_num_pares'),
+                valor_total: ref('modificar_valor_total'),
+                observaciones: ref('modificar_observaciones'),
+                saldo_a_favor: ref('modificar_saldo_a_favor'),
+                productos,
+                abonos
+            };
 
             try {
-                await db.collection('registros').doc(id).update({
-                    cliente,
-                    num_pares,
-                    valor_total,
-                    observaciones,
-                    saldo_a_favor,
-                    productos,
-                    abonos
-                });
+                await db.collection('registros').doc(id).update(datos);
                 alert("Pedido modificado exitosamente.");
                 cerrarModal('modal_modificar');
                 verPedidos(); // Volver a cargar los pedidos
