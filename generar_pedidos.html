@@ -370,19 +370,23 @@
 
             <h2>Registros</h2>
             <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
-                <script>
+    <script>
         async function exportarAExcel() {
             try {
                 const querySnapshot = await db.collection('registros').get();
                 const registros = [];
                 querySnapshot.forEach((doc) => {
-                    registros.push(doc.data());
+                    let data = doc.data();
+
+                    // Convertir productos y abonos a string para exportar a Excel
+                    data.productos = data.productos.map(p => `Referencia: ${p.referencia}, Color: ${p.color}, Talla: ${p.talla}, Precio: ${p.precio}`).join("\n");
+                    data.abonos = data.abonos.map(a => `Fecha: ${a.fecha}, Monto: ${a.monto}`).join("\n");
+                    
+                    registros.push(data);
                 });
 
                 const wb = XLSX.utils.book_new();
-                const ws = XLSX.utils.json_to_sheet(registros, {
-                    header: ["fecha_hora", "codigo_unico", "cliente", "productos", "num_pares", "valor_total", "observaciones", "saldo_a_favor", "abonos", "asesor"]
-                });
+                const ws = XLSX.utils.json_to_sheet(registros);
 
                 XLSX.utils.book_append_sheet(wb, ws, "Registros");
                 XLSX.writeFile(wb, "registros.xlsx");
@@ -394,7 +398,6 @@
             }
         }
     </script>
-
             <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
     </div>
     <!-- Modal para agregar productos -->
