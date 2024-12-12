@@ -222,8 +222,6 @@
                 alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
             }
 
-            mostrarRegistros();
-
             document.querySelector('form').reset();
             productos = [];
             abonos = [];
@@ -231,85 +229,6 @@
             actualizarLista('productos', productos);
             actualizarLista('abonos', abonos);
             actualizarValorTotal();
-        }
-        function mostrarRegistros() {
-            console.log("Mostrando registros...");
-            let registrosHTML = '';
-            db.collection('registros').onSnapshot((querySnapshot) => {
-                registrosHTML = '';
-                querySnapshot.forEach((doc, index) => {
-                    const registro = doc.data();
-                    console.log("Registro recuperado:", registro);
-                    if (datosUsuario.permisos === 'administrador' || registro.usuario === datosUsuario.usuario) {
-                        let productosHTML = '';
-                        if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                            registro.productos.forEach((producto, i) => {
-                                productosHTML += `<div>
-                                    <p><strong>Producto ${i + 1}</strong></p>
-                                    <p>Referencia: ${producto.referencia}</p>
-                                    <p>Color: ${producto.color}</p>
-                                    <p>Talla: ${producto.talla}</p>
-                                    <p>Precio: ${producto.precio}</p>
-                                </div>`;
-                            });
-                        } else {
-                            productosHTML = 'Sin productos';
-                        }
-
-                        let abonosHTML = '';
-                        if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                            registro.abonos.forEach((abono, j) => {
-                                abonosHTML += `<div>
-                                    <p><strong>Abono ${j + 1}</strong></p>
-                                    <p>Fecha: ${abono.fecha}</p>
-                                    <p>Monto: ${abono.monto}</p>
-                                </div>`;
-                            });
-                        } else {
-                            abonosHTML = 'Sin abonos';
-                        }
-
-                        registrosHTML += `<div class="record">
-                            <p><strong>Registro ${index + 1}</strong></p>
-                            <p>Fecha y Hora: ${registro.fecha_hora}</p>
-                            <p>Código Único: ${registro.codigo_unico}</p>
-                            <p>Cliente: ${registro.cliente}</p>
-                            <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                            ${productosHTML}
-                            ${abonosHTML}
-                            <p>Número de Pares: ${registro.num_pares}</p>
-                            <p>Valor Total: ${registro.valor_total}</p>
-                            <p>Observaciones: ${registro.observaciones}</p>
-                            <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
-                            <hr>
-                        </div>`;
-                    }
-                });
-                document.getElementById('registros').innerHTML = registrosHTML;
-            }, (error) => {
-                console.error("Error al mostrar registros:", error);
-            });
-        }
-
-        async function exportarAExcel() {
-            try {
-                const querySnapshot = await db.collection('registros').get();
-                const registros = [];
-                querySnapshot.forEach((doc) => {
-                    registros.push(doc.data());
-                });
-
-                const wb = XLSX.utils.book_new();
-                const ws = XLSX.utils.json_to_sheet(registros, {
-                    header: ["fecha_hora", "codigo_unico", "cliente", "productos", "num_pares", "valor_total", "observaciones", "saldo_a_favor", "abonos", "asesor"]
-                });
-
-                XLSX.utils.book_append_sheet(wb, ws, "Registros");
-                XLSX.writeFile(wb, "registros.xlsx");
-                console.log("Datos exportados a Excel.");
-            } catch (error) {
-                console.error("Error al exportar a Excel:", error);
-            }
         }
         async function verPedidos() {
             console.log("Ver pedidos...");
@@ -334,7 +253,7 @@
                         } else {
                             productosHTML = 'Sin productos';
                         }
-                        
+
                         let abonosHTML = '';
                         if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
                             registro.abonos.forEach((abono, j) => {
@@ -395,7 +314,6 @@
                 document.getElementById('exportar').style.display = 'none';
             }
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Agregar asesor automáticamente
-            mostrarRegistros();
         }
     </script>
 </head>
@@ -452,7 +370,6 @@
             <h2>Registros</h2>
             <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
             <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
-            <div id="registros"></div>
     </div>
     <!-- Modal para agregar productos -->
     <div id="modal_producto" class="modal">
