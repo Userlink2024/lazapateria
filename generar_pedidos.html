@@ -200,7 +200,8 @@
                 valor_total: Math.round(valorTotal),
                 observaciones: document.querySelector('textarea[name="observaciones"]').value,
                 saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                abonos
+                abonos,
+                usuario: datosUsuario.usuario  // Guardar el usuario que hizo el pedido
             };
 
             await guardarEnBaseDeDatos(datos);
@@ -216,10 +217,10 @@
             return false;
         }
 
-        async function mostrarRegistros() {
+        function mostrarRegistros() {
             let registrosHTML = '';
-            try {
-                const querySnapshot = await db.collection('registros').get();
+            db.collection('registros').onSnapshot((querySnapshot) => {
+                registrosHTML = '';
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
                     if (datosUsuario.permisos === 'administrador' || registro.usuario === datosUsuario.usuario) {
@@ -260,10 +261,10 @@
                         </div>`;
                     }
                 });
-            } catch (error) {
+                document.getElementById('registros').innerHTML = registrosHTML;
+            }, (error) => {
                 console.error("Error al mostrar registros:", error);
-            }
-            document.getElementById('registros').innerHTML = registrosHTML;
+            });
         }
         async function exportarAExcel() {
             try {
@@ -287,8 +288,8 @@
 
         async function verPedidos() {
             let pedidosHTML = '';
-            try {
-                const querySnapshot = await db.collection('registros').get();
+            db.collection('registros').onSnapshot((querySnapshot) => {
+                pedidosHTML = '';
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
                     if (datosUsuario.permisos === 'administrador' || registro.usuario === datosUsuario.usuario) {
@@ -329,10 +330,10 @@
                         </div>`;
                     }
                 });
-            } catch (error) {
+                document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
+            }, (error) => {
                 console.error("Error al ver pedidos:", error);
-            }
-            document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
+            });
             mostrarModal('modal_pedidos');
         }
 
@@ -409,7 +410,7 @@
             </div>
 
             <h2>Registros</h2>
-            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel">Exportar a Excel</button>
+            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
             <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
             <div id="registros"></div>
     </div>
