@@ -230,63 +230,107 @@
             actualizarLista('productos', productos);
             actualizarLista('abonos', abonos);
             actualizarValorTotal();
-            }
-async function verPedidos() {
-    console.log("Ver pedidos...");
-    let pedidosHTML = '';
-    const querySnapshot = await db.collection('registros').get();
-    querySnapshot.forEach((doc, index) => {
-        const registro = doc.data();
-        console.log("Registro recuperado:", registro);
-        if (datosUsuario.permisos === 'administrador' || registro.usuario === datosUsuario.usuario) {
-            let productosHTML = '';
-            if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                registro.productos.forEach((producto, i) => {
-                    productosHTML += `<div>
-                        <p><strong>Producto ${i + 1}</strong></p>
-                        <p>Referencia: ${producto.referencia}</p>
-                        <p>Color: ${producto.color}</p>
-                        <p>Talla: ${producto.talla}</p>
-                        <p>Precio: ${producto.precio}</p>
-                    </div>`;
-                });
-            } else {
-                productosHTML = 'Sin productos';
-            }
-
-            let abonosHTML = '';
-            if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                registro.abonos.forEach((abono, j) => {
-                    abonosHTML += `<div>
-                        <p><strong>Abono ${j + 1}</strong></p>
-                        <p>Fecha: ${abono.fecha}</p>
-                        <p>Monto: ${abono.monto}</p>
-                    </div>`;
-                });
-            } else {
-                abonosHTML = 'Sin abonos';
-            }
-
-            pedidosHTML += `<div class="record">
-                <p><strong>Registro ${index + 1}</strong></p>
-                <p>Fecha y Hora: ${registro.fecha_hora}</p>
-                <p>Código Único: ${registro.codigo_unico}</p>
-                <p>Cliente: ${registro.cliente}</p>
-                <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                ${productosHTML}
-                ${abonosHTML}
-                <p>Número de Pares: ${registro.num_pares}</p>
-                <p>Valor Total: ${registro.valor_total}</p>
-                <p>Observaciones: ${registro.observaciones}</p>
-                <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
-                <hr>
-            </div>`;
         }
-    });
-    document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
-    mostrarModal('modal_pedidos');
-}
+        async function verPedidos() {
+            console.log("Ver pedidos...");
+            let pedidosHTML = '';
+            let asesores = new Set();
+            const querySnapshot = await db.collection('registros').get();
+            querySnapshot.forEach((doc, index) => {
+                const registro = doc.data();
+                asesores.add(registro.asesor); // Agregar asesor al set
 
+                let productosHTML = '';
+                if (Array.isArray(registro.productos) && registro.productos.length > 0) {
+                    registro.productos.forEach((producto, i) => {
+                        productosHTML += `<div>
+                            <p><strong>Producto ${i + 1}</strong></p>
+                            <p>Referencia: ${producto.referencia}</p>
+                            <p>Color: ${producto.color}</p>
+                            <p>Talla: ${producto.talla}</p>
+                            <p>Precio: ${producto.precio}</p>
+                        </div>`;
+                    });
+                } else {
+                    productosHTML = 'Sin productos';
+                }
+
+                let abonosHTML = '';
+                if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
+                    registro.abonos.forEach((abono, j) => {
+                        abonosHTML += `<div>
+                            <p><strong>Abono ${j + 1}</strong></p>
+                            <p>Fecha: ${abono.fecha}</p>
+                            <p>Monto: ${abono.monto}</p>
+                        </div>`;
+                    });
+                } else {
+                    abonosHTML = 'Sin abonos';
+                }
+
+                pedidosHTML += `<div class="record" data-asesor="${registro.asesor}">
+                    <p><strong>Registro ${index + 1}</strong></p>
+                    <p>Fecha y Hora: ${registro.fecha_hora}</p>
+                    <p>Código Único: ${registro.codigo_unico}</p>
+                    <p>Cliente: ${registro.cliente}</p>
+                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                    ${productosHTML}
+                    ${abonosHTML}
+                    <p>Número de Pares: ${registro.num_pares}</p>
+                    <p>Valor Total: ${registro.valor_total}</p>
+                    <p>Observaciones: ${registro.observaciones}</p>
+                    <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
+                    <button onclick="modificarPedido('${doc.id}')">Modificar</button>
+                    <button onclick="eliminarPedido('${doc.id}')">Eliminar</button>
+                    <hr>
+                </div>`;
+            });
+
+            document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
+
+            // Agregar opciones de asesores al combobox
+            const filtroAsesor = document.getElementById('filtro_asesor');
+            asesores.forEach(asesor => {
+                const option = document.createElement('option');
+                option.value = asesor;
+                option.textContent = asesor;
+                filtroAsesor.appendChild(option);
+            });
+
+            mostrarModal('modal_pedidos');
+        }
+
+        function filtrarPedidosPorAsesor() {
+            const filtroAsesor = document.getElementById('filtro_asesor').value;
+            const registros = document.querySelectorAll('#lista_pedidos .record');
+            registros.forEach(registro => {
+                if (filtroAsesor === '' || registro.dataset.asesor === filtroAsesor) {
+                    registro.style.display = 'block';
+                } else {
+                    registro.style.display = 'none';
+                }
+            });
+        }
+
+        async function modificarPedido(id) {
+            // Lógica para modificar el pedido
+            console.log("Modificando pedido:", id);
+        }
+
+        async function eliminarPedido(id) {
+            // Lógica para eliminar el pedido
+            console.log("Eliminando pedido:", id);
+            if (confirm("¿Estás seguro de que deseas eliminar este pedido?")) {
+                try {
+                    await db.collection('registros').doc(id).delete();
+                    alert("Pedido eliminado correctamente.");
+                    verPedidos(); // Volver a cargar los pedidos
+                } catch (error) {
+                    console.error("Error al eliminar el pedido:", error);
+                    alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
+                }
+            }
+        }
 
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
@@ -367,45 +411,10 @@ async function verPedidos() {
 
             <h2>Registros</h2>
             <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
-                <script>
-    async function exportarAExcel() {
-        try {
-            const querySnapshot = await db.collection('registros').get();
-            const registros = [];
-            querySnapshot.forEach((doc) => {
-                let data = doc.data();
-
-                // Asegurarse de que productos y abonos estén definidos antes de mapear
-                if (data.productos && Array.isArray(data.productos)) {
-                    data.productos = data.productos.map(p => `Referencia: ${p.referencia}, Color: ${p.color}, Talla: ${p.talla}, Precio: ${p.precio}`).join("\n");
-                } else {
-                    data.productos = 'Sin productos';
-                }
-
-                if (data.abonos && Array.isArray(data.abonos)) {
-                    data.abonos = data.abonos.map(a => `Fecha: ${a.fecha}, Monto: ${a.monto}`).join("\n");
-                } else {
-                    data.abonos = 'Sin abonos';
-                }
-
-                registros.push(data);
-            });
-
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.json_to_sheet(registros);
-
-            XLSX.utils.book_append_sheet(wb, ws, "Registros");
-            XLSX.writeFile(wb, "registros.xlsx");
-            console.log("Datos exportados a Excel.");
-            alert("Datos exportados a Excel correctamente!");
-        } catch (error) {
-            console.error("Error al exportar a Excel:", error);
-            alert("Hubo un error al exportar los datos a Excel. Inténtelo de nuevo.");
-        }
-    }
-</script>
             <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
+        </div>
     </div>
+
     <!-- Modal para agregar productos -->
     <div id="modal_producto" class="modal">
         <div class="modal-content">
@@ -453,6 +462,13 @@ async function verPedidos() {
         <div class="modal-content">
             <span class="close" onclick="cerrarModal('modal_pedidos')">&times;</span>
             <h2>Pedidos</h2>
+            <div class="form-field">
+                <label>Filtrar por Asesor:</label>
+                <select id="filtro_asesor" onchange="filtrarPedidosPorAsesor()">
+                    <option value="">Todos</option>
+                    <!-- Opciones se agregarán dinámicamente -->
+                </select>
+            </div>
             <div id="lista_pedidos" class="form-field">
                 <!-- Lista de pedidos se actualizará aquí -->
             </div>
