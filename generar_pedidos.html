@@ -124,6 +124,13 @@
         .record hr {
             margin-top: 10px;
         }
+        .summary {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e7f3e7;
+            border: 1px solid #4CAF50;
+            border-radius: 6px;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
@@ -258,6 +265,8 @@
             resetearComboBoxAsesor(); // Resetear opciones del combobox
             let pedidosHTML = '';
             let asesores = new Set();
+            let resumenAsesores = {};
+
             const querySnapshot = await db.collection('registros').get();
             querySnapshot.forEach((doc, index) => {
                 const registro = doc.data();
@@ -265,6 +274,13 @@
                 // Permitir que el administrador vea todos los pedidos y el operador solo los suyos
                 if (datosUsuario.permisos.toLowerCase() === 'administrador' || registro.usuario === datosUsuario.usuario) {
                     asesores.add(registro.asesor); // Agregar asesor al set
+
+                    // Actualizar el resumen del asesor
+                    if (!resumenAsesores[registro.asesor]) {
+                        resumenAsesores[registro.asesor] = { num_pares: 0, valor_vendido: 0 };
+                    }
+                    resumenAsesores[registro.asesor].num_pares += parseInt(registro.num_pares);
+                    resumenAsesores[registro.asesor].valor_vendido += parseFloat(registro.valor_total);
 
                     let productosHTML = '';
                     if (Array.isArray(registro.productos) && registro.productos.length > 0) {
@@ -311,6 +327,10 @@
 
             document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
 
+            if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+                mostrarResumenAsesores(resumenAsesores);
+            }
+
             // Evitar duplicados al cargar el combobox
             const filtroAsesor = document.getElementById('filtro_asesor');
             asesores.forEach(asesor => {
@@ -331,6 +351,20 @@
             });
         }
 
+        function mostrarResumenAsesores(resumen) {
+            let resumenHTML = '<h3>Resumen de Asesores</h3><div>';
+            for (const asesor in resumen) {
+                resumenHTML += `
+                    <div class="summary">
+                        <p><strong>Asesor: ${asesor}</strong></p>
+                        <p>Número de Pares: ${resumen[asesor].num_pares}</p>
+                        <p>Valor Vendido: ${resumen[asesor].valor_vendido.toLocaleString('es-CO')}</p>
+                    </div>
+                `;
+            }
+            resumenHTML += '</div>';
+            document.getElementById('resumen_asesores').innerHTML = resumenHTML;
+        }
         async function modificarPedido(id) {
             try {
                 // Recuperar datos del pedido
@@ -508,6 +542,9 @@
             <h2>Registros</h2>
             <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
             <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
+        </div>
+        <div id="resumen_asesores">
+            <!-- Resumen de asesores se actualizará aquí -->
         </div>
     </div>
 
