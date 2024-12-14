@@ -3,8 +3,9 @@
 <head>
     <title>Generar Pedidos</title>
     <style>
+        /* Estilos existentes */
         body {
-            font-family: Arial, sans-serif; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
             background-color: #f0f2f5;
@@ -23,51 +24,24 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
             overflow-y: auto;
-            max-height: 90vh; /* Limita la altura del contenedor */
+            max-height: 90vh;
         }
         h1, h2 {
             color: #4CAF50;
             text-align: center;
-        }
-        h1 {
-            font-size: 1.4em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
-            margin-bottom: 20px;
-        }
-        h2 {
-            font-size: 1.2em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
-            margin-bottom: 15px;
         }
         .form-field {
             display: flex;
             flex-direction: column;
             margin-bottom: 10px;
         }
-        label {
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input, textarea, select, button {
-            padding: 8px; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+        input, textarea, button {
+            padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
-            font-size: 0.9em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
-            transition: all 0.3s ease;
-        }
-        input:focus, textarea:focus, select:focus, button:focus {
-            border-color: #4CAF50;
-            outline: none;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-        button:hover {
-            background-color: #45a049;
         }
         .modal {
-            display: none; /* Mantener oculto por defecto */
+            display: none;
             position: fixed;
             z-index: 1;
             left: 0;
@@ -84,412 +58,51 @@
             border-radius: 8px;
             width: 90%;
             max-width: 400px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             position: relative;
             margin: auto;
-            top: 3px; /* Aumentado el valor para mover el modal hacia abajo */
-            max-height: 90vh; /* Ajustar la altura máxima del modal */
-            overflow-y: auto; /* Agregar barra de desplazamiento vertical */
+            top: 3px;
+            max-height: 90vh;
+            overflow-y: auto;
         }
         .close {
-            color: #aaa;
-            float: right;
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
             position: absolute;
-            top: 20px; /* Aumentado el valor para mover la X hacia abajo */
-            right: 10px; /* Manteniendo el valor para mantener la X en la misma posición horizontal */
-        }
-        .close:hover, .close:focus {
-            color: black;
-            text-decoration: none;
+            top: 10px;
+            right: 15px;
+            font-size: 18px;
+            cursor: pointer;
         }
         .record {
-            background-color: #f9f9f9;
-            padding: 10px; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            margin-bottom: 10px;
+            padding: 10px;
             border: 1px solid #ddd;
             border-radius: 6px;
-            margin-bottom: 10px;
-            font-size: 0.9em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
-        }
-        .record p, .record ul {
-            margin: 5px 0; /* Ajusta el margen para controlar el espacio entre los elementos */
-        }
-        .record button {
-            margin-top: 10px;
-            padding: 5px 10px; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
-            font-size: 0.9em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
-        }
-        .record hr {
-            margin-top: 10px; /* Ajusta el margen para controlar el espacio antes y después de la línea */
         }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBVtSkeQe1WZna6nKC4vGxd4ISaRBQ5SVY",
-            authDomain: "facba-a160c.firebaseapp.com",
-            projectId: "facba-a160c",
-            storageBucket: "facba-a160c.appspot.com",
-            messagingSenderId: "585530132394",
-            appId: "1:585530132394:web:a25cda63f883f786804dd3",
-            measurementId: "G-S29LSYM8TQ"
-        };
-
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        console.log("Firebase configurado correctamente.");
-
-        let productos = [], abonos = [], valorTotal = 0;
-        let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
-        console.log("Datos del usuario:", datosUsuario);
-
-        const mostrarModal = id => document.getElementById(id).style.display = 'flex';
-        const cerrarModal = id => document.getElementById(id).style.display = 'none';
-        function agregarProducto() {
-            const ref = id => document.getElementById(id).value;
-            const producto = { referencia: ref('producto_referencia'), color: ref('producto_color'), talla: ref('producto_talla'), precio: parseFloat(ref('producto_precio')) };
-            if (Object.values(producto).every(val => val)) {
-                productos.push(producto);
-                valorTotal += producto.precio;
-                actualizarLista('productos', productos);
-                actualizarValorTotal();
-                cerrarModal('modal_producto');
-            } else alert('Por favor, complete todos los campos del producto.');
-        }
-
-        function agregarAbono() {
-            const abono = { fecha: document.getElementById('abono_fecha').value, monto: parseFloat(document.getElementById('abono_monto').value) };
-            if (abono.fecha && abono.monto) {
-                abonos.push(abono);
-                actualizarLista('abonos', abonos);
-                cerrarModal('modal_abono');
-            } else alert('Por favor, complete todos los campos del abono.');
-        }
-
-        function actualizarLista(tipo, lista) {
-            let html = '';
-            lista.forEach((item, index) => {
-                if (tipo === 'productos') {
-                    html += `<div class="record">
-                        <p><strong>Producto ${index + 1}</strong></p>
-                        <p>Referencia: ${item.referencia}</p>
-                        <p>Color: ${item.color}</p>
-                        <p>Talla: ${item.talla}</p>
-                        <p>Precio: ${item.precio}</p>
-                    </div>`;
-                } else if (tipo === 'abonos') {
-                    html += `<div class="record">
-                        <p><strong>Abono ${index + 1}</strong></p>
-                        <p>Fecha: ${item.fecha}</p>
-                        <p>Monto: ${item.monto}</p>
-                    </div>`;
-                }
-            });
-            document.getElementById(`lista_${tipo}`).innerHTML = html;
-        }
-
-        function actualizarValorTotal() {
-            document.getElementById('valor_total').value = Math.round(valorTotal);
-            document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + Math.round(valorTotal).toLocaleString('es-CO');
-        }
-
-        async function guardarEnBaseDeDatos(datos) {
-            try {
-                await db.collection('registros').add(datos);
-                console.log("Datos guardados en Firebase:", datos);
-            } catch (error) {
-                console.error("Error guardando en Firebase:", error);
-            }
-        }
-
-        async function enviarFormulario(event) {
-            event.preventDefault(); // Evitar recargar la página
-            if (confirm("¿Desea enviar el formulario?")) {
-                mostrarBarraCargando();
-                console.log("Enviando formulario...");
-
-                const datos = {
-                    fecha_hora: new Date().toLocaleString(),
-                    codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-                    cliente: document.querySelector('input[name="cliente"]').value,
-                    productos,
-                    num_pares: document.querySelector('input[name="num_pares"]').value,
-                    valor_total: Math.round(valorTotal),
-                    observaciones: document.querySelector('textarea[name="observaciones"]').value,
-                    saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                    abonos,
-                    asesor: datosUsuario.nombreCompleto, // Agregar el campo asesor automáticamente
-                    usuario: datosUsuario.usuario  // Guardar el usuario que hizo el pedido
-                };
-
-                console.log("Datos a guardar:", datos);
-
-                try {
-                    await db.collection('registros').add(datos);
-                    console.log("Datos guardados en Firebase:", datos);
-                    alert("Pedido agregado exitosamente!");
-                } catch (error) {
-                    console.error("Error guardando en Firebase:", error);
-                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
-                }
-
-                document.querySelector('form').reset();
-                productos = [];
-                abonos = [];
-                valorTotal = 0;
-                actualizarLista('productos', productos);
-                actualizarLista('abonos', abonos);
-                actualizarValorTotal();
-            }
-        }
-
-        function resetearComboBoxAsesor() {
-            const filtroAsesor = document.getElementById('filtro_asesor');
-            filtroAsesor.innerHTML = '<option value="">Todos</option>'; // Reiniciar opciones
-        }
-        async function verPedidos() {
-            console.log("Ver pedidos...");
-            resetearComboBoxAsesor(); // Resetear opciones del combobox
-            let pedidosHTML = '';
-            let asesores = new Set();
-            const querySnapshot = await db.collection('registros').get();
-            querySnapshot.forEach((doc, index) => {
-                const registro = doc.data();
-
-                // Permitir que el administrador vea todos los pedidos y el operador solo los suyos
-                if (datosUsuario.permisos.toLowerCase() === 'administrador' || registro.usuario === datosUsuario.usuario) {
-                    asesores.add(registro.asesor); // Agregar asesor al set
-
-                    let productosHTML = '';
-                    if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                        productosHTML = '<ul>';
-                        registro.productos.forEach((producto, i) => {
-                            productosHTML += `<li>Producto ${i + 1}: ${producto.referencia} - ${producto.color} - ${producto.talla} - ${producto.precio}</li>`;
-                        });
-                        productosHTML += '</ul>';
-                    } else {
-                        productosHTML = 'Sin productos';
-                    }
-
-                    let abonosHTML = '';
-                    if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                        abonosHTML = '<ul>';
-                        registro.abonos.forEach((abono, j) => {
-                            abonosHTML += `<li>Abono ${j + 1}: ${abono.fecha} - ${abono.monto}</li>`;
-                        });
-                        abonosHTML += '</ul>';
-                    } else {
-                        abonosHTML = 'Sin abonos';
-                    }
-
-                    pedidosHTML += `
-                        <div class="record" data-asesor="${registro.asesor}">
-                            <p><strong>Registro ${index + 1}</strong></p>
-                            <p>Fecha y Hora: ${registro.fecha_hora}</p>
-                            <p>Código Único: ${registro.codigo_unico}</p>
-                            <p>Cliente: ${registro.cliente}</p>
-                            <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                            ${productosHTML}
-                            ${abonosHTML}
-                            <p>Número de Pares: ${registro.num_pares}</p>
-                            <p>Valor Total: ${registro.valor_total}</p>
-                            <p>Observaciones: ${registro.observaciones}</p>
-                            <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
-                            <button onclick="modificarPedido('${doc.id}')">Modificar</button>
-                            <button onclick="eliminarPedido('${doc.id}')">Eliminar</button>
-                            <hr>
-                        </div>
-                    `;
-                }
-            });
-
-            document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
-
-            // Evitar duplicados al cargar el combobox
-            const filtroAsesor = document.getElementById('filtro_asesor');
-            asesores.forEach(asesor => {
-                const option = document.createElement('option');
-                option.value = asesor;
-                option.textContent = asesor;
-                filtroAsesor.appendChild(option);
-            });
-
-            mostrarModal('modal_pedidos');
-        }
-
-        function filtrarPedidosPorAsesor() {
-            const filtroAsesor = document.getElementById('filtro_asesor').value;
-            const registros = document.querySelectorAll('#lista_pedidos .record');
-            registros.forEach(registro => {
-                registro.style.display = filtroAsesor === '' || registro.dataset.asesor === filtroAsesor ? 'block' : 'none';
-            });
-        }
-        async function modificarPedido(id) {
-            // Recuperar datos del pedido
-            const doc = await db.collection('registros').doc(id).get();
-            const registro = doc.data();
-
-            // Cargar datos en el modal
-            const ref = id => document.getElementById(id);
-            ref('modificar_cliente').value = registro.cliente;
-            ref('modificar_num_pares').value = registro.num_pares;
-            ref('modificar_valor_total').value = registro.valor_total;
-            ref('modificar_observaciones').value = registro.observaciones;
-            ref('modificar_saldo_a_favor').value = registro.saldo_a_favor;
-
-            const generarHTML = (items, tipo) => {
-                let html = '';
-                items.forEach((item, i) => {
-                    html += `<div>
-                        <p><strong>${tipo} ${i + 1}</strong></p>
-                        <p>Referencia: ${item.referencia}</p>
-                        <p>Color: ${item.color}</p>
-                        <p>Talla: ${item.talla}</p>
-                        <p>Precio: ${item.precio}</p>
-                    </div>`;
-                });
-                return html || `Sin ${tipo.toLowerCase()}`;
-            };
-
-            ref('modificar_productos').innerHTML = generarHTML(registro.productos, 'Producto');
-            ref('modificar_abonos').innerHTML = generarHTML(registro.abonos, 'Abono');
-
-            mostrarModal('modal_modificar');
-        }
-
-        async function guardarCambios(id) {
-            const ref = id => document.getElementById(id).value;
-            const productos = Array.from(document.querySelectorAll('#modificar_productos div')).map(el => ({
-                referencia: el.querySelector('p:nth-child(2)').textContent.replace('Referencia: ', ''),
-                color: el.querySelector('p:nth-child(3)').textContent.replace('Color: ', ''),
-                talla: el.querySelector('p:nth-child(4)').textContent.replace('Talla: ', ''),
-                precio: parseFloat(el.querySelector('p:nth-child(5)').textContent.replace('Precio: ', ''))
-            }));
-
-            const abonos = Array.from(document.querySelectorAll('#modificar_abonos div')).map(el => ({
-                fecha: el.querySelector('p:nth-child(2)').textContent.replace('Fecha: ', ''),
-                monto: parseFloat(el.querySelector('p:nth-child(3)').textContent.replace('Monto: ', ''))
-            }));
-
-            const datos = {
-                cliente: ref('modificar_cliente'),
-                num_pares: ref('modificar_num_pares'),
-                valor_total: ref('modificar_valor_total'),
-                observaciones: ref('modificar_observaciones'),
-                saldo_a_favor: ref('modificar_saldo_a_favor'),
-                productos,
-                abonos
-            };
-
-            try {
-                await db.collection('registros').doc(id).update(datos);
-                alert("Pedido modificado exitosamente.");
-                cerrarModal('modal_modificar');
-                verPedidos(); // Volver a cargar los pedidos
-            } catch (error) {
-                console.error("Error al modificar el pedido:", error);
-                alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
-            }
-        }
-
-        async function eliminarPedido(id) {
-            console.log("Eliminando pedido:", id);
-            if (confirm("¿Estás seguro de que deseas eliminar este pedido?")) {
-                try {
-                    await db.collection('registros').doc(id).delete();
-                    alert("Pedido eliminado correctamente.");
-                    verPedidos(); // Volver a cargar los pedidos
-                } catch (error) {
-                    console.error("Error al eliminar el pedido:", error);
-                    alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
-                }
-            }
-        }
-
-        function mostrarBarraCargando() {
-            var loadingBar = document.getElementById("loading-bar");
-            var loadingBarFill = document.getElementById("loading-bar-fill");
-            loadingBar.style.display = "block";
-            loadingBarFill.style.width = "0%";
-            var width = 0;
-            var interval = setInterval(function() {
-                if (width >= 100) {
-                    clearInterval(interval);
-                    loadingBar.style.display = "none";
-                } else {
-                    width++;
-                    loadingBarFill.style.width = width + "%";
-                    loadingBarFill.innerText = width + "%";
-                }
-            }, 20);
-        }
-
-        window.onload = function() {
-            console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
-            if (datosUsuario.permisos.toLowerCase() === 'operador') {
-                document.getElementById('exportar').style.display = 'none';
-            }
-            document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Agregar asesor automáticamente
-        }
-    </script>
+</head>
 <body>
     <div class="container">
         <h1>Generar Pedidos</h1>
-        <div id="formulario">
-            <h2>Agregar Registro</h2>
-            <form onsubmit="enviarFormulario(event);">
-                <div class="form-field">
-                    <label>Nombre del Cliente:</label>
-                    <input type="text" name="cliente" required>
-                </div>
-                <div class="form-field">
-                    <label>Asesor:</label>
-                    <input type="text" name="asesor" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Productos:</label>
-                    <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
-                </div>
-                <div id="lista_productos" class="form-field">
-                    <!-- Lista de productos se actualizará aquí -->
-                </div>
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button>
-                </div>
-                <div id="lista_abonos" class="form-field">
-                    <!-- Lista de abonos se actualizará aquí -->
-                </div>
-                <div class="form-field">
-                    <label>Número de Pares:</label>
-                    <input type="number" name="num_pares" required>
-                </div>
-                <div class="form-field">
-                    <label id="valor_total_pesos">Valor Total:</label>
-                    <input type="number" id="valor_total" name="valor_total" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Observaciones:</label>
-                    <textarea name="observaciones"></textarea>
-                </div>
-                <div class="form-field">
-                    <label>Saldo a Favor:</label>
-                    <input type="number" name="saldo_a_favor" required>
-                </div>
-                <input type="submit" value="Agregar">
-            </form>
-            <div id="loading-bar" style="display: none;">
-                <div id="loading-bar-fill">0%</div>
+        <form onsubmit="enviarFormulario(event);">
+            <div class="form-field">
+                <label>Nombre del Cliente:</label>
+                <input type="text" id="cliente" required>
             </div>
+            <div class="form-field">
+                <label>Productos:</label>
+                <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
+            </div>
+            <div id="lista_productos" class="form-field"></div>
+            <div class="form-field">
+                <label>Valor Total:</label>
+                <input type="number" id="valor_total" readonly>
+            </div>
+            <input type="submit" value="Agregar Pedido">
+        </form>
 
-            <h2>Registros</h2>
-            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
-            <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
-        </div>
+        <h2>Registros</h2>
+        <button onclick="verPedidos()">Ver Pedidos</button>
     </div>
 
     <!-- Modal para agregar productos -->
@@ -502,78 +115,10 @@
                 <input type="text" id="producto_referencia" required>
             </div>
             <div class="form-field">
-                <label>Color:</label>
-                <input type="text" id="producto_color" required>
-            </div>
-            <div class="form-field">
-                <label>Talla:</label>
-                <input type="text" id="producto_talla" required>
-            </div>
-            <div class="form-field">
                 <label>Precio:</label>
                 <input type="number" id="producto_precio" required>
             </div>
-            <button type="button" onclick="agregarProducto()">Agregar Producto</button>
-        </div>
-    </div>
-
-    <!-- Modal para agregar abonos -->
-    <div id="modal_abono" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_abono')">&times;</span>
-            <h2>Agregar Abono</h2>
-            <div class="form-field">
-                <label>Fecha:</label>
-                <input type="date" id="abono_fecha" required>
-            </div>
-            <div class="form-field">
-                <label>Monto:</label>
-                <input type="number" id="abono_monto" required>
-            </div>
-            <button type="button" onclick="agregarAbono()">Agregar Abono</button>
-        </div>
-    </div>
-
-    <!-- Modal para modificar pedidos -->
-    <div id="modal_modificar" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_modificar')">&times;</span>
-            <h2>Modificar Pedido</h2>
-            <div class="form-field">
-                <label>Nombre del Cliente:</label>
-                <input type="text" id="modificar_cliente" required>
-            </div>
-            <div class="form-field">
-                <label>Productos:</label>
-                <div id="modificar_productos">
-                    <!-- Lista de productos se actualizará aquí -->
-                </div>
-                <button type="button" onclick="mostrarModal('modal_producto_modificar')">Agregar Producto</button>
-            </div>
-            <div class="form-field">
-                <label>Abonos:</label>
-                <div id="modificar_abonos">
-                    <!-- Lista de abonos se actualizará aquí -->
-                </div>
-                <button type="button" onclick="mostrarModal('modal_abono_modificar')">Agregar Abono</button>
-            </div>
-            <div class="form-field">
-                <label>Número de Pares:</label>
-                <input type="number" id="modificar_num_pares" required>
-            </div>
-            <div class="form-field">
-                <label>Valor Total:</label>
-                <input type="number" id="modificar_valor_total" required readonly>
-            </div>
-            <div class="form-field">
-                <label>Observaciones:</label>
-                <textarea id="modificar_observaciones"></textarea>
-            </div>
-            <div class="form-field">
-                <label>Saldo a Favor:</label>
-                <input type="number" id="modificar_saldo_a_favor" required>
-            </div>
-            <button type="button" onclick="guardarCambios('${doc.id}')">Guardar Cambios</button>
+            <button onclick="agregarProducto()">Agregar</button>
         </div>
     </div>
 
@@ -582,17 +127,107 @@
         <div class="modal-content">
             <span class="close" onclick="cerrarModal('modal_pedidos')">&times;</span>
             <h2>Pedidos</h2>
-            <div class="form-field">
-                <label>Filtrar por Asesor:</label>
-                <select id="filtro_asesor" onchange="filtrarPedidosPorAsesor()">
-                    <option value="">Todos</option>
-                    <!-- Opciones se agregarán dinámicamente -->
-                </select>
-            </div>
-            <div id="lista_pedidos" class="form-field">
-                <!-- Lista de pedidos se actualizará aquí -->
-            </div>
+            <div id="lista_pedidos"></div>
         </div>
     </div>
+
+    <!-- Modal para modificar pedido -->
+    <div id="modal_modificar" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_modificar')">&times;</span>
+            <h2>Modificar Pedido</h2>
+            <div class="form-field">
+                <label>Cliente:</label>
+                <input type="text" id="modificar_cliente">
+            </div>
+            <button onclick="guardarCambios()">Guardar Cambios</button>
+        </div>
+    </div>
+
+    <script>
+        let productos = [];
+        let pedidos = [];
+        let idEditar = null;
+
+        const mostrarModal = id => document.getElementById(id).style.display = 'flex';
+        const cerrarModal = id => document.getElementById(id).style.display = 'none';
+
+        function agregarProducto() {
+            const referencia = document.getElementById('producto_referencia').value;
+            const precio = parseFloat(document.getElementById('producto_precio').value);
+            productos.push({ referencia, precio });
+            actualizarListaProductos();
+            cerrarModal('modal_producto');
+        }
+
+        function actualizarListaProductos() {
+            const lista = document.getElementById('lista_productos');
+            lista.innerHTML = '';
+            productos.forEach((producto, index) => {
+                lista.innerHTML += `<div class="record">
+                    <p>${producto.referencia} - $${producto.precio}</p>
+                    <button onclick="eliminarProducto(${index})">Eliminar</button>
+                </div>`;
+            });
+            actualizarValorTotal();
+        }
+
+        function eliminarProducto(index) {
+            productos.splice(index, 1);
+            actualizarListaProductos();
+        }
+
+        function actualizarValorTotal() {
+            const total = productos.reduce((sum, producto) => sum + producto.precio, 0);
+            document.getElementById('valor_total').value = total;
+        }
+
+        function enviarFormulario(event) {
+            event.preventDefault();
+            const cliente = document.getElementById('cliente').value;
+            const valorTotal = parseFloat(document.getElementById('valor_total').value);
+            pedidos.push({ cliente, productos: [...productos], valorTotal });
+            productos = [];
+            document.getElementById('cliente').value = '';
+            actualizarListaProductos();
+            alert('Pedido agregado');
+        }
+
+        function verPedidos() {
+            const lista = document.getElementById('lista_pedidos');
+            lista.innerHTML = '';
+            pedidos.forEach((pedido, index) => {
+                lista.innerHTML += `<div class="record">
+                    <p><strong>${pedido.cliente}</strong></p>
+                    <p>Valor Total: $${pedido.valorTotal}</p>
+                    <button onclick="modificarPedido(${index})">Modificar</button>
+                    <button onclick="eliminarPedido(${index})">Eliminar</button>
+                </div>`;
+            });
+            mostrarModal('modal_pedidos');
+        }
+
+        function modificarPedido(index) {
+            idEditar = index;
+            const pedido = pedidos[index];
+            document.getElementById('modificar_cliente').value = pedido.cliente;
+            mostrarModal('modal_modificar');
+        }
+
+        function guardarCambios() {
+            const cliente = document.getElementById('modificar_cliente').value;
+            if (idEditar !== null) {
+                pedidos[idEditar].cliente = cliente;
+                idEditar = null;
+            }
+            cerrarModal('modal_modificar');
+            verPedidos();
+        }
+
+        function eliminarPedido(index) {
+            pedidos.splice(index, 1);
+            verPedidos();
+        }
+    </script>
 </body>
 </html>
