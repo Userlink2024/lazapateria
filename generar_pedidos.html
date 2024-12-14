@@ -4,7 +4,7 @@
     <title>Generar Pedidos</title>
     <style>
         body {
-            font-family: Arial, sans-serif; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
             background-color: #f0f2f5;
@@ -30,11 +30,11 @@
             text-align: center;
         }
         h1 {
-            font-size: 1.4em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            font-size: 1.4em;
             margin-bottom: 20px;
         }
         h2 {
-            font-size: 1.2em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            font-size: 1.2em;
             margin-bottom: 15px;
         }
         .form-field {
@@ -47,10 +47,10 @@
             font-weight: bold;
         }
         input, textarea, select, button {
-            padding: 8px; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
-            font-size: 0.9em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            font-size: 0.9em;
             transition: all 0.3s ease;
         }
         input:focus, textarea:focus, select:focus, button:focus {
@@ -67,7 +67,7 @@
             background-color: #45a049;
         }
         .modal {
-            display: none; /* Mantener oculto por defecto */
+            display: none;
             position: fixed;
             z-index: 1;
             left: 0;
@@ -87,9 +87,9 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             position: relative;
             margin: auto;
-            top: 3px; /* Aumentado el valor para mover el modal hacia abajo */
-            max-height: 90vh; /* Ajustar la altura máxima del modal */
-            overflow-y: auto; /* Agregar barra de desplazamiento vertical */
+            top: 3px;
+            max-height: 90vh;
+            overflow-y: auto;
         }
         .close {
             color: #aaa;
@@ -98,8 +98,8 @@
             font-weight: bold;
             cursor: pointer;
             position: absolute;
-            top: 20px; /* Aumentado el valor para mover la X hacia abajo */
-            right: 10px; /* Manteniendo el valor para mantener la X en la misma posición horizontal */
+            top: 20px;
+            right: 10px;
         }
         .close:hover, .close:focus {
             color: black;
@@ -107,22 +107,22 @@
         }
         .record {
             background-color: #f9f9f9;
-            padding: 10px; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            padding: 10px;
             border: 1px solid #ddd;
             border-radius: 6px;
             margin-bottom: 10px;
-            font-size: 0.9em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            font-size: 0.9em;
         }
         .record p, .record ul {
-            margin: 5px 0; /* Ajusta el margen para controlar el espacio entre los elementos */
+            margin: 5px 0;
         }
         .record button {
             margin-top: 10px;
-            padding: 5px 10px; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
-            font-size: 0.9em; /* (AQUI DEBES MODIFICAR EL TAMAÑO) */
+            padding: 5px 10px;
+            font-size: 0.9em;
         }
         .record hr {
-            margin-top: 10px; /* Ajusta el margen para controlar el espacio antes y después de la línea */
+            margin-top: 10px;
         }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
@@ -149,6 +149,7 @@
 
         const mostrarModal = id => document.getElementById(id).style.display = 'flex';
         const cerrarModal = id => document.getElementById(id).style.display = 'none';
+
         function agregarProducto() {
             const ref = id => document.getElementById(id).value;
             const producto = { referencia: ref('producto_referencia'), color: ref('producto_color'), talla: ref('producto_talla'), precio: parseFloat(ref('producto_precio')) };
@@ -169,7 +170,6 @@
                 cerrarModal('modal_abono');
             } else alert('Por favor, complete todos los campos del abono.');
         }
-
         function actualizarLista(tipo, lista) {
             let html = '';
             lista.forEach((item, index) => {
@@ -229,9 +229,32 @@
                 console.log("Datos a guardar:", datos);
 
                 try {
-                    await db.collection('registros').add(datos);
+                    const docRef = await db.collection('registros').add(datos);
                     console.log("Datos guardados en Firebase:", datos);
                     alert("Pedido agregado exitosamente!");
+
+                    // Agregar botones de modificar y eliminar en el listado
+                    const productosHTML = actualizarLista('productos', datos.productos);
+                    const abonosHTML = actualizarLista('abonos', datos.abonos);
+
+                    document.getElementById('lista_pedidos').innerHTML += `
+                        <div class="record" data-asesor="${datos.asesor}">
+                            <p><strong>Registro ${datos.codigo_unico}</strong></p>
+                            <p>Fecha y Hora: ${datos.fecha_hora}</p>
+                            <p>Código Único: ${datos.codigo_unico}</p>
+                            <p>Cliente: ${datos.cliente}</p>
+                            <p>Asesor: ${datos.asesor}</p>
+                            ${productosHTML}
+                            ${abonosHTML}
+                            <p>Número de Pares: ${datos.num_pares}</p>
+                            <p>Valor Total: ${datos.valor_total}</p>
+                            <p>Observaciones: ${datos.observaciones}</p>
+                            <p>Saldo a Favor: ${datos.saldo_a_favor}</p>
+                            <button onclick="modificarPedido('${docRef.id}')">Modificar</button>
+                            <button onclick="eliminarPedido('${docRef.id}')">Eliminar</button>
+                            <hr>
+                        </div>
+                    `;
                 } catch (error) {
                     console.error("Error guardando en Firebase:", error);
                     alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
@@ -246,11 +269,11 @@
                 actualizarValorTotal();
             }
         }
-
         function resetearComboBoxAsesor() {
             const filtroAsesor = document.getElementById('filtro_asesor');
             filtroAsesor.innerHTML = '<option value="">Todos</option>'; // Reiniciar opciones
         }
+
         async function verPedidos() {
             console.log("Ver pedidos...");
             resetearComboBoxAsesor(); // Resetear opciones del combobox
@@ -358,6 +381,10 @@
             ref('modificar_productos').innerHTML = generarHTML(registro.productos, 'Producto');
             ref('modificar_abonos').innerHTML = generarHTML(registro.abonos, 'Abono');
 
+            // Cambiar el valor del botón de guardar cambios para que funcione con el ID del documento
+            const botonGuardar = document.querySelector('#modal_modificar button[onclick^="guardarCambios"]');
+            botonGuardar.setAttribute('onclick', `guardarCambios('${id}')`);
+
             mostrarModal('modal_modificar');
         }
 
@@ -436,6 +463,7 @@
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Agregar asesor automáticamente
         }
     </script>
+</head>
 <body>
     <div class="container">
         <h1>Generar Pedidos</h1>
@@ -516,7 +544,6 @@
             <button type="button" onclick="agregarProducto()">Agregar Producto</button>
         </div>
     </div>
-
     <!-- Modal para agregar abonos -->
     <div id="modal_abono" class="modal">
         <div class="modal-content">
@@ -576,7 +603,6 @@
             <button type="button" onclick="guardarCambios('${doc.id}')">Guardar Cambios</button>
         </div>
     </div>
-
     <!-- Modal para ver pedidos -->
     <div id="modal_pedidos" class="modal">
         <div class="modal-content">
