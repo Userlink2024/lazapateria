@@ -170,164 +170,162 @@
                 cerrarModal('modal_abono');
             } else alert('Por favor, complete todos los campos del abono.');
         }
-        function actualizarLista(tipo, lista) {
-            let html = '';
-            lista.forEach((item, index) => {
-                if (tipo === 'productos') {
-                    html += `<div class="record">
-                        <p><strong>Producto ${index + 1}</strong></p>
-                        <p>Referencia: ${item.referencia}</p>
-                        <p>Color: ${item.color}</p>
-                        <p>Talla: ${item.talla}</p>
-                        <p>Precio: ${item.precio}</p>
-                    </div>`;
-                } else if (tipo === 'abonos') {
-                    html += `<div class="record">
-                        <p><strong>Abono ${index + 1}</strong></p>
-                        <p>Fecha: ${item.fecha}</p>
-                        <p>Monto: ${item.monto}</p>
-                    </div>`;
-                }
-            });
-            document.getElementById(`lista_${tipo}`).innerHTML = html;
-        }
+    </script>
+</head>
+    function actualizarLista(tipo, lista) {
+        let html = '';
+        lista.forEach((item, index) => {
+            if (tipo === 'productos') {
+                html += `<div class="record">
+                    <p><strong>Producto ${index + 1}</strong></p>
+                    <p>Referencia: ${item.referencia}</p>
+                    <p>Color: ${item.color}</p>
+                    <p>Talla: ${item.talla}</p>
+                    <p>Precio: ${item.precio}</p>
+                </div>`;
+            } else if (tipo === 'abonos') {
+                html += `<div class="record">
+                    <p><strong>Abono ${index + 1}</strong></p>
+                    <p>Fecha: ${item.fecha}</p>
+                    <p>Monto: ${item.monto}</p>
+                </div>`;
+            }
+        });
+        document.getElementById(`lista_${tipo}`).innerHTML = html;
+    }
 
-        function actualizarValorTotal() {
-            document.getElementById('valor_total').value = Math.round(valorTotal);
-            document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + Math.round(valorTotal).toLocaleString('es-CO');
-        }
+    function actualizarValorTotal() {
+        document.getElementById('valor_total').value = Math.round(valorTotal);
+        document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + Math.round(valorTotal).toLocaleString('es-CO');
+    }
 
-        async function guardarEnBaseDeDatos(datos) {
+    async function guardarEnBaseDeDatos(datos) {
+        try {
+            await db.collection('registros').add(datos);
+            console.log("Datos guardados en Firebase:", datos);
+        } catch (error) {
+            console.error("Error guardando en Firebase:", error);
+        }
+    }
+
+    async function enviarFormulario(event) {
+        event.preventDefault(); // Evitar recargar la página
+        if (confirm("¿Desea enviar el formulario?")) {
+            mostrarBarraCargando();
+            console.log("Enviando formulario...");
+
+            const datos = {
+                fecha_hora: new Date().toLocaleString(),
+                codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                cliente: document.querySelector('input[name="cliente"]').value,
+                productos,
+                num_pares: document.querySelector('input[name="num_pares"]').value,
+                valor_total: Math.round(valorTotal),
+                observaciones: document.querySelector('textarea[name="observaciones"]').value,
+                saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
+                abonos,
+                asesor: datosUsuario.nombreCompleto, // Agregar el campo asesor automáticamente
+                usuario: datosUsuario.usuario  // Guardar el usuario que hizo el pedido
+            };
+
+            console.log("Datos a guardar:", datos);
+
             try {
-                await db.collection('registros').add(datos);
+                const docRef = await db.collection('registros').add(datos);
                 console.log("Datos guardados en Firebase:", datos);
+                alert("Pedido agregado exitosamente!");
+
+                // Agregar botones de modificar y eliminar en el listado
+                const productosHTML = actualizarLista('productos', datos.productos);
+                const abonosHTML = actualizarLista('abonos', datos.abonos);
+
+                document.getElementById('lista_pedidos').innerHTML += `
+                    <div class="record" data-asesor="${datos.asesor}">
+                        <p><strong>Registro ${datos.codigo_unico}</strong></p>
+                        <p>Fecha y Hora: ${datos.fecha_hora}</p>
+                        <p>Código Único: ${datos.codigo_unico}</p>
+                        <p>Cliente: ${datos.cliente}</p>
+                        <p>Asesor: ${datos.asesor}</p>
+                        ${productosHTML}
+                        ${abonosHTML}
+                        <p>Número de Pares: ${datos.num_pares}</p>
+                        <p>Valor Total: ${datos.valor_total}</p>
+                        <p>Observaciones: ${datos.observaciones}</p>
+                        <p>Saldo a Favor: ${datos.saldo_a_favor}</p>
+                        <button onclick="modificarPedido('${docRef.id}')">Modificar</button>
+                        <button onclick="eliminarPedido('${docRef.id}')">Eliminar</button>
+                        <hr>
+                    </div>
+                `;
             } catch (error) {
                 console.error("Error guardando en Firebase:", error);
+                alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
             }
+
+            document.querySelector('form').reset();
+            productos = [];
+            abonos = [];
+            valorTotal = 0;
+            actualizarLista('productos', productos);
+            actualizarLista('abonos', abonos);
+            actualizarValorTotal();
         }
+    }
+    function resetearComboBoxAsesor() {
+        const filtroAsesor = document.getElementById('filtro_asesor');
+        filtroAsesor.innerHTML = '<option value="">Todos</option>'; // Reiniciar opciones
+    }
 
-        async function enviarFormulario(event) {
-            event.preventDefault(); // Evitar recargar la página
-            if (confirm("¿Desea enviar el formulario?")) {
-                mostrarBarraCargando();
-                console.log("Enviando formulario...");
-
-                const datos = {
-                    fecha_hora: new Date().toLocaleString(),
-                    codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-                    cliente: document.querySelector('input[name="cliente"]').value,
-                    productos,
-                    num_pares: document.querySelector('input[name="num_pares"]').value,
-                    valor_total: Math.round(valorTotal),
-                    observaciones: document.querySelector('textarea[name="observaciones"]').value,
-                    saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                    abonos,
-                    asesor: datosUsuario.nombreCompleto, // Agregar el campo asesor automáticamente
-                    usuario: datosUsuario.usuario  // Guardar el usuario que hizo el pedido
-                };
-
-                console.log("Datos a guardar:", datos);
-
-                try {
-                    const docRef = await db.collection('registros').add(datos);
-                    console.log("Datos guardados en Firebase:", datos);
-                    alert("Pedido agregado exitosamente!");
-
-                    // Agregar botones de modificar y eliminar en el listado
-                    const productosHTML = actualizarLista('productos', datos.productos);
-                    const abonosHTML = actualizarLista('abonos', datos.abonos);
-
-                    document.getElementById('lista_pedidos').innerHTML += `
-                        <div class="record" data-asesor="${datos.asesor}">
-                            <p><strong>Registro ${datos.codigo_unico}</strong></p>
-                            <p>Fecha y Hora: ${datos.fecha_hora}</p>
-                            <p>Código Único: ${datos.codigo_unico}</p>
-                            <p>Cliente: ${datos.cliente}</p>
-                            <p>Asesor: ${datos.asesor}</p>
-                            ${productosHTML}
-                            ${abonosHTML}
-                            <p>Número de Pares: ${datos.num_pares}</p>
-                            <p>Valor Total: ${datos.valor_total}</p>
-                            <p>Observaciones: ${datos.observaciones}</p>
-                            <p>Saldo a Favor: ${datos.saldo_a_favor}</p>
-                            <button onclick="modificarPedido('${docRef.id}')">Modificar</button>
-                            <button onclick="eliminarPedido('${docRef.id}')">Eliminar</button>
-                            <hr>
-                        </div>
-                    `;
-                } catch (error) {
-                    console.error("Error guardando en Firebase:", error);
-                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
-                }
-
-                document.querySelector('form').reset();
-                productos = [];
-                abonos = [];
-                valorTotal = 0;
-                actualizarLista('productos', productos);
-                actualizarLista('abonos', abonos);
-                actualizarValorTotal();
-            }
-        }
-        function resetearComboBoxAsesor() {
-            const filtroAsesor = document.getElementById('filtro_asesor');
-            filtroAsesor.innerHTML = '<option value="">Todos</option>'; // Reiniciar opciones
-        }
-
-        async function verPedidos() {
-            console.log("Ver pedidos...");
-            resetearComboBoxAsesor(); // Resetear opciones del combobox
+    async function verPedidos() {
+        try {
+            const querySnapshot = await db.collection('registros').get();
             let pedidosHTML = '';
             let asesores = new Set();
-            const querySnapshot = await db.collection('registros').get();
             querySnapshot.forEach((doc, index) => {
                 const registro = doc.data();
 
-                // Permitir que el administrador vea todos los pedidos y el operador solo los suyos
-                if (datosUsuario.permisos.toLowerCase() === 'administrador' || registro.usuario === datosUsuario.usuario) {
-                    asesores.add(registro.asesor); // Agregar asesor al set
+                asesores.add(registro.asesor); // Agregar asesor al set
 
-                    let productosHTML = '';
-                    if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                        productosHTML = '<ul>';
-                        registro.productos.forEach((producto, i) => {
-                            productosHTML += `<li>Producto ${i + 1}: ${producto.referencia} - ${producto.color} - ${producto.talla} - ${producto.precio}</li>`;
-                        });
-                        productosHTML += '</ul>';
-                    } else {
-                        productosHTML = 'Sin productos';
-                    }
-
-                    let abonosHTML = '';
-                    if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                        abonosHTML = '<ul>';
-                        registro.abonos.forEach((abono, j) => {
-                            abonosHTML += `<li>Abono ${j + 1}: ${abono.fecha} - ${abono.monto}</li>`;
-                        });
-                        abonosHTML += '</ul>';
-                    } else {
-                        abonosHTML = 'Sin abonos';
-                    }
-
-                    pedidosHTML += `
-                        <div class="record" data-asesor="${registro.asesor}">
-                            <p><strong>Registro ${index + 1}</strong></p>
-                            <p>Fecha y Hora: ${registro.fecha_hora}</p>
-                            <p>Código Único: ${registro.codigo_unico}</p>
-                            <p>Cliente: ${registro.cliente}</p>
-                            <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                            ${productosHTML}
-                            ${abonosHTML}
-                            <p>Número de Pares: ${registro.num_pares}</p>
-                            <p>Valor Total: ${registro.valor_total}</p>
-                            <p>Observaciones: ${registro.observaciones}</p>
-                            <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
-                            <button onclick="modificarPedido('${doc.id}')">Modificar</button>
-                            <button onclick="eliminarPedido('${doc.id}')">Eliminar</button>
-                            <hr>
-                        </div>
-                    `;
+                let productosHTML = '';
+                if (Array.isArray(registro.productos) && registro.productos.length > 0) {
+                    productosHTML = '<ul>';
+                    registro.productos.forEach((producto, i) => {
+                        productosHTML += `<li>Producto ${i + 1}: ${producto.referencia} - ${producto.color} - ${producto.talla} - ${producto.precio}</li>`;
+                    });
+                    productosHTML += '</ul>';
+                } else {
+                    productosHTML = 'Sin productos';
                 }
+
+                let abonosHTML = '';
+                if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
+                    abonosHTML = '<ul>';
+                    registro.abonos.forEach((abono, j) => {
+                        abonosHTML += `<li>Abono ${j + 1}: ${abono.fecha} - ${abono.monto}</li>`;
+                    });
+                    abonosHTML += '</ul>';
+                } else {
+                    abonosHTML = 'Sin abonos';
+                }
+
+                pedidosHTML += `
+                    <div class="record" data-asesor="${registro.asesor}">
+                        <p><strong>Registro ${index + 1}</strong></p>
+                        <p>Fecha y Hora: ${registro.fecha_hora}</p>
+                        <p>Código Único: ${registro.codigo_unico}</p>
+                        <p>Cliente: ${registro.cliente}</p>
+                        <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                        ${productosHTML}
+                        ${abonosHTML}
+                        <p>Número de Pares: ${registro.num_pares}</p>
+                        <p>Valor Total: ${registro.valor_total}</p>
+                        <p>Observaciones: ${registro.observaciones}</p>
+                        <p>Saldo a Favor: ${registro.saldo_a_favor}</p>
+                        <button onclick="modificarPedido('${doc.id}')">Modificar</button>
+                        <button onclick="eliminarPedido('${doc.id}')">Eliminar</button>
+                        <hr>
+                    </div>
+                `;
             });
 
             document.getElementById('lista_pedidos').innerHTML = pedidosHTML;
@@ -342,27 +340,30 @@
             });
 
             mostrarModal('modal_pedidos');
+        } catch (error) {
+            console.error("Error al cargar los pedidos:", error);
         }
+    }
 
-        function filtrarPedidosPorAsesor() {
-            const filtroAsesor = document.getElementById('filtro_asesor').value;
-            const registros = document.querySelectorAll('#lista_pedidos .record');
-            registros.forEach(registro => {
-                registro.style.display = filtroAsesor === '' || registro.dataset.asesor === filtroAsesor ? 'block' : 'none';
-            });
-        }
-        async function modificarPedido(id) {
+    function filtrarPedidosPorAsesor() {
+        const filtroAsesor = document.getElementById('filtro_asesor').value;
+        const registros = document.querySelectorAll('#lista_pedidos .record');
+        registros.forEach(registro => {
+            registro.style.display = filtroAsesor === '' || registro.dataset.asesor === filtroAsesor ? 'block' : 'none';
+        });
+    }
+    async function modificarPedido(id) {
+        try {
             // Recuperar datos del pedido
             const doc = await db.collection('registros').doc(id).get();
             const registro = doc.data();
 
             // Cargar datos en el modal
-            const ref = id => document.getElementById(id);
-            ref('modificar_cliente').value = registro.cliente;
-            ref('modificar_num_pares').value = registro.num_pares;
-            ref('modificar_valor_total').value = registro.valor_total;
-            ref('modificar_observaciones').value = registro.observaciones;
-            ref('modificar_saldo_a_favor').value = registro.saldo_a_favor;
+            document.getElementById('modificar_cliente').value = registro.cliente;
+            document.getElementById('modificar_num_pares').value = registro.num_pares;
+            document.getElementById('modificar_valor_total').value = registro.valor_total;
+            document.getElementById('modificar_observaciones').value = registro.observaciones;
+            document.getElementById('modificar_saldo_a_favor').value = registro.saldo_a_favor;
 
             // Cargar productos y abonos en campos editables
             let productosHTML = '';
@@ -387,92 +388,95 @@
                     </div>`;
             });
 
-            ref('modificar_productos').innerHTML = productosHTML;
-            ref('modificar_abonos').innerHTML = abonosHTML;
+            document.getElementById('modificar_productos').innerHTML = productosHTML;
+            document.getElementById('modificar_abonos').innerHTML = abonosHTML;
 
             // Cambiar el valor del botón de guardar cambios para que funcione con el ID del documento
-            const botonGuardar = document.querySelector('#modal_modificar button[onclick^="guardarCambios"]');
+            const botonGuardar = document.querySelector('#modal_modificar input[type="submit"]');
             botonGuardar.setAttribute('onclick', `guardarCambios('${id}')`);
 
+            // Mostrar el modal
             mostrarModal('modal_modificar');
+        } catch (error) {
+            console.error("Error al cargar el pedido para modificar:", error);
         }
+    }
 
-        async function guardarCambios(id) {
-            const ref = id => document.getElementById(id).value;
-            const productos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => ({
-                referencia: el.querySelector(`#producto_referencia_${index}`).value,
-                color: el.querySelector(`#producto_color_${index}`).value,
-                talla: el.querySelector(`#producto_talla_${index}`).value,
-                precio: parseFloat(el.querySelector(`#producto_precio_${index}`).value)
-            }));
+    async function guardarCambios(id) {
+        const ref = id => document.getElementById(id).value;
+        const productos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => ({
+            referencia: el.querySelector(`#producto_referencia_${index}`).value,
+            color: el.querySelector(`#producto_color_${index}`).value,
+            talla: el.querySelector(`#producto_talla_${index}`).value,
+            precio: parseFloat(el.querySelector(`#producto_precio_${index}`).value)
+        }));
 
-            const abonos = Array.from(document.querySelectorAll('#modificar_abonos .form-field')).map((el, index) => ({
-                fecha: el.querySelector(`#abono_fecha_${index}`).value,
-                monto: parseFloat(el.querySelector(`#abono_monto_${index}`).value)
-            }));
+        const abonos = Array.from(document.querySelectorAll('#modificar_abonos .form-field')).map((el, index) => ({
+            fecha: el.querySelector(`#abono_fecha_${index}`).value,
+            monto: parseFloat(el.querySelector(`#abono_monto_${index}`).value)
+        }));
 
-            const datos = {
-                cliente: ref('modificar_cliente'),
-                num_pares: ref('modificar_num_pares'),
-                valor_total: ref('modificar_valor_total'),
-                observaciones: ref('modificar_observaciones'),
-                saldo_a_favor: ref('modificar_saldo_a_favor'),
-                productos,
-                abonos
-            };
+        const datos = {
+            cliente: ref('modificar_cliente'),
+            num_pares: ref('modificar_num_pares'),
+            valor_total: ref('modificar_valor_total'),
+            observaciones: ref('modificar_observaciones'),
+            saldo_a_favor: ref('modificar_saldo_a_favor'),
+            productos,
+            abonos
+        };
 
+        try {
+            await db.collection('registros').doc(id).update(datos);
+            alert("Pedido modificado exitosamente.");
+            cerrarModal('modal_modificar');
+            verPedidos(); // Volver a cargar los pedidos
+        } catch (error) {
+            console.error("Error al modificar el pedido:", error);
+            alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
+        }
+    }
+
+    async function eliminarPedido(id) {
+        console.log("Eliminando pedido:", id);
+        if (confirm("¿Estás seguro de que deseas eliminar este pedido?")) {
             try {
-                await db.collection('registros').doc(id).update(datos);
-                alert("Pedido modificado exitosamente.");
-                cerrarModal('modal_modificar');
+                await db.collection('registros').doc(id).delete();
+                alert("Pedido eliminado correctamente.");
                 verPedidos(); // Volver a cargar los pedidos
             } catch (error) {
-                console.error("Error al modificar el pedido:", error);
-                alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
+                console.error("Error al eliminar el pedido:", error);
+                alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
             }
         }
+    }
 
-        async function eliminarPedido(id) {
-            console.log("Eliminando pedido:", id);
-            if (confirm("¿Estás seguro de que deseas eliminar este pedido?")) {
-                try {
-                    await db.collection('registros').doc(id).delete();
-                    alert("Pedido eliminado correctamente.");
-                    verPedidos(); // Volver a cargar los pedidos
-                } catch (error) {
-                    console.error("Error al eliminar el pedido:", error);
-                    alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
-                }
+    function mostrarBarraCargando() {
+        var loadingBar = document.getElementById("loading-bar");
+        var loadingBarFill = document.getElementById("loading-bar-fill");
+        loadingBar.style.display = "block";
+        loadingBarFill.style.width = "0%";
+        var width = 0;
+        var interval = setInterval(function() {
+            if (width >= 100) {
+                clearInterval(interval);
+                loadingBar.style.display = "none";
+            } else {
+                width++;
+                loadingBarFill.style.width = width + "%";
+                loadingBarFill.innerText = width + "%";
             }
-        }
+        }, 20);
+    }
 
-        function mostrarBarraCargando() {
-            var loadingBar = document.getElementById("loading-bar");
-            var loadingBarFill = document.getElementById("loading-bar-fill");
-            loadingBar.style.display = "block";
-            loadingBarFill.style.width = "0%";
-            var width = 0;
-            var interval = setInterval(function() {
-                if (width >= 100) {
-                    clearInterval(interval);
-                    loadingBar.style.display = "none";
-                } else {
-                    width++;
-                    loadingBarFill.style.width = width + "%";
-                    loadingBarFill.innerText = width + "%";
-                }
-            }, 20);
+    window.onload = function() {
+        console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
+        if (datosUsuario.permisos.toLowerCase() === 'operador') {
+            document.getElementById('exportar').style.display = 'none';
         }
-
-        window.onload = function() {
-            console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
-            if (datosUsuario.permisos.toLowerCase() === 'operador') {
-                document.getElementById('exportar').style.display = 'none';
-            }
-            document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Agregar asesor automáticamente
-        }
-    </script>
-</head>
+        document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Agregar asesor automáticamente
+    }
+</script>
 <body>
     <div class="container">
         <h1>Generar Pedidos</h1>
