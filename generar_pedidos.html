@@ -83,7 +83,7 @@
             padding: 20px;
             border-radius: 8px;
             width: 90%;
-            max-width: 400px;
+            max-width: 600px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             position: relative;
             margin: auto;
@@ -364,22 +364,31 @@
             ref('modificar_observaciones').value = registro.observaciones;
             ref('modificar_saldo_a_favor').value = registro.saldo_a_favor;
 
-            const generarHTML = (items, tipo) => {
-                let html = '';
-                items.forEach((item, i) => {
-                    html += `<div>
-                        <p><strong>${tipo} ${i + 1}</strong></p>
-                        <p>Referencia: ${item.referencia}</p>
-                        <p>Color: ${item.color}</p>
-                        <p>Talla: ${item.talla}</p>
-                        <p>Precio: ${item.precio}</p>
+            // Cargar productos y abonos en campos editables
+            let productosHTML = '';
+            registro.productos.forEach((producto, index) => {
+                productosHTML += `
+                    <div class="form-field">
+                        <label>Producto ${index + 1}:</label>
+                        <input type="text" value="${producto.referencia}" placeholder="Referencia">
+                        <input type="text" value="${producto.color}" placeholder="Color">
+                        <input type="text" value="${producto.talla}" placeholder="Talla">
+                        <input type="number" value="${producto.precio}" placeholder="Precio">
                     </div>`;
-                });
-                return html || `Sin ${tipo.toLowerCase()}`;
-            };
+            });
 
-            ref('modificar_productos').innerHTML = generarHTML(registro.productos, 'Producto');
-            ref('modificar_abonos').innerHTML = generarHTML(registro.abonos, 'Abono');
+            let abonosHTML = '';
+            registro.abonos.forEach((abono, index) => {
+                abonosHTML += `
+                    <div class="form-field">
+                        <label>Abono ${index + 1}:</label>
+                        <input type="date" value="${abono.fecha}" placeholder="Fecha">
+                        <input type="number" value="${abono.monto}" placeholder="Monto">
+                    </div>`;
+            });
+
+            ref('modificar_productos').innerHTML = productosHTML;
+            ref('modificar_abonos').innerHTML = abonosHTML;
 
             // Cambiar el valor del botón de guardar cambios para que funcione con el ID del documento
             const botonGuardar = document.querySelector('#modal_modificar button[onclick^="guardarCambios"]');
@@ -390,16 +399,16 @@
 
         async function guardarCambios(id) {
             const ref = id => document.getElementById(id).value;
-            const productos = Array.from(document.querySelectorAll('#modificar_productos div')).map(el => ({
-                referencia: el.querySelector('p:nth-child(2)').textContent.replace('Referencia: ', ''),
-                color: el.querySelector('p:nth-child(3)').textContent.replace('Color: ', ''),
-                talla: el.querySelector('p:nth-child(4)').textContent.replace('Talla: ', ''),
-                precio: parseFloat(el.querySelector('p:nth-child(5)').textContent.replace('Precio: ', ''))
+            const productos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map(el => ({
+                referencia: el.querySelector('input:nth-child(2)').value,
+                color: el.querySelector('input:nth-child(3)').value,
+                talla: el.querySelector('input:nth-child(4)').value,
+                precio: parseFloat(el.querySelector('input:nth-child(5)').value)
             }));
 
-            const abonos = Array.from(document.querySelectorAll('#modificar_abonos div')).map(el => ({
-                fecha: el.querySelector('p:nth-child(2)').textContent.replace('Fecha: ', ''),
-                monto: parseFloat(el.querySelector('p:nth-child(3)').textContent.replace('Monto: ', ''))
+            const abonos = Array.from(document.querySelectorAll('#modificar_abonos .form-field')).map(el => ({
+                fecha: el.querySelector('input:nth-child(2)').value,
+                monto: parseFloat(el.querySelector('input:nth-child(3)').value)
             }));
 
             const datos = {
@@ -560,49 +569,90 @@
             <button type="button" onclick="agregarAbono()">Agregar Abono</button>
         </div>
     </div>
+    <!-- Modal para agregar productos -->
+    <div id="modal_producto" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_producto')">&times;</span>
+            <h2>Agregar Producto</h2>
+            <div class="form-field">
+                <label>Referencia:</label>
+                <input type="text" id="producto_referencia" required>
+            </div>
+            <div class="form-field">
+                <label>Color:</label>
+                <input type="text" id="producto_color" required>
+            </div>
+            <div class="form-field">
+                <label>Talla:</label>
+                <input type="text" id="producto_talla" required>
+            </div>
+            <div class="form-field">
+                <label>Precio:</label>
+                <input type="number" id="producto_precio" required>
+            </div>
+            <button type="button" onclick="agregarProducto()">Agregar Producto</button>
+        </div>
+    </div>
 
+    <!-- Modal para agregar abonos -->
+    <div id="modal_abono" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_abono')">&times;</span>
+            <h2>Agregar Abono</h2>
+            <div class="form-field">
+                <label>Fecha:</label>
+                <input type="date" id="abono_fecha" required>
+            </div>
+            <div class="form-field">
+                <label>Monto:</label>
+                <input type="number" id="abono_monto" required>
+            </div>
+            <button type="button" onclick="agregarAbono()">Agregar Abono</button>
+        </div>
+    </div>
     <!-- Modal para modificar pedidos -->
     <div id="modal_modificar" class="modal">
         <div class="modal-content">
             <span class="close" onclick="cerrarModal('modal_modificar')">&times;</span>
             <h2>Modificar Pedido</h2>
-            <div class="form-field">
-                <label>Nombre del Cliente:</label>
-                <input type="text" id="modificar_cliente" required>
-            </div>
-            <div class="form-field">
-                <label>Productos:</label>
-                <div id="modificar_productos">
-                    <!-- Lista de productos se actualizará aquí -->
+            <form onsubmit="guardarCambios(event, '${id}'); return false;">
+                <div class="form-field">
+                    <label>Nombre del Cliente:</label>
+                    <input type="text" id="modificar_cliente" required>
                 </div>
-                <button type="button" onclick="mostrarModal('modal_producto_modificar')">Agregar Producto</button>
-            </div>
-            <div class="form-field">
-                <label>Abonos:</label>
-                <div id="modificar_abonos">
-                    <!-- Lista de abonos se actualizará aquí -->
+                <div class="form-field">
+                    <label>Productos:</label>
+                    <div id="modificar_productos">
+                        <!-- Lista de productos se actualizará aquí -->
+                    </div>
                 </div>
-                <button type="button" onclick="mostrarModal('modal_abono_modificar')">Agregar Abono</button>
-            </div>
-            <div class="form-field">
-                <label>Número de Pares:</label>
-                <input type="number" id="modificar_num_pares" required>
-            </div>
-            <div class="form-field">
-                <label>Valor Total:</label>
-                <input type="number" id="modificar_valor_total" required readonly>
-            </div>
-            <div class="form-field">
-                <label>Observaciones:</label>
-                <textarea id="modificar_observaciones"></textarea>
-            </div>
-            <div class="form-field">
-                <label>Saldo a Favor:</label>
-                <input type="number" id="modificar_saldo_a_favor" required>
-            </div>
-            <button type="button" onclick="guardarCambios('${doc.id}')">Guardar Cambios</button>
+                <div class="form-field">
+                    <label>Abonos:</label>
+                    <div id="modificar_abonos">
+                        <!-- Lista de abonos se actualizará aquí -->
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label>Número de Pares:</label>
+                    <input type="number" id="modificar_num_pares" required>
+                </div>
+                <div class="form-field">
+                    <label>Valor Total:</label>
+                    <input type="number" id="modificar_valor_total" required readonly>
+                </div>
+                <div class="form-field">
+                    <label>Observaciones:</label>
+                    <textarea id="modificar_observaciones"></textarea>
+                </div>
+                <div class="form-field">
+                    <label>Saldo a Favor:</label>
+                    <input type="number" id="modificar_saldo_a_favor" required>
+                </div>
+                <input type="submit" value="Guardar Cambios">
+            </form>
         </div>
     </div>
+
     <!-- Modal para ver pedidos -->
     <div id="modal_pedidos" class="modal">
         <div class="modal-content">
