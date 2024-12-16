@@ -386,6 +386,34 @@
             resumenHTML += '</div>';
             document.getElementById('resumen_asesores').innerHTML = resumenHTML;
         }
+
+        async function exportarAExcel() {
+            console.log("Exportando a Excel...");
+            const querySnapshot = await db.collection('registros').get();
+            let registros = [];
+
+            querySnapshot.forEach(doc => {
+                const registro = doc.data();
+                registros.push({
+                    fecha_hora: registro.fecha_hora,
+                    codigo_unico: registro.codigo_unico,
+                    cliente: registro.cliente,
+                    asesor: registro.asesor,
+                    productos: registro.productos.map(producto => `${producto.referencia} - ${producto.color} - ${producto.talla} - ${producto.precio}`).join(', '),
+                    num_pares: registro.num_pares,
+                    valor_total: registro.valor_total,
+                    observaciones: registro.observaciones,
+                    saldo_a_favor: registro.saldo_a_favor,
+                    abonos: registro.abonos.map(abono => `${abono.fecha} - ${abono.monto}`).join(', ')
+                });
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(registros);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
+
+            XLSX.writeFile(workbook, 'registros.xlsx');
+        }
         async function modificarPedido(id) {
             try {
                 // Recuperar datos del pedido
