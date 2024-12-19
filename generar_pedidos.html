@@ -165,7 +165,6 @@
 
         const mostrarModal = id => document.getElementById(id).style.display = 'flex';
         const cerrarModal = id => document.getElementById(id).style.display = 'none';
-
         function agregarProducto() {
             const ref = id => document.getElementById(id).value;
             const producto = { referencia: ref('producto_referencia'), color: ref('producto_color'), talla: ref('producto_talla'), precio: parseFloat(ref('producto_precio')) };
@@ -223,7 +222,6 @@
                 console.error("Error guardando en Firebase:", error);
             }
         }
-
         async function enviarFormulario(event) {
             event.preventDefault(); // Evitar recargar la página
             if (confirm("¿Desea enviar el formulario?")) {
@@ -289,7 +287,7 @@
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
             document.getElementById('valor_vendido').innerText = `Valor Vendido: ${valorTotal.toLocaleString('es-CO')}`;
         }
-      async function verPedidos() {
+        async function verPedidos() {
             console.log("Ver pedidos...");
             resetearComboBoxAsesor(); // Resetear opciones del combobox
             let pedidosHTML = '';
@@ -414,7 +412,7 @@
 
             XLSX.writeFile(workbook, 'registros.xlsx');
         }
-        async function modificarPedido(id) {
+           async function modificarPedido(id) {
             try {
                 // Recuperar datos del pedido
                 const doc = await db.collection('registros').doc(id).get();
@@ -435,7 +433,7 @@
                             <input type="text" id="producto_referencia_${index}" value="${producto.referencia}" placeholder="Referencia">
                             <input type="text" id="producto_color_${index}" value="${producto.color}" placeholder="Color">
                             <input type="text" id="producto_talla_${index}" value="${producto.talla}" placeholder="Talla">
-                            <input type="number" id="producto_precio_${index}" value="${producto.precio}" placeholder="Precio">
+                            <input type="number" id="producto_precio_${index}" value="${producto.precio}" placeholder="Precio" oninput="actualizarValorTotalModificar()">
                         </div>`;
                 });
 
@@ -454,7 +452,7 @@
 
                 // Cambiar el valor del botón de guardar cambios para que funcione con el ID del documento
                 const botonGuardar = document.querySelector('#modal_modificar input[type="submit"]');
-                botonGuardar.setAttribute('onclick', `guardarCambios('${id}')`);
+                botonGuardar.setAttribute('onclick', `guardarCambios(event, '${id}')`);
 
                 // Mostrar el modal al frente
                 const modal = document.getElementById('modal_modificar');
@@ -464,8 +462,9 @@
                 console.error("Error al cargar el pedido para modificar:", error);
             }
         }
+        async function guardarCambios(event, id) {
+            event.preventDefault(); // Evitar el comportamiento por defecto del formulario
 
-        async function guardarCambios(id) {
             const ref = id => document.getElementById(id).value;
             const productos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => ({
                 referencia: el.querySelector(`#producto_referencia_${index}`).value,
@@ -482,7 +481,7 @@
             const datos = {
                 cliente: ref('modificar_cliente'),
                 num_pares: ref('modificar_num_pares'),
-                valor_total: ref('modificar_valor_total'),
+                valor_total: parseFloat(document.getElementById('modificar_valor_total').value),
                 observaciones: ref('modificar_observaciones'),
                 saldo_a_favor: ref('modificar_saldo_a_favor'),
                 productos,
@@ -500,6 +499,12 @@
             }
         }
 
+        function actualizarValorTotalModificar() {
+            const productos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => parseFloat(el.querySelector(`#producto_precio_${index}`).value) || 0);
+            const valorTotal = productos.reduce((total, precio) => total + precio, 0);
+            document.getElementById('modificar_valor_total').value = valorTotal.toFixed(2);
+        }
+
         async function eliminarPedido(id) {
             console.log("Eliminando pedido:", id);
             if (confirm("¿Estás seguro de que deseas eliminar este pedido?")) {
@@ -513,7 +518,6 @@
                 }
             }
         }
-
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
@@ -589,7 +593,6 @@
             <div id="loading-bar" style="display: none;">
                 <div id="loading-bar-fill">0%</div>
             </div>
-
             <h2>Registros</h2>
             <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
             <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
@@ -602,7 +605,6 @@
             <!-- Resumen de asesores se actualizará aquí -->
         </div>
     </div>
-
     <!-- Modal para agregar productos -->
     <div id="modal_producto" class="modal">
         <div class="modal-content">
@@ -643,7 +645,6 @@
             <button type="button" onclick="agregarAbono()">Agregar Abono</button>
         </div>
     </div>
-
     <!-- Modal para modificar pedidos -->
     <div id="modal_modificar" class="modal">
         <div class="modal-content">
@@ -686,7 +687,6 @@
             </form>
         </div>
     </div>
-
     <!-- Modal para ver pedidos -->
     <div id="modal_pedidos" class="modal">
         <div class="modal-content">
@@ -706,3 +706,4 @@
     </div>
 </body>
 </html>
+  
