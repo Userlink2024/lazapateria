@@ -140,9 +140,6 @@
             border: 1px solid #4CAF50;
             border-radius: 6px;
         }
-        .btn-admin {
-            display: none; /* Ocultar por defecto */
-        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
@@ -168,11 +165,6 @@
 
         const mostrarModal = id => document.getElementById(id).style.display = 'flex';
         const cerrarModal = id => document.getElementById(id).style.display = 'none';
-
-        // Mostrar botón "Revisar Pedidos" solo para administradores
-        if (datosUsuario.permisos.toLowerCase() === 'administrador') {
-            document.querySelector('.btn-admin').style.display = 'block';
-        }
         function agregarProducto() {
             const ref = id => document.getElementById(id).value;
             const producto = { referencia: ref('producto_referencia'), color: ref('producto_color'), talla: ref('producto_talla'), precio: parseFloat(ref('producto_precio')) };
@@ -222,70 +214,57 @@
             document.getElementById('valor_total').value = Math.round(valorTotal);
             document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + Math.round(valorTotal).toLocaleString('es-CO');
         }
-<body>
-    <div class="container">
-        <h1>Generar Pedidos</h1>
-        <div id="formulario">
-            <h2>Agregar Registro</h2>
-            <form onsubmit="enviarFormulario(event);">
-                <div class="form-field">
-                    <label>Nombre del Cliente:</label>
-                    <input type="text" name="cliente" required>
-                </div>
-                <div class="form-field">
-                    <label>Asesor:</label>
-                    <input type="text" name="asesor" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Productos:</label>
-                    <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
-                </div>
-                <div id="lista_productos" class="form-field">
-                    <!-- Lista de productos se actualizará aquí -->
-                </div>
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button>
-                </div>
-                <div id="lista_abonos" class="form-field">
-                    <!-- Lista de abonos se actualizará aquí -->
-                </div>
-                <div class="form-field">
-                    <label>Número de Pares:</label>
-                    <input type="number" name="num_pares" required>
-                </div>
-                <div class="form-field">
-                    <label id="valor_total_pesos">Valor Total:</label>
-                    <input type="number" id="valor_total" name="valor_total" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Observaciones:</label>
-                    <textarea name="observaciones"></textarea>
-                </div>
-                <div class="form-field">
-                    <label>Saldo a Favor:</label>
-                    <input type="number" name="saldo_a_favor" required>
-                </div>
-                <input type="submit" value="Agregar">
-            </form>
-            <div id="loading-bar" style="display: none;">
-                <div id="loading-bar-fill">0%</div>
-            </div>
-            <h2>Registros</h2>
-            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
-            <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
-            <button id="revisar_pedidos" class="btn-admin" onclick="location.href='revisar.html'">Revisar Pedidos</button>
-            <div class="totals">
-                <label id="total_pares">Total Pares: 0</label>
-                <label id="valor_vendido">Valor Vendido: 0</label>
-            </div>
-        </div>
-        <div id="resumen_asesores">
-            <!-- Resumen de asesores se actualizará aquí -->
-        </div>
-    </div>
-</body>
-</html>
+        async function guardarEnBaseDeDatos(datos) {
+            try {
+                await db.collection('registros').add(datos);
+                console.log("Datos guardados en Firebase:", datos);
+            } catch (error) {
+                console.error("Error guardando en Firebase:", error);
+            }
+        }
+
+        async function enviarFormulario(event) {
+            event.preventDefault(); // Evitar recargar la página
+            if (confirm("¿Desea enviar el formulario?")) {
+                mostrarBarraCargando();
+                console.log("Enviando formulario...");
+
+                const datos = {
+                    fecha_hora: new Date().toLocaleString(),
+                    codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    cliente: document.querySelector('input[name="cliente"]').value,
+                    productos,
+                    num_pares: document.querySelector('input[name="num_pares"]').value,
+                    valor_total: Math.round(valorTotal),
+                    observaciones: document.querySelector('textarea[name="observaciones"]').value,
+                    saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
+                    abonos,
+                    asesor: datosUsuario.nombreCompleto, // Agregar el campo asesor automáticamente
+                    usuario: datosUsuario.usuario  // Guardar el usuario que hizo el pedido
+                };
+
+                console.log("Datos a guardar:", datos);
+
+                try {
+                    await db.collection('registros').add(datos);
+                    console.log("Datos guardados en Firebase:", datos);
+                    alert("Pedido agregado exitosamente!");
+                } catch (error) {
+                    console.error("Error guardando en Firebase:", error);
+                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
+                }
+
+                // Restablecer el formulario pero mantener el campo "asesor"
+                document.querySelector('form').reset();
+                productos = [];
+                abonos = [];
+                valorTotal = 0;
+                actualizarLista('productos', productos);
+                actualizarLista('abonos', abonos);
+                actualizarValorTotal();
+                document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Reestablecer el asesor
+            }
+        }
         function resetearComboBoxAsesor() {
             const filtroAsesor = document.getElementById('filtro_asesor');
             filtroAsesor.innerHTML = '<option value="">Todos</option>'; // Reiniciar opciones
@@ -541,6 +520,94 @@
                 }
             }
         }
+        function mostrarBarraCargando() {
+            var loadingBar = document.getElementById("loading-bar");
+            var loadingBarFill = document.getElementById("loading-bar-fill");
+            loadingBar.style.display = "block";
+            loadingBarFill.style.width = "0%";
+            var width = 0;
+            var interval = setInterval(function() {
+                if (width >= 100) {
+                    clearInterval(interval);
+                    loadingBar.style.display = "none";
+                } else {
+                    width++;
+                    loadingBarFill.style.width = width + "%";
+                    loadingBarFill.innerText = width + "%";
+                }
+            }, 20);
+        }
+
+        window.onload = function() {
+            console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
+            if (datosUsuario.permisos.toLowerCase() === 'operador') {
+                document.getElementById('exportar').style.display = 'none';
+            }
+            document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Agregar asesor automáticamente
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Generar Pedidos</h1>
+        <div id="formulario">
+            <h2>Agregar Registro</h2>
+            <form onsubmit="enviarFormulario(event);">
+                <div class="form-field">
+                    <label>Nombre del Cliente:</label>
+                    <input type="text" name="cliente" required>
+                </div>
+                <div class="form-field">
+                    <label>Asesor:</label>
+                    <input type="text" name="asesor" required readonly>
+                </div>
+                <div class="form-field">
+                    <label>Productos:</label>
+                    <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
+                </div>
+                <div id="lista_productos" class="form-field">
+                    <!-- Lista de productos se actualizará aquí -->
+                </div>
+                <div class="form-field">
+                    <label>Abonos:</label>
+                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button>
+                </div>
+                <div id="lista_abonos" class="form-field">
+                    <!-- Lista de abonos se actualizará aquí -->
+                </div>
+                <div class="form-field">
+                    <label>Número de Pares:</label>
+                    <input type="number" name="num_pares" required>
+                </div>
+                <div class="form-field">
+                    <label id="valor_total_pesos">Valor Total:</label>
+                    <input type="number" id="valor_total" name="valor_total" required readonly>
+                </div>
+                <div class="form-field">
+                    <label>Observaciones:</label>
+                    <textarea name="observaciones"></textarea>
+                </div>
+                <div class="form-field">
+                    <label>Saldo a Favor:</label>
+                    <input type="number" name="saldo_a_favor" required>
+                </div>
+                <input type="submit" value="Agregar">
+            </form>
+            <div id="loading-bar" style="display: none;">
+                <div id="loading-bar-fill">0%</div>
+            </div>
+            <h2>Registros</h2>
+            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
+            <button id="ver_pedidos" onclick="verPedidos()">Ver Pedidos</button>
+            <div class="totals">
+                <label id="total_pares">Total Pares: 0</label>
+                <label id="valor_vendido">Valor Vendido: 0</label>
+            </div>
+        </div>
+        <div id="resumen_asesores">
+            <!-- Resumen de asesores se actualizará aquí -->
+        </div>
+    </div>
     <!-- Modal para agregar productos -->
     <div id="modal_producto" class="modal">
         <div class="modal-content">
