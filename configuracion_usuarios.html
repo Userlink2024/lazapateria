@@ -86,7 +86,7 @@ const firebaseConfig = {
 
         async function verificarAutenticacionYRol() {
             auth.onAuthStateChanged(async (user) => {
-                console.log("Estado de autenticación:", user);
+                console.log("Estado de autenticación en configuración:", user);
                 if (user) {
                     try {
                         const userRef = database.ref(`usuarios/${user.uid}`);
@@ -99,8 +99,8 @@ const firebaseConfig = {
                                 cargarUsuarios();
                                 cargarEmpresas();
                             } else {
-                                console.warn("No se encontró la información del usuario o el rol en Realtime Database para el UID:", user.uid);
-                                alert("No se encontró la información del usuario. Por favor, inicia sesión nuevamente.");
+                                console.warn("No se encontraron permisos de usuario en Realtime Database para el UID:", user.uid);
+                                alert("No se encontraron los permisos del usuario. Por favor, inicia sesión nuevamente.");
                                 window.location.href = 'index.html';
                             }
                         });
@@ -110,7 +110,7 @@ const firebaseConfig = {
                         window.location.href = 'index.html';
                     }
                 } else {
-                    console.log("Usuario no autenticado.");
+                    console.log("Usuario no autenticado en configuración.");
                     alert("No estás autenticado. Por favor, inicia sesión.");
                     window.location.href = 'index.html';
                 }
@@ -172,7 +172,7 @@ const firebaseConfig = {
         }
     </script>
     <h2>Registrar un nuevo usuario</h2>
-    <form onsubmit="event.preventDefault(); registrarUsuario();">
+    <form id="registroForm" onsubmit="event.preventDefault(); registrarUsuario();">
         <label for="usuarioRegistro">Usuario:</label>
         <input type="text" id="usuarioRegistro" name="usuarioRegistro">
 
@@ -240,7 +240,7 @@ const firebaseConfig = {
             const contraseña = document.getElementById("contraseña").value;
             const empresa = nuevaEmpresa || empresaSeleccionada;
 
-            if (!nombreCompleto || !empresa || !usuario || !contraseña) {
+            if (!nombreCompleto || !empresa || !usuario || !contraseña || !correo) {
                 alert("Por favor, complete todos los campos obligatorios.");
                 return;
             }
@@ -270,7 +270,7 @@ const firebaseConfig = {
                 alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
                 cargarUsuarios();
                 cargarEmpresas();
-                document.querySelector('form').reset();
+                document.getElementById('registroForm').reset();
 
             } catch (error) {
                 console.error("Error al registrar usuario:", error);
@@ -297,7 +297,7 @@ const firebaseConfig = {
             const contraseña = document.getElementById("contraseña").value;
             const usuarioRegistro = document.getElementById("usuarioRegistro").value;
 
-            if (!usuarioId || !nombreCompleto || !empresa || !usuarioRegistro || !contraseña) {
+            if (!usuarioId || !nombreCompleto || !empresa || !usuarioRegistro || !contraseña || !correo) {
                 alert("Por favor, seleccione un usuario y complete los campos obligatorios.");
                 return;
             }
@@ -331,18 +331,24 @@ const firebaseConfig = {
 
             if (confirm("¿Está seguro de que desea eliminar este usuario?")) {
                 try {
-                    // Obtener el correo electrónico del usuario antes de eliminarlo de la base de datos
+                    // Obtener el correo electrónico del usuario antes de intentar eliminarlo de Auth
                     const snapshot = await database.ref(`usuarios/${usuarioId}`).once('value');
                     const userData = snapshot.val();
                     if (userData && userData.correo) {
-                        await auth.deleteUser(usuarioId); // This might not work as expected, see note below
+                        try {
+                            await auth.deleteUser(usuarioId);
+                            console.log(`Usuario con UID ${usuarioId} eliminado de Authentication.`);
+                        } catch (authError) {
+                            console.error("Error al eliminar usuario de Authentication:", authError);
+                            alert("Error al eliminar la cuenta de autenticación del usuario. Es posible que deba hacerlo manualmente desde Firebase.");
+                        }
                     }
                     await database.ref(`usuarios/${usuarioId}`).remove();
-                    alert("Usuario eliminado con éxito.");
+                    alert("Usuario eliminado con éxito de la base de datos.");
                     cargarUsuarios();
-                    document.querySelector('form').reset();
+                    document.getElementById('registroForm').reset();
                 } catch (error) {
-                    console.error("Error al eliminar usuario:", error);
+                    console.error("Error al eliminar usuario de la base de datos:", error);
                     alert("Error al eliminar usuario: " + error.message);
                 }
             }
@@ -370,7 +376,7 @@ const firebaseConfig = {
                     }
                 });
             } else {
-                document.querySelector('form').reset();
+                document.getElementById('registroForm').reset();
             }
         }
     </script>
