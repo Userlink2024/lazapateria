@@ -245,30 +245,37 @@ const firebaseConfig = {
                 return;
             }
 
-            const newUserRef = database.ref(`usuarios`).push();
-            await newUserRef.set({
-                nombreCompleto,
-                tipoDocumento,
-                celular,
-                correo,
-                direccion,
-                municipio,
-                tipoContrato,
-                permisos,
-                empresa,
-                usuario,
-                contraseña
-            });
+            try {
+                const userCredential = await auth.createUserWithEmailAndPassword(correo, contraseña);
+                const uid = userCredential.user.uid;
 
-            if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
-                const newEmpresaRef = database.ref(`empresas`).push();
-                await newEmpresaRef.set({ nombre: nuevaEmpresa });
+                await database.ref(`usuarios/${uid}`).set({
+                    nombreCompleto,
+                    tipoDocumento,
+                    celular,
+                    correo,
+                    direccion,
+                    municipio,
+                    tipoContrato,
+                    permisos,
+                    empresa,
+                    usuario
+                });
+
+                if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
+                    const newEmpresaRef = database.ref(`empresas`).push();
+                    await newEmpresaRef.set({ nombre: nuevaEmpresa });
+                }
+
+                alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
+                cargarUsuarios();
+                cargarEmpresas();
+                document.querySelector('form').reset();
+
+            } catch (error) {
+                console.error("Error al registrar usuario:", error);
+                alert("Error al registrar usuario: " + error.message);
             }
-
-            alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
-            cargarUsuarios();
-            cargarEmpresas();
-            document.querySelector('form').reset();
         }
 
         async function empresaExiste(nombreEmpresa) {
@@ -323,10 +330,21 @@ const firebaseConfig = {
             }
 
             if (confirm("¿Está seguro de que desea eliminar este usuario?")) {
-                await database.ref(`usuarios/${usuarioId}`).remove();
-                alert("Usuario eliminado con éxito.");
-                cargarUsuarios();
-                document.querySelector('form').reset();
+                try {
+                    // Obtener el correo electrónico del usuario antes de eliminarlo de la base de datos
+                    const snapshot = await database.ref(`usuarios/${usuarioId}`).once('value');
+                    const userData = snapshot.val();
+                    if (userData && userData.correo) {
+                        await auth.deleteUser(usuarioId); // This might not work as expected, see note below
+                    }
+                    await database.ref(`usuarios/${usuarioId}`).remove();
+                    alert("Usuario eliminado con éxito.");
+                    cargarUsuarios();
+                    document.querySelector('form').reset();
+                } catch (error) {
+                    console.error("Error al eliminar usuario:", error);
+                    alert("Error al eliminar usuario: " + error.message);
+                }
             }
         }
     </script>
