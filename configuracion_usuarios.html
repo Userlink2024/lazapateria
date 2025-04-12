@@ -5,10 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Configuración de Usuarios</title>
     <style>
-        /* ... (Tu CSS original) ... */
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+            width: 100%;
+            max-width: 600px;
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
+        }
+        label {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .actions {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .actions button {
+            flex: 1 1 auto;
+            margin: 5px;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script>
         // Configuración de Firebase
@@ -25,50 +77,18 @@ const firebaseConfig = {
         // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const auth = firebase.auth(); // Inicializar Firebase Auth
 
-        async function verificarAutenticacionYRol() {
-            auth.onAuthStateChanged(async (user) => {
-                console.log("Estado de autenticación:", user);
-                if (user) {
-                    // Usuario autenticado, ahora obtener su rol desde Firestore
-                    try {
-                        const userDoc = await db.collection('usuarios').doc(user.uid).get();
-                        if (userDoc.exists) {
-                            const userData = userDoc.data();
-                            const rolUsuario = userData.permisos; // Asumiendo que el rol está en el campo 'permisos'
-                            console.log("Rol del usuario desde Firestore:", rolUsuario);
-
-                            if (rolUsuario === 'Administrador') {
-                                // El usuario es administrador, cargar la página de configuración
-                                cargarUsuarios();
-                                cargarEmpresas();
-                                // Puedes mostrar el contenido de la página aquí o dejar que las funciones de carga lo hagan
-                            } else {
-                                // El usuario no es administrador, mostrar mensaje de acceso denegado
-                                alert("Acceso denegado. Solo los administradores pueden acceder a esta página.");
-                                window.location.href = 'index.html'; // Redirigir a otra página
-                            }
-                        } else {
-                            console.warn("No se encontraron datos del usuario en Firestore para el UID:", user.uid);
-                            alert("No se encontraron los datos del usuario. Por favor, inicia sesión nuevamente.");
-                            window.location.href = 'index.html';
-                        }
-                    } catch (error) {
-                        console.error("Error al obtener la información del usuario:", error);
-                        alert("Error al cargar la configuración. Intenta nuevamente.");
-                        window.location.href = 'index.html';
-                    }
-                } else {
-                    // No hay usuario autenticado, redirigir a la página de inicio de sesión
-                    alert("No estás autenticado. Por favor, inicia sesión.");
-                    window.location.href = 'index.html';
-                }
-            });
-        }
-
-        window.onload = verificarAutenticacionYRol;
-
+        window.onload = () => {
+            cargarUsuarios();
+            cargarEmpresas();
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Configuración de Usuarios</h1>
+        <p id="estadoUsuarios"></p>
+    <script>
         async function cargarUsuarios() {
             document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
             try {
@@ -106,7 +126,61 @@ const firebaseConfig = {
                 console.error("Error cargando empresas: ", error);
             }
         }
+    </script>
+    <h2>Registrar un nuevo usuario</h2>
+    <form onsubmit="event.preventDefault(); registrarUsuario();">
+        <label for="usuarioRegistro">Usuario:</label>
+        <input type="text" id="usuarioRegistro" name="usuarioRegistro">
 
+        <label for="nombreCompleto">Nombre completo:</label>
+        <input type="text" id="nombreCompleto" name="nombreCompleto">
+
+        <label for="tipoDocumento">Tipo de documento:</label>
+        <input type="text" id="tipoDocumento" name="tipoDocumento">
+
+        <label for="celular">Celular:</label>
+        <input type="text" id="celular" name="celular">
+
+        <label for="correo">Correo:</label>
+        <input type="email" id="correo" name="correo">
+
+        <label for="direccion">Dirección:</label>
+        <input type="text" id="direccion" name="direccion">
+
+        <label for="municipio">Municipio:</label>
+        <input type="text" id="municipio" name="municipio">
+
+        <label for="tipoContrato">Tipo de contrato:</label>
+        <select id="tipoContrato" name="tipoContrato">
+            <option value="Fijo">Fijo</option>
+            <option value="Temporal">Temporal</option>
+            <option value="Indefinido">Indefinido</option>
+        </select>
+
+        <label for="permisos">Permisos:</label>
+        <select id="permisos" name="permisos">
+            <option value="Administrador">Administrador</option>
+            <option value="Operador">Operador</option>
+        </select>
+
+        <label for="nuevaEmpresa">Nueva Empresa (si no está en la lista):</label>
+        <input type="text" id="nuevaEmpresa" name="nuevaEmpresa">
+
+        <label for="empresaSeleccionadaRegistro">Seleccionar Empresa:</label>
+        <select id="empresaSeleccionadaRegistro" name="empresaSeleccionadaRegistro">
+            <option value="">Seleccionar Empresa</option>
+        </select>
+
+        <label for="contraseña">Contraseña:</label>
+        <input type="password" id="contraseña" name="contraseña">
+
+        <div class="actions">
+            <button type="submit">Registrar</button>
+            <button type="button" onclick="modificarUsuario()">Modificar</button>
+            <button type="button" onclick="eliminarUsuario()">Eliminar</button>
+        </div>
+    </form>
+    <script>
         async function registrarUsuario() {
             const nombreCompleto = document.getElementById("nombreCompleto").value;
             const tipoDocumento = document.getElementById("tipoDocumento").value;
@@ -122,7 +196,7 @@ const firebaseConfig = {
             const contraseña = document.getElementById("contraseña").value;
             const empresa = nuevaEmpresa || empresaSeleccionada;
 
-            if (!nombreCompleto || !empresa || !usuario || !contraseña || !correo) {
+            if (!nombreCompleto || !empresa || !usuario || !contraseña) {
                 alert("Por favor, complete todos los campos obligatorios.");
                 return;
             }
@@ -171,8 +245,9 @@ const firebaseConfig = {
             const permisos = document.getElementById("permisos").value;
             const empresa = document.getElementById("empresaSeleccionadaRegistro").value;
             const contraseña = document.getElementById("contraseña").value;
+            const usuarioRegistro = document.getElementById("usuarioRegistro").value;
 
-            if (!nombreCompleto || !empresa || !usuarioId || !contraseña || !correo) {
+            if (!nombreCompleto || !empresa || !usuarioId || !contraseña || !usuarioRegistro || !correo) {
                 alert("Por favor, complete todos los campos obligatorios.");
                 return;
             }
@@ -188,7 +263,7 @@ const firebaseConfig = {
                     tipoContrato,
                     permisos,
                     empresa,
-                    usuario: document.getElementById("usuarioRegistro").value,
+                    usuario: usuarioRegistro,
                     contraseña // ¡Importante! Considera la seguridad de almacenar contraseñas en Firestore
                 });
                 alert("Usuario modificado con éxito.");
@@ -215,7 +290,13 @@ const firebaseConfig = {
                 console.error("Error eliminando usuario: ", error);
             }
         }
+    </script>
 
+    <h2>Usuarios Registrados</h2>
+    <select id="usuariosSelect" onchange="mostrarDatosUsuario()">
+        <option value="">Seleccionar Usuario</option>
+    </select>
+    <script>
         async function mostrarDatosUsuario() {
             const usuarioId = document.getElementById('usuariosSelect').value;
             if (usuarioId) {
@@ -243,68 +324,6 @@ const firebaseConfig = {
             }
         }
     </script>
-
-    <div class="container">
-        <h1>Configuración de Usuarios</h1>
-        <p id="estadoUsuarios"></p>
-        <h2>Registrar un nuevo usuario</h2>
-        <form onsubmit="event.preventDefault(); registrarUsuario();">
-            <label for="usuarioRegistro">Usuario:</label>
-            <input type="text" id="usuarioRegistro" name="usuarioRegistro">
-
-            <label for="nombreCompleto">Nombre completo:</label>
-            <input type="text" id="nombreCompleto" name="nombreCompleto">
-
-            <label for="tipoDocumento">Tipo de documento:</label>
-            <input type="text" id="tipoDocumento" name="tipoDocumento">
-
-            <label for="celular">Celular:</label>
-            <input type="text" id="celular" name="celular">
-
-            <label for="correo">Correo:</label>
-            <input type="email" id="correo" name="correo">
-
-            <label for="direccion">Dirección:</label>
-            <input type="text" id="direccion" name="direccion">
-
-            <label for="municipio">Municipio:</label>
-            <input type="text" id="municipio" name="municipio">
-
-            <label for="tipoContrato">Tipo de contrato:</label>
-            <select id="tipoContrato" name="tipoContrato">
-                <option value="Fijo">Fijo</option>
-                <option value="Temporal">Temporal</option>
-                <option value="Indefinido">Indefinido</option>
-            </select>
-
-            <label for="permisos">Permisos:</label>
-            <select id="permisos" name="permisos">
-                <option value="Administrador">Administrador</option>
-                <option value="Operador">Operador</option>
-            </select>
-
-            <label for="nuevaEmpresa">Nueva Empresa (si no está en la lista):</label>
-            <input type="text" id="nuevaEmpresa" name="nuevaEmpresa">
-
-            <label for="empresaSeleccionadaRegistro">Seleccionar Empresa:</label>
-            <select id="empresaSeleccionadaRegistro" name="empresaSeleccionadaRegistro">
-                <option value="">Seleccionar Empresa</option>
-            </select>
-
-            <label for="contraseña">Contraseña:</label>
-            <input type="password" id="contraseña" name="contraseña">
-
-            <div class="actions">
-                <button type="submit">Registrar</button>
-                <button type="button" onclick="modificarUsuario()">Modificar</button>
-                <button type="button" onclick="eliminarUsuario()">Eliminar</button>
-            </div>
-        </form>
-
-        <h2>Usuarios Registrados</h2>
-        <select id="usuariosSelect" onchange="mostrarDatosUsuario()">
-            <option value="">Seleccionar Usuario</option>
-        </select>
-    </div>
+</div>
 </body>
 </html>
