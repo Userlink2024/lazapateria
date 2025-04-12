@@ -62,9 +62,9 @@
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-database-compat.js"></script>
     <script>
-        // Configuración de Firebase
+        // firebaseConfig.js
 const firebaseConfig = {
     apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
     authDomain: "lazapateria-c4157.firebaseapp.com",
@@ -75,38 +75,42 @@ const firebaseConfig = {
     measurementId: "G-HVG7615JEE"
 };
 
-        // Inicializar Firebase
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const auth = firebase.auth();
+        // Inicializar Firebase App
+        const app = firebase.initializeApp(firebaseConfig);
+
+        // Inicializar Firebase Authentication
+        const auth = firebase.auth(app);
+
+        // Inicializar Firebase Realtime Database
+        const database = firebase.database(app);
 
         async function verificarAutenticacionYRol() {
             auth.onAuthStateChanged(async (user) => {
-                console.log("Estado de autenticación:", user); // Depuración
+                console.log("Estado de autenticación:", user);
                 if (user) {
-                    // El usuario está autenticado, ahora obtenemos su rol desde Firestore
                     try {
-                        const userDoc = await db.collection('usuarios').doc(user.uid).get();
-                        if (userDoc.exists) {
-                            const userData = userDoc.data();
-                            console.log("Datos del usuario desde Firestore:", userData); // Depuración
-                            const rolUsuario = userData.permisos; // Asumiendo que el rol está en el campo 'permisos'
-                            console.log("Rol del usuario desde Firebase:", rolUsuario); // Depuración
-                            cargarUsuarios();
-                            cargarEmpresas();
-                            // Aquí podrías realizar acciones basadas en el rol si es necesario
-                        } else {
-                            console.warn("No se encontró la información del usuario en la base de datos para el UID:", user.uid);
-                            alert("No se encontró la información del usuario. Por favor, inicia sesión nuevamente.");
-                            window.location.href = 'index.html';
-                        }
+                        const userRef = database.ref(`usuarios/${user.uid}`);
+                        userRef.once('value', (snapshot) => {
+                            const userData = snapshot.val();
+                            console.log("Datos del usuario desde Realtime Database:", userData);
+                            if (userData && userData.permisos) {
+                                const rolUsuario = userData.permisos;
+                                console.log("Rol del usuario desde Realtime Database:", rolUsuario);
+                                cargarUsuarios();
+                                cargarEmpresas();
+                            } else {
+                                console.warn("No se encontró la información del usuario o el rol en Realtime Database para el UID:", user.uid);
+                                alert("No se encontró la información del usuario. Por favor, inicia sesión nuevamente.");
+                                window.location.href = 'index.html';
+                            }
+                        });
                     } catch (error) {
-                        console.error("Error al obtener la información del usuario:", error);
+                        console.error("Error al obtener la información del usuario desde Realtime Database:", error);
                         alert("Error al cargar la configuración. Intenta nuevamente.");
                         window.location.href = 'index.html';
                     }
                 } else {
-                    console.log("Usuario no autenticado."); // Depuración
+                    console.log("Usuario no autenticado.");
                     alert("No estás autenticado. Por favor, inicia sesión.");
                     window.location.href = 'index.html';
                 }
@@ -126,19 +130,22 @@ const firebaseConfig = {
         async function cargarUsuarios() {
             document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
             try {
-                const snapshot = await db.collection('usuarios').get();
+                const snapshot = await database.ref('usuarios').once('value');
+                const usuariosData = snapshot.val();
                 const usuariosSelect = document.getElementById('usuariosSelect');
                 if (!usuariosSelect) {
                     throw new Error("usuariosSelect no está definido.");
                 }
                 usuariosSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
-                snapshot.forEach(doc => {
-                    const usuario = doc.data().nombreCompleto;
-                    const option = document.createElement('option');
-                    option.value = doc.id;
-                    option.textContent = usuario;
-                    usuariosSelect.appendChild(option);
-                });
+                if (usuariosData) {
+                    Object.keys(usuariosData).forEach(uid => {
+                        const usuario = usuariosData[uid];
+                        const option = document.createElement('option');
+                        option.value = uid;
+                        option.textContent = usuario.nombreCompleto || usuario.usuario || uid; // Intenta mostrar nombre, usuario o UID
+                        usuariosSelect.appendChild(option);
+                    });
+                }
                 document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
             } catch (error) {
                 document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
@@ -149,13 +156,16 @@ const firebaseConfig = {
             const empresaSelect = document.getElementById('empresaSeleccionadaRegistro');
             empresaSelect.innerHTML = '<option value="">Seleccionar Empresa</option>';
             try {
-                const snapshot = await db.collection('empresas').get();
-                snapshot.forEach(doc => {
-                    const option = document.createElement('option');
-                    option.value = doc.data().nombre;
-                    option.textContent = doc.data().nombre;
-                    empresaSelect.appendChild(option);
-                });
+                const snapshot = await database.ref('empresas').once('value');
+                const empresasData = snapshot.val();
+                if (empresasData) {
+                    Object.values(empresasData).forEach(empresa => {
+                        const option = document.createElement('option');
+                        option.value = empresa.nombre;
+                        option.textContent = empresa.nombre;
+                        empresaSelect.appendChild(option);
+                    });
+                }
             } catch (error) {
                 console.error("Error cargando empresas: ", error);
             }
@@ -235,36 +245,35 @@ const firebaseConfig = {
                 return;
             }
 
+            const newUserRef = database.ref(`usuarios`).push();
+            await newUserRef.set({
+                nombreCompleto,
+                tipoDocumento,
+                celular,
+                correo,
+                direccion,
+                municipio,
+                tipoContrato,
+                permisos,
+                empresa,
+                usuario,
+                contraseña
+            });
+
             if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
-                await db.collection('empresas').add({ nombre: nuevaEmpresa });
+                const newEmpresaRef = database.ref(`empresas`).push();
+                await newEmpresaRef.set({ nombre: nuevaEmpresa });
             }
 
-            try {
-                await db.collection('usuarios').add({
-                    nombreCompleto,
-                    tipoDocumento,
-                    celular,
-                    correo,
-                    direccion,
-                    municipio,
-                    tipoContrato,
-                    permisos,
-                    empresa,
-                    usuario,
-                    contraseña // Agregando contraseña a la colección
-                });
-                alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
-                cargarUsuarios();
-                cargarEmpresas();
-                document.querySelector('form').reset();
-            } catch (error) {
-                console.error("Error registrando usuario: ", error);
-            }
+            alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
+            cargarUsuarios();
+            cargarEmpresas();
+            document.querySelector('form').reset();
         }
 
         async function empresaExiste(nombreEmpresa) {
-            const snapshot = await db.collection('empresas').where('nombre', '==', nombreEmpresa).get();
-            return !snapshot.empty;
+            const snapshot = await database.ref('empresas').orderByChild('nombre').equalTo(nombreEmpresa).once('value');
+            return snapshot.val() !== null;
         }
 
         async function modificarUsuario() {
@@ -286,25 +295,23 @@ const firebaseConfig = {
                 return;
             }
 
-            try {
-                await db.collection('usuarios').doc(usuarioId).update({
-                    nombreCompleto,
-                    tipoDocumento,
-                    celular,
-                    correo,
-                    direccion,
-                    municipio,
-                    tipoContrato,
-                    permisos,
-                    empresa,
-                    usuario: usuarioRegistro,
-                    contraseña
-                });
-                alert("Usuario modificado con éxito.");
-                cargarUsuarios();
-            } catch (error) {
-                console.error("Error modificando usuario: ", error);
-            }
+            const userRef = database.ref(`usuarios/${usuarioId}`);
+            await userRef.update({
+                nombreCompleto,
+                tipoDocumento,
+                celular,
+                correo,
+                direccion,
+                municipio,
+                tipoContrato,
+                permisos,
+                empresa,
+                usuario: usuarioRegistro,
+                contraseña
+            });
+
+            alert("Usuario modificado con éxito.");
+            cargarUsuarios();
         }
 
         async function eliminarUsuario() {
@@ -316,14 +323,10 @@ const firebaseConfig = {
             }
 
             if (confirm("¿Está seguro de que desea eliminar este usuario?")) {
-                try {
-                    await db.collection('usuarios').doc(usuarioId).delete();
-                    alert("Usuario eliminado con éxito.");
-                    cargarUsuarios();
-                    document.querySelector('form').reset();
-                } catch (error) {
-                    console.error("Error eliminando usuario: ", error);
-                }
+                await database.ref(`usuarios/${usuarioId}`).remove();
+                alert("Usuario eliminado con éxito.");
+                cargarUsuarios();
+                document.querySelector('form').reset();
             }
         }
     </script>
@@ -331,25 +334,23 @@ const firebaseConfig = {
         async function mostrarDatosUsuario() {
             const usuarioId = document.getElementById('usuariosSelect').value;
             if (usuarioId) {
-                try {
-                    const usuarioDoc = await db.collection('usuarios').doc(usuarioId).get();
-                    if (usuarioDoc.exists) {
-                        const usuario = usuarioDoc.data();
-                        document.getElementById('usuarioRegistro').value = usuario.usuario;
-                        document.getElementById('nombreCompleto').value = usuario.nombreCompleto;
-                        document.getElementById('tipoDocumento').value = usuario.tipoDocumento;
-                        document.getElementById('celular').value = usuario.celular;
-                        document.getElementById('correo').value = usuario.correo;
-                        document.getElementById('direccion').value = usuario.direccion;
-                        document.getElementById('municipio').value = usuario.municipio;
-                        document.getElementById('tipoContrato').value = usuario.tipoContrato;
-                        document.getElementById('permisos').value = usuario.permisos;
-                        document.getElementById('empresaSeleccionadaRegistro').value = usuario.empresa;
-                        document.getElementById('contraseña').value = usuario.contraseña;
+                const userRef = database.ref(`usuarios/${usuarioId}`);
+                userRef.once('value', (snapshot) => {
+                    const usuario = snapshot.val();
+                    if (usuario) {
+                        document.getElementById('usuarioRegistro').value = usuario.usuario || '';
+                        document.getElementById('nombreCompleto').value = usuario.nombreCompleto || '';
+                        document.getElementById('tipoDocumento').value = usuario.tipoDocumento || '';
+                        document.getElementById('celular').value = usuario.celular || '';
+                        document.getElementById('correo').value = usuario.correo || '';
+                        document.getElementById('direccion').value = usuario.direccion || '';
+                        document.getElementById('municipio').value = usuario.municipio || '';
+                        document.getElementById('tipoContrato').value = usuario.tipoContrato || '';
+                        document.getElementById('permisos').value = usuario.permisos || '';
+                        document.getElementById('empresaSeleccionadaRegistro').value = usuario.empresa || '';
+                        document.getElementById('contraseña').value = usuario.contraseña || '';
                     }
-                } catch (error) {
-                    console.error("Error obteniendo datos del usuario: ", error);
-                }
+                });
             } else {
                 document.querySelector('form').reset();
             }
