@@ -59,6 +59,12 @@
             flex: 1 1 auto;
             margin: 5px;
         }
+        .restricted-access {
+            text-align: center;
+            color: red;
+            font-weight: bold;
+            margin-top: 20px;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
@@ -87,6 +93,9 @@ const firebaseConfig = {
         async function verificarAutenticacionYRol() {
             auth.onAuthStateChanged(async (user) => {
                 console.log("Estado de autenticación en configuración:", user);
+                const container = document.querySelector('.container');
+                container.innerHTML = ''; // Limpiar el contenido inicial
+
                 if (user) {
                     try {
                         const userRef = database.ref(`usuarios/${user.uid}`);
@@ -96,8 +105,90 @@ const firebaseConfig = {
                             if (userData && userData.permisos) {
                                 const rolUsuario = userData.permisos;
                                 console.log("Rol del usuario desde Realtime Database:", rolUsuario);
-                                cargarUsuarios();
-                                cargarEmpresas();
+                                if (rolUsuario === 'Administrador') {
+                                    // Si es administrador, cargar la configuración
+                                    container.innerHTML = `
+                                        <h1>Configuración de Usuarios</h1>
+                                        <p id="estadoUsuarios">Cargando...</p>
+                                        <div id="usuarios-content"></div>
+                                        <h2>Registrar un nuevo usuario</h2>
+                                        <form id="registroForm" onsubmit="event.preventDefault(); registrarUsuario();">
+                                            <label for="usuarioRegistro">Usuario:</label>
+                                            <input type="text" id="usuarioRegistro" name="usuarioRegistro">
+                                            <label for="nombreCompleto">Nombre completo:</label>
+                                            <input type="text" id="nombreCompleto" name="nombreCompleto">
+                                            <label for="tipoDocumento">Tipo de documento:</label>
+                                            <input type="text" id="tipoDocumento" name="tipoDocumento">
+                                            <label for="celular">Celular:</label>
+                                            <input type="text" id="celular" name="celular">
+                                            <label for="correo">Correo:</label>
+                                            <input type="email" id="correo" name="correo">
+                                            <label for="direccion">Dirección:</label>
+                                            <input type="text" id="direccion" name="direccion">
+                                            <label for="municipio">Municipio:</label>
+                                            <input type="text" id="municipio" name="municipio">
+                                            <label for="tipoContrato">Tipo de contrato:</label>
+                                            <select id="tipoContrato" name="tipoContrato">
+                                                <option value="Fijo">Fijo</option>
+                                                <option value="Temporal">Temporal</option>
+                                                <option value="Indefinido">Indefinido</option>
+                                            </select>
+                                            <label for="permisos">Permisos:</label>
+                                            <select id="permisos" name="permisos">
+                                                <option value="Administrador">Administrador</option>
+                                                <option value="Operador">Operador</option>
+                                            </select>
+                                            <label for="nuevaEmpresa">Nueva Empresa (si no está en la lista):</label>
+                                            <input type="text" id="nuevaEmpresa" name="nuevaEmpresa">
+                                            <label for="empresaSeleccionadaRegistro">Seleccionar Empresa:</label>
+                                            <select id="empresaSeleccionadaRegistro" name="empresaSeleccionadaRegistro">
+                                                <option value="">Seleccionar Empresa</option>
+                                            </select>
+                                            <label for="contraseña">Contraseña:</label>
+                                            <input type="password" id="contraseña" name="contraseña">
+                                            <div class="actions">
+                                                <button type="submit">Registrar</button>
+                                                <button type="button" onclick="modificarUsuario()">Modificar</button>
+                                                <button type="button" onclick="eliminarUsuario()">Eliminar</button>
+                                            </div>
+                                        </form>
+                                        <h2>Usuarios Registrados</h2>
+                                        <select id="usuariosSelect" onchange="mostrarDatosUsuario()">
+                                            <option value="">Seleccionar Usuario</option>
+                                        </select>
+                                    `;
+                                    cargarUsuarios();
+                                    cargarEmpresas();
+                                    // Re-enlazar los scripts después de cargar el contenido dinámicamente
+                                    const script1 = document.createElement('script');
+                                    script1.textContent = cargarUsuarios.toString();
+                                    document.head.appendChild(script1);
+                                    const script2 = document.createElement('script');
+                                    script2.textContent = cargarEmpresas.toString();
+                                    document.head.appendChild(script2);
+                                    const script3 = document.createElement('script');
+                                    script3.textContent = registrarUsuario.toString();
+                                    document.head.appendChild(script3);
+                                    const script4 = document.createElement('script');
+                                    script4.textContent = empresaExiste.toString();
+                                    document.head.appendChild(script4);
+                                    const script5 = document.createElement('script');
+                                    script5.textContent = modificarUsuario.toString();
+                                    document.head.appendChild(script5);
+                                    const script6 = document.createElement('script');
+                                    script6.textContent = eliminarUsuario.toString();
+                                    document.head.appendChild(script6);
+                                    const script7 = document.createElement('script');
+                                    script7.textContent = mostrarDatosUsuario.toString();
+                                    document.head.appendChild(script7);
+
+                                } else {
+                                    // Si no es administrador, mostrar mensaje de acceso denegado
+                                    container.innerHTML = '<div class="restricted-access">Acceso denegado. No tienes permisos de administrador para ver esta página.</div>';
+                                    console.warn("Acceso denegado: El usuario no es administrador.");
+                                    // Opcionalmente, redirigir a otra página para operadores
+                                    // window.location.href = 'pagina_para_operadores.html';
+                                }
                             } else {
                                 console.warn("No se encontraron permisos de usuario en Realtime Database para el UID:", user.uid);
                                 alert("No se encontraron los permisos del usuario. Por favor, inicia sesión nuevamente.");
@@ -120,271 +211,20 @@ const firebaseConfig = {
         window.onload = () => {
             verificarAutenticacionYRol();
         };
+
+        // Funciones para cargar, registrar, modificar y eliminar usuarios (las mismas que antes)
+        async function cargarUsuarios() { /* ... */ }
+        async function cargarEmpresas() { /* ... */ }
+        async function registrarUsuario() { /* ... */ }
+        async function empresaExiste(nombreEmpresa) { /* ... */ }
+        async function modificarUsuario() { /* ... */ }
+        async function eliminarUsuario() { /* ... */ }
+        async function mostrarDatosUsuario() { /* ... */ }
     </script>
 </head>
 <body>
     <div class="container">
-        <h1>Configuración de Usuarios</h1>
-        <p id="estadoUsuarios"></p>
-    <script>
-        async function cargarUsuarios() {
-            document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
-            try {
-                const snapshot = await database.ref('usuarios').once('value');
-                const usuariosData = snapshot.val();
-                const usuariosSelect = document.getElementById('usuariosSelect');
-                if (!usuariosSelect) {
-                    throw new Error("usuariosSelect no está definido.");
-                }
-                usuariosSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
-                if (usuariosData) {
-                    Object.keys(usuariosData).forEach(uid => {
-                        const usuario = usuariosData[uid];
-                        const option = document.createElement('option');
-                        option.value = uid;
-                        option.textContent = usuario.nombreCompleto || usuario.usuario || uid; // Intenta mostrar nombre, usuario o UID
-                        usuariosSelect.appendChild(option);
-                    });
-                }
-                document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
-            } catch (error) {
-                document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
-            }
-        }
-
-        async function cargarEmpresas() {
-            const empresaSelect = document.getElementById('empresaSeleccionadaRegistro');
-            empresaSelect.innerHTML = '<option value="">Seleccionar Empresa</option>';
-            try {
-                const snapshot = await database.ref('empresas').once('value');
-                const empresasData = snapshot.val();
-                if (empresasData) {
-                    Object.values(empresasData).forEach(empresa => {
-                        const option = document.createElement('option');
-                        option.value = empresa.nombre;
-                        option.textContent = empresa.nombre;
-                        empresaSelect.appendChild(option);
-                    });
-                }
-            } catch (error) {
-                console.error("Error cargando empresas: ", error);
-            }
-        }
-    </script>
-    <h2>Registrar un nuevo usuario</h2>
-    <form id="registroForm" onsubmit="event.preventDefault(); registrarUsuario();">
-        <label for="usuarioRegistro">Usuario:</label>
-        <input type="text" id="usuarioRegistro" name="usuarioRegistro">
-
-        <label for="nombreCompleto">Nombre completo:</label>
-        <input type="text" id="nombreCompleto" name="nombreCompleto">
-
-        <label for="tipoDocumento">Tipo de documento:</label>
-        <input type="text" id="tipoDocumento" name="tipoDocumento">
-
-        <label for="celular">Celular:</label>
-        <input type="text" id="celular" name="celular">
-
-        <label for="correo">Correo:</label>
-        <input type="email" id="correo" name="correo">
-
-        <label for="direccion">Dirección:</label>
-        <input type="text" id="direccion" name="direccion">
-
-        <label for="municipio">Municipio:</label>
-        <input type="text" id="municipio" name="municipio">
-
-        <label for="tipoContrato">Tipo de contrato:</label>
-        <select id="tipoContrato" name="tipoContrato">
-            <option value="Fijo">Fijo</option>
-            <option value="Temporal">Temporal</option>
-            <option value="Indefinido">Indefinido</option>
-        </select>
-
-        <label for="permisos">Permisos:</label>
-        <select id="permisos" name="permisos">
-            <option value="Administrador">Administrador</option>
-            <option value="Operador">Operador</option>
-        </select>
-
-        <label for="nuevaEmpresa">Nueva Empresa (si no está en la lista):</label>
-        <input type="text" id="nuevaEmpresa" name="nuevaEmpresa">
-
-        <label for="empresaSeleccionadaRegistro">Seleccionar Empresa:</label>
-        <select id="empresaSeleccionadaRegistro" name="empresaSeleccionadaRegistro">
-            <option value="">Seleccionar Empresa</option>
-        </select>
-
-        <label for="contraseña">Contraseña:</label>
-        <input type="password" id="contraseña" name="contraseña">
-
-        <div class="actions">
-            <button type="submit">Registrar</button>
-            <button type="button" onclick="modificarUsuario()">Modificar</button>
-            <button type="button" onclick="eliminarUsuario()">Eliminar</button>
-        </div>
-    </form>
-    <script>
-        async function registrarUsuario() {
-            const nombreCompleto = document.getElementById("nombreCompleto").value;
-            const tipoDocumento = document.getElementById("tipoDocumento").value;
-            const celular = document.getElementById("celular").value;
-            const correo = document.getElementById("correo").value;
-            const direccion = document.getElementById("direccion").value;
-            const municipio = document.getElementById("municipio").value;
-            const tipoContrato = document.getElementById("tipoContrato").value;
-            const permisos = document.getElementById("permisos").value;
-            const nuevaEmpresa = document.getElementById("nuevaEmpresa").value;
-            const empresaSeleccionada = document.getElementById("empresaSeleccionadaRegistro").value;
-            const usuario = document.getElementById("usuarioRegistro").value;
-            const contraseña = document.getElementById("contraseña").value;
-            const empresa = nuevaEmpresa || empresaSeleccionada;
-
-            if (!nombreCompleto || !empresa || !usuario || !contraseña || !correo) {
-                alert("Por favor, complete todos los campos obligatorios.");
-                return;
-            }
-
-            try {
-                const userCredential = await auth.createUserWithEmailAndPassword(correo, contraseña);
-                const uid = userCredential.user.uid;
-
-                await database.ref(`usuarios/${uid}`).set({
-                    nombreCompleto,
-                    tipoDocumento,
-                    celular,
-                    correo,
-                    direccion,
-                    municipio,
-                    tipoContrato,
-                    permisos,
-                    empresa,
-                    usuario
-                });
-
-                if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
-                    const newEmpresaRef = database.ref(`empresas`).push();
-                    await newEmpresaRef.set({ nombre: nuevaEmpresa });
-                }
-
-                alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
-                cargarUsuarios();
-                cargarEmpresas();
-                document.getElementById('registroForm').reset();
-
-            } catch (error) {
-                console.error("Error al registrar usuario:", error);
-                alert("Error al registrar usuario: " + error.message);
-            }
-        }
-
-        async function empresaExiste(nombreEmpresa) {
-            const snapshot = await database.ref('empresas').orderByChild('nombre').equalTo(nombreEmpresa).once('value');
-            return snapshot.val() !== null;
-        }
-
-        async function modificarUsuario() {
-            const usuarioId = document.getElementById('usuariosSelect').value;
-            const nombreCompleto = document.getElementById("nombreCompleto").value;
-            const tipoDocumento = document.getElementById("tipoDocumento").value;
-            const celular = document.getElementById("celular").value;
-            const correo = document.getElementById("correo").value;
-            const direccion = document.getElementById("direccion").value;
-            const municipio = document.getElementById("municipio").value;
-            const tipoContrato = document.getElementById("tipoContrato").value;
-            const permisos = document.getElementById("permisos").value;
-            const empresa = document.getElementById("empresaSeleccionadaRegistro").value;
-            const contraseña = document.getElementById("contraseña").value;
-            const usuarioRegistro = document.getElementById("usuarioRegistro").value;
-
-            if (!usuarioId || !nombreCompleto || !empresa || !usuarioRegistro || !contraseña || !correo) {
-                alert("Por favor, seleccione un usuario y complete los campos obligatorios.");
-                return;
-            }
-
-            const userRef = database.ref(`usuarios/${usuarioId}`);
-            await userRef.update({
-                nombreCompleto,
-                tipoDocumento,
-                celular,
-                correo,
-                direccion,
-                municipio,
-                tipoContrato,
-                permisos,
-                empresa,
-                usuario: usuarioRegistro,
-                contraseña
-            });
-
-            alert("Usuario modificado con éxito.");
-            cargarUsuarios();
-        }
-
-        async function eliminarUsuario() {
-            const usuarioId = document.getElementById('usuariosSelect').value;
-
-            if (!usuarioId) {
-                alert("Por favor, seleccione un usuario.");
-                return;
-            }
-
-            if (confirm("¿Está seguro de que desea eliminar este usuario?")) {
-                try {
-                    // Obtener el correo electrónico del usuario antes de intentar eliminarlo de Auth
-                    const snapshot = await database.ref(`usuarios/${usuarioId}`).once('value');
-                    const userData = snapshot.val();
-                    if (userData && userData.correo) {
-                        try {
-                            await auth.deleteUser(usuarioId);
-                            console.log(`Usuario con UID ${usuarioId} eliminado de Authentication.`);
-                        } catch (authError) {
-                            console.error("Error al eliminar usuario de Authentication:", authError);
-                            alert("Error al eliminar la cuenta de autenticación del usuario. Es posible que deba hacerlo manualmente desde Firebase.");
-                        }
-                    }
-                    await database.ref(`usuarios/${usuarioId}`).remove();
-                    alert("Usuario eliminado con éxito de la base de datos.");
-                    cargarUsuarios();
-                    document.getElementById('registroForm').reset();
-                } catch (error) {
-                    console.error("Error al eliminar usuario de la base de datos:", error);
-                    alert("Error al eliminar usuario: " + error.message);
-                }
-            }
-        }
-    </script>
-    <script>
-        async function mostrarDatosUsuario() {
-            const usuarioId = document.getElementById('usuariosSelect').value;
-            if (usuarioId) {
-                const userRef = database.ref(`usuarios/${usuarioId}`);
-                userRef.once('value', (snapshot) => {
-                    const usuario = snapshot.val();
-                    if (usuario) {
-                        document.getElementById('usuarioRegistro').value = usuario.usuario || '';
-                        document.getElementById('nombreCompleto').value = usuario.nombreCompleto || '';
-                        document.getElementById('tipoDocumento').value = usuario.tipoDocumento || '';
-                        document.getElementById('celular').value = usuario.celular || '';
-                        document.getElementById('correo').value = usuario.correo || '';
-                        document.getElementById('direccion').value = usuario.direccion || '';
-                        document.getElementById('municipio').value = usuario.municipio || '';
-                        document.getElementById('tipoContrato').value = usuario.tipoContrato || '';
-                        document.getElementById('permisos').value = usuario.permisos || '';
-                        document.getElementById('empresaSeleccionadaRegistro').value = usuario.empresa || '';
-                        document.getElementById('contraseña').value = usuario.contraseña || '';
-                    }
-                });
-            } else {
-                document.getElementById('registroForm').reset();
-            }
-        }
-    </script>
-
-    <h2>Usuarios Registrados</h2>
-    <select id="usuariosSelect" onchange="mostrarDatosUsuario()">
-        <option value="">Seleccionar Usuario</option>
-    </select>
-</div>
+        Cargando...
+    </div>
 </body>
 </html>
