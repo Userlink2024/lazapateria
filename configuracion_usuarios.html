@@ -65,26 +65,32 @@
     <script>
         // Configuración de Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
-  authDomain: "lazapateria-c4157.firebaseapp.com",
-  projectId: "lazapateria-c4157",
-  storageBucket: "lazapateria-c4157.firebasestorage.app",
-  messagingSenderId: "300241769138",
-  appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
-  measurementId: "G-HVG7615JEE"
-        };
+    apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+    authDomain: "lazapateria-c4157.firebaseapp.com",
+    projectId: "lazapateria-c4157",
+    storageBucket: "lazapateria-c4157.firebasestorage.app",
+    messagingSenderId: "300241769138",
+    appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+    measurementId: "G-HVG7615JEE"
+};
 
         // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        
-        window.onload = () => {
+
+        function verificarRol() {
             const rolUsuario = localStorage.getItem('rolUsuario');
             if (!rolUsuario) {
-                alert("No se encontró el rol del usuario.");
-                window.location.href = 'index.html';
-            } else {
-                console.log("Rol del usuario recuperado del localStorage:", rolUsuario); // Depuración
+                alert("No se encontró el rol del usuario. Por favor, inicia sesión nuevamente.");
+                window.location.href = 'index.html'; // Redirige a la página de inicio de sesión
+                return false;
+            }
+            console.log("Rol del usuario recuperado del localStorage:", rolUsuario);
+            return true;
+        }
+
+        window.onload = () => {
+            if (verificarRol()) {
                 cargarUsuarios();
                 cargarEmpresas();
             }
@@ -229,6 +235,8 @@ const firebaseConfig = {
                 alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
                 cargarUsuarios();
                 cargarEmpresas();
+                // Limpiar el formulario después de registrar
+                document.querySelector('form').reset();
             } catch (error) {
                 console.error("Error registrando usuario: ", error);
             }
@@ -251,9 +259,10 @@ const firebaseConfig = {
             const permisos = document.getElementById("permisos").value;
             const empresa = document.getElementById("empresaSeleccionadaRegistro").value;
             const contraseña = document.getElementById("contraseña").value;
+            const usuarioRegistro = document.getElementById("usuarioRegistro").value; // Mantener el nombre de usuario
 
-            if (!nombreCompleto || !empresa || !usuarioId || !contraseña) {
-                alert("Por favor, complete todos los campos obligatorios.");
+            if (!usuarioId || !nombreCompleto || !empresa || !usuarioRegistro || !contraseña) {
+                alert("Por favor, seleccione un usuario y complete los campos obligatorios.");
                 return;
             }
 
@@ -268,6 +277,7 @@ const firebaseConfig = {
                     tipoContrato,
                     permisos,
                     empresa,
+                    usuario: usuarioRegistro, // Asegurarse de actualizar el nombre de usuario si es necesario
                     contraseña // Agregando contraseña a la actualización
                 });
                 alert("Usuario modificado con éxito.");
@@ -285,12 +295,16 @@ const firebaseConfig = {
                 return;
             }
 
-            try {
-                await db.collection('usuarios').doc(usuarioId).delete();
-                alert("Usuario eliminado con éxito.");
-                cargarUsuarios();
-            } catch (error) {
-                console.error("Error eliminando usuario: ", error);
+            if (confirm("¿Está seguro de que desea eliminar este usuario?")) {
+                try {
+                    await db.collection('usuarios').doc(usuarioId).delete();
+                    alert("Usuario eliminado con éxito.");
+                    cargarUsuarios();
+                    // Limpiar el formulario después de eliminar
+                    document.querySelector('form').reset();
+                } catch (error) {
+                    console.error("Error eliminando usuario: ", error);
+                }
             }
         }
     </script>
@@ -317,21 +331,11 @@ const firebaseConfig = {
                 } catch (error) {
                     console.error("Error obteniendo datos del usuario: ", error);
                 }
+            } else {
+                // Limpiar el formulario si no se selecciona ningún usuario
+                document.querySelector('form').reset();
             }
         }
-
-        // Asegurarse de que el DOM esté completamente cargado antes de llamar a estas funciones
-        window.onload = function() {
-            const rolUsuario = localStorage.getItem('rolUsuario');
-            if (!rolUsuario) {
-                alert("No se encontró el rol del usuario.");
-                window.location.href = 'index.html';
-            } else {
-                console.log("Rol del usuario recuperado del localStorage:", rolUsuario); // Depuración
-                cargarUsuarios();
-                cargarEmpresas();
-            }
-        };
     </script>
 
     <h2>Usuarios Registrados</h2>
