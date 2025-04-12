@@ -5,62 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Configuración de Usuarios</title>
     <style>
-        body {
-            font-family: 'Roboto', sans-serif;
-            background-color: #f0f2f5;
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .container {
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            padding: 20px;
-            width: 100%;
-            max-width: 600px;
-        }
-        h1, h2 {
-            color: #333;
-            text-align: center;
-        }
-        label {
-            margin-top: 10px;
-            font-weight: bold;
-            color: #555;
-        }
-        input, select, button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        button {
-            background-color: #28a745;
-            color: white;
-            border: none;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-        button:hover {
-            background-color: #218838;
-        }
-        .actions {
-            display: flex;
-            justify-content: space-between;
-            flex-wrap: wrap;
-        }
-        .actions button {
-            flex: 1 1 auto;
-            margin: 5px;
-        }
+        /* ... (Tu CSS existente) ... */
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script>
         // Configuración de Firebase
@@ -77,23 +25,41 @@ const firebaseConfig = {
         // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        const auth = firebase.auth();
 
-        function verificarRol() {
-            const rolUsuario = localStorage.getItem('rolUsuario');
-            if (!rolUsuario) {
-                alert("No se encontró el rol del usuario. Por favor, inicia sesión nuevamente.");
-                window.location.href = 'index.html'; // Redirige a la página de inicio de sesión
-                return false;
-            }
-            console.log("Rol del usuario recuperado del localStorage:", rolUsuario);
-            return true;
+        async function verificarAutenticacionYRol() {
+            auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    // El usuario está autenticado, ahora obtenemos su rol desde Firestore
+                    try {
+                        const userDoc = await db.collection('usuarios').doc(user.uid).get();
+                        if (userDoc.exists) {
+                            const userData = userDoc.data();
+                            const rolUsuario = userData.permisos; // Asumiendo que el rol se guarda en el campo 'permisos'
+                            console.log("Rol del usuario desde Firebase:", rolUsuario);
+                            cargarUsuarios();
+                            cargarEmpresas();
+                            // Aquí podrías realizar acciones adicionales basadas en el rol,
+                            // como habilitar/deshabilitar ciertas funcionalidades de la página.
+                        } else {
+                            alert("No se encontró la información del usuario en la base de datos.");
+                            window.location.href = 'index.html'; // Redirigir si no se encuentra el usuario
+                        }
+                    } catch (error) {
+                        console.error("Error al obtener la información del usuario:", error);
+                        alert("Error al cargar la configuración. Intenta nuevamente.");
+                        window.location.href = 'index.html';
+                    }
+                } else {
+                    // El usuario no está autenticado
+                    alert("No estás autenticado. Por favor, inicia sesión.");
+                    window.location.href = 'index.html';
+                }
+            });
         }
 
         window.onload = () => {
-            if (verificarRol()) {
-                cargarUsuarios();
-                cargarEmpresas();
-            }
+            verificarAutenticacionYRol();
         };
     </script>
 </head>
@@ -235,7 +201,6 @@ const firebaseConfig = {
                 alert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
                 cargarUsuarios();
                 cargarEmpresas();
-                // Limpiar el formulario después de registrar
                 document.querySelector('form').reset();
             } catch (error) {
                 console.error("Error registrando usuario: ", error);
@@ -259,7 +224,7 @@ const firebaseConfig = {
             const permisos = document.getElementById("permisos").value;
             const empresa = document.getElementById("empresaSeleccionadaRegistro").value;
             const contraseña = document.getElementById("contraseña").value;
-            const usuarioRegistro = document.getElementById("usuarioRegistro").value; // Mantener el nombre de usuario
+            const usuarioRegistro = document.getElementById("usuarioRegistro").value;
 
             if (!usuarioId || !nombreCompleto || !empresa || !usuarioRegistro || !contraseña) {
                 alert("Por favor, seleccione un usuario y complete los campos obligatorios.");
@@ -277,8 +242,8 @@ const firebaseConfig = {
                     tipoContrato,
                     permisos,
                     empresa,
-                    usuario: usuarioRegistro, // Asegurarse de actualizar el nombre de usuario si es necesario
-                    contraseña // Agregando contraseña a la actualización
+                    usuario: usuarioRegistro,
+                    contraseña
                 });
                 alert("Usuario modificado con éxito.");
                 cargarUsuarios();
@@ -300,7 +265,6 @@ const firebaseConfig = {
                     await db.collection('usuarios').doc(usuarioId).delete();
                     alert("Usuario eliminado con éxito.");
                     cargarUsuarios();
-                    // Limpiar el formulario después de eliminar
                     document.querySelector('form').reset();
                 } catch (error) {
                     console.error("Error eliminando usuario: ", error);
@@ -326,13 +290,12 @@ const firebaseConfig = {
                         document.getElementById('tipoContrato').value = usuario.tipoContrato;
                         document.getElementById('permisos').value = usuario.permisos;
                         document.getElementById('empresaSeleccionadaRegistro').value = usuario.empresa;
-                        document.getElementById('contraseña').value = usuario.contraseña; // Mostrar la contraseña
+                        document.getElementById('contraseña').value = usuario.contraseña;
                     }
                 } catch (error) {
                     console.error("Error obteniendo datos del usuario: ", error);
                 }
             } else {
-                // Limpiar el formulario si no se selecciona ningún usuario
                 document.querySelector('form').reset();
             }
         }
