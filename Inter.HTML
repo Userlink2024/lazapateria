@@ -22,7 +22,7 @@
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 800px; /* Aumentamos el ancho máximo para el módulo de guías */
+            max-width: 950px;
             margin-bottom: 20px;
         }
         h2 {
@@ -101,7 +101,7 @@
             border-bottom: 1px solid #eee;
             padding: 10px 0;
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr auto auto; /* Más columnas para los datos */
+            grid-template-columns: 1.5fr 2fr 1.5fr 1fr 1.5fr auto auto;
             gap: 10px;
             align-items: center;
         }
@@ -153,19 +153,100 @@ const firebaseConfig = {
         };
 
         async function cargarUsuarioLogueado() {
-            // ... (tu función cargarUsuarioLogueado anterior) ...
+            const usuarioLogueadoElement = document.getElementById('usuarioLogueado');
+            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
+
+            if (datosUsuario && datosUsuario.nombreCompleto) {
+                usuarioLogueadoElement.value = datosUsuario.nombreCompleto;
+                usuarioLogueadoElement.readOnly = true;
+                // Hacer el campo de usuario arrastrable
+                usuarioLogueadoElement.draggable = true;
+                usuarioLogueadoElement.ondragstart = (event) => {
+                    event.dataTransfer.setData("text", event.target.value);
+                };
+                console.log("Usuario cargado y arrastrable:", datosUsuario.nombreCompleto);
+            } else {
+                usuarioLogueadoElement.value = 'No se pudo cargar el usuario';
+                usuarioLogueadoElement.readOnly = true;
+                console.error("No se encontraron datos del usuario en localStorage.");
+            }
         }
 
         function verificarRolParaExportar() {
-            // ... (tu función verificarRolParaExportar anterior) ...
+            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
+            const exportarExcelBtn = document.getElementById('exportarExcelBtn');
+
+            if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
+                exportarExcelBtn.style.display = 'block';
+            } else {
+                exportarExcelBtn.style.display = 'none';
+            }
         }
 
         async function guardarGuia() {
-            // ... (tu función guardarGuia anterior) ...
+            const usuario = document.getElementById('usuarioLogueado').value;
+            const fecha = document.getElementById('fechaGuia').value;
+            const nombreCliente = document.getElementById('nombreCliente').value;
+            const valorMercancia = document.getElementById('valorMercancia').value;
+            const numeroGuia = document.getElementById('numeroGuia').value;
+            const errorMessageElement = document.getElementById('error-message');
+            errorMessageElement.textContent = '';
+            const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
+
+            if (!fecha || !nombreCliente || !valorMercancia || !numeroGuia) {
+                errorMessageElement.textContent = 'Por favor, completa todos los campos.';
+                return;
+            }
+
+            const guiaData = {
+                usuario: usuario,
+                fecha: fecha,
+                nombreCliente: nombreCliente,
+                valorMercancia: parseFloat(valorMercancia),
+                numeroGuia: numeroGuia,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            try {
+                if (guiaAEditarId) {
+                    console.log("Actualizando guía con ID:", guiaAEditarId, guiaData);
+                    await db.collection('guias_interrapidissimo').doc(guiaAEditarId).update(guiaData);
+                    alert('Guía de Inter Rapidisimo actualizada exitosamente.');
+                    guardarBtn.textContent = 'Guardar Guía';
+                    guiaAEditarId = null;
+                } else {
+                    console.log("Guardando nueva guía:", guiaData);
+                    await db.collection('guias_interrapidissimo').add(guiaData);
+                    alert('Guía de Inter Rapidisimo registrada exitosamente.');
+                }
+                document.getElementById('generarGuiaForm').reset();
+                cargarGuias();
+            } catch (error) {
+                console.error("Error al guardar/actualizar la guía: ", error);
+                errorMessageElement.textContent = `Error al ${guiaAEditarId ? 'actualizar' : 'guardar'} la guía de Inter Rapidisimo. Inténtalo de nuevo.`;
+            }
         }
 
         async function exportarGuiasExcel() {
-            // ... (tu función exportarGuiasExcel anterior) ...
+            try {
+                const querySnapshot = await db.collection('guias_interrapidissimo').get();
+                const data = [];
+                querySnapshot.forEach(doc => {
+                    data.push(doc.data());
+                });
+
+                if (data.length > 0) {
+                    const workbook = XLSX.utils.book_new();
+                    const worksheet = XLSX.utils.json_to_sheet(data);
+                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Guias Inter Rapidisimo');
+                    XLSX.writeFile(workbook, 'guias_interrapidissimo.xlsx');
+                } else {
+                    alert('No hay guías de Inter Rapidisimo para exportar.');
+                }
+            } catch (error) {
+                console.error("Error al exportar guías a Excel: ", error);
+                alert('Error al exportar guías a Excel.');
+            }
         }
 
         function mostrarModuloGuias() {
@@ -185,7 +266,7 @@ const firebaseConfig = {
                     guia.id = doc.id;
                     guiasInterrapidissimo.push(guia);
                 });
-                mostrarGuiasFiltradas(guiasInterrapidissimo); // Mostrar todas al cargar
+                mostrarGuiasFiltradas(guiasInterrapidissimo);
             } catch (error) {
                 console.error("Error al cargar las guías: ", error);
                 alert('Error al cargar las guías de Inter Rapidisimo.');
@@ -203,7 +284,7 @@ const firebaseConfig = {
 
             const headerItem = document.createElement('li');
             headerItem.className = 'guia-header';
-            headerItem.style.gridTemplateColumns = '1.5fr 2fr 1.5fr 1fr 1fr auto auto'; // Ajustar columnas del header
+            headerItem.style.gridTemplateColumns = '1.5fr 2fr 1.5fr 1fr 1.5fr auto auto';
             headerItem.innerHTML = `
                 <div>Número de Guía</div>
                 <div>Nombre del Cliente</div>
@@ -217,7 +298,7 @@ const firebaseConfig = {
 
             guias.forEach(guia => {
                 const listItem = document.createElement('li');
-                listItem.style.gridTemplateColumns = '1.5fr 2fr 1.5fr 1fr 1fr auto auto'; // Ajustar columnas de los datos
+                listItem.style.gridTemplateColumns = '1.5fr 2fr 1.5fr 1fr 1.5fr auto auto';
                 listItem.innerHTML = `
                     <div>${guia.numeroGuia}</div>
                     <div>${guia.nombreCliente}</div>
@@ -225,7 +306,7 @@ const firebaseConfig = {
                     <div>${guia.valorMercancia}</div>
                     <div>${guia.usuario}</div>
                     <div>
-                        <button class="accion-btn" onclick="cargarDatosParaEdicion(${JSON.stringify(guia)})">Editar</button>
+                        <button class="accion-btn" onclick="cargarDatosParaEdicion('${guia.id}')">Editar</button>
                     </div>
                     <div>
                         <button class="accion-btn eliminar" onclick="eliminarGuia('${guia.id}')">Eliminar</button>
@@ -234,17 +315,25 @@ const firebaseConfig = {
                 listaGuiasElement.appendChild(listItem);
             });
         }
+      function cargarDatosParaEdicion(guiaId) {
+            console.log("Cargando datos para edición con ID:", guiaId);
+            const guiaParaEditar = guiasInterrapidissimo.find(guia => guia.id === guiaId);
 
-        function cargarDatosParaEdicion(guia) {
-            document.getElementById('usuarioLogueado').value = guia.usuario;
-            document.getElementById('fechaGuia').value = guia.fecha;
-            document.getElementById('nombreCliente').value = guia.nombreCliente;
-            document.getElementById('valorMercancia').value = guia.valorMercancia;
-            document.getElementById('numeroGuia').value = guia.numeroGuia;
+            if (guiaParaEditar) {
+                console.log("Guía encontrada para editar:", guiaParaEditar);
+                document.getElementById('usuarioLogueado').value = guiaParaEditar.usuario;
+                document.getElementById('fechaGuia').value = guiaParaEditar.fecha;
+                document.getElementById('nombreCliente').value = guiaParaEditar.nombreCliente;
+                document.getElementById('valorMercancia').value = guiaParaEditar.valorMercancia;
+                document.getElementById('numeroGuia').value = guiaParaEditar.numeroGuia;
 
-            guiaAEditarId = guia.id;
-            const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
-            guardarBtn.textContent = 'Actualizar Guía';
+                guiaAEditarId = guiaId;
+                const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
+                guardarBtn.textContent = 'Actualizar Guía';
+            } else {
+                console.error("No se encontró la guía con ID:", guiaId);
+                alert("Error: No se pudo cargar la guía para editar.");
+            }
         }
 
         async function eliminarGuia(id) {
@@ -279,7 +368,7 @@ const firebaseConfig = {
         <h2>Generar guía de Inter Rapidisimo</h2>
         <form id="generarGuiaForm" onsubmit="event.preventDefault(); guardarGuia();">
             <label for="usuarioLogueado">Usuario:</label>
-            <input type="text" id="usuarioLogueado" readonly>
+            <input type="text" id="usuarioLogueado" readonly draggable="true" ondragstart="event.dataTransfer.setData('text', this.value)">
 
             <label for="fechaGuia">Fecha:</label>
             <input type="date" id="fechaGuia" required>
