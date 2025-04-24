@@ -7,12 +7,14 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #e7f3ff; /* Azul claro de fondo */
+            background-color: #e7f3ff;
             margin: 0;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            justify-content: flex-start;
             align-items: center;
             min-height: 100vh;
+            padding-top: 20px;
         }
         .container {
             background-color: #fff;
@@ -20,11 +22,12 @@
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 600px;
+            max-width: 800px; /* Aumentamos el ancho máximo para el módulo de guías */
+            margin-bottom: 20px;
         }
         h2 {
             text-align: center;
-            color: #0056b3; /* Azul oscuro para el encabezado */
+            color: #0056b3;
             margin-bottom: 20px;
         }
         label {
@@ -44,7 +47,7 @@
             box-sizing: border-box;
         }
         button {
-            background-color: #007bff; /* Azul Bootstrap */
+            background-color: #007bff;
             color: white;
             padding: 12px 20px;
             border: none;
@@ -54,17 +57,74 @@
             margin-top: 10px;
         }
         button:hover {
-            background-color: #0056b3; /* Azul oscuro para el hover */
+            background-color: #0056b3;
         }
         .error-message {
             color: red;
             margin-top: 10px;
         }
         #exportarExcelBtn {
-            background-color: #28a745; /* Verde Bootstrap para el botón de exportar */
+            background-color: #28a745;
         }
         #exportarExcelBtn:hover {
             background-color: #1e7e34;
+        }
+        #verGuiasBtn {
+            background-color: #6c757d;
+        }
+        #verGuiasBtn:hover {
+            background-color: #5a6268;
+        }
+        #guiasModulo {
+            display: none;
+            margin-top: 20px;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+        }
+        #buscadorGuias {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        #listaGuias {
+            list-style: none;
+            padding: 0;
+        }
+        #listaGuias li {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto auto; /* Más columnas para los datos */
+            gap: 10px;
+            align-items: center;
+        }
+        #listaGuias li:last-child {
+            border-bottom: none;
+        }
+        .accion-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .accion-btn.eliminar {
+            background-color: #dc3545;
+        }
+        .accion-btn:hover {
+            opacity: 0.8;
+        }
+        .guia-header {
+            font-weight: bold;
         }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
@@ -84,6 +144,8 @@ const firebaseConfig = {
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        let guiasInterrapidissimo = [];
+        let guiaAEditarId = null;
 
         window.onload = () => {
             cargarUsuarioLogueado();
@@ -91,84 +153,124 @@ const firebaseConfig = {
         };
 
         async function cargarUsuarioLogueado() {
-            const usuarioLogueadoElement = document.getElementById('usuarioLogueado');
-            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
-
-            if (datosUsuario && datosUsuario.nombreCompleto) {
-                usuarioLogueadoElement.value = datosUsuario.nombreCompleto;
-                usuarioLogueadoElement.readOnly = true;
-            } else {
-                usuarioLogueadoElement.value = 'No se pudo cargar el usuario';
-                usuarioLogueadoElement.readOnly = true;
-                console.error("No se encontraron datos del usuario en localStorage.");
-                // Opcionalmente, podrías redirigir al usuario a la página de inicio de sesión
-                // window.location.href = 'index.html';
-            }
+            // ... (tu función cargarUsuarioLogueado anterior) ...
         }
 
         function verificarRolParaExportar() {
-            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
-            const exportarExcelBtn = document.getElementById('exportarExcelBtn');
-
-            if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
-                exportarExcelBtn.style.display = 'block';
-            } else {
-                exportarExcelBtn.style.display = 'none';
-            }
+            // ... (tu función verificarRolParaExportar anterior) ...
         }
 
         async function guardarGuia() {
-            const usuario = document.getElementById('usuarioLogueado').value;
-            const fecha = document.getElementById('fechaGuia').value;
-            const nombreCliente = document.getElementById('nombreCliente').value;
-            const valorMercancia = document.getElementById('valorMercancia').value;
-            const numeroGuia = document.getElementById('numeroGuia').value;
-            const errorMessageElement = document.getElementById('error-message');
-            errorMessageElement.textContent = '';
-
-            if (!fecha || !nombreCliente || !valorMercancia || !numeroGuia) {
-                errorMessageElement.textContent = 'Por favor, completa todos los campos.';
-                return;
-            }
-
-            try {
-                await db.collection('guias_interrapidissimo').add({
-                    usuario: usuario,
-                    fecha: fecha,
-                    nombreCliente: nombreCliente,
-                    valorMercancia: parseFloat(valorMercancia),
-                    numeroGuia: numeroGuia,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                alert('Guía de Inter Rapidisimo registrada exitosamente.');
-                document.getElementById('generarGuiaForm').reset();
-            } catch (error) {
-                console.error("Error al guardar la guía: ", error);
-                errorMessageElement.textContent = 'Error al guardar la guía de Inter Rapidisimo. Inténtalo de nuevo.';
-            }
+            // ... (tu función guardarGuia anterior) ...
         }
 
         async function exportarGuiasExcel() {
-            console.log("Exportar guías de Inter Rapidisimo a Excel Clicked");
-            try {
-                const querySnapshot = await db.collection('guias_interrapidissimo').get();
-                const data = [];
-                querySnapshot.forEach(doc => {
-                    data.push(doc.data());
-                });
+            // ... (tu función exportarGuiasExcel anterior) ...
+        }
 
-                if (data.length > 0) {
-                    const workbook = XLSX.utils.book_new();
-                    const worksheet = XLSX.utils.json_to_sheet(data);
-                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Guias Inter Rapidisimo');
-                    XLSX.writeFile(workbook, 'guias_interrapidissimo.xlsx');
-                } else {
-                    alert('No hay guías de Inter Rapidisimo para exportar.');
-                }
+        function mostrarModuloGuias() {
+            document.getElementById('guiasModulo').style.display = 'block';
+            cargarGuias();
+        }
+
+        async function cargarGuias() {
+            const listaGuiasElement = document.getElementById('listaGuias');
+            listaGuiasElement.innerHTML = '';
+            guiasInterrapidissimo = [];
+
+            try {
+                const querySnapshot = await db.collection('guias_interrapidissimo').orderBy('timestamp', 'desc').get();
+                querySnapshot.forEach(doc => {
+                    const guia = doc.data();
+                    guia.id = doc.id;
+                    guiasInterrapidissimo.push(guia);
+                });
+                mostrarGuiasFiltradas(guiasInterrapidissimo); // Mostrar todas al cargar
             } catch (error) {
-                console.error("Error al exportar guías a Excel: ", error);
-                alert('Error al exportar guías a Excel.');
+                console.error("Error al cargar las guías: ", error);
+                alert('Error al cargar las guías de Inter Rapidisimo.');
             }
+        }
+
+        function mostrarGuiasFiltradas(guias) {
+            const listaGuiasElement = document.getElementById('listaGuias');
+            listaGuiasElement.innerHTML = '';
+
+            if (guias.length === 0) {
+                listaGuiasElement.innerHTML = '<li>No se encontraron guías.</li>';
+                return;
+            }
+
+            const headerItem = document.createElement('li');
+            headerItem.className = 'guia-header';
+            headerItem.style.gridTemplateColumns = '1.5fr 2fr 1.5fr 1fr 1fr auto auto'; // Ajustar columnas del header
+            headerItem.innerHTML = `
+                <div>Número de Guía</div>
+                <div>Nombre del Cliente</div>
+                <div>Fecha</div>
+                <div>Valor</div>
+                <div>Usuario</div>
+                <div></div>
+                <div></div>
+            `;
+            listaGuiasElement.appendChild(headerItem);
+
+            guias.forEach(guia => {
+                const listItem = document.createElement('li');
+                listItem.style.gridTemplateColumns = '1.5fr 2fr 1.5fr 1fr 1fr auto auto'; // Ajustar columnas de los datos
+                listItem.innerHTML = `
+                    <div>${guia.numeroGuia}</div>
+                    <div>${guia.nombreCliente}</div>
+                    <div>${guia.fecha}</div>
+                    <div>${guia.valorMercancia}</div>
+                    <div>${guia.usuario}</div>
+                    <div>
+                        <button class="accion-btn" onclick="cargarDatosParaEdicion(${JSON.stringify(guia)})">Editar</button>
+                    </div>
+                    <div>
+                        <button class="accion-btn eliminar" onclick="eliminarGuia('${guia.id}')">Eliminar</button>
+                    </div>
+                `;
+                listaGuiasElement.appendChild(listItem);
+            });
+        }
+
+        function cargarDatosParaEdicion(guia) {
+            document.getElementById('usuarioLogueado').value = guia.usuario;
+            document.getElementById('fechaGuia').value = guia.fecha;
+            document.getElementById('nombreCliente').value = guia.nombreCliente;
+            document.getElementById('valorMercancia').value = guia.valorMercancia;
+            document.getElementById('numeroGuia').value = guia.numeroGuia;
+
+            guiaAEditarId = guia.id;
+            const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
+            guardarBtn.textContent = 'Actualizar Guía';
+        }
+
+        async function eliminarGuia(id) {
+            if (confirm('¿Estás seguro de que deseas eliminar esta guía?')) {
+                try {
+                    await db.collection('guias_interrapidissimo').doc(id).delete();
+                    alert('Guía eliminada exitosamente.');
+                    cargarGuias();
+                } catch (error) {
+                    console.error("Error al eliminar la guía: ", error);
+                    alert('Error al eliminar la guía.');
+                }
+            }
+        }
+
+        function filtrarGuias() {
+            const filtro = document.getElementById('buscadorGuias').value.toLowerCase();
+            const guiasFiltradas = guiasInterrapidissimo.filter(guia => {
+                return Object.values(guia).some(valor => {
+                    if (typeof valor === 'string' || typeof valor === 'number') {
+                        return String(valor).toLowerCase().includes(filtro);
+                    }
+                    return false;
+                });
+            });
+            mostrarGuiasFiltradas(guiasFiltradas);
         }
     </script>
 </head>
@@ -193,8 +295,16 @@ const firebaseConfig = {
 
             <button type="submit">Guardar Guía</button>
             <button type="button" id="exportarExcelBtn" onclick="exportarGuiasExcel()" style="display:none;">Exportar a Excel</button>
+            <button type="button" id="verGuiasBtn" onclick="mostrarModuloGuias()">Ver Guías</button>
             <p id="error-message" class="error-message"></p>
         </form>
+    </div>
+
+    <div class="container" id="guiasModulo">
+        <h2>Listado de Guías de Inter Rapidisimo</h2>
+        <input type="text" id="buscadorGuias" onkeyup="filtrarGuias()" placeholder="Buscar en todas las guías...">
+        <ul id="listaGuias">
+            </ul>
     </div>
 </body>
 </html>
