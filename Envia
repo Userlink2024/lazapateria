@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generar Guías - La Zapatería</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"],
+        input[type="date"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #dc3545; /* Rojo Bootstrap */
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #c82333; /* Rojo más oscuro para el hover */
+        }
+        .error-message {
+            color: red;
+            margin-top: 10px;
+        }
+        #exportarExcelBtn {
+            background-color: #007bff; /* Azul Bootstrap para el botón de exportar */
+        }
+        #exportarExcelBtn:hover {
+            background-color: #0056b3;
+        }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+    <script>
+const firebaseConfig = {
+    apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+    authDomain: "lazapateria-c4157.firebaseapp.com",
+    projectId: "lazapateria-c4157",
+    storageBucket: "lazapateria-c4157.firebasestorage.app",
+    messagingSenderId: "300241769138",
+    appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+    measurementId: "G-HVG7615JEE"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        window.onload = () => {
+            cargarUsuarioLogueado();
+            verificarRolParaExportar();
+        };
+
+        async function cargarUsuarioLogueado() {
+            const usuarioLogueadoElement = document.getElementById('usuarioLogueado');
+            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
+
+            if (datosUsuario && datosUsuario.nombreCompleto) {
+                usuarioLogueadoElement.value = datosUsuario.nombreCompleto;
+                usuarioLogueadoElement.readOnly = true;
+            } else {
+                usuarioLogueadoElement.value = 'No se pudo cargar el usuario';
+                usuarioLogueadoElement.readOnly = true;
+                console.error("No se encontraron datos del usuario en localStorage.");
+                // Opcionalmente, podrías redirigir al usuario a la página de inicio de sesión
+                // window.location.href = 'index.html';
+            }
+        }
+
+        function verificarRolParaExportar() {
+            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
+            const exportarExcelBtn = document.getElementById('exportarExcelBtn');
+
+            if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
+                exportarExcelBtn.style.display = 'block';
+            } else {
+                exportarExcelBtn.style.display = 'none';
+            }
+        }
+
+        async function guardarGuia() {
+            const usuario = document.getElementById('usuarioLogueado').value;
+            const fecha = document.getElementById('fechaGuia').value;
+            const nombreCliente = document.getElementById('nombreCliente').value;
+            const valorMercancia = document.getElementById('valorMercancia').value;
+            const numeroGuia = document.getElementById('numeroGuia').value;
+            const errorMessageElement = document.getElementById('error-message');
+            errorMessageElement.textContent = '';
+
+            if (!fecha || !nombreCliente || !valorMercancia || !numeroGuia) {
+                errorMessageElement.textContent = 'Por favor, completa todos los campos.';
+                return;
+            }
+
+            try {
+                await db.collection('guias').add({
+                    usuario: usuario,
+                    fecha: fecha,
+                    nombreCliente: nombreCliente,
+                    valorMercancia: parseFloat(valorMercancia),
+                    numeroGuia: numeroGuia,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                alert('Guía registrada exitosamente.');
+                document.getElementById('generarGuiaForm').reset();
+            } catch (error) {
+                console.error("Error al guardar la guía: ", error);
+                errorMessageElement.textContent = 'Error al guardar la guía. Inténtalo de nuevo.';
+            }
+        }
+
+        function exportarGuiasExcel() {
+            console.log("Exportar a Excel Clicked");
+            // Aquí deberías implementar la lógica para exportar los datos de las guías a un archivo Excel.
+            alert("Funcionalidad de exportación a Excel en desarrollo.");
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h2>Generar guía de Envía</h2>
+        <form id="generarGuiaForm" onsubmit="event.preventDefault(); guardarGuia();">
+            <label for="usuarioLogueado">Usuario:</label>
+            <input type="text" id="usuarioLogueado" readonly>
+
+            <label for="fechaGuia">Fecha:</label>
+            <input type="date" id="fechaGuia" required>
+
+            <label for="nombreCliente">Nombre del Cliente:</label>
+            <input type="text" id="nombreCliente" required>
+
+            <label for="valorMercancia">Valor de la Mercancía:</label>
+            <input type="number" id="valorMercancia" required>
+
+            <label for="numeroGuia">Número de Guía:</label>
+            <input type="text" id="numeroGuia" required>
+
+            <button type="submit">Guardar Guía</button>
+            <button type="button" id="exportarExcelBtn" onclick="exportarGuiasExcel()" style="display:none;">Exportar a Excel</button>
+            <p id="error-message" class="error-message"></p>
+        </form>
+    </div>
+</body>
+</html>
