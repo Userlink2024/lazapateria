@@ -40,9 +40,10 @@
             width: 100%; /* Make buttons take full width on mobile */
             box-sizing: border-box; /* Include padding and border in the element's total width */
             text-align: center;
+            transition: opacity 0.3s ease; /* Smooth hover effect */
         }
         button:hover {
-            opacity: 0.9; /* Suaviza el efecto hover */
+            opacity: 0.9;
         }
         .error {
             color: red;
@@ -68,6 +69,72 @@
             color: white;
         }
 
+        /* --- Modal Styles --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000; /* Ensure it's on top of other content */
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            max-width: 300px; /* Limit content width */
+            width: 90%; /* Responsive width */
+            box-sizing: border-box;
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            color: #4CAF50; /* Green color */
+            font-size: 1.3em;
+        }
+
+        .modal-content p {
+             margin-bottom: 15px;
+             font-size: 0.95em;
+        }
+
+        .modal-content input[type="password"] {
+            width: calc(100% - 22px); /* Full width minus padding/border */
+            padding: 10px;
+            margin: 0 0 10px 0; /* Adjust margin */
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box; /* Include padding/border in width */
+        }
+
+        .modal-buttons {
+            margin-top: 15px;
+        }
+
+        .modal-buttons button {
+             width: auto; /* Buttons within modal don't need full width */
+             margin: 0 5px; /* Space between modal buttons */
+             display: inline-block; /* Arrange side by side */
+             padding: 8px 15px; /* Smaller padding */
+             font-size: 14px;
+        }
+
+        /* Style for error message inside modal */
+        #modalErrorMessage {
+            color: red;
+            font-size: 0.9em;
+            margin-top: 5px;
+            display: none; /* Hidden by default */
+        }
+
 
         /* Optional: Add a media query for larger screens to revert some styles */
         @media (min-width: 600px) {
@@ -82,6 +149,23 @@
             h1 {
                 font-size: 2em; /* Larger heading on larger screens */
             }
+            .modal-content {
+                 padding: 30px;
+            }
+             .modal-content h2 {
+                font-size: 1.5em;
+            }
+             .modal-content p {
+                 font-size: 1em;
+            }
+            .modal-content input[type="password"] {
+                 padding: 12px;
+                 font-size: 18px;
+            }
+             .modal-buttons button {
+                 padding: 10px 20px;
+                 font-size: 16px;
+             }
         }
 
     </style>
@@ -102,7 +186,34 @@ const firebaseConfig = {
         firebase.initializeApp(firebaseConfig);
         console.log("Configuración de Firebase completada.");
 
+        // Get references to modal elements
+        let passwordModal;
+        let passwordInput;
+        let modalOkButton;
+        let modalCancelButton;
+        let modalErrorMessage;
+
         window.onload = () => {
+            // Get modal element references after the DOM is loaded
+            passwordModal = document.getElementById('passwordModal');
+            passwordInput = document.getElementById('passwordInput');
+            modalOkButton = document.getElementById('modalOkButton');
+            modalCancelButton = document.getElementById('modalCancelButton');
+            modalErrorMessage = document.getElementById('modalErrorMessage');
+
+            // Add event listeners for the modal buttons
+            modalOkButton.addEventListener('click', checkInventarioPassword);
+            modalCancelButton.addEventListener('click', hideInventarioPasswordModal);
+
+            // Allow pressing Enter key in the input field to submit
+            passwordInput.addEventListener('keypress', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault(); // Prevent default form submission if it were a form
+                    checkInventarioPassword();
+                }
+            });
+
+
             const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
             const errorMensaje = document.getElementById('error-mensaje');
             if (datosUsuario && datosUsuario.permisos) {
@@ -146,11 +257,13 @@ const firebaseConfig = {
         }
 
         function ocultarBotones() {
-            // Hide all buttons if role is not found or unknown
+            // Hide all buttons within the container div
             const buttons = document.querySelectorAll('.container button');
              buttons.forEach(button => {
                  button.style.display = 'none';
              });
+             // Ensure the main error message is visible if buttons are hidden
+             document.getElementById('error-mensaje').style.display = 'block';
         }
 
         function generarPedidos() {
@@ -178,21 +291,39 @@ const firebaseConfig = {
             window.location.href = 'envia.html'; // Redirigir a envia.html (This button is styled .azul-oscuro - red)
         }
 
-        // New function for Inventario China
-        function goToInventarioChina() {
-            console.log("Inventario China Clicked");
-            const password = prompt("Por favor, ingrese la clave para acceder al Inventario China:");
-            const correctPassword = "1022";
+        // Function called by the Inventario China button to show the modal
+        function showInventarioPasswordModal() {
+             console.log("Showing Inventario China password modal");
+             passwordInput.value = ''; // Clear previous input
+             modalErrorMessage.style.display = 'none'; // Hide previous error
+             passwordModal.style.display = 'flex'; // Show the modal (using flex for centering)
+             passwordInput.focus(); // Focus the input field
+        }
 
-            if (password === correctPassword) {
-                console.log("Contraseña correcta. Redirigiendo a Inventario China.");
+        // Function to hide the modal and clear input/error
+        function hideInventarioPasswordModal() {
+            console.log("Hiding Inventario China password modal");
+            passwordModal.style.display = 'none'; // Hide the modal
+            passwordInput.value = ''; // Clear input field
+            modalErrorMessage.style.display = 'none'; // Hide error message
+        }
+
+        // Function called by the modal's OK button (or Enter key)
+        function checkInventarioPassword() {
+            console.log("Checking Inventario China password");
+            const enteredPassword = passwordInput.value;
+            const correctPassword = "1022"; // The required password
+
+            if (enteredPassword === correctPassword) {
+                console.log("Contraseña correcta. Redirigiendo...");
+                hideInventarioPasswordModal(); // Hide modal before redirecting
                 window.location.href = 'https://userlink2024.github.io/FACBA/temporal.html';
-            } else if (password !== null) { // Check if the user didn't cancel
-                console.warn("Contraseña incorrecta.");
-                alert("Clave incorrecta.");
             } else {
-                 console.log("Acceso al Inventario China cancelado.");
-                 // User cancelled the prompt, do nothing.
+                console.warn("Contraseña incorrecta.");
+                modalErrorMessage.textContent = 'Clave incorrecta.';
+                modalErrorMessage.style.display = 'block'; // Show error message inside modal
+                passwordInput.value = ''; // Clear input field for re-entry
+                passwordInput.focus(); // Focus the input field again
             }
         }
 
@@ -206,9 +337,21 @@ const firebaseConfig = {
         <button id="configButton" class="verde" onclick="configuracionUsuarios()">Configuración de Usuarios</button>
         <button class="rojo" onclick="guiasEnvia()">Guías Interrapidísimo</button>
         <button class="azul-oscuro" onclick="guiasInterrapidissimo()">Guías envía</button>
-         <button id="inventarioChinaButton" class="inventario" onclick="goToInventarioChina()">Inventario China</button>
+         <button id="inventarioChinaButton" class="inventario" onclick="showInventarioPasswordModal()">Inventario China</button>
 
         <p id="error-mensaje" class="error"></p>
     </div>
-</body>
+
+    <div id="passwordModal" class="modal-overlay" style="display: none;">
+      <div class="modal-content">
+        <h2>Acceso Restringido</h2>
+        <p>Por favor, ingrese la clave para acceder al Inventario China:</p>
+        <input type="password" id="passwordInput" placeholder="Clave">
+        <p id="modalErrorMessage" class="error"></p> <div class="modal-buttons">
+          <button id="modalOkButton" class="verde">Aceptar</button>
+          <button id="modalCancelButton" class="azul-oscuro">Cancelar</button>
+        </div>
+      </div>
+    </div>
+    </body>
 </html>
