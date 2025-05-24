@@ -202,6 +202,7 @@
         console.log("Datos del usuario:", datosUsuario);
 
         if (!datosUsuario || !datosUsuario.permisos) {
+            // Using alert for simplicity, consider custom modal for better UX
             alert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, inicie sesión de nuevo.");
             datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
         }
@@ -232,7 +233,7 @@
         function agregarProducto() {
             const ref = id => document.getElementById(id).value;
             const producto = { referencia: ref('producto_referencia'), color: ref('producto_color'), talla: ref('producto_talla'), precio: parseFloat(ref('producto_precio')) };
-            if (Object.values(producto).every(val => val || val === 0)) {
+            if (Object.values(producto).every(val => val || val === 0)) { // Check if all fields are filled (0 is a valid price)
                 productos.push(producto);
                 valorTotal += producto.precio;
                 actualizarLista('productos', productos);
@@ -243,7 +244,7 @@
 
         function agregarAbono() {
             const abono = { fecha: document.getElementById('abono_fecha').value, monto: parseFloat(document.getElementById('abono_monto').value) };
-            if (abono.fecha && abono.monto) {
+            if (abono.fecha && abono.monto) { // Check if date and amount are provided
                 abonos.push(abono);
                 actualizarLista('abonos', abonos);
                 cerrarModal('modal_abono');
@@ -276,46 +277,46 @@
 
         async function enviarFormulario(event) {
             event.preventDefault();
-            // Reemplazar window.confirm con un modal personalizado si es posible en el futuro
+            // Replace window.confirm with a custom modal if possible in the future for better UX
             const confirmacion = window.confirm("¿Desea enviar el formulario?");
             if (confirmacion) {
                 mostrarBarraCargando();
                 console.log("Enviando formulario...");
 
                 const datos = {
-                    fecha_hora: firebase.firestore.Timestamp.fromDate(new Date()), // Usar Timestamp de Firebase
+                    fecha_hora: firebase.firestore.Timestamp.fromDate(new Date()), // Use Firebase Timestamp for correct ordering
                     codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
                     cliente: document.querySelector('input[name="cliente"]').value,
-                    productos,
+                    productos, // Array of product objects
                     num_pares: document.querySelector('input[name="num_pares"]').value,
                     valor_total: Math.round(valorTotal),
                     observaciones: document.querySelector('textarea[name="observaciones"]').value,
                     saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                    abonos,
+                    abonos, // Array of abono objects
                     asesor: datosUsuario.nombreCompleto,
                     usuario: datosUsuario.usuario,
-                    bloqueado: false,
-                    despachado: false // Nuevo campo
+                    bloqueado: false, // Default to not blocked
+                    despachado: false // Default to not dispatched
                 };
                 console.log("Datos a guardar:", datos);
 
                 try {
                     await db.collection('registros').add(datos);
                     console.log("Datos guardados en Firebase:", datos);
-                    alert("Pedido agregado exitosamente!");
+                    alert("Pedido agregado exitosamente!"); // Replace with custom modal
                 } catch (error) {
                     console.error("Error guardando en Firebase:", error);
-                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
+                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo."); // Replace with custom modal
                 }
 
-                document.querySelector('form').reset();
-                productos = [];
-                abonos = [];
-                valorTotal = 0;
-                actualizarLista('productos', productos);
-                actualizarLista('abonos', abonos);
-                actualizarValorTotal();
-                if (datosUsuario && datosUsuario.nombreCompleto) {
+                document.querySelector('form').reset(); // Reset the form
+                productos = []; // Clear products array
+                abonos = []; // Clear abonos array
+                valorTotal = 0; // Reset total value
+                actualizarLista('productos', productos); // Update UI
+                actualizarLista('abonos', abonos); // Update UI
+                actualizarValorTotal(); // Update UI
+                if (datosUsuario && datosUsuario.nombreCompleto) { // Set asesor field if user data is available
                     document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
                 }
                  ocultarBarraCargando();
@@ -324,16 +325,17 @@
 
         function resetearComboBoxAsesor() {
             const filtroAsesor = document.getElementById('filtro_asesor');
+            // Preserve "Todos" option or create it
             const todosOptionHTML = filtroAsesor.options[0] && filtroAsesor.options[0].value === "" ? filtroAsesor.options[0].outerHTML : '<option value="">Todos</option>';
             filtroAsesor.innerHTML = todosOptionHTML;
         }
 
-        // Combinada función de filtro y búsqueda
+        // Combined filter and search function
         function filtrarYBuscarPedidos() {
             const filtroAsesorValue = document.getElementById('filtro_asesor').value;
-            const searchTerm = document.getElementById('search_term').value.toLowerCase(); // Obtener término de búsqueda
+            const searchTerm = document.getElementById('search_term').value.toLowerCase(); // Get search term and convert to lowercase
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
-            const registros = listaPedidosContainer.querySelectorAll('.record');
+            const registros = listaPedidosContainer.querySelectorAll('.record'); // Get all record elements
             
             let totalPares = 0;
             let valorTotalFiltrado = 0;
@@ -344,24 +346,25 @@
                 const codigoDelRegistro = registro.dataset.codigo ? registro.dataset.codigo.toLowerCase() : '';
                 const productosDelRegistro = registro.dataset.productos ? registro.dataset.productos.toLowerCase() : '';
 
-                const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
+                const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue; // Check asesor filter
                 
-                let coincideBusqueda = true;
-                if (searchTerm) {
+                let coincideBusqueda = true; // Default to true if no search term
+                if (searchTerm) { // If there is a search term, check for matches
                     coincideBusqueda = clienteDelRegistro.includes(searchTerm) ||
                                       asesorDelRegistro.toLowerCase().includes(searchTerm) ||
                                       codigoDelRegistro.includes(searchTerm) ||
                                       productosDelRegistro.includes(searchTerm);
                 }
 
-                if (coincideAsesor && coincideBusqueda) {
-                    registro.style.display = 'block';
+                if (coincideAsesor && coincideBusqueda) { // If both filters match
+                    registro.style.display = 'block'; // Show the record
                     totalPares += parseInt(registro.querySelector('.num_pares')?.innerText.split(': ')[1] || 0);
                     valorTotalFiltrado += parseFloat(registro.querySelector('.valor_total_raw')?.innerText || 0);
                 } else {
-                    registro.style.display = 'none';
+                    registro.style.display = 'none'; // Hide the record
                 }
             });
+            // Update summary totals
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
             document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
         }
@@ -370,44 +373,47 @@
             console.log("Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos');
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
-            listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>';
-            isInitialLoadPedidos = true;
+            listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>'; // Initial loading message
+            isInitialLoadPedidos = true; // Flag for initial load
 
-            if (pedidosListenerUnsubscribe) {
+            if (pedidosListenerUnsubscribe) { // If a listener already exists, unsubscribe
                 pedidosListenerUnsubscribe();
             }
 
-            pedidosListenerUnsubscribe = db.collection('registros').orderBy('fecha_hora', 'desc')
+            // Listen for real-time updates, order by fecha_hora ascending (earliest first)
+            pedidosListenerUnsubscribe = db.collection('registros').orderBy('fecha_hora', 'asc') 
                 .onSnapshot(querySnapshot => {
                     console.log("Datos de pedidos recibidos/actualizados.");
                     
-                    if (!isInitialLoadPedidos) {
+                    if (!isInitialLoadPedidos) { // Save scroll position if not initial load
                         scrollPosPedidos = listaPedidosContainer.scrollTop;
                     }
 
                     let pedidosHTML = '';
-                    let asesores = new Set();
-                    let resumenAsesores = {};
+                    let asesores = new Set(); // To populate asesor filter dropdown
+                    let resumenAsesores = {}; // For admin summary
 
                     querySnapshot.forEach((doc, index) => {
                         const registro = doc.data();
                         const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
                         const esPropietario = registro.usuario === datosUsuario.usuario;
                         const estaBloqueado = registro.bloqueado === true;
-                        const estaDespachado = registro.despachado === true; // Nuevo estado
+                        const estaDespachado = registro.despachado === true;
 
+                        // Show record if admin or owner
                         if (esAdministrador || esPropietario) {
-                            if(registro.asesor) asesores.add(registro.asesor);
+                            if(registro.asesor) asesores.add(registro.asesor); // Add asesor to set
 
+                            // Calculate summary for admin
                             if (registro.asesor && !resumenAsesores[registro.asesor]) {
                                 resumenAsesores[registro.asesor] = { num_pares: 0, valor_vendido: 0 };
                             }
-                            if(registro.asesor){
+                            if(registro.asesor){ // Ensure asesor exists before adding to summary
                                 resumenAsesores[registro.asesor].num_pares += parseInt(registro.num_pares || 0);
                                 resumenAsesores[registro.asesor].valor_vendido += parseFloat(registro.valor_total || 0);
                             }
                             
-                            let productosTextoParaBusqueda = ""; // Para la búsqueda
+                            let productosTextoParaBusqueda = ""; // Concatenated product info for searching
                             let productosHTMLList = 'Sin productos';
                             if (Array.isArray(registro.productos) && registro.productos.length > 0) {
                                 productosHTMLList = '<ul>';
@@ -428,7 +434,9 @@
                                 abonosHTMLList += '</ul>';
                             }
 
-                            let controlesHTML = '';
+                            let controlesHTML = ''; // HTML for admin controls (checkboxes)
+                            let statusTextHTML = ''; // HTML for status text for non-admins
+
                             if (esAdministrador) {
                                 controlesHTML = `
                                     <div class="control-container">
@@ -439,17 +447,18 @@
                                         <input type="checkbox" id="despachar_${doc.id}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${doc.id}', this.checked)">
                                         <label for="despachar_${doc.id}">Marcar como Despachado</label>
                                     </div>`;
-                            } else {
+                            } else { // For non-admins, show status text
                                 if (estaBloqueado) {
-                                     controlesHTML += `<p class="status-bloqueado">Pedido Bloqueado</p>`;
+                                     statusTextHTML += `<p class="status-bloqueado">Pedido Bloqueado</p>`;
                                 }
                                 if (estaDespachado) {
-                                     controlesHTML += `<p class="status-despachado">Pedido Despachado</p>`;
+                                     statusTextHTML += `<p class="status-despachado">Pedido Despachado</p>`;
                                 }
                             }
                             
-                            // Un pedido despachado o bloqueado no puede ser modificado/eliminado por un operador
+                            // Operators cannot modify/delete if blocked OR dispatched
                             const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
+                            // Format date and time
                             const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
 
                             pedidosHTML += `
@@ -471,43 +480,46 @@
                                     <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
                                     <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                                     <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
-                                    ${estaDespachado && !esAdministrador ? '<p class="status-despachado">Pedido Despachado</p>' : ''}
-                                    ${estaBloqueado && !esAdministrador ? '<p class="status-bloqueado">Pedido Bloqueado</p>' : ''}
-                                    ${controlesHTML}
+                                    ${statusTextHTML} {/* Show status text for non-admins */}
+                                    ${controlesHTML} {/* Show checkboxes for admins */}
                                     <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
                                     <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
                                     <hr>
                                 </div>
                             `;
                         }
-                    });
+                    }); // End querySnapshot.forEach
                     
-                    listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>';
+                    listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>'; // Update pedidos list
                     
+                    // Show summary if admin
                     if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                         mostrarResumenAsesores(resumenAsesores);
                     } else {
-                         document.getElementById('resumen_asesores').innerHTML = '';
+                         document.getElementById('resumen_asesores').innerHTML = ''; // Clear summary if not admin
                     }
 
+                    // Populate asesor filter dropdown
                     const filtroAsesorDropdown = document.getElementById('filtro_asesor');
-                    const valorActualFiltro = filtroAsesorDropdown.value;
+                    const valorActualFiltro = filtroAsesorDropdown.value; // Save current filter value
                     
-                    resetearComboBoxAsesor();
+                    resetearComboBoxAsesor(); // Clear and add "Todos" option
                     asesores.forEach(asesor => {
                         const option = document.createElement('option');
                         option.value = asesor;
                         option.textContent = asesor;
                         filtroAsesorDropdown.appendChild(option);
                     });
+                    // Restore filter selection if possible
                     if (Array.from(filtroAsesorDropdown.options).some(opt => opt.value === valorActualFiltro)) {
                         filtroAsesorDropdown.value = valorActualFiltro;
                     }
 
-                    filtrarYBuscarPedidos(); 
+                    filtrarYBuscarPedidos(); // Apply current filters and search term
 
+                    // Restore scroll position
                     if (isInitialLoadPedidos) {
-                        isInitialLoadPedidos = false;
+                        isInitialLoadPedidos = false; // No longer initial load
                     } else {
                         listaPedidosContainer.scrollTop = scrollPosPedidos;
                     }
@@ -521,36 +533,38 @@
         async function toggleBloqueoPedido(id, nuevoEstadoBloqueo) {
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 alert("Esta acción solo puede ser realizada por un administrador.");
-                const checkbox = document.getElementById(`bloquear_${id}`);
+                const checkbox = document.getElementById(`bloquear_${id}`); // Revert checkbox if not admin
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
                 return;
             }
             try {
                 await db.collection('registros').doc(id).update({ bloqueado: nuevoEstadoBloqueo });
                 console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo}`);
+                // UI updates via onSnapshot listener
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
                 alert("Error al cambiar el estado de bloqueo del pedido.");
-                const checkbox = document.getElementById(`bloquear_${id}`);
+                const checkbox = document.getElementById(`bloquear_${id}`); // Revert checkbox on error
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
             }
         }
 
-        // Nueva función para marcar como despachado
+        // New function to toggle 'despachado' status
         async function toggleDespachadoPedido(id, nuevoEstadoDespachado) {
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 alert("Esta acción solo puede ser realizada por un administrador.");
-                const checkbox = document.getElementById(`despachar_${id}`);
+                const checkbox = document.getElementById(`despachar_${id}`); // Revert checkbox if not admin
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
                 return;
             }
             try {
                 await db.collection('registros').doc(id).update({ despachado: nuevoEstadoDespachado });
                 console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado}`);
+                // UI updates via onSnapshot listener
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
                 alert("Error al cambiar el estado de despachado del pedido.");
-                const checkbox = document.getElementById(`despachar_${id}`);
+                const checkbox = document.getElementById(`despachar_${id}`); // Revert checkbox on error
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
             }
         }
@@ -572,8 +586,8 @@
 
         async function exportarAExcel() {
             console.log("Exportando a Excel...");
-            // Asegurarse que el listener no interfiera o usar una copia de los datos si es necesario
-            const querySnapshot = await db.collection('registros').orderBy('fecha_hora', 'desc').get();
+            // Get data directly for export, ordered as displayed (or as needed for Excel)
+            const querySnapshot = await db.collection('registros').orderBy('fecha_hora', 'asc').get();
             let registros = [];
 
             querySnapshot.forEach(doc => {
@@ -591,14 +605,14 @@
                     "Saldo a Favor": registro.saldo_a_favor,
                     "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
                     "Bloqueado": registro.bloqueado ? 'Sí' : 'No',
-                    "Despachado": registro.despachado ? 'Sí' : 'No' // Nuevo campo en Excel
+                    "Despachado": registro.despachado ? 'Sí' : 'No' // Include 'despachado' status in Excel
                 });
             });
             const worksheet = XLSX.utils.json_to_sheet(registros);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
 
-            XLSX.writeFile(workbook, 'registros_pedidos.xlsx');
+            XLSX.writeFile(workbook, 'registros_pedidos.xlsx'); // Save Excel file
         }
         
         async function modificarPedido(id) {
@@ -612,12 +626,13 @@
                 }
                 const registro = docSnap.data();
 
-                // Un operador no puede modificar si está bloqueado O despachado
+                // Operator cannot modify if blocked OR dispatched
                 if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
                     alert("Este pedido está bloqueado o despachado y no puede ser modificado.");
                     return;
                 }
 
+                // Populate modification form
                 document.getElementById('modificar_cliente').value = registro.cliente;
                 document.getElementById('modificar_num_pares').value = registro.num_pares;
                 document.getElementById('modificar_valor_total').value = registro.valor_total;
@@ -648,11 +663,11 @@
                 document.getElementById('modificar_abonos').innerHTML = abonosHTML;
 
                 const botonGuardar = document.querySelector('#modal_modificar button[type="submit"]');
-                botonGuardar.onclick = (event) => guardarCambios(event, id);
+                botonGuardar.onclick = (event) => guardarCambios(event, id); // Pass event and id
 
                 const modal = document.getElementById('modal_modificar');
                 modal.style.display = 'flex';
-                modal.style.zIndex = '1001'; // Asegurar que esté sobre el modal de pedidos si ambos están abiertos
+                modal.style.zIndex = '1001'; // Ensure it's above other modals if any overlap
             } catch (error) {
                 console.error("Error al cargar el pedido para modificar:", error);
                 alert("Error al cargar el pedido. " + error.message);
@@ -661,9 +676,9 @@
 
 
         async function guardarCambios(event, id) {
-            event.preventDefault();
+            event.preventDefault(); // Prevent default form submission
             
-            try {
+            try { // Check status again before saving (in case it changed while modal was open)
                 const docSnap = await db.collection('registros').doc(id).get();
                 if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
                     alert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios.");
@@ -676,6 +691,7 @@
                 return;
             }
 
+            // Get updated data from form
             const ref = elId => document.getElementById(elId).value;
             const productosActualizados = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => ({
                 referencia: el.querySelector(`#mod_producto_referencia_${index}`).value,
@@ -687,7 +703,7 @@
                 fecha: el.querySelector(`#mod_abono_fecha_${index}`).value,
                 monto: parseFloat(el.querySelector(`#mod_abono_monto_${index}`).value) || 0
             }));
-            const datosActualizados = { // Renombrado para evitar conflicto con la variable global 'datos'
+            const datosActualizados = { 
                 cliente: ref('modificar_cliente'),
                 num_pares: ref('modificar_num_pares'),
                 valor_total: parseFloat(document.getElementById('modificar_valor_total').value) || 0,
@@ -695,12 +711,13 @@
                 saldo_a_favor: ref('modificar_saldo_a_favor'),
                 productos: productosActualizados,
                 abonos: abonosActualizados
-                // No actualizamos 'bloqueado' ni 'despachado' aquí, eso se maneja con sus propios toggles.
+                // 'bloqueado' and 'despachado' are not updated here; they have their own toggle functions
             };
             try {
                 await db.collection('registros').doc(id).update(datosActualizados);
                 alert("Pedido modificado exitosamente.");
                 cerrarModal('modal_modificar');
+                // List will update automatically via onSnapshot listener
             } catch (error) {
                 console.error("Error al modificar el pedido:", error);
                 alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
@@ -710,13 +727,13 @@
         function actualizarValorTotalModificar() {
             const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => parseFloat(el.querySelector(`#mod_producto_precio_${index}`).value) || 0);
             const valorTotalCalculado = preciosProductos.reduce((total, precio) => total + precio, 0);
-            document.getElementById('modificar_valor_total').value = valorTotalCalculado.toFixed(2);
+            document.getElementById('modificar_valor_total').value = valorTotalCalculado.toFixed(2); // Format to 2 decimal places
         }
 
         async function eliminarPedido(id) {
             console.log("Eliminando pedido:", id);
 
-            try {
+            try { // Check status before deleting
                 const docRef = db.collection('registros').doc(id);
                 const docSnap = await docRef.get();
                 if (docSnap.exists) {
@@ -735,11 +752,12 @@
                  return;
             }
 
-            const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?");
+            const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?"); // Replace with custom modal
             if (confirmacion) {
                 try {
                     await db.collection('registros').doc(id).delete();
                     alert("Pedido eliminado correctamente.");
+                    // List will update automatically via onSnapshot listener
                 } catch (error) {
                     console.error("Error al eliminar el pedido:", error);
                     alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
@@ -747,12 +765,13 @@
             }
         }
         
+        // --- Funciones de la Barra de Carga ---
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
             if(loadingBar && loadingBarFill) {
                 loadingBar.style.display = "block";
-                loadingBarFill.style.width = "0%";
+                loadingBarFill.style.width = "0%"; // Reset width
                 var width = 0;
                 var interval = setInterval(function() {
                     if (width >= 100) {
@@ -762,7 +781,7 @@
                         loadingBarFill.style.width = width + "%";
                         loadingBarFill.innerText = width + "%";
                     }
-                }, 20);
+                }, 20); // Adjust timing for smoother animation if needed
             }
         }
 
@@ -773,35 +792,36 @@
             }
         }
 
-
+        // --- Funciones de Carga de Página y Salida ---
         window.onload = function() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
                 alert("No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
-                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>";
+                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>"; // Critical error message
                 return;
             }
             console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
+            // Hide elements based on user permissions
             if (datosUsuario.permisos.toLowerCase() === 'operador') {
                 document.getElementById('exportar').style.display = 'none';
                  document.getElementById('resumen_asesores').style.display = 'none';
             }
-            document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
-            ocultarBarraCargando();
+            document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Set asesor name
+            ocultarBarraCargando(); // Hide loading bar if it was visible
 
-            // Añadir event listener para la barra de búsqueda
+            // Add event listener for the search bar
             const searchTermInput = document.getElementById('search_term');
             if(searchTermInput) {
-                searchTermInput.addEventListener('input', filtrarYBuscarPedidos);
+                searchTermInput.addEventListener('input', filtrarYBuscarPedidos); // Call filter/search on input
             }
         }
 
-        window.onbeforeunload = function(event) {
+        window.onbeforeunload = function(event) { // Warn user before leaving if form has unsaved data
             const cliente = document.querySelector('input[name="cliente"]').value;
             const numPares = document.querySelector('input[name="num_pares"]').value;
-            if (productos.length > 0 || abonos.length > 0 || cliente || numPares) {
+            if (productos.length > 0 || abonos.length > 0 || cliente || numPares) { // Check if any data is entered
                 const mensaje = "¿Estás seguro de que quieres salir? Perderás la información del pedido actual que no ha sido guardada.";
-                event.returnValue = mensaje; // Para navegadores estándar
-                return mensaje; // Para algunos navegadores más antiguos
+                event.returnValue = mensaje; // For standard browsers
+                return mensaje; // For some older browsers
             }
         };
     </script>
