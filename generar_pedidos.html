@@ -12,18 +12,16 @@
             display: flex;
             justify-content: center;
             align-items: flex-start;
-            min-height: 100vh; /* Cambiado para asegurar que el contenido largo sea visible */
+            min-height: 100vh;
         }
         .container {
             width: 90%;
             max-width: 800px;
-            margin: 20px auto; /* Centrado y con margen superior/inferior */
+            margin: 20px auto;
             padding: 20px;
             background-color: #fff;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
-            /* overflow-y: auto; No es necesario aquí si el body ya lo permite */
-            /* max-height: 90vh; */
         }
         h1, h2 {
             color: #4CAF50;
@@ -91,6 +89,10 @@
             max-height: 90vh;
             overflow-y: auto;
         }
+        .modal-content.modal-pedidos-content { /* Estilo específico para el modal de pedidos */
+            max-width: 950px; /* Más ancho para la lista de pedidos */
+            width: 95%;
+        }
         .close {
             color: #aaa;
             float: right;
@@ -134,20 +136,20 @@
         .totals {
             display: flex;
             justify-content: space-between;
-            margin-top: 10px; /* Ajustado */
-            margin-bottom: 10px; /* Añadido */
+            margin-top: 10px;
+            margin-bottom: 10px;
             padding: 10px;
             background-color: #e7f3e7;
             border: 1px solid #4CAF50;
             border-radius: 6px;
         }
-        .bloqueo-container {
+        .control-container { /* Renombrado de bloqueo-container */
             display: flex;
             align-items: center;
             margin-top: 5px;
             margin-bottom: 5px;
         }
-        .bloqueo-container label {
+        .control-container label {
             margin-left: 5px;
             font-weight: normal;
         }
@@ -155,14 +157,28 @@
             background-color: #ccc;
             cursor: not-allowed;
         }
-        /* Estilo para el contenedor de la lista de pedidos con scroll */
-        #lista_pedidos_container { /* Renombrado para claridad */
-            max-height: 60vh; /* O la altura que prefieras */
+        #lista_pedidos_container {
+            max-height: 55vh; /* Ajustado para dar espacio a la búsqueda */
             overflow-y: auto;
-            border: 1px solid #eee; /* Opcional, para visualizar el contenedor */
+            border: 1px solid #eee;
             padding: 5px;
             margin-top: 10px;
         }
+        .search-bar-container {
+            margin-bottom: 15px;
+        }
+        .search-bar-container input {
+            width: calc(100% - 20px); /* Ajustar para padding */
+        }
+        .status-despachado {
+            color: green;
+            font-weight: bold;
+        }
+        .status-bloqueado {
+            color: red;
+            font-weight: bold;
+        }
+
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
@@ -190,11 +206,9 @@
             datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
         }
 
-        // NUEVO: Variable para el listener de Firestore y control de scroll
         let pedidosListenerUnsubscribe = null;
-        let scrollPosPedidos = 0; // Para guardar la posición del scroll
-        let isInitialLoadPedidos = true; // Para manejar la carga inicial del modal de pedidos
-
+        let scrollPosPedidos = 0;
+        let isInitialLoadPedidos = true;
 
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
@@ -204,15 +218,13 @@
                 document.getElementById('producto_talla').value = '';
                 document.getElementById('producto_precio').value = '';
             }
-            // La lógica para iniciar el listener de pedidos se moverá a la función que abre ese modal
         };
 
         const cerrarModal = id => {
             document.getElementById(id).style.display = 'none';
-            // NUEVO: Detener el listener de Firestore cuando se cierra el modal de pedidos
             if (id === 'modal_pedidos' && pedidosListenerUnsubscribe) {
-                pedidosListenerUnsubscribe(); // Llama a la función de unsubscribe
-                pedidosListenerUnsubscribe = null; // Limpia la variable
+                pedidosListenerUnsubscribe();
+                pedidosListenerUnsubscribe = null;
                 console.log("Listener de pedidos detenido.");
             }
         };
@@ -264,13 +276,14 @@
 
         async function enviarFormulario(event) {
             event.preventDefault();
-            const confirmacion = window.confirm("¿Desea enviar el formulario?"); // Usar window.confirm para pruebas, idealmente un modal custom
+            // Reemplazar window.confirm con un modal personalizado si es posible en el futuro
+            const confirmacion = window.confirm("¿Desea enviar el formulario?");
             if (confirmacion) {
                 mostrarBarraCargando();
                 console.log("Enviando formulario...");
 
                 const datos = {
-                    fecha_hora: new Date().toLocaleString(),
+                    fecha_hora: firebase.firestore.Timestamp.fromDate(new Date()), // Usar Timestamp de Firebase
                     codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
                     cliente: document.querySelector('input[name="cliente"]').value,
                     productos,
@@ -281,17 +294,18 @@
                     abonos,
                     asesor: datosUsuario.nombreCompleto,
                     usuario: datosUsuario.usuario,
-                    bloqueado: false
+                    bloqueado: false,
+                    despachado: false // Nuevo campo
                 };
                 console.log("Datos a guardar:", datos);
 
                 try {
                     await db.collection('registros').add(datos);
                     console.log("Datos guardados en Firebase:", datos);
-                    alert("Pedido agregado exitosamente!"); // Idealmente un modal custom
+                    alert("Pedido agregado exitosamente!");
                 } catch (error) {
                     console.error("Error guardando en Firebase:", error);
-                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo."); // Idealmente un modal custom
+                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
                 }
 
                 document.querySelector('form').reset();
@@ -310,23 +324,37 @@
 
         function resetearComboBoxAsesor() {
             const filtroAsesor = document.getElementById('filtro_asesor');
-            // Guardar la opción "Todos" si existe, o crearla
             const todosOptionHTML = filtroAsesor.options[0] && filtroAsesor.options[0].value === "" ? filtroAsesor.options[0].outerHTML : '<option value="">Todos</option>';
             filtroAsesor.innerHTML = todosOptionHTML;
         }
 
-
-        function filtrarPedidosPorAsesor() {
+        // Combinada función de filtro y búsqueda
+        function filtrarYBuscarPedidos() {
             const filtroAsesorValue = document.getElementById('filtro_asesor').value;
-            const listaPedidosContainer = document.getElementById('lista_pedidos_container'); // Usar el contenedor
-            const registros = listaPedidosContainer.querySelectorAll('.record'); // Buscar dentro del contenedor
+            const searchTerm = document.getElementById('search_term').value.toLowerCase(); // Obtener término de búsqueda
+            const listaPedidosContainer = document.getElementById('lista_pedidos_container');
+            const registros = listaPedidosContainer.querySelectorAll('.record');
             
             let totalPares = 0;
             let valorTotalFiltrado = 0;
 
             registros.forEach(registro => {
                 const asesorDelRegistro = registro.dataset.asesor;
-                if (filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue) {
+                const clienteDelRegistro = registro.dataset.cliente ? registro.dataset.cliente.toLowerCase() : '';
+                const codigoDelRegistro = registro.dataset.codigo ? registro.dataset.codigo.toLowerCase() : '';
+                const productosDelRegistro = registro.dataset.productos ? registro.dataset.productos.toLowerCase() : '';
+
+                const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
+                
+                let coincideBusqueda = true;
+                if (searchTerm) {
+                    coincideBusqueda = clienteDelRegistro.includes(searchTerm) ||
+                                      asesorDelRegistro.toLowerCase().includes(searchTerm) ||
+                                      codigoDelRegistro.includes(searchTerm) ||
+                                      productosDelRegistro.includes(searchTerm);
+                }
+
+                if (coincideAsesor && coincideBusqueda) {
                     registro.style.display = 'block';
                     totalPares += parseInt(registro.querySelector('.num_pares')?.innerText.split(': ')[1] || 0);
                     valorTotalFiltrado += parseFloat(registro.querySelector('.valor_total_raw')?.innerText || 0);
@@ -338,16 +366,13 @@
             document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
         }
         
-        // MODIFICADO: Cambia el nombre de verPedidos a iniciarVistaPedidosEnTiempoReal
-        // y actualiza el botón en el HTML: onclick="iniciarVistaPedidosEnTiempoReal()"
         function iniciarVistaPedidosEnTiempoReal() {
             console.log("Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos');
-            const listaPedidosContainer = document.getElementById('lista_pedidos_container'); // Contenedor de la lista
-            listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>'; // Mensaje inicial
-            isInitialLoadPedidos = true; // Marcar como carga inicial
+            const listaPedidosContainer = document.getElementById('lista_pedidos_container');
+            listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>';
+            isInitialLoadPedidos = true;
 
-            // Si ya hay un listener, detenerlo antes de crear uno nuevo
             if (pedidosListenerUnsubscribe) {
                 pedidosListenerUnsubscribe();
             }
@@ -356,8 +381,7 @@
                 .onSnapshot(querySnapshot => {
                     console.log("Datos de pedidos recibidos/actualizados.");
                     
-                    // Guardar la posición del scroll ANTES de actualizar el DOM
-                    if (!isInitialLoadPedidos) { // No guardar en la primera carga
+                    if (!isInitialLoadPedidos) {
                         scrollPosPedidos = listaPedidosContainer.scrollTop;
                     }
 
@@ -370,6 +394,7 @@
                         const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
                         const esPropietario = registro.usuario === datosUsuario.usuario;
                         const estaBloqueado = registro.bloqueado === true;
+                        const estaDespachado = registro.despachado === true; // Nuevo estado
 
                         if (esAdministrador || esPropietario) {
                             if(registro.asesor) asesores.add(registro.asesor);
@@ -377,21 +402,24 @@
                             if (registro.asesor && !resumenAsesores[registro.asesor]) {
                                 resumenAsesores[registro.asesor] = { num_pares: 0, valor_vendido: 0 };
                             }
-                            if(registro.asesor){ // Asegurar que asesor exista
+                            if(registro.asesor){
                                 resumenAsesores[registro.asesor].num_pares += parseInt(registro.num_pares || 0);
                                 resumenAsesores[registro.asesor].valor_vendido += parseFloat(registro.valor_total || 0);
                             }
                             
-                            let productosHTMLList = 'Sin productos'; // Renombrado para evitar conflicto
+                            let productosTextoParaBusqueda = ""; // Para la búsqueda
+                            let productosHTMLList = 'Sin productos';
                             if (Array.isArray(registro.productos) && registro.productos.length > 0) {
                                 productosHTMLList = '<ul>';
                                 registro.productos.forEach((producto, i) => {
-                                    productosHTMLList += `<li>Producto ${i + 1}: ${producto.referencia || 'N/A'} - ${producto.color || 'N/A'} - ${producto.talla || 'N/A'} - $${(producto.precio || 0).toLocaleString('es-CO')}</li>`;
+                                    const prodText = `${producto.referencia || 'N/A'} - ${producto.color || 'N/A'} - ${producto.talla || 'N/A'} - $${(producto.precio || 0).toLocaleString('es-CO')}`;
+                                    productosHTMLList += `<li>Producto ${i + 1}: ${prodText}</li>`;
+                                    productosTextoParaBusqueda += `${producto.referencia} ${producto.color} ${producto.talla} `;
                                 });
                                 productosHTMLList += '</ul>';
                             }
 
-                            let abonosHTMLList = 'Sin abonos'; // Renombrado para evitar conflicto
+                            let abonosHTMLList = 'Sin abonos';
                             if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
                                 abonosHTMLList = '<ul>';
                                 registro.abonos.forEach((abono, j) => {
@@ -400,67 +428,86 @@
                                 abonosHTMLList += '</ul>';
                             }
 
-                            let bloqueoHTML = '';
+                            let controlesHTML = '';
                             if (esAdministrador) {
-                                // MODIFICADO: Pasar this.checked a toggleBloqueoPedido
-                                bloqueoHTML = `
-                                    <div class="bloqueo-container">
+                                controlesHTML = `
+                                    <div class="control-container">
                                         <input type="checkbox" id="bloquear_${doc.id}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${doc.id}', this.checked)">
-                                        <label for="bloquear_${doc.id}">Bloquear Pedido (Admin)</label>
+                                        <label for="bloquear_${doc.id}">Bloquear Pedido</label>
+                                    </div>
+                                    <div class="control-container">
+                                        <input type="checkbox" id="despachar_${doc.id}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${doc.id}', this.checked)">
+                                        <label for="despachar_${doc.id}">Marcar como Despachado</label>
                                     </div>`;
-                            } else if (estaBloqueado) {
-                                 bloqueoHTML = `<p style="color:red; font-weight:bold;">Pedido Bloqueado por Administrador</p>`;
+                            } else {
+                                if (estaBloqueado) {
+                                     controlesHTML += `<p class="status-bloqueado">Pedido Bloqueado</p>`;
+                                }
+                                if (estaDespachado) {
+                                     controlesHTML += `<p class="status-despachado">Pedido Despachado</p>`;
+                                }
                             }
                             
-                            const puedeModificarEliminar = esAdministrador || (!esAdministrador && !estaBloqueado);
+                            // Un pedido despachado o bloqueado no puede ser modificado/eliminado por un operador
+                            const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
+                            const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
 
                             pedidosHTML += `
-                                <div class="record" data-id="${doc.id}" data-asesor="${registro.asesor || 'N/A'}">
+                                <div class="record" 
+                                     data-id="${doc.id}" 
+                                     data-asesor="${registro.asesor || 'N/A'}" 
+                                     data-cliente="${registro.cliente || 'N/A'}"
+                                     data-codigo="${registro.codigo_unico || 'N/A'}"
+                                     data-productos="${productosTextoParaBusqueda.trim()}">
                                     <p><strong>Registro ${index + 1}</strong></p>
-                                    <p>Fecha y Hora: ${registro.fecha_hora || 'N/A'}</p> <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
+                                    <p>Fecha y Hora: ${fechaHoraFormateada}</p>
+                                    <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
                                     <p>Cliente: ${registro.cliente || 'N/A'}</p>
-                                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p> ${productosHTMLList}
+                                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                                    ${productosHTMLList}
                                     ${abonosHTMLList}
                                     <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
                                     <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span> <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                                     <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
-                                    ${bloqueoHTML}
-                                    <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado"' : ''}>Modificar</button> <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado"' : ''}>Eliminar</button> <hr>
+                                    ${estaDespachado && !esAdministrador ? '<p class="status-despachado">Pedido Despachado</p>' : ''}
+                                    ${estaBloqueado && !esAdministrador ? '<p class="status-bloqueado">Pedido Bloqueado</p>' : ''}
+                                    ${controlesHTML}
+                                    <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
+                                    <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
+                                    <hr>
                                 </div>
                             `;
                         }
-                    }); // Fin querySnapshot.forEach
+                    });
                     
                     listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>';
                     
                     if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                         mostrarResumenAsesores(resumenAsesores);
                     } else {
-                         document.getElementById('resumen_asesores').innerHTML = ''; // Limpiar si no es admin
+                         document.getElementById('resumen_asesores').innerHTML = '';
                     }
 
                     const filtroAsesorDropdown = document.getElementById('filtro_asesor');
-                    const valorActualFiltro = filtroAsesorDropdown.value; // Guardar valor actual del filtro
+                    const valorActualFiltro = filtroAsesorDropdown.value;
                     
-                    resetearComboBoxAsesor(); // Limpia el combo box
+                    resetearComboBoxAsesor();
                     asesores.forEach(asesor => {
                         const option = document.createElement('option');
                         option.value = asesor;
                         option.textContent = asesor;
                         filtroAsesorDropdown.appendChild(option);
                     });
-                    // Intentar restaurar la selección del filtro
                     if (Array.from(filtroAsesorDropdown.options).some(opt => opt.value === valorActualFiltro)) {
                         filtroAsesorDropdown.value = valorActualFiltro;
                     }
 
+                    filtrarYBuscarPedidos(); 
 
-                    filtrarPedidosPorAsesor(); // Aplicar el filtro después de actualizar la lista y el combo
-
-                     // Restaurar la posición del scroll DESPUÉS de actualizar el DOM
                     if (isInitialLoadPedidos) {
-                        isInitialLoadPedidos = false; // Ya no es la carga inicial
+                        isInitialLoadPedidos = false;
                     } else {
                         listaPedidosContainer.scrollTop = scrollPosPedidos;
                     }
@@ -471,11 +518,9 @@
                 });
         }
         
-        // MODIFICADO: toggleBloqueoPedido ahora solo actualiza Firestore. La UI se actualiza por el listener.
         async function toggleBloqueoPedido(id, nuevoEstadoBloqueo) {
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 alert("Esta acción solo puede ser realizada por un administrador.");
-                // Revertir visualmente el checkbox si el usuario no es admin
                 const checkbox = document.getElementById(`bloquear_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
                 return;
@@ -483,13 +528,30 @@
             try {
                 await db.collection('registros').doc(id).update({ bloqueado: nuevoEstadoBloqueo });
                 console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo}`);
-                // La UI se actualizará automáticamente gracias al listener onSnapshot
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
                 alert("Error al cambiar el estado de bloqueo del pedido.");
-                // Revertir visualmente el checkbox si la actualización falla
                 const checkbox = document.getElementById(`bloquear_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
+            }
+        }
+
+        // Nueva función para marcar como despachado
+        async function toggleDespachadoPedido(id, nuevoEstadoDespachado) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                const checkbox = document.getElementById(`despachar_${id}`);
+                if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
+                return;
+            }
+            try {
+                await db.collection('registros').doc(id).update({ despachado: nuevoEstadoDespachado });
+                console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado}`);
+            } catch (error) {
+                console.error("Error al actualizar el estado de despachado:", error);
+                alert("Error al cambiar el estado de despachado del pedido.");
+                const checkbox = document.getElementById(`despachar_${id}`);
+                if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
             }
         }
 
@@ -510,30 +572,33 @@
 
         async function exportarAExcel() {
             console.log("Exportando a Excel...");
-            const querySnapshot = await db.collection('registros').get();
+            // Asegurarse que el listener no interfiera o usar una copia de los datos si es necesario
+            const querySnapshot = await db.collection('registros').orderBy('fecha_hora', 'desc').get();
             let registros = [];
 
             querySnapshot.forEach(doc => {
                 const registro = doc.data();
+                const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
                 registros.push({
-                    fecha_hora: registro.fecha_hora,
-                    codigo_unico: registro.codigo_unico,
-                    cliente: registro.cliente,
-                    asesor: registro.asesor,
-                    productos: (registro.productos || []).map(producto => `${producto.referencia} - ${producto.color} - ${producto.talla} - ${producto.precio}`).join('; '), // Cambiado a ;
-                    num_pares: registro.num_pares,
-                    valor_total: registro.valor_total,
-                    observaciones: registro.observaciones,
-                    saldo_a_favor: registro.saldo_a_favor,
-                    abonos: (registro.abonos || []).map(abono => `${abono.fecha} - ${abono.monto}`).join('; '), // Cambiado a ;
-                    bloqueado: registro.bloqueado ? 'Sí' : 'No'
+                    "Fecha y Hora": fechaHoraFormateada,
+                    "Código Único": registro.codigo_unico,
+                    "Cliente": registro.cliente,
+                    "Asesor": registro.asesor,
+                    "Productos": (registro.productos || []).map(p => `${p.referencia || ''} - ${p.color || ''} - ${p.talla || ''} - $${p.precio || 0}`).join('; '),
+                    "Num Pares": registro.num_pares,
+                    "Valor Total": registro.valor_total,
+                    "Observaciones": registro.observaciones,
+                    "Saldo a Favor": registro.saldo_a_favor,
+                    "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
+                    "Bloqueado": registro.bloqueado ? 'Sí' : 'No',
+                    "Despachado": registro.despachado ? 'Sí' : 'No' // Nuevo campo en Excel
                 });
             });
             const worksheet = XLSX.utils.json_to_sheet(registros);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
 
-            XLSX.writeFile(workbook, 'registros.xlsx');
+            XLSX.writeFile(workbook, 'registros_pedidos.xlsx');
         }
         
         async function modificarPedido(id) {
@@ -547,8 +612,9 @@
                 }
                 const registro = docSnap.data();
 
-                if (datosUsuario.permisos.toLowerCase() === 'operador' && registro.bloqueado === true) {
-                    alert("Este pedido está bloqueado por un administrador y no puede ser modificado.");
+                // Un operador no puede modificar si está bloqueado O despachado
+                if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
+                    alert("Este pedido está bloqueado o despachado y no puede ser modificado.");
                     return;
                 }
 
@@ -563,27 +629,30 @@
                     productosHTML += `
                         <div class="form-field">
                             <label>Producto ${index + 1}:</label>
-                            <input type="text" id="producto_referencia_${index}" value="${producto.referencia || ''}" placeholder="Referencia"> <input type="text" id="producto_color_${index}" value="${producto.color || ''}" placeholder="Color">
-                            <input type="text" id="producto_talla_${index}" value="${producto.talla || ''}" placeholder="Talla">
-                            <input type="number" id="producto_precio_${index}" value="${producto.precio || 0}" placeholder="Precio" oninput="actualizarValorTotalModificar()"> </div>`;
+                            <input type="text" id="mod_producto_referencia_${index}" value="${producto.referencia || ''}" placeholder="Referencia">
+                            <input type="text" id="mod_producto_color_${index}" value="${producto.color || ''}" placeholder="Color">
+                            <input type="text" id="mod_producto_talla_${index}" value="${producto.talla || ''}" placeholder="Talla">
+                            <input type="number" id="mod_producto_precio_${index}" value="${producto.precio || 0}" placeholder="Precio" oninput="actualizarValorTotalModificar()">
+                        </div>`;
                 });
                 let abonosHTML = '';
                 (registro.abonos || []).forEach((abono, index) => {
                     abonosHTML += `
                         <div class="form-field">
                             <label>Abono ${index + 1}:</label>
-                            <input type="date" id="abono_fecha_${index}" value="${abono.fecha || ''}" placeholder="Fecha"> <input type="number" id="abono_monto_${index}" value="${abono.monto || 0}" placeholder="Monto">
+                            <input type="date" id="mod_abono_fecha_${index}" value="${abono.fecha || ''}" placeholder="Fecha">
+                            <input type="number" id="mod_abono_monto_${index}" value="${abono.monto || 0}" placeholder="Monto">
                         </div>`;
                 });
                 document.getElementById('modificar_productos').innerHTML = productosHTML;
                 document.getElementById('modificar_abonos').innerHTML = abonosHTML;
 
                 const botonGuardar = document.querySelector('#modal_modificar button[type="submit"]');
-                botonGuardar.onclick = (event) => guardarCambios(event, id); // Asegurar que se pasa el evento y el id
+                botonGuardar.onclick = (event) => guardarCambios(event, id);
 
                 const modal = document.getElementById('modal_modificar');
                 modal.style.display = 'flex';
-                modal.style.zIndex = '1001';
+                modal.style.zIndex = '1001'; // Asegurar que esté sobre el modal de pedidos si ambos están abiertos
             } catch (error) {
                 console.error("Error al cargar el pedido para modificar:", error);
                 alert("Error al cargar el pedido. " + error.message);
@@ -596,30 +665,29 @@
             
             try {
                 const docSnap = await db.collection('registros').doc(id).get();
-                if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && docSnap.data().bloqueado === true) {
-                    alert("Este pedido está bloqueado y no se pueden guardar los cambios.");
+                if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
+                    alert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios.");
                     cerrarModal('modal_modificar');
                     return;
                 }
             } catch (error) {
-                console.error("Error verificando bloqueo antes de guardar:", error);
+                console.error("Error verificando estado antes de guardar:", error);
                 alert("Error de verificación. No se pudo guardar.");
                 return;
             }
 
-
-            const ref = elId => document.getElementById(elId).value; // Cambiado el nombre del parámetro para evitar conflicto
+            const ref = elId => document.getElementById(elId).value;
             const productosActualizados = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => ({
-                referencia: el.querySelector(`#producto_referencia_${index}`).value,
-                color: el.querySelector(`#producto_color_${index}`).value,
-                talla: el.querySelector(`#producto_talla_${index}`).value,
-                precio: parseFloat(el.querySelector(`#producto_precio_${index}`).value) || 0
+                referencia: el.querySelector(`#mod_producto_referencia_${index}`).value,
+                color: el.querySelector(`#mod_producto_color_${index}`).value,
+                talla: el.querySelector(`#mod_producto_talla_${index}`).value,
+                precio: parseFloat(el.querySelector(`#mod_producto_precio_${index}`).value) || 0
             }));
             const abonosActualizados = Array.from(document.querySelectorAll('#modificar_abonos .form-field')).map((el, index) => ({
-                fecha: el.querySelector(`#abono_fecha_${index}`).value,
-                monto: parseFloat(el.querySelector(`#abono_monto_${index}`).value) || 0
+                fecha: el.querySelector(`#mod_abono_fecha_${index}`).value,
+                monto: parseFloat(el.querySelector(`#mod_abono_monto_${index}`).value) || 0
             }));
-            const datos = {
+            const datosActualizados = { // Renombrado para evitar conflicto con la variable global 'datos'
                 cliente: ref('modificar_cliente'),
                 num_pares: ref('modificar_num_pares'),
                 valor_total: parseFloat(document.getElementById('modificar_valor_total').value) || 0,
@@ -627,12 +695,12 @@
                 saldo_a_favor: ref('modificar_saldo_a_favor'),
                 productos: productosActualizados,
                 abonos: abonosActualizados
+                // No actualizamos 'bloqueado' ni 'despachado' aquí, eso se maneja con sus propios toggles.
             };
             try {
-                await db.collection('registros').doc(id).update(datos);
+                await db.collection('registros').doc(id).update(datosActualizados);
                 alert("Pedido modificado exitosamente.");
                 cerrarModal('modal_modificar');
-                // La lista se actualizará automáticamente por el listener, no es necesario llamar a iniciarVistaPedidosEnTiempoReal() aquí.
             } catch (error) {
                 console.error("Error al modificar el pedido:", error);
                 alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
@@ -640,7 +708,7 @@
         }
 
         function actualizarValorTotalModificar() {
-            const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => parseFloat(el.querySelector(`#producto_precio_${index}`).value) || 0);
+            const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => parseFloat(el.querySelector(`#mod_producto_precio_${index}`).value) || 0);
             const valorTotalCalculado = preciosProductos.reduce((total, precio) => total + precio, 0);
             document.getElementById('modificar_valor_total').value = valorTotalCalculado.toFixed(2);
         }
@@ -653,8 +721,8 @@
                 const docSnap = await docRef.get();
                 if (docSnap.exists) {
                     const registro = docSnap.data();
-                    if (datosUsuario.permisos.toLowerCase() === 'operador' && registro.bloqueado === true) {
-                        alert("Este pedido está bloqueado por un administrador y no puede ser eliminado.");
+                    if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
+                        alert("Este pedido está bloqueado o despachado y no puede ser eliminado.");
                         return;
                     }
                 } else {
@@ -662,17 +730,16 @@
                     return;
                 }
             } catch (error) {
-                 console.error("Error al verificar el estado de bloqueo para eliminar:", error);
+                 console.error("Error al verificar el estado para eliminar:", error);
                  alert("Error al verificar el estado del pedido. Inténtelo de nuevo.");
                  return;
             }
 
-            const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?"); // Usar window.confirm para pruebas
+            const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?");
             if (confirmacion) {
                 try {
                     await db.collection('registros').doc(id).delete();
                     alert("Pedido eliminado correctamente.");
-                    // La lista se actualizará automáticamente por el listener.
                 } catch (error) {
                     console.error("Error al eliminar el pedido:", error);
                     alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
@@ -720,6 +787,12 @@
             }
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
             ocultarBarraCargando();
+
+            // Añadir event listener para la barra de búsqueda
+            const searchTermInput = document.getElementById('search_term');
+            if(searchTermInput) {
+                searchTermInput.addEventListener('input', filtrarYBuscarPedidos);
+            }
         }
 
         window.onbeforeunload = function(event) {
@@ -727,8 +800,8 @@
             const numPares = document.querySelector('input[name="num_pares"]').value;
             if (productos.length > 0 || abonos.length > 0 || cliente || numPares) {
                 const mensaje = "¿Estás seguro de que quieres salir? Perderás la información del pedido actual que no ha sido guardada.";
-                event.returnValue = mensaje;
-                return mensaje;
+                event.returnValue = mensaje; // Para navegadores estándar
+                return mensaje; // Para algunos navegadores más antiguos
             }
         };
     </script>
@@ -842,11 +915,15 @@
     </div>
 
     <div id="modal_pedidos" class="modal">
-        <div class="modal-content" style="max-width: 900px; width: 95%;"> <span class="close" onclick="cerrarModal('modal_pedidos');">&times;</span>
+        <div class="modal-content modal-pedidos-content"> <span class="close" onclick="cerrarModal('modal_pedidos');">&times;</span>
             <h2>Pedidos Registrados</h2>
+            <div class="form-field search-bar-container">
+                <label for="search_term">Buscar Pedido (Cliente, Código, Asesor, Producto):</label>
+                <input type="text" id="search_term" placeholder="Escriba para buscar...">
+            </div>
             <div class="form-field">
                 <label>Filtrar por Asesor:</label>
-                <select id="filtro_asesor" onchange="filtrarPedidosPorAsesor()">
+                <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()">
                     <option value="">Todos</option>
                     </select>
             </div>
