@@ -116,8 +116,15 @@
     <div id="feedbackModal" class="modal">
         <div class="modal-content">
             <p id="modalMessage" class="text-lg mb-4"></p>
-            <div class="modal-buttons">
+            <p id="screenshotRecommendation" class="text-sm text-gray-500 mb-4" style="display: none;">Se recomienda tomar un pantallazo de esta confirmación.</p>
+            <div class="modal-buttons flex justify-center items-center">
                 <button id="modalOkButton" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg">OK</button>
+                <button id="generarCitaPdfButton" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg ml-3" style="display: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                    </svg>
+                    Generar PDF Cita
+                </button>
             </div>
         </div>
     </div>
@@ -165,7 +172,12 @@
         const feedbackModal = document.getElementById('feedbackModal');
         const modalMessage = document.getElementById('modalMessage');
         const modalOkButton = document.getElementById('modalOkButton');
-        const generarPdfButton = document.getElementById('generarPdfButton'); // Botón para PDF
+        const generarPdfButton = document.getElementById('generarPdfButton'); // Botón para PDF del Acta de Entrega
+        const generarCitaPdfButton = document.getElementById('generarCitaPdfButton'); // Nuevo botón para PDF de la cita
+        const screenshotRecommendation = document.getElementById('screenshotRecommendation'); // Nuevo elemento para la recomendación de pantallazo
+
+        // Variable para almacenar los detalles de la cita agendada temporalmente
+        let lastBookedAppointment = null;
 
 
         // --- Funciones ---
@@ -239,9 +251,17 @@
         }
 
         // Mostrar modal de feedback
-        function mostrarFeedback(message, isError = false) {
+        function mostrarFeedback(message, isError = false, showCitaPdfButton = false) {
             modalMessage.textContent = message;
             modalMessage.className = isError ? 'text-lg mb-4 text-red-600' : 'text-lg mb-4 text-green-700';
+            
+            if (showCitaPdfButton) {
+                generarCitaPdfButton.style.display = 'inline-block';
+                screenshotRecommendation.style.display = 'block';
+            } else {
+                generarCitaPdfButton.style.display = 'none';
+                screenshotRecommendation.style.display = 'none';
+            }
             feedbackModal.style.display = 'block';
         }
 
@@ -285,7 +305,17 @@
                 });
                 
                 const hora12Display = convertTo12HourFormat(hora24);
-                mostrarFeedback(`¡Cita agendada para ${fabricante} el ${new Date(fecha + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} a las ${hora12Display} con éxito!`);
+                const fechaFormateada = new Date(fecha + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                
+                // Almacenar los detalles de la cita para el PDF
+                lastBookedAppointment = {
+                    fabricante: fabricante,
+                    telefono: telefono,
+                    fecha: fechaFormateada,
+                    hora: hora12Display
+                };
+
+                mostrarFeedback(`¡Cita agendada para ${fabricante} el ${fechaFormateada} a las ${hora12Display} con éxito!`, false, true);
                 
                 citaForm.reset();
                 horaSelect.innerHTML = '<option value="" disabled selected>Seleccione una hora</option>';
@@ -293,7 +323,7 @@
                 diaSelect.value = ""; 
             } catch (error) {
                 console.error("Error agendando la cita: ", error);
-                mostrarFeedback("Error al agendar la cita. Inténtelo de nuevo.", true);
+                mostrarFeedback("Error al agendar la cita. Inténtelo de nuevo.", true, false);
             }
         });
 
@@ -387,10 +417,95 @@
             doc.save("Acta_de_Entrega_La_Zapateria.pdf");
         }
 
+        // Función para generar el PDF de la cita agendada
+        function generarCitaPDF(citaDetails) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const margen = 20;
+            let yPos = margen;
+
+            // Header con logo (placeholder) y título
+            doc.setFontSize(24);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(46, 139, 87); // Verde mar
+            doc.text("Confirmación de Cita", margen, yPos);
+            yPos += 10;
+            doc.setFontSize(14);
+            doc.setTextColor(0, 0, 0); // Negro
+            doc.text("Show Room La Zapatería", margen, yPos);
+            yPos += 20;
+
+            // Línea separadora
+            doc.setDrawColor(46, 139, 87); // Verde mar
+            doc.setLineWidth(0.5);
+            doc.line(margen, yPos, doc.internal.pageSize.width - margen, yPos);
+            yPos += 15;
+
+            // Detalles de la cita
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(51, 51, 51); // Gris oscuro
+
+            doc.text("Estimado/a Fabricante:", margen, yPos);
+            yPos += 10;
+            doc.text("Su cita ha sido agendada con éxito. A continuación, los detalles:", margen, yPos);
+            yPos += 15;
+
+            doc.setFont(undefined, 'bold');
+            doc.text("Fabricante:", margen, yPos);
+            doc.setFont(undefined, 'normal');
+            doc.text(citaDetails.fabricante, margen + 30, yPos);
+            yPos += 10;
+
+            doc.setFont(undefined, 'bold');
+            doc.text("Teléfono:", margen, yPos);
+            doc.setFont(undefined, 'normal');
+            doc.text(citaDetails.telefono, margen + 30, yPos);
+            yPos += 10;
+
+            doc.setFont(undefined, 'bold');
+            doc.text("Fecha:", margen, yPos);
+            doc.setFont(undefined, 'normal');
+            doc.text(citaDetails.fecha, margen + 30, yPos);
+            yPos += 10;
+
+            doc.setFont(undefined, 'bold');
+            doc.text("Hora:", margen, yPos);
+            doc.setFont(undefined, 'normal');
+            doc.text(citaDetails.hora, margen + 30, yPos);
+            yPos += 20;
+
+            // Mensaje final
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'italic');
+            doc.text("Agradecemos su preferencia. ¡Le esperamos!", margen, yPos);
+            yPos += 15;
+
+            // Footer
+            doc.setDrawColor(46, 139, 87); // Verde mar
+            doc.line(margen, doc.internal.pageSize.height - margen - 10, doc.internal.pageSize.width - margen, doc.internal.pageSize.height - margen - 10);
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100); // Gris
+            doc.text("La Zapatería - Evento Show Room", margen, doc.internal.pageSize.height - margen);
+            doc.text(`Generado el: ${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO')}`, doc.internal.pageSize.width - margen, doc.internal.pageSize.height - margen, { align: 'right' });
+
+
+            doc.save(`Cita_ShowRoom_${citaDetails.fabricante}.pdf`);
+        }
+
 
         // --- Event Listeners ---
         diaSelect.addEventListener('change', actualizarHorariosDisponibles);
-        generarPdfButton.addEventListener('click', generarActaEntregaPDF); // Event listener para el botón de PDF
+        generarPdfButton.addEventListener('click', generarActaEntregaPDF); // Event listener para el botón de PDF del Acta
+        
+        // Event listener para el nuevo botón de PDF de la cita
+        generarCitaPdfButton.addEventListener('click', function() {
+            if (lastBookedAppointment) {
+                generarCitaPDF(lastBookedAppointment);
+            } else {
+                mostrarFeedback("No hay una cita reciente para generar el PDF.", true);
+            }
+        });
 
 
         // --- Inicialización ---
