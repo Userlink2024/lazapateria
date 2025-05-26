@@ -203,6 +203,38 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.3); /* Sombra más pronunciada */
             z-index: 10; /* Asegurar que esté por encima de otros elementos */
         }
+        /* Estilos para los botones de filtro de despacho */
+        .dispatch-filter-button {
+            background-color: #f0f0f0;
+            color: #333;
+            border: 1px solid #ccc;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .dispatch-filter-button:hover {
+            background-color: #e0e0e0;
+        }
+        .dispatch-filter-button.active {
+            background-color: #4CAF50; /* Default active green */
+            color: white;
+            border-color: #4CAF50;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .dispatch-filter-button.active.bg-yellow-500 {
+            background-color: #DAA520; /* Darker yellow for active */
+            border-color: #DAA520;
+        }
+        .dispatch-filter-button.active.bg-green-500 {
+            background-color: #388E3C; /* Darker green for active */
+            border-color: #388E3C;
+        }
+        .dispatch-filter-button.active.bg-gray-300 {
+            background-color: #616161; /* Darker gray for active */
+            border-color: #616161;
+            color: white;
+        }
 
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
@@ -235,6 +267,7 @@
         let pedidosListenerUnsubscribe = null;
         let scrollPosPedidos = 0;
         let isInitialLoadPedidos = true;
+        let currentDispatchFilter = 'all'; // 'all', 'despachados', 'noDespachados'
 
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
@@ -365,28 +398,36 @@
             let totalPares = 0;
             let valorTotalFiltrado = 0;
 
-            registros.forEach(registro => {
-                const asesorDelRegistro = registro.dataset.asesor;
-                const clienteDelRegistro = registro.dataset.cliente ? registro.dataset.cliente.toLowerCase() : '';
-                const codigoDelRegistro = registro.dataset.codigo ? registro.dataset.codigo.toLowerCase() : '';
-                const productosDelRegistro = registro.dataset.productos ? registro.dataset.productos.toLowerCase() : '';
+            registros.forEach(registroElement => {
+                const asesorDelRegistro = registroElement.dataset.asesor;
+                const clienteDelRegistro = registroElement.dataset.cliente ? registroElement.dataset.cliente.toLowerCase() : '';
+                const codigoDelRegistro = registroElement.dataset.codigo ? registroElement.dataset.codigo.toLowerCase() : '';
+                const productosDelRegistro = registroElement.dataset.productos ? registroElement.dataset.productos.toLowerCase() : '';
+                const despachadoDelRegistro = registroElement.dataset.despachado === 'true'; // Convert string to boolean
 
-                const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue; // Check asesor filter
+                const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
                 
-                let coincideBusqueda = true; // Default to true if no search term
-                if (searchTerm) { // If there is a search term, check for matches
+                let coincideBusqueda = true;
+                if (searchTerm) {
                     coincideBusqueda = clienteDelRegistro.includes(searchTerm) ||
                                       asesorDelRegistro.toLowerCase().includes(searchTerm) ||
                                       codigoDelRegistro.includes(searchTerm) ||
                                       productosDelRegistro.includes(searchTerm);
                 }
 
-                if (coincideAsesor && coincideBusqueda) { // If both filters match
-                    registro.style.display = 'block'; // Show the record
-                    totalPares += parseInt(registro.querySelector('.num_pares')?.innerText.split(': ')[1] || 0);
-                    valorTotalFiltrado += parseFloat(registro.querySelector('.valor_total_raw')?.innerText || 0);
+                let coincideDespacho = true;
+                if (currentDispatchFilter === 'despachados') {
+                    coincideDespacho = despachadoDelRegistro;
+                } else if (currentDispatchFilter === 'noDespachados') {
+                    coincideDespacho = !despachadoDelRegistro;
+                }
+
+                if (coincideAsesor && coincideBusqueda && coincideDespacho) {
+                    registroElement.style.display = 'block'; // Show the record
+                    totalPares += parseInt(registroElement.querySelector('.num_pares')?.innerText.split(': ')[1] || 0);
+                    valorTotalFiltrado += parseFloat(registroElement.querySelector('.valor_total_raw')?.innerText || 0);
                 } else {
-                    registro.style.display = 'none'; // Hide the record
+                    registroElement.style.display = 'none'; // Hide the record
                 }
             });
             // Update summary totals
@@ -492,7 +533,8 @@
                                      data-asesor="${registro.asesor || 'N/A'}" 
                                      data-cliente="${registro.cliente || 'N/A'}"
                                      data-codigo="${registro.codigo_unico || 'N/A'}"
-                                     data-productos="${productosTextoParaBusqueda.trim()}">
+                                     data-productos="${productosTextoParaBusqueda.trim()}"
+                                     data-despachado="${estaDespachado}">
                                     <p><strong>Registro ${index + 1}</strong></p>
                                     <p>Fecha y Hora: ${fechaHoraFormateada}</p>
                                     <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
@@ -541,6 +583,7 @@
                     }
 
                     filtrarYBuscarPedidos(); // Apply current filters and search term
+                    setActiveDispatchFilterButton(currentDispatchFilter); // Set initial active dispatch filter button
 
                     // Restore scroll position
                     if (isInitialLoadPedidos) {
@@ -849,6 +892,86 @@
                 return mensaje; // For some older browsers
             }
         };
+
+        // Función para establecer el botón de filtro de despacho activo
+        function setActiveDispatchFilterButton(filterType) {
+            const allDispatchButtons = document.querySelectorAll('.dispatch-filter-button');
+            allDispatchButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+            if (filterType === 'all') {
+                document.getElementById('filterAllButton').classList.add('active');
+            } else if (filterType === 'despachados') {
+                document.getElementById('filterDespachadosButton').classList.add('active');
+            } else if (filterType === 'noDespachados') {
+                document.getElementById('filterNoDespachadosButton').classList.add('active');
+            }
+        }
+
+        // Event listeners para los nuevos botones de filtro de despacho
+        document.addEventListener('DOMContentLoaded', () => {
+            const filterAllButton = document.createElement('button');
+            filterAllButton.id = 'filterAllButton';
+            filterAllButton.className = 'dispatch-filter-button bg-gray-300 text-gray-800 hover:bg-gray-400 py-1 px-3 rounded-md text-sm';
+            filterAllButton.textContent = 'Todos';
+            filterAllButton.addEventListener('click', () => {
+                currentDispatchFilter = 'all';
+                setActiveDispatchFilterButton('all');
+                filtrarYBuscarPedidos();
+            });
+
+            const filterDespachadosButton = document.createElement('button');
+            filterDespachadosButton.id = 'filterDespachadosButton';
+            filterDespachadosButton.className = 'dispatch-filter-button bg-green-500 text-white hover:bg-green-600 py-1 px-3 rounded-md text-sm';
+            filterDespachadosButton.textContent = 'Despachados';
+            filterDespachadosButton.addEventListener('click', () => {
+                currentDispatchFilter = 'despachados';
+                setActiveDispatchFilterButton('despachados');
+                filtrarYBuscarPedidos();
+            });
+
+            const filterNoDespachadosButton = document.createElement('button');
+            filterNoDespachadosButton.id = 'filterNoDespachadosButton';
+            filterNoDespachadosButton.className = 'dispatch-filter-button bg-yellow-500 text-white hover:bg-yellow-600 py-1 px-3 rounded-md text-sm';
+            filterNoDespachadosButton.textContent = 'No Despachados';
+            filterNoDespachadosButton.addEventListener('click', () => {
+                currentDispatchFilter = 'noDespachados';
+                setActiveDispatchFilterButton('noDespachados');
+                filtrarYBuscarPedidos();
+            });
+
+            const filterContainer = document.createElement('div');
+            filterContainer.className = 'flex space-x-2 mt-1 mb-4'; // Added mb-4 for spacing
+            filterContainer.appendChild(filterAllButton);
+            filterContainer.appendChild(filterDespachadosButton);
+            filterContainer.appendChild(filterNoDespachadosButton);
+
+            const modalPedidosContent = document.querySelector('#modal_pedidos .modal-content');
+            const searchBarContainer = modalPedidosContent.querySelector('.search-bar-container');
+            
+            // Insert the new filter container after the search bar
+            if (searchBarContainer) {
+                searchBarContainer.parentNode.insertBefore(filterContainer, searchBarContainer.nextSibling);
+            } else {
+                modalPedidosContent.insertBefore(filterContainer, modalPedidosContent.firstChild);
+            }
+
+            // Set initial active button
+            setActiveDispatchFilterButton(currentDispatchFilter);
+        });
+
+        // Modificar clearAllFilters para resetear también el filtro de despacho
+        const originalClearAllFilters = window.clearAllFilters; // Guardar referencia a la función original si existe
+        window.clearAllFilters = function() {
+            if (originalClearAllFilters) {
+                originalClearAllFilters(); // Llamar a la función original si existe
+            }
+            // Resetear los filtros de despacho
+            currentDispatchFilter = 'all';
+            setActiveDispatchFilterButton('all');
+            filtrarYBuscarPedidos(); // Re-aplicar todos los filtros
+        };
+
     </script>
 </head>
 <body>
