@@ -64,6 +64,15 @@
         <h1 class="text-3xl font-bold text-center text-green-600 mb-8">Panel de Administración de Citas</h1>
         <p class="text-center text-gray-600 mb-6">Gestiona las citas agendadas para el Show Room de La Zapatería.</p>
 
+        <div class="mb-4 flex justify-end">
+            <button id="addCitaButton" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                </svg>
+                Agregar Cita
+            </button>
+        </div>
+
         <div class="overflow-x-auto">
             <table class="min-w-full bg-white rounded-lg shadow-md">
                 <thead class="bg-green-600 text-white">
@@ -94,9 +103,12 @@
                                 <option value="">Todas las horas</option>
                                 </select>
                         </th>
-                        <th class="py-2 px-4 text-center">
+                        <th class="py-2 px-4 text-center flex flex-col space-y-2">
                             <button id="clearFiltersButton" class="w-full text-sm bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded-md">
                                 Limpiar Filtros
+                            </button>
+                            <button id="exportExcelButton" class="w-full text-sm bg-green-500 hover:bg-green-600 text-white py-1 px-2 rounded-md">
+                                Exportar a Excel
                             </button>
                         </th>
                     </tr>
@@ -146,6 +158,50 @@
                     <button type="submit"
                             class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
                         Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="addModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <button class="modal-close-button" onclick="closeAddModal()">&times;</button>
+            <h2 class="text-2xl font-bold text-purple-600 mb-6">Agregar Nueva Cita</h2>
+            <form id="addCitaForm" class="space-y-4">
+                <div>
+                    <label for="addFabricante" class="block text-sm font-medium text-gray-700 text-left mb-1">Fabricante:</label>
+                    <input type="text" id="addFabricante" name="fabricante" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="addTelefono" class="block text-sm font-medium text-gray-700 text-left mb-1">Teléfono:</label>
+                    <input type="tel" id="addTelefono" name="telefono" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="addDia" class="block text-sm font-medium text-gray-700 text-left mb-1">Día:</label>
+                    <select id="addDia" name="dia" required
+                            class="mt-1 block w-full px-4 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                        <option value="" disabled selected>Seleccione un día</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="addHora" class="block text-sm font-medium text-gray-700 text-left mb-1">Hora:</label>
+                    <select id="addHora" name="hora" required disabled
+                            class="mt-1 block w-full px-4 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm disabled:bg-gray-50">
+                        <option value="" disabled selected>Seleccione una hora</option>
+                    </select>
+                    <p id="loading-add-hours" class="text-xs text-gray-500 mt-1" style="display: none;">Cargando horarios disponibles...</p>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" onclick="closeAddModal()"
+                            class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                            class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                        Agregar Cita
                     </button>
                 </div>
             </form>
@@ -219,6 +275,16 @@
         const editTelefono = document.getElementById('editTelefono');
         const editDia = document.getElementById('editDia');
         const editHora = document.getElementById('editHora');
+
+        const addModal = document.getElementById('addModal'); // Nuevo modal de agregar
+        const addCitaForm = document.getElementById('addCitaForm');
+        const addFabricante = document.getElementById('addFabricante');
+        const addTelefono = document.getElementById('addTelefono');
+        const addDia = document.getElementById('addDia');
+        const addHora = document.getElementById('addHora');
+        const loadingAddHoursP = document.getElementById('loading-add-hours');
+
+
         const deleteConfirmModal = document.getElementById('deleteConfirmModal');
         const confirmDeleteButton = document.getElementById('confirmDeleteButton');
         const feedbackModal = document.getElementById('feedbackModal');
@@ -231,13 +297,15 @@
         const filterFecha = document.getElementById('filterFecha');
         const filterHora = document.getElementById('filterHora');
         const clearFiltersButton = document.getElementById('clearFiltersButton');
+        const exportExcelButton = document.getElementById('exportExcelButton');
+        const addCitaButton = document.getElementById('addCitaButton'); // Botón para abrir modal de agregar
 
-        let citaToDeleteId = null; // Variable para almacenar el ID de la cita a eliminar
-        let allCitasData = []; // Almacena todas las citas sin filtrar
+        let citaToDeleteId = null; 
+        let allCitasData = []; 
+        let displayedCitas = []; 
 
         // --- Funciones de Utilidad ---
 
-        // Convertir hora de formato 24h a 12h (AM/PM)
         function convertTo12HourFormat(time24) {
             if (!time24) return "";
             const [hours, minutes] = time24.split(':');
@@ -248,22 +316,19 @@
             return `${h}:${minutes} ${ampm}`;
         }
 
-        // Obtener horarios para un día específico (en formato 24h)
         function obtenerHorariosParaDia(fechaValue) {
-            if (fechaValue === `${yearForEvent}-07-19`) { // Sábado 19 de julio
+            if (fechaValue === `${yearForEvent}-07-19`) { 
                 return todosLosHorarios.morning;
             }
             return [...todosLosHorarios.morning, ...todosLosHorarios.afternoon];
         }
 
-        // Mostrar modal de feedback
         function mostrarFeedback(message, isError = false) {
             modalMessage.textContent = message;
             modalMessage.className = isError ? 'text-lg mb-4 text-red-600' : 'text-lg mb-4 text-green-700';
-            feedbackModal.style.display = 'flex'; // Usar flex para centrar
+            feedbackModal.style.display = 'flex';
         }
 
-        // Cerrar modal de feedback
         modalOkButton.onclick = function() {
             feedbackModal.style.display = "none";
         }
@@ -275,7 +340,6 @@
             editFabricante.value = cita.fabricante;
             editTelefono.value = cita.telefono;
 
-            // Poblar días en el modal de edición
             editDia.innerHTML = '<option value="" disabled>Seleccione un día</option>';
             diasDisponibles.forEach(dia => {
                 const option = document.createElement('option');
@@ -283,26 +347,69 @@
                 option.textContent = dia.text;
                 editDia.appendChild(option);
             });
-            editDia.value = cita.fecha; // Seleccionar el día actual de la cita
+            editDia.value = cita.fecha;
 
-            // Actualizar horas al cambiar el día en el modal de edición
             editDia.onchange = async function() {
-                await updateEditModalHours(editDia.value, cita.id);
+                await updateHoursDropdown(editDia, editHora, null, cita.id); // Pass cita.id to exclude
             };
-
-            // Cargar las horas para el día seleccionado, marcando las ocupadas
-            updateEditModalHours(cita.fecha, cita.id, cita.hora);
+            updateHoursDropdown(editDia, editHora, cita.hora, cita.id); // Pass cita.id to exclude
             
-            editModal.style.display = 'flex'; // Usar flex para centrar
+            editModal.style.display = 'flex';
         }
 
-        async function updateEditModalHours(fechaSeleccionada, currentCitaId, selectedHora = null) {
-            editHora.innerHTML = '<option value="" disabled selected>Seleccione una hora</option>';
+        function closeEditModal() {
+            editModal.style.display = 'none';
+            editCitaForm.reset();
+        }
+
+        function openAddModal() {
+            addCitaForm.reset(); // Reset form when opening
+            addDia.innerHTML = '<option value="" disabled selected>Seleccione un día</option>';
+            diasDisponibles.forEach(dia => {
+                const option = document.createElement('option');
+                option.value = dia.value;
+                option.textContent = dia.text;
+                addDia.appendChild(option);
+            });
+            addHora.innerHTML = '<option value="" disabled selected>Seleccione una hora</option>';
+            addHora.disabled = true;
+            loadingAddHoursP.style.display = 'none';
+
+            addDia.onchange = async function() {
+                await updateHoursDropdown(addDia, addHora, null, null, loadingAddHoursP); // No ID to exclude for add
+            };
+
+            addModal.style.display = 'flex';
+        }
+
+        function closeAddModal() {
+            addModal.style.display = 'none';
+            addCitaForm.reset();
+        }
+
+        // Reusable function to update hours dropdown for both edit and add modals
+        async function updateHoursDropdown(daySelectElement, hourSelectElement, selectedHora = null, excludeCitaId = null, loadingElement = null) {
+            const fechaSeleccionada = daySelectElement.value;
+            hourSelectElement.innerHTML = '<option value="" disabled selected>Seleccione una hora</option>';
+            hourSelectElement.disabled = true;
+            if (loadingElement) loadingElement.style.display = 'block';
+
+            if (!fechaSeleccionada) {
+                if (loadingElement) loadingElement.style.display = 'none';
+                return;
+            }
+
             try {
                 const querySnapshot = await citasCollection.where('fecha', '==', fechaSeleccionada).get();
-                const horariosOcupados = querySnapshot.docs
-                    .filter(doc => doc.id !== currentCitaId) // Excluir la cita actual que estamos editando
-                    .map(doc => doc.data().hora);
+                let horariosOcupados = querySnapshot.docs.map(doc => doc.data().hora);
+                
+                // If editing, remove the current cita's hour from occupied list
+                if (excludeCitaId) {
+                    const currentCitaDoc = querySnapshot.docs.find(doc => doc.id === excludeCitaId);
+                    if (currentCitaDoc) {
+                        horariosOcupados = horariosOcupados.filter(hora => hora !== currentCitaDoc.data().hora);
+                    }
+                }
                 
                 const horariosBase = obtenerHorariosParaDia(fechaSeleccionada);
                 
@@ -314,33 +421,33 @@
                         option.disabled = true;
                         option.textContent += ' (Ocupado)';
                     }
-                    editHora.appendChild(option);
+                    hourSelectElement.appendChild(option);
                 });
+
+                // Set selected hour if provided and not occupied by another appointment
                 if (selectedHora && !horariosOcupados.includes(selectedHora)) {
-                    editHora.value = selectedHora; // Seleccionar la hora actual de la cita si no está ocupada por otra
-                } else if (selectedHora && horariosOcupados.includes(selectedHora) && editCitaId.value === currentCitaId) {
-                     // Si la hora actual está ocupada por ESTA cita, mantenerla seleccionada y habilitada.
-                     const currentOption = Array.from(editHora.options).find(opt => opt.value === selectedHora);
-                     if (currentOption) {
-                         currentOption.disabled = false;
-                         editHora.value = selectedHora;
-                     }
+                    hourSelectElement.value = selectedHora;
+                } else if (selectedHora && excludeCitaId) { // If it's the current cita's hour, re-enable it
+                    const currentOption = Array.from(hourSelectElement.options).find(opt => opt.value === selectedHora);
+                    if (currentOption) {
+                        currentOption.disabled = false;
+                        hourSelectElement.value = selectedHora;
+                    }
                 }
+
+                hourSelectElement.disabled = false;
             } catch (error) {
-                console.error("Error actualizando horarios del modal de edición: ", error);
-                mostrarFeedback("Error al cargar horarios para edición.", true);
+                console.error("Error actualizando horarios del modal: ", error);
+                mostrarFeedback("Error al cargar horarios. Intente de nuevo.", true);
+            } finally {
+                if (loadingElement) loadingElement.style.display = 'none';
             }
         }
 
 
-        function closeEditModal() {
-            editModal.style.display = 'none';
-            editCitaForm.reset();
-        }
-
         function openDeleteConfirmModal(citaId) {
             citaToDeleteId = citaId;
-            deleteConfirmModal.style.display = 'flex'; // Usar flex para centrar
+            deleteConfirmModal.style.display = 'flex';
         }
 
         function closeDeleteConfirmModal() {
@@ -350,7 +457,7 @@
 
         // --- Lógica de Filtros ---
         function applyFilters() {
-            let filteredCitas = [...allCitasData]; // Trabajar sobre una copia de los datos originales
+            let filteredCitas = [...allCitasData]; 
 
             const filterFabricanteVal = filterFabricante.value.toLowerCase().trim();
             const filterTelefonoVal = filterTelefono.value.toLowerCase().trim();
@@ -378,24 +485,23 @@
                 );
             }
 
+            displayedCitas = filteredCitas; 
             renderCitas(filteredCitas);
         }
 
         function clearAllFilters() {
             filterFabricante.value = '';
             filterTelefono.value = '';
-            // Deseleccionar todas las opciones en el multi-select de fecha
             Array.from(filterFecha.options).forEach(option => option.selected = false);
             filterHora.value = '';
-            applyFilters(); // Re-aplicar filtros para mostrar todo
+            applyFilters(); 
         }
 
 
         // --- Manejo de Datos y Renderizado ---
 
-        // Renderizar citas en la tabla
         function renderCitas(citasToRender) {
-            citasTableBody.innerHTML = ''; // Limpiar tabla
+            citasTableBody.innerHTML = ''; 
             if (citasToRender.length === 0) {
                 citasTableBody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">No hay citas registradas que coincidan con los filtros.</td></tr>`;
                 return;
@@ -439,7 +545,6 @@
 
         // Poblar opciones de filtro de fecha y hora
         function populateFilterOptions() {
-            // Fecha
             filterFecha.innerHTML = '';
             diasDisponibles.forEach(dia => {
                 const option = document.createElement('option');
@@ -448,9 +553,8 @@
                 filterFecha.appendChild(option);
             });
 
-            // Hora
             filterHora.innerHTML = '<option value="">Todas las horas</option>';
-            const allHours = [...new Set([...todosLosHorarios.morning, ...todosLosHorarios.afternoon])].sort(); // Obtener horas únicas y ordenarlas
+            const allHours = [...new Set([...todosLosHorarios.morning, ...todosLosHorarios.afternoon])].sort(); 
             allHours.forEach(hora24 => {
                 const option = document.createElement('option');
                 option.value = hora24;
@@ -459,21 +563,53 @@
             });
         }
 
+        function exportToExcel() {
+            if (displayedCitas.length === 0) {
+                mostrarFeedback("No hay citas para exportar.", true);
+                return;
+            }
 
-        // Escuchar cambios en tiempo real en la colección 'citasShowroom'
-        // Se eliminó el orderBy de la consulta de Firestore para evitar el error de índice.
+            const headers = ["Fabricante", "Telefono", "Fecha", "Hora"];
+            let csvContent = headers.join(";") + "\n"; 
+
+            displayedCitas.forEach(cita => {
+                const row = [
+                    `"${cita.fabricante.replace(/"/g, '""')}"`, 
+                    `"${cita.telefono.replace(/"/g, '""')}"`,
+                    `"${new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }).replace(/"/g, '""')}"`,
+                    `"${convertTo12HourFormat(cita.hora).replace(/"/g, '""')}"`
+                ];
+                csvContent += row.join(";") + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) { 
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'citas_showroom.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                mostrarFeedback("Citas exportadas a Excel con éxito.");
+            } else {
+                mostrarFeedback("Su navegador no soporta la descarga de archivos. Intente copiar los datos manualmente.", true);
+            }
+        }
+
         citasCollection.onSnapshot(snapshot => {
-            allCitasData = []; // Resetear el array de datos completos
+            allCitasData = []; 
             snapshot.forEach(doc => {
                 allCitasData.push({ id: doc.id, ...doc.data() });
             });
-            // Ordenar los datos en el cliente (JavaScript) por fecha y luego por hora
             allCitasData.sort((a, b) => {
                 const dateA = new Date(a.fecha + 'T' + a.hora);
                 const dateB = new Date(b.fecha + 'T' + b.hora);
                 return dateA - dateB;
             });
-            applyFilters(); // Aplicar filtros después de obtener y ordenar los datos más recientes
+            applyFilters(); 
         }, error => {
             console.error("Error al escuchar citas: ", error);
             mostrarFeedback("Error al cargar las citas en tiempo real.", true);
@@ -481,9 +617,7 @@
 
         // --- Manejadores de Eventos ---
 
-        // Manejar edición de cita
         window.handleEdit = function(id, fabricante, telefono, fecha, hora) {
-            // Unescape single quotes that might be in the fabricant name for JS function call
             const unescapedFabricante = fabricante.replace(/\\'/g, "'");
             openEditModal({ id, fabricante: unescapedFabricante, telefono, fecha, hora });
         };
@@ -502,7 +636,6 @@
             }
 
             try {
-                // Verificar si el nuevo horario ya está ocupado por OTRA cita
                 const snapshot = await citasCollection
                     .where('fecha', '==', updatedFecha)
                     .where('hora', '==', updatedHora)
@@ -529,7 +662,46 @@
             }
         });
 
-        // Manejar eliminación de cita
+        // Manejador para agregar nueva cita
+        addCitaForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const fabricante = addFabricante.value;
+            const telefono = addTelefono.value;
+            const fecha = addDia.value;
+            const hora = addHora.value;
+
+            if (!fabricante || !telefono || !fecha || !hora) {
+                mostrarFeedback("Por favor, complete todos los campos para agregar la cita.", true);
+                return;
+            }
+
+            try {
+                const snapshot = await citasCollection
+                    .where('fecha', '==', fecha)
+                    .where('hora', '==', hora)
+                    .get();
+
+                if (!snapshot.empty) {
+                    mostrarFeedback("Lo sentimos, este horario ya está ocupado. Por favor, seleccione otro.", true);
+                    return;
+                }
+
+                await citasCollection.add({
+                    fabricante: fabricante,
+                    telefono: telefono,
+                    fecha: fecha,
+                    hora: hora,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                mostrarFeedback("Nueva cita agregada con éxito.");
+                closeAddModal();
+            } catch (error) {
+                console.error("Error al agregar la cita: ", error);
+                mostrarFeedback("Error al agregar la cita. Inténtelo de nuevo.", true);
+            }
+        });
+
+
         window.handleDelete = function(id) {
             openDeleteConfirmModal(id);
         };
@@ -547,40 +719,35 @@
             }
         });
 
-        // Manejar generación de PDF de cita individual
         window.handleGeneratePdf = function(fabricante, telefono, fecha, hora) {
             const citaDetails = { fabricante, telefono, fecha, hora };
             generarCitaPDF(citaDetails);
         };
 
-        // Función para generar el PDF de la cita agendada (reutilizada y adaptada)
         function generarCitaPDF(citaDetails) {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             const margen = 20;
             let yPos = margen;
 
-            // Header con logo (placeholder) y título
             doc.setFontSize(24);
             doc.setFont(undefined, 'bold');
-            doc.setTextColor(46, 139, 87); // Verde mar
+            doc.setTextColor(46, 139, 87); 
             doc.text("Confirmación de Cita", margen, yPos);
             yPos += 10;
             doc.setFontSize(14);
-            doc.setTextColor(0, 0, 0); // Negro
+            doc.setTextColor(0, 0, 0); 
             doc.text("Show Room La Zapatería", margen, yPos);
             yPos += 20;
 
-            // Línea separadora
-            doc.setDrawColor(46, 139, 87); // Verde mar
+            doc.setDrawColor(46, 139, 87); 
             doc.setLineWidth(0.5);
             doc.line(margen, yPos, doc.internal.pageSize.width - margen, yPos);
             yPos += 15;
 
-            // Detalles de la cita
             doc.setFontSize(12);
             doc.setFont(undefined, 'normal');
-            doc.setTextColor(51, 51, 51); // Gris oscuro
+            doc.setTextColor(51, 51, 51); 
 
             doc.text("Estimado/a Fabricante:", margen, yPos);
             yPos += 10;
@@ -611,17 +778,15 @@
             doc.text(citaDetails.hora, margen + 30, yPos);
             yPos += 20;
 
-            // Mensaje final
             doc.setFontSize(10);
             doc.setFont(undefined, 'italic');
             doc.text("Agradecemos su preferencia. ¡Le esperamos!", margen, yPos);
             yPos += 15;
 
-            // Footer
-            doc.setDrawColor(46, 139, 87); // Verde mar
+            doc.setDrawColor(46, 139, 87); 
             doc.line(margen, doc.internal.pageSize.height - margen - 10, doc.internal.pageSize.width - margen, doc.internal.pageSize.height - margen - 10);
             doc.setFontSize(8);
-            doc.setTextColor(100, 100, 100); // Gris
+            doc.setTextColor(100, 100, 100); 
             doc.text("La Zapatería - Evento Show Room", margen, doc.internal.pageSize.height - margen);
             doc.text(`Generado el: ${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO')}`, doc.internal.pageSize.width - margen, doc.internal.pageSize.height - margen, { align: 'right' });
 
@@ -629,10 +794,12 @@
             doc.save(`Cita_ShowRoom_${citaDetails.fabricante}.pdf`);
         }
 
-        // Inicialización: Asegurarse de que los modales se cierren al hacer clic fuera
         window.onclick = function(event) {
             if (event.target == editModal) {
                 closeEditModal();
+            }
+            if (event.target == addModal) { // Cerrar modal de agregar
+                closeAddModal();
             }
             if (event.target == deleteConfirmModal) {
                 closeDeleteConfirmModal();
@@ -642,14 +809,14 @@
             }
         }
 
-        // Event listeners para los filtros
         filterFabricante.addEventListener('input', applyFilters);
         filterTelefono.addEventListener('input', applyFilters);
         filterFecha.addEventListener('change', applyFilters);
         filterHora.addEventListener('change', applyFilters);
         clearFiltersButton.addEventListener('click', clearAllFilters);
+        exportExcelButton.addEventListener('click', exportToExcel);
+        addCitaButton.addEventListener('click', openAddModal); // Event listener para el botón de agregar
 
-        // Poblar las opciones de los filtros al cargar
         populateFilterOptions();
     </script>
 </body>
