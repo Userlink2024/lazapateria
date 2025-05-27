@@ -235,7 +235,36 @@
             border-color: #616161;
             color: white;
         }
-
+        /* Styles for product/abono items in modification modal */
+        .product-item, .abono-item {
+            border: 1px solid #eee;
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            background-color: #fcfcfc;
+        }
+        .product-item input, .abono-item input {
+            margin-bottom: 5px; /* Space between inputs within an item */
+        }
+        .product-item button, .abono-item button {
+            background-color: #dc3545;
+            margin-top: 5px;
+            padding: 5px 10px;
+            font-size: 0.85em;
+        }
+        .product-item button:hover, .abono-item button:hover {
+            background-color: #c82333;
+        }
+        /* Styles for add buttons in modification modal */
+        .add-item-button {
+            background-color: #28a745;
+            margin-top: 10px;
+            padding: 8px 15px;
+            font-size: 0.9em;
+        }
+        .add-item-button:hover {
+            background-color: #218838;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
@@ -269,6 +298,10 @@
         let isInitialLoadPedidos = true;
         let currentDispatchFilter = 'all'; // 'all', 'despachados', 'noDespachados'
 
+        // Global variables to store original products and abonos for comparison
+        let originalProductsForModification = [];
+        let originalAbonosForModification = [];
+
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
             if (id === 'modal_producto') {
@@ -285,6 +318,9 @@
                 pedidosListenerUnsubscribe();
                 pedidosListenerUnsubscribe = null;
                 console.log("Listener de pedidos detenido.");
+            }
+            if (id === 'modal_pares_warning') {
+                // Optionally do something when the warning modal is closed
             }
         };
 
@@ -346,7 +382,7 @@
                     codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
                     cliente: document.querySelector('input[name="cliente"]').value,
                     productos, // Array of product objects
-                    num_pares: document.querySelector('input[name="num_pares"]').value,
+                    num_pares: parseInt(document.querySelector('input[name="num_pares"]').value) || 0, // Ensure num_pares is an integer
                     valor_total: Math.round(valorTotal),
                     observaciones: document.querySelector('textarea[name="observaciones"]').value,
                     saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
@@ -548,7 +584,6 @@
                                     <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                                     <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                                     ${statusTextHTML} 
-                                    ${controlesHTML} 
                                     ${estaDespachado ? '<div class="despachado-sello">DESPACHADO</div>' : ''} <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
                                     <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
                                     <hr>
@@ -693,7 +728,7 @@
 
             XLSX.writeFile(workbook, 'registros_pedidos.xlsx'); // Save Excel file
         }
-        
+
         async function modificarPedido(id) {
             try {
                 const docRef = db.collection('registros').doc(id);
@@ -711,35 +746,22 @@
                     return;
                 }
 
+                // Store original products and abonos for comparison later
+                originalProductsForModification = JSON.parse(JSON.stringify(registro.productos || []));
+                originalAbonosForModification = JSON.parse(JSON.stringify(registro.abonos || []));
+
                 // Populate modification form
                 document.getElementById('modificar_cliente').value = registro.cliente;
-                document.getElementById('modificar_num_pares').value = registro.num_pares;
+                document.getElementById('modificar_num_pares').value = registro.num_pares; 
                 document.getElementById('modificar_valor_total').value = registro.valor_total;
                 document.getElementById('modificar_observaciones').value = registro.observaciones;
                 document.getElementById('modificar_saldo_a_favor').value = registro.saldo_a_favor;
 
-                let productosHTML = '';
-                (registro.productos || []).forEach((producto, index) => {
-                    productosHTML += `
-                        <div class="form-field">
-                            <label>Producto ${index + 1}:</label>
-                            <input type="text" id="mod_producto_referencia_${index}" value="${producto.referencia || ''}" placeholder="Referencia">
-                            <input type="text" id="mod_producto_color_${index}" value="${producto.color || ''}" placeholder="Color">
-                            <input type="text" id="mod_producto_talla_${index}" value="${producto.talla || ''}" placeholder="Talla">
-                            <input type="number" id="mod_producto_precio_${index}" value="${producto.precio || 0}" placeholder="Precio" oninput="actualizarValorTotalModificar()">
-                        </div>`;
-                });
-                let abonosHTML = '';
-                (registro.abonos || []).forEach((abono, index) => {
-                    abonosHTML += `
-                        <div class="form-field">
-                            <label>Abono ${index + 1}:</label>
-                            <input type="date" id="mod_abono_fecha_${index}" value="${abono.fecha || ''}" placeholder="Fecha">
-                            <input type="number" id="mod_abono_monto_${index}" value="${abono.monto || 0}" placeholder="Monto">
-                        </div>`;
-                });
-                document.getElementById('modificar_productos').innerHTML = productosHTML;
-                document.getElementById('modificar_abonos').innerHTML = abonosHTML;
+                // Render dynamic product and abono fields
+                renderModificarProductos(registro.productos || []);
+                renderModificarAbonos(registro.abonos || []);
+                
+                actualizarValorTotalModificar(); // Set initial total based on products
 
                 const botonGuardar = document.querySelector('#modal_modificar button[type="submit"]');
                 botonGuardar.onclick = (event) => guardarCambios(event, id); // Pass event and id
@@ -753,6 +775,122 @@
             }
         }
 
+        // Functions for dynamic product management in modification modal
+        function renderModificarProductos(products) {
+            const container = document.getElementById('modificar_productos_list');
+            let html = '';
+            if (products.length === 0) {
+                html += '<p>No hay productos en este pedido. Agregue uno:</p>';
+            }
+            products.forEach((product, index) => {
+                html += `
+                    <div class="product-item" data-index="${index}">
+                        <label>Producto ${index + 1}:</label>
+                        <input type="text" class="mod_product_referencia" value="${product.referencia || ''}" placeholder="Referencia">
+                        <input type="text" class="mod_product_color" value="${product.color || ''}" placeholder="Color">
+                        <input type="text" class="mod_product_talla" value="${product.talla || ''}" placeholder="Talla">
+                        <input type="number" class="mod_product_precio" value="${product.precio || 0}" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
+                        <button type="button" onclick="removeProductModificar(this)">Eliminar Producto</button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function addProductModificar() {
+            const container = document.getElementById('modificar_productos_list');
+            // Remove initial "No hay productos..." message if present
+            if (container.querySelector('p')) {
+                container.innerHTML = '';
+            }
+
+            const newIndex = container.children.length;
+            const newProductHtml = `
+                <div class="product-item" data-index="${newIndex}">
+                    <label>Producto ${newIndex + 1}:</label>
+                    <input type="text" class="mod_product_referencia" placeholder="Referencia">
+                    <input type="text" class="mod_product_color" placeholder="Color">
+                    <input type="text" class="mod_product_talla" placeholder="Talla">
+                    <input type="number" class="mod_product_precio" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
+                    <button type="button" onclick="removeProductModificar(this)">Eliminar Producto</button>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', newProductHtml);
+            actualizarValorTotalModificar(); // Update total after adding
+        }
+
+        function removeProductModificar(buttonElement) {
+            const productItem = buttonElement.closest('.product-item');
+            productItem.remove();
+            actualizarValorTotalModificar(); // Update total after removing
+            // Re-index displayed product numbers
+            Array.from(document.querySelectorAll('#modificar_productos_list .product-item')).forEach((item, index) => {
+                item.dataset.index = index;
+                item.querySelector('label').textContent = `Producto ${index + 1}:`;
+            });
+            // If no products remain, display a message
+            if (document.querySelectorAll('#modificar_productos_list .product-item').length === 0) {
+                document.getElementById('modificar_productos_list').innerHTML = '<p>No hay productos en este pedido. Agregue uno:</p>';
+            }
+        }
+
+        // Functions for dynamic abono management in modification modal
+        function renderModificarAbonos(abonos) {
+            const container = document.getElementById('modificar_abonos_list');
+            let html = '';
+            if (abonos.length === 0) {
+                html += '<p>No hay abonos en este pedido. Agregue uno:</p>';
+            }
+            abonos.forEach((abono, index) => {
+                html += `
+                    <div class="abono-item" data-index="${index}">
+                        <label>Abono ${index + 1}:</label>
+                        <input type="date" class="mod_abono_fecha" value="${abono.fecha || ''}" placeholder="Fecha">
+                        <input type="number" class="mod_abono_monto" value="${abono.monto || 0}" placeholder="Monto" step="any">
+                        <button type="button" onclick="removeAbonoModificar(this)">Eliminar Abono</button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function addAbonoModificar() {
+            const container = document.getElementById('modificar_abonos_list');
+             // Remove initial "No hay abonos..." message if present
+            if (container.querySelector('p')) {
+                container.innerHTML = '';
+            }
+
+            const newIndex = container.children.length;
+            const newAbonoHtml = `
+                <div class="abono-item" data-index="${newIndex}">
+                    <label>Abono ${newIndex + 1}:</label>
+                    <input type="date" class="mod_abono_fecha" value="${new Date().toISOString().slice(0, 10)}" placeholder="Fecha">
+                    <input type="number" class="mod_abono_monto" placeholder="Monto" step="any">
+                    <button type="button" onclick="removeAbonoModificar(this)">Eliminar Abono</button>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', newAbonoHtml);
+            // Re-index displayed abono numbers
+            Array.from(document.querySelectorAll('#modificar_abonos_list .abono-item')).forEach((item, index) => {
+                item.dataset.index = index;
+                item.querySelector('label').textContent = `Abono ${index + 1}:`;
+            });
+        }
+
+        function removeAbonoModificar(buttonElement) {
+            const abonoItem = buttonElement.closest('.abono-item');
+            abonoItem.remove();
+            // Re-index displayed abono numbers
+            Array.from(document.querySelectorAll('#modificar_abonos_list .abono-item')).forEach((item, index) => {
+                item.dataset.index = index;
+                item.querySelector('label').textContent = `Abono ${index + 1}:`;
+            });
+            // If no abonos remain, display a message
+            if (document.querySelectorAll('#modificar_abonos_list .abono-item').length === 0) {
+                document.getElementById('modificar_abonos_list').innerHTML = '<p>No hay abonos en este pedido. Agregue uno:</p>';
+            }
+        }
 
         async function guardarCambios(event, id) {
             event.preventDefault(); // Prevent default form submission
@@ -772,30 +910,40 @@
 
             // Get updated data from form
             const ref = elId => document.getElementById(elId).value;
-            const productosActualizados = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => ({
-                referencia: el.querySelector(`#mod_producto_referencia_${index}`).value,
-                color: el.querySelector(`#mod_producto_color_${index}`).value,
-                talla: el.querySelector(`#mod_producto_talla_${index}`).value,
-                precio: parseFloat(el.querySelector(`#mod_producto_precio_${index}`).value) || 0
+            
+            const productosActualizados = Array.from(document.querySelectorAll('#modificar_productos_list .product-item')).map((el) => ({
+                referencia: el.querySelector('.mod_product_referencia').value,
+                color: el.querySelector('.mod_product_color').value,
+                talla: el.querySelector('.mod_product_talla').value,
+                precio: parseFloat(el.querySelector('.mod_product_precio').value) || 0
             }));
-            const abonosActualizados = Array.from(document.querySelectorAll('#modificar_abonos .form-field')).map((el, index) => ({
-                fecha: el.querySelector(`#mod_abono_fecha_${index}`).value,
-                monto: parseFloat(el.querySelector(`#mod_abono_monto_${index}`).value) || 0
+
+            const abonosActualizados = Array.from(document.querySelectorAll('#modificar_abonos_list .abono-item')).map((el) => ({
+                fecha: el.querySelector('.mod_abono_fecha').value,
+                monto: parseFloat(el.querySelector('.mod_abono_monto').value) || 0
             }));
+
             const datosActualizados = { 
                 cliente: ref('modificar_cliente'),
-                num_pares: ref('modificar_num_pares'),
+                num_pares: parseInt(ref('modificar_num_pares')) || 0,
                 valor_total: parseFloat(document.getElementById('modificar_valor_total').value) || 0,
                 observaciones: ref('modificar_observaciones'),
                 saldo_a_favor: ref('modificar_saldo_a_favor'),
                 productos: productosActualizados,
                 abonos: abonosActualizados
-                // 'bloqueado' and 'despachado' are not updated here; they have their own toggle functions
             };
+
+            // Check if products have changed (deep comparison of content, not just reference)
+            const productsChanged = JSON.stringify(originalProductsForModification) !== JSON.stringify(productosActualizados);
+
             try {
                 await db.collection('registros').doc(id).update(datosActualizados);
                 alert("Pedido modificado exitosamente.");
                 cerrarModal('modal_modificar');
+
+                if (productsChanged) {
+                    showWarningModal(); // Show warning about num_pares
+                }
                 // List will update automatically via onSnapshot listener
             } catch (error) {
                 console.error("Error al modificar el pedido:", error);
@@ -804,7 +952,7 @@
         }
 
         function actualizarValorTotalModificar() {
-            const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos .form-field')).map((el, index) => parseFloat(el.querySelector(`#mod_producto_precio_${index}`).value) || 0);
+            const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos_list .mod_product_precio')).map((el) => parseFloat(el.value) || 0);
             const valorTotalCalculado = preciosProductos.reduce((total, precio) => total + precio, 0);
             document.getElementById('modificar_valor_total').value = valorTotalCalculado.toFixed(2); // Format to 2 decimal places
         }
@@ -844,7 +992,7 @@
             }
         }
         
-        // --- Funciones de la Barra de Carga ---
+        // --- Funciones de la Barra de Cargando ---
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
@@ -897,7 +1045,7 @@
         window.onbeforeunload = function(event) { // Warn user before leaving if form has unsaved data
             const cliente = document.querySelector('input[name="cliente"]').value;
             const numPares = document.querySelector('input[name="num_pares"]').value;
-            if (productos.length > 0 || abonos.length > 0 || cliente || numPares) { // Check if any data is entered
+            if (productos.length > 0 || abonos.length > 0 || cliente || numPares > 0) { // Check if any data is entered
                 const mensaje = "¿Estás seguro de que quieres salir? Perderás la información del pedido actual que no ha sido guardada.";
                 event.returnValue = mensaje; // For standard browsers
                 return mensaje; // For some older browsers
@@ -923,7 +1071,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const filterAllButton = document.createElement('button');
             filterAllButton.id = 'filterAllButton';
-            filterAllButton.className = 'dispatch-filter-button bg-gray-300 text-gray-800 hover:bg-gray-400 py-1 px-3 rounded-md text-sm';
+            filterAllButton.className = 'dispatch-filter-button'; // Adjusted class for general style
             filterAllButton.textContent = 'Todos';
             filterAllButton.addEventListener('click', () => {
                 currentDispatchFilter = 'all';
@@ -933,7 +1081,7 @@
 
             const filterDespachadosButton = document.createElement('button');
             filterDespachadosButton.id = 'filterDespachadosButton';
-            filterDespachadosButton.className = 'dispatch-filter-button bg-green-500 text-white hover:bg-green-600 py-1 px-3 rounded-md text-sm';
+            filterDespachadosButton.className = 'dispatch-filter-button'; // Adjusted class
             filterDespachadosButton.textContent = 'Despachados';
             filterDespachadosButton.addEventListener('click', () => {
                 currentDispatchFilter = 'despachados';
@@ -943,7 +1091,7 @@
 
             const filterNoDespachadosButton = document.createElement('button');
             filterNoDespachadosButton.id = 'filterNoDespachadosButton';
-            filterNoDespachadosButton.className = 'dispatch-filter-button bg-yellow-500 text-white hover:bg-yellow-600 py-1 px-3 rounded-md text-sm';
+            filterNoDespachadosButton.className = 'dispatch-filter-button'; // Adjusted class
             filterNoDespachadosButton.textContent = 'No Despachados';
             filterNoDespachadosButton.addEventListener('click', () => {
                 currentDispatchFilter = 'noDespachados';
@@ -952,7 +1100,7 @@
             });
 
             const filterContainer = document.createElement('div');
-            filterContainer.className = 'flex space-x-2 mt-1 mb-4'; // Added mb-4 for spacing
+            filterContainer.className = 'flex space-x-2 mt-1 mb-4'; // Added mb-4 for spacing and flex for alignment
             filterContainer.appendChild(filterAllButton);
             filterContainer.appendChild(filterDespachadosButton);
             filterContainer.appendChild(filterNoDespachadosButton);
@@ -971,7 +1119,11 @@
             setActiveDispatchFilterButton(currentDispatchFilter);
         });
 
-        // Modificar clearAllFilters para resetear también el filtro de despacho
+        // This function will be removed or commented out if clearAllFilters is not defined elsewhere
+        // If clearAllFilters is intended to clear *all* filters, including search and asesor dropdown
+        // then integrate the dispatch filter reset into that function.
+        // For now, I'm just adding the dispatch filter reset directly where it's used.
+        /*
         const originalClearAllFilters = window.clearAllFilters; // Guardar referencia a la función original si existe
         window.clearAllFilters = function() {
             if (originalClearAllFilters) {
@@ -982,7 +1134,12 @@
             setActiveDispatchFilterButton('all');
             filtrarYBuscarPedidos(); // Re-aplicar todos los filtros
         };
+        */
 
+        // New warning modal for "Número de Pares"
+        function showWarningModal() {
+            document.getElementById('modal_pares_warning').style.display = 'flex';
+        }
     </script>
 </head>
 <body>
@@ -993,34 +1150,42 @@
             <form onsubmit="enviarFormulario(event);">
                 <div class="form-field">
                     <label>Nombre del Cliente:</label>
-                    <input type="text" name="cliente" required> </div>
+                    <input type="text" name="cliente" required>
+                </div>
                 <div class="form-field">
                     <label>Asesor:</label>
-                    <input type="text" name="asesor" required readonly> </div>
+                    <input type="text" name="asesor" required readonly>
+                </div>
                 <div class="form-field">
                     <label>Productos:</label>
                     <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
                 </div>
                 <div id="lista_productos" class="form-field">
-                    </div>
+                </div>
                 <div class="form-field">
                     <label>Abonos:</label>
-                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button> </div>
+                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button>
+                </div>
                 <div id="lista_abonos" class="form-field">
-                    </div>
+                </div>
                 <div class="form-field">
-                    <label>Número de Pares:</label> <input type="number" name="num_pares" required>
+                    <label>Número de Pares:</label>
+                    <input type="number" name="num_pares" required>
                 </div>
                 <div class="form-field">
                     <label id="valor_total_pesos">Valor Total:</label>
-                    <input type="number" id="valor_total" name="valor_total" required readonly> </div>
+                    <input type="number" id="valor_total" name="valor_total" required readonly>
+                </div>
                 <div class="form-field">
                     <label>Observaciones:</label>
                     <textarea name="observaciones"></textarea>
-                </div> <div class="form-field">
+                </div>
+                <div class="form-field">
                     <label>Saldo a Favor:</label>
-                    <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required> </div>
-                <input type="submit" value="Agregar Pedido"> </form>
+                    <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required>
+                </div>
+                <input type="submit" value="Agregar Pedido">
+            </form>
             <div id="loading-bar" style="width: 100%; background-color: #ddd; margin-top:10px; display: none;">
                 <div id="loading-bar-fill" style="height: 24px; width: 0%; background-color: #4CAF50; text-align: center; line-height: 24px; color: white;">0%</div>
             </div>
@@ -1029,7 +1194,7 @@
             <button id="ver_pedidos" onclick="iniciarVistaPedidosEnTiempoReal()">Ver Pedidos</button>
         </div>
         <div id="resumen_asesores" style="margin-top: 20px;">
-            </div>
+        </div>
     </div>
 
     <div id="modal_producto" class="modal">
@@ -1038,17 +1203,22 @@
             <h2>Agregar Producto</h2>
             <div class="form-field">
                 <label>Referencia:</label>
-                <input type="text" id="producto_referencia" required> </div>
+                <input type="text" id="producto_referencia" required>
+            </div>
             <div class="form-field">
                 <label>Color:</label>
                 <input type="text" id="producto_color" required>
             </div>
-            <div class="form-field"> <label>Talla:</label>
+            <div class="form-field">
+                <label>Talla:</label>
                 <input type="text" id="producto_talla" required>
             </div>
             <div class="form-field">
                 <label>Precio:</label>
-                <input type="number" id="producto_precio" step="any" required> </div> <button type="button" onclick="agregarProducto()">Agregar Producto</button> </div>
+                <input type="number" id="producto_precio" step="any" required>
+            </div>
+            <button type="button" onclick="agregarProducto()">Agregar Producto</button>
+        </div>
     </div>
 
     <div id="modal_abono" class="modal">
@@ -1056,45 +1226,62 @@
             <span class="close" onclick="cerrarModal('modal_abono')">&times;</span>
             <h2>Agregar Abono</h2>
             <div class="form-field">
-                <label>Fecha:</label> <input type="date" id="abono_fecha" required>
+                <label>Fecha:</label>
+                <input type="date" id="abono_fecha" required>
             </div>
             <div class="form-field">
                 <label>Monto:</label>
-                <input type="number" id="abono_monto" step="any" required> </div> <button type="button" onclick="agregarAbono()">Agregar Abono</button> </div>
+                <input type="number" id="abono_monto" step="any" required>
+            </div>
+            <button type="button" onclick="agregarAbono()">Agregar Abono</button>
+        </div>
     </div>
 
     <div id="modal_modificar" class="modal">
         <div class="modal-content">
             <span class="close" onclick="cerrarModal('modal_modificar')">&times;</span>
             <h2>Modificar Pedido</h2>
-            <form id="modificar_formulario"> <div class="form-field"> <label>Nombre del Cliente:</label>
+            <form id="modificar_formulario">
+                <div class="form-field">
+                    <label>Nombre del Cliente:</label>
                     <input type="text" id="modificar_cliente" required>
                 </div>
                 <div class="form-field">
-                    <label>Productos:</label> <div id="modificar_productos">
+                    <label>Productos:</label>
+                    <div id="modificar_productos_list">
                         </div>
-                </div> <div class="form-field">
+                    <button type="button" class="add-item-button" onclick="addProductModificar()">Agregar Otro Producto</button>
+                </div>
+                <div class="form-field">
                     <label>Abonos:</label>
-                    <div id="modificar_abonos">
-                        </div> </div>
+                    <div id="modificar_abonos_list">
+                        </div>
+                    <button type="button" class="add-item-button" onclick="addAbonoModificar()">Agregar Otro Abono</button>
+                </div>
                 <div class="form-field">
                     <label>Número de Pares:</label>
                     <input type="number" id="modificar_num_pares" required>
-                </div> <div class="form-field">
-                    <label>Valor Total:</label>
-                    <input type="number" id="modificar_valor_total" step="any" required readonly> </div>
+                </div>
                 <div class="form-field">
-                    <label>Observaciones:</label> <textarea id="modificar_observaciones"></textarea>
+                    <label>Valor Total:</label>
+                    <input type="number" id="modificar_valor_total" step="any" required readonly>
+                </div>
+                <div class="form-field">
+                    <label>Observaciones:</label>
+                    <textarea id="modificar_observaciones"></textarea>
                 </div>
                 <div class="form-field">
                     <label>Saldo a Favor:</label>
-                    <input type="number" id="modificar_saldo_a_favor" step="any" required> </div>
-                <button type="submit" id="guardarCambiosBtn">Guardar Cambios</button> </form>
+                    <input type="number" id="modificar_saldo_a_favor" step="any" required>
+                </div>
+                <button type="submit" id="guardarCambiosBtn">Guardar Cambios</button>
+            </form>
         </div>
     </div>
 
     <div id="modal_pedidos" class="modal">
-        <div class="modal-content modal-pedidos-content"> <span class="close" onclick="cerrarModal('modal_pedidos');">&times;</span>
+        <div class="modal-content modal-pedidos-content">
+            <span class="close" onclick="cerrarModal('modal_pedidos');">&times;</span>
             <h2>Pedidos Registrados</h2>
             <div class="form-field search-bar-container">
                 <label for="search_term">Buscar Pedido (Cliente, Código, Asesor, Producto):</label>
@@ -1104,14 +1291,23 @@
                 <label>Filtrar por Asesor:</label>
                 <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()">
                     <option value="">Todos</option>
-                    </select>
+                </select>
             </div>
             <div class="totals">
                 <label id="total_pares">Total Pares: 0</label>
                 <label id="valor_vendido">Valor Vendido: $0</label>
             </div>
             <div id="lista_pedidos_container" class="form-field">
-                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal_pares_warning" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_pares_warning')">&times;</span>
+            <h2>Advertencia de Pares</h2>
+            <p>Se han realizado cambios en los productos del pedido. Por favor, **verifique y ajuste el "Número de Pares"** para asegurar que sea correcto antes de continuar.</p>
+            <button type="button" onclick="cerrarModal('modal_pares_warning')">Entendido</button>
         </div>
     </div>
 </body>
