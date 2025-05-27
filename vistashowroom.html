@@ -658,28 +658,31 @@
             }
 
             try {
-                const snapshot = await citasCollection
-                    .where('fecha', '==', updatedFecha)
-                    .where('hora', '==', updatedHora)
-                    .get();
+                await db.runTransaction(async (transaction) => {
+                    const query = citasCollection
+                        .where('fecha', '==', updatedFecha)
+                        .where('hora', '==', updatedHora);
+                    
+                    const snapshot = await transaction.get(query);
 
-                const isOccupiedByAnother = snapshot.docs.some(doc => doc.id !== id);
+                    const isOccupiedByAnother = snapshot.docs.some(doc => doc.id !== id);
 
-                if (isOccupiedByAnother) {
-                    mostrarFeedback("Lo sentimos, el horario seleccionado ya está ocupado por otra cita. Por favor, elija otro.", true);
-                    return;
-                }
+                    if (isOccupiedByAnother) {
+                        throw new Error("Lo sentimos, el horario seleccionado ya está ocupado por otra cita. Por favor, elija otro.");
+                    }
 
-                await citasCollection.doc(id).update({
-                    fabricante: updatedFabricante,
-                    fecha: updatedFecha,
-                    hora: updatedHora
+                    const citaRef = citasCollection.doc(id);
+                    transaction.update(citaRef, {
+                        fabricante: updatedFabricante,
+                        fecha: updatedFecha,
+                        hora: updatedHora
+                    });
                 });
                 mostrarFeedback("Cita actualizada con éxito.");
                 closeEditModal();
             } catch (error) {
                 console.error("Error al actualizar la cita: ", error);
-                mostrarFeedback("Error al actualizar la cita. Inténtelo de nuevo.", true);
+                mostrarFeedback(`Error al actualizar la cita: ${error.message}. Inténtelo de nuevo.`, true);
             }
         });
 
@@ -695,26 +698,30 @@
             }
 
             try {
-                const snapshot = await citasCollection
-                    .where('fecha', '==', fecha)
-                    .where('hora', '==', hora)
-                    .get();
-                if (!snapshot.empty) {
-                    mostrarFeedback("Lo sentimos, este horario ya está ocupado. Por favor, seleccione otro.", true);
-                    return;
-                }
+                await db.runTransaction(async (transaction) => {
+                    const query = citasCollection
+                        .where('fecha', '==', fecha)
+                        .where('hora', '==', hora);
+                    
+                    const snapshot = await transaction.get(query);
 
-                await citasCollection.add({
-                    fabricante: fabricante,
-                    fecha: fecha,
-                    hora: hora,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    if (!snapshot.empty) {
+                        throw new Error("Lo sentimos, este horario ya está ocupado. Por favor, seleccione otro.");
+                    }
+
+                    const newDocRef = citasCollection.doc(); // Firestore genera un nuevo ID de documento
+                    transaction.set(newDocRef, {
+                        fabricante: fabricante,
+                        fecha: fecha,
+                        hora: hora,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
                 });
                 mostrarFeedback("Nueva cita agregada con éxito.");
                 closeAddModal();
             } catch (error) {
                 console.error("Error al agregar la cita: ", error);
-                mostrarFeedback("Error al agregar la cita. Inténtelo de nuevo.", true);
+                mostrarFeedback(`Error al agregar la cita: ${error.message}. Inténtelo de nuevo.`, true);
             }
         });
         window.handleDelete = function(id) {
