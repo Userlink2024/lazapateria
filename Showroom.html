@@ -79,13 +79,7 @@
             <div>
                 <label for="fabricante" class="block text-sm font-medium text-gray-700 mb-1">Ingrese el nombre de su fábrica:</label>
                 <input type="text" id="fabricante" name="fabricante" required
-                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
-            </div>
-
-            <div>
-                <label for="telefono" class="block text-sm font-medium text-gray-700 mb-1">Número de Teléfono:</label>
-                <input type="tel" id="telefono" name="telefono" required
-                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
             </div>
 
             <div>
@@ -157,13 +151,11 @@
             { value: `${yearForEvent}-07-18`, text: `18 de Julio de ${yearForEvent} (Viernes)` },
             { value: `${yearForEvent}-07-19`, text: `19 de Julio de ${yearForEvent} (Sábado)` }
         ];
-
         // Horarios en formato 24 horas para la lógica interna
         const todosLosHorarios = {
             morning: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30"],
             afternoon: ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30"]
         };
-
         // --- Elementos del DOM ---
         const diaSelect = document.getElementById('dia');
         const horaSelect = document.getElementById('hora');
@@ -178,8 +170,6 @@
 
         // Variable para almacenar los detalles de la cita agendada temporalmente
         let lastBookedAppointment = null;
-
-
         // --- Funciones ---
 
         // Convertir hora de formato 24h a 12h (AM/PM)
@@ -254,7 +244,6 @@
         function mostrarFeedback(message, isError = false, showCitaPdfButton = false) {
             modalMessage.textContent = message;
             modalMessage.className = isError ? 'text-lg mb-4 text-red-600' : 'text-lg mb-4 text-green-700';
-            
             if (showCitaPdfButton) {
                 generarCitaPdfButton.style.display = 'inline-block';
                 screenshotRecommendation.style.display = 'block';
@@ -279,11 +268,10 @@
         citaForm.addEventListener('submit', async function(event) {
             event.preventDefault();
             const fabricante = document.getElementById('fabricante').value;
-            const telefono = document.getElementById('telefono').value;
             const fecha = diaSelect.value;
             const hora24 = horaSelect.value; // Este es el valor en formato 24h
 
-            if (!fabricante || !telefono || !fecha || !hora24) {
+            if (!fabricante || !fecha || !hora24) { // Se eliminó 'telefono'
                 mostrarFeedback("Por favor, complete todos los campos.", true);
                 return;
             }
@@ -298,35 +286,31 @@
 
                 await citasCollection.add({
                     fabricante: fabricante,
-                    telefono: telefono,
+                    // Se eliminó el campo 'telefono'
                     fecha: fecha,
                     hora: hora24, 
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                
                 const hora12Display = convertTo12HourFormat(hora24);
                 const fechaFormateada = new Date(fecha + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                
                 // Almacenar los detalles de la cita para el PDF
                 lastBookedAppointment = {
                     fabricante: fabricante,
-                    telefono: telefono,
+                    // Se eliminó el campo 'telefono'
                     fecha: fechaFormateada,
                     hora: hora12Display
                 };
-
                 mostrarFeedback(`¡Cita agendada para ${fabricante} el ${fechaFormateada} a las ${hora12Display} con éxito!`, false, true);
                 
                 citaForm.reset();
                 horaSelect.innerHTML = '<option value="" disabled selected>Seleccione una hora</option>';
                 horaSelect.disabled = true;
-                diaSelect.value = ""; 
+                diaSelect.value = "";
             } catch (error) {
                 console.error("Error agendando la cita: ", error);
                 mostrarFeedback("Error al agendar la cita. Inténtelo de nuevo.", true, false);
             }
         });
-
         // Función para generar el PDF del Acta de Entrega
         function generarActaEntregaPDF() {
             const { jsPDF } = window.jspdf;
@@ -341,7 +325,6 @@
             doc.text("Acta de Entrega - Proveedores La Zapatería", margenIzquierdo, yPos);
             yPos += 10;
             doc.setFont(undefined, 'normal');
-
             // Introducción
             doc.setFontSize(11);
             let textoIntro = "Es un placer para nosotros que formes parte de nuestra empresa, donde trabajamos con mucho amor día a día para generar empleo a miles de familias. Debido a la gran cantidad de proveedores y la alta demanda de nuestros productos, hemos propuesto algunos ítems generales que sin excepción deben ser cumplidos por TODOS nuestros proveedores.";
@@ -367,7 +350,6 @@
             }
 
             addSection("SELLO:", "Toda mercancía se debe entregar sellada con sello LOVE (El PDF se podrá solicitar directamente en WhatsApp).");
-            
             // Sección de Horario de Entrega con texto en rojo
             if (yPos > 260) { // Check for new page before adding section
                 doc.addPage();
@@ -379,23 +361,18 @@
             yPos += 7;
             doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
-            
             const horarioTextoNormal = "De 8:00 AM A 12:00 PM ";
             const horarioTextoRojo = "(sin excepción, NO se recibe mercancía fuera de este horario).";
-
             // Obtener la anchura del texto normal
             const widthNormalText = doc.getTextWidth(horarioTextoNormal);
-
             // Imprimir la primera parte en negro
             doc.setTextColor(0, 0, 0); // Negro
             doc.text(horarioTextoNormal, margenIzquierdo, yPos);
-
             // Cambiar a rojo e imprimir la segunda parte
             doc.setTextColor(255, 0, 0); // Rojo
             doc.text(horarioTextoRojo, margenIzquierdo + widthNormalText, yPos);
-            
             // Restablecer el color a negro para el resto del documento
-            doc.setTextColor(0, 0, 0); 
+            doc.setTextColor(0, 0, 0);
             yPos += 6; // Ajustar espaciado para la línea del horario
             yPos += 5; // Espacio adicional después de la sección
 
@@ -405,7 +382,6 @@
             addSection("REPOSICIONES:", "Todas las reposiciones tienen un plazo máximo de entrega de 10 días, después de pasados estos 10 días no se reciben reposiciones.");
             addSection("FACTURACIÓN:", "Toda la mercancía debe ser facturada en formato remisión y en lo posible enviar la factura al WhatsApp de Juan Carlos, ya que en caso de pérdida de facturas este será el único comprobante con el que se pagarán facturas. Los precios de la factura deben ser tal cual a los precios que se encuentran en el formato de pedido, si se alteran los precios se devolverá toda la mercancía y no se recibirá más.");
             addSection("DEVOLUCIONES:", "Cada vez que el fabricante entregue mercancía debe informar si tiene devoluciones y así evitamos acumularlas. Las Devoluciones que salgan de bodega no tienen flete, devoluciones recibidas de otra ciudad cubre un flete el fabricante.");
-            
             if (yPos > 270) { 
                 doc.addPage();
                 yPos = 20;
@@ -423,7 +399,6 @@
             const doc = new jsPDF();
             const margen = 20;
             let yPos = margen;
-
             // Header con logo (placeholder) y título
             doc.setFontSize(24);
             doc.setFont(undefined, 'bold');
@@ -450,18 +425,20 @@
             yPos += 10;
             doc.text("Su cita ha sido agendada con éxito. A continuación, los detalles:", margen, yPos);
             yPos += 15;
-
             doc.setFont(undefined, 'bold');
             doc.text("Fabricante:", margen, yPos);
             doc.setFont(undefined, 'normal');
             doc.text(citaDetails.fabricante, margen + 30, yPos);
             yPos += 10;
 
+            // Se eliminó la línea de teléfono del PDF
+            /*
             doc.setFont(undefined, 'bold');
             doc.text("Teléfono:", margen, yPos);
             doc.setFont(undefined, 'normal');
             doc.text(citaDetails.telefono, margen + 30, yPos);
             yPos += 10;
+            */
 
             doc.setFont(undefined, 'bold');
             doc.text("Fecha:", margen, yPos);
@@ -480,7 +457,6 @@
             doc.setFont(undefined, 'italic');
             doc.text("Agradecemos su preferencia. ¡Le esperamos!", margen, yPos);
             yPos += 15;
-
             // Footer
             doc.setDrawColor(46, 139, 87); // Verde mar
             doc.line(margen, doc.internal.pageSize.height - margen - 10, doc.internal.pageSize.width - margen, doc.internal.pageSize.height - margen - 10);
@@ -506,8 +482,6 @@
                 mostrarFeedback("No hay una cita reciente para generar el PDF.", true);
             }
         });
-
-
         // --- Inicialización ---
         poblarDias();
 
