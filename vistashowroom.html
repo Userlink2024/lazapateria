@@ -6,30 +6,32 @@
     <title>Panel de Administración de Citas - La Zapatería</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Estilos base para el cuerpo y la fuente */
         body {
             font-family: 'Inter', sans-serif;
         }
+        /* Estilos para los modales (ventanas emergentes) */
         .modal {
-            display: none; /* Hidden by default */
-            position: fixed; /* Stay in place */
-            z-index: 100; /* Sit on top */
+            display: none; /* Oculto por defecto */
+            position: fixed; /* Permanece en su lugar */
+            z-index: 100; /* Se superpone a otros elementos */
             left: 0;
             top: 0;
-            width: 100%; /* Full width */
-            height: 100%; /* Full height */
-            overflow: auto; /* Enable scroll if needed */
-            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 100%; /* Ancho completo */
+            height: 100%; /* Alto completo */
+            overflow: auto; /* Habilita el scroll si el contenido es muy grande */
+            background-color: rgba(0,0,0,0.4); /* Fondo semi-transparente */
+            display: flex; /* Para centrar el contenido del modal */
+            align-items: center; /* Centrado vertical */
+            justify-content: center; /* Centrado horizontal */
         }
         .modal-content {
             background-color: #fefefe;
-            padding: 24px;
-            border-radius: 0.75rem; /* rounded-lg */
-            box-shadow: 0 10px 15px rgba(0,0,0,0.1); /* shadow-xl */
-            width: 90%;
-            max-width: 500px;
+            padding: 24px; /* Relleno interno */
+            border-radius: 0.75rem; /* Bordes redondeados */
+            box-shadow: 0 10px 15px rgba(0,0,0,0.1); /* Sombra */
+            width: 90%; /* Ancho del modal en pantallas pequeñas */
+            max-width: 500px; /* Ancho máximo del modal en pantallas grandes */
             text-align: center;
             position: relative;
         }
@@ -41,16 +43,61 @@
             border: none;
             font-size: 1.5rem;
             cursor: pointer;
-            color: #6b7280; /* gray-500 */
+            color: #6b7280; /* Color gris */
         }
+        /* Estilos para opciones deshabilitadas en selectores */
         select option:disabled {
             color: #cccccc;
             background-color: #f0f0f0;
         }
-        /* Custom styles for multi-select date filter */
+        /* Estilos personalizados para el filtro de fecha multi-selección */
         #filterFecha {
-            height: 100px; /* Adjust height as needed */
-            overflow-y: auto;
+            height: 100px; /* Altura fija para el selector de fecha */
+            overflow-y: auto; /* Scroll vertical si hay muchas opciones */
+        }
+
+        /* Ajustes para la tabla en pantallas pequeñas */
+        @media (max-width: 640px) {
+            table thead {
+                display: none; /* Oculta el encabezado de la tabla en móviles */
+            }
+            table, table tbody, table tr, table td {
+                display: block; /* Hace que los elementos de la tabla se comporten como bloques */
+                width: 100%; /* Ancho completo */
+            }
+            table tr {
+                margin-bottom: 1rem; /* Espacio entre filas */
+                border: 1px solid #e2e8f0; /* Borde para cada fila */
+                border-radius: 0.5rem; /* Bordes redondeados */
+                padding: 0.5rem; /* Relleno para cada fila */
+            }
+            table td {
+                text-align: right; /* Alinea el texto a la derecha */
+                padding-left: 50%; /* Espacio para la etiqueta */
+                position: relative;
+            }
+            table td::before {
+                content: attr(data-label); /* Usa el atributo data-label para mostrar la etiqueta */
+                position: absolute;
+                left: 0.5rem;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+            }
+            /* Ajuste para los filtros en el encabezado de la tabla en móvil */
+            table thead tr:last-child {
+                display: flex;
+                flex-direction: column;
+                padding: 0;
+                border: none;
+            }
+            table thead tr:last-child th {
+                width: 100%;
+                padding: 0.5rem 0.75rem;
+                text-align: left;
+            }
         }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -58,15 +105,15 @@
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
-<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen py-10 px-4 sm:px-6 lg:px-8">
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen py-4 sm:py-10 px-2 sm:px-6 lg:px-8">
 
-    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-4xl mb-8">
-        <h1 class="text-3xl font-bold text-center text-green-600 mb-8">Panel de Administración de Citas</h1>
-        <p class="text-center text-gray-600 mb-6">Gestiona las citas agendadas para el Show Room de La Zapatería.</p>
+    <div class="bg-white p-4 sm:p-8 rounded-lg shadow-xl w-full max-w-4xl mb-4 sm:mb-8">
+        <h1 class="text-2xl sm:text-3xl font-bold text-center text-green-600 mb-4 sm:mb-8">Panel de Administración de Citas</h1>
+        <p class="text-sm sm:text-base text-center text-gray-600 mb-4 sm:mb-6">Gestiona las citas agendadas para el Show Room de La Zapatería.</p>
 
         <div class="mb-4 flex justify-end">
-            <button id="addCitaButton" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+            <button id="addCitaButton" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm flex items-center text-sm sm:text-base">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
                 </svg>
                 Agregar Cita
@@ -120,33 +167,33 @@
     <div id="editModal" class="modal" style="display: none;">
         <div class="modal-content">
             <button class="modal-close-button" onclick="closeEditModal()">&times;</button>
-            <h2 class="text-2xl font-bold text-green-600 mb-6">Editar Cita</h2>
-            <form id="editCitaForm" class="space-y-4">
+            <h2 class="text-xl sm:text-2xl font-bold text-green-600 mb-4 sm:mb-6">Editar Cita</h2>
+            <form id="editCitaForm" class="space-y-3 sm:space-y-4">
                 <input type="hidden" id="editCitaId">
                 <div>
                     <label for="editFabricante" class="block text-sm font-medium text-gray-700 text-left mb-1">Fabricante:</label>
                     <input type="text" id="editFabricante" name="fabricante" required
-                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
+                           class="mt-1 block w-full px-3 py-2 sm:px-4 sm:py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 text-sm">
                 </div>
                 <div>
                     <label for="editDia" class="block text-sm font-medium text-gray-700 text-left mb-1">Día:</label>
                     <select id="editDia" name="dia" required
-                            class="mt-1 block w-full px-4 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
+                            class="mt-1 block w-full px-3 py-2 sm:px-4 sm:py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 text-sm">
                     </select>
                 </div>
                 <div>
                     <label for="editHora" class="block text-sm font-medium text-gray-700 text-left mb-1">Hora:</label>
                     <select id="editHora" name="hora" required
-                            class="mt-1 block w-full px-4 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
+                            class="mt-1 block w-full px-3 py-2 sm:px-4 sm:py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 text-sm">
                     </select>
                 </div>
-                <div class="flex justify-end space-x-3 mt-6">
+                <div class="flex justify-end space-x-2 sm:space-x-3 mt-4 sm:mt-6">
                     <button type="button" onclick="closeEditModal()"
-                            class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            class="py-2 px-3 sm:px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                         Cancelar
                     </button>
                     <button type="submit"
-                            class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                            class="py-2 px-3 sm:px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
                         Guardar Cambios
                     </button>
                 </div>
@@ -157,35 +204,35 @@
     <div id="addModal" class="modal" style="display: none;">
         <div class="modal-content">
             <button class="modal-close-button" onclick="closeAddModal()">&times;</button>
-            <h2 class="text-2xl font-bold text-purple-600 mb-6">Agregar Nueva Cita</h2>
-            <form id="addCitaForm" class="space-y-4">
+            <h2 class="text-xl sm:text-2xl font-bold text-purple-600 mb-4 sm:mb-6">Agregar Nueva Cita</h2>
+            <form id="addCitaForm" class="space-y-3 sm:space-y-4">
                 <div>
                     <label for="addFabricante" class="block text-sm font-medium text-gray-700 text-left mb-1">Fabricante:</label>
                     <input type="text" id="addFabricante" name="fabricante" required
-                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                           class="mt-1 block w-full px-3 py-2 sm:px-4 sm:py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm">
                 </div>
                 <div>
                     <label for="addDia" class="block text-sm font-medium text-gray-700 text-left mb-1">Día:</label>
                     <select id="addDia" name="dia" required
-                            class="mt-1 block w-full px-4 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            class="mt-1 block w-full px-3 py-2 sm:px-4 sm:py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm">
                         <option value="" disabled selected>Seleccione un día</option>
                     </select>
                 </div>
                 <div>
                     <label for="addHora" class="block text-sm font-medium text-gray-700 text-left mb-1">Hora:</label>
                     <select id="addHora" name="hora" required disabled
-                            class="mt-1 block w-full px-4 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm disabled:bg-gray-50">
+                            class="mt-1 block w-full px-3 py-2 sm:px-4 sm:py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm disabled:bg-gray-50">
                         <option value="" disabled selected>Seleccione una hora</option>
                     </select>
                     <p id="loading-add-hours" class="text-xs text-gray-500 mt-1" style="display: none;">Cargando horarios disponibles...</p>
                 </div>
-                <div class="flex justify-end space-x-3 mt-6">
+                <div class="flex justify-end space-x-2 sm:space-x-3 mt-4 sm:mt-6">
                     <button type="button" onclick="closeAddModal()"
-                            class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            class="py-2 px-3 sm:px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                         Cancelar
                     </button>
                     <button type="submit"
-                            class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                            class="py-2 px-3 sm:px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
                         Agregar Cita
                     </button>
                 </div>
@@ -196,15 +243,15 @@
     <div id="deleteConfirmModal" class="modal" style="display: none;">
         <div class="modal-content">
             <button class="modal-close-button" onclick="closeDeleteConfirmModal()">&times;</button>
-            <h2 class="text-2xl font-bold text-red-600 mb-6">Confirmar Eliminación</h2>
-            <p class="text-lg mb-6">¿Está seguro de que desea eliminar esta cita?</p>
-            <div class="flex justify-center space-x-4">
+            <h2 class="text-xl sm:text-2xl font-bold text-red-600 mb-4 sm:mb-6">Confirmar Eliminación</h2>
+            <p class="text-base sm:text-lg mb-4 sm:mb-6">¿Está seguro de que desea eliminar esta cita?</p>
+            <div class="flex justify-center space-x-2 sm:space-x-4">
                 <button type="button" onclick="closeDeleteConfirmModal()"
-                        class="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        class="py-2 px-3 sm:px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                     Cancelar
                 </button>
                 <button type="button" id="confirmDeleteButton"
-                        class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                        class="py-2 px-3 sm:px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
                     Eliminar
                 </button>
             </div>
@@ -213,9 +260,9 @@
 
     <div id="feedbackModal" class="modal" style="display: none;">
         <div class="modal-content">
-            <p id="modalMessage" class="text-lg mb-4"></p>
+            <p id="modalMessage" class="text-base sm:text-lg mb-3 sm:mb-4"></p>
             <div class="modal-buttons">
-                <button id="modalOkButton" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg">OK</button>
+                <button id="modalOkButton" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg text-sm sm:text-base">OK</button>
             </div>
         </div>
     </div>
@@ -478,27 +525,27 @@
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-50';
                 row.innerHTML = `
-                    <td class="py-3 px-4 whitespace-nowrap text-sm font-medium text-gray-900">${cita.fabricante}</td>
-                    <td class="py-3 px-4 whitespace-nowrap text-sm text-gray-700">${new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
-                    <td class="py-3 px-4 whitespace-nowrap text-sm text-gray-700">${convertTo12HourFormat(cita.hora)}</td>
+                    <td class="py-3 px-4 whitespace-nowrap text-sm font-medium text-gray-900" data-label="Fabricante:">${cita.fabricante}</td>
+                    <td class="py-3 px-4 whitespace-nowrap text-sm text-gray-700" data-label="Fecha:">${new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                    <td class="py-3 px-4 whitespace-nowrap text-sm text-gray-700" data-label="Hora:">${convertTo12HourFormat(cita.hora)}</td>
                     <td class="py-3 px-4 whitespace-nowrap text-center text-sm font-medium">
                         <button onclick="handleEdit('${cita.id}', '${cita.fabricante.replace(/'/g, "\\'")}', '${cita.fecha}', '${cita.hora}')"
-                                class="text-blue-600 hover:text-blue-900 mr-3 inline-flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                class="text-blue-600 hover:text-blue-900 mr-1 sm:mr-3 inline-flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                             <span class="hidden sm:inline-block">Editar</span>
                         </button>
                         <button onclick="handleDelete('${cita.id}')"
-                                class="text-red-600 hover:text-red-900 mr-3 inline-flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                class="text-red-600 hover:text-red-900 mr-1 sm:mr-3 inline-flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                             <span class="hidden sm:inline-block">Eliminar</span>
                         </button>
                         <button onclick="handleGeneratePdf('${cita.fabricante.replace(/'/g, "\\'")}', '${new Date(cita.fecha + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}', '${convertTo12HourFormat(cita.hora)}')"
                                 class="text-purple-600 hover:text-purple-900 inline-flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block" viewBox="0 0 20 20" fill="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5 inline-block" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
                             </svg>
                             <span class="hidden sm:inline-block">PDF</span>
