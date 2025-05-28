@@ -54,9 +54,6 @@
         }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen py-10">
 
@@ -99,7 +96,7 @@
                 <p id="loading-hours" class="text-xs text-gray-500 mt-1" style="display: none;">Cargando horarios disponibles...</p>
             </div>
 
-            <button type="submit"
+            <button type="submit" id="submitButton"
                     class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
                 Agendar Cita
             </button>
@@ -123,20 +120,88 @@
         </div>
     </div>
 
-    <script>
-        // Configuración de Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
-            authDomain: "lazapateria-c4157.firebaseapp.com",
-            projectId: "lazapateria-c4157",
-            storageBucket: "lazapateria-c4157.firebasestorage.app",
-            messagingSenderId: "300241769138",
-            appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
-            measurementId: "G-HVG7615JEE"
+    <script type="module">
+        // Importar las funciones de Firebase directamente
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.10.0/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.10.0/firebase-auth.js";
+        import { getFirestore, collection, query, where, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore.js";
+        // Cargar jsPDF aquí para asegurar que window.jspdf esté disponible
+        import "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"; 
+
+        // ======================================================================
+        // CONFIGURACIÓN Y AUTENTICACIÓN DE FIREBASE
+        // ======================================================================
+
+        // Es crucial que la autenticación anónima esté habilitada en tu proyecto de Firebase.
+        // Ve a la Consola de Firebase -> Authentication -> Sign-in method -> Habilita "Anonymous".
+        //
+        // También, asegúrate de que tus reglas de seguridad de Firestore permitan a usuarios
+        // autenticados (lo que incluye a los usuarios anónimos) leer y escribir datos en la colección.
+        // Por ejemplo, para la colección de citas:
+        // match /artifacts/{appId}/public/data/citasShowroom/{document=**} {
+        //   allow read, write: if request.auth != null;
+        // }
+        //
+        // IMPORTANTE: Si estás usando consultas con múltiples condiciones 'where' (como 'fecha' y 'hora'),
+        // es probable que necesites crear un ÍNDICE COMPUESTO en Firestore.
+        // Si la consola del navegador muestra un error de "missing index", Firebase te dará un enlace
+        // directo para crear el índice necesario en tu consola de Firebase.
+        // ======================================================================
+
+        // Configuración de Firebase: Usar las variables globales proporcionadas por el entorno
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // Configuración de respaldo (no debería usarse en el entorno de Canvas)
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID",
+            measurementId: "YOUR_MEASUREMENT_ID"
         };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const citasCollection = db.collection('citasShowroom');
+
+        // Inicializar la aplicación Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Variable para la colección de citas (se inicializará después de la autenticación)
+        let citasCollection;
+        let userId = null; // Para almacenar el ID del usuario autenticado
+
+        // Autenticar al usuario (prioriza token custom, si no, anónimo)
+        async function authenticateFirebase() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    console.log("Autenticado con token personalizado.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Autenticado anónimamente.");
+                }
+            } catch (error) {
+                console.error("Error de autenticación de Firebase:", error);
+            }
+        }
+
+        // Escuchar cambios en el estado de autenticación
+        onAuthStateChanged(auth, user => {
+            if (user) {
+                userId = user.uid;
+                console.log("ID de usuario:", userId);
+                // Definir la colección de citas después de la autenticación
+                // Usamos una ruta pública para que todas las citas sean visibles/agendables por todos los usuarios de la app
+                citasCollection = collection(db, `/artifacts/${appId}/public/data/citasShowroom`);
+                actualizarHorariosDisponibles(); // Actualizar horarios una vez que Firebase esté listo y autenticado
+            } else {
+                userId = null;
+                console.log("Ningún usuario autenticado. La funcionalidad de agendamiento estará limitada.");
+            }
+        });
+
+        // Llamar a la función de autenticación al cargar el script
+        authenticateFirebase();
 
         // --- Definición de Días y Horarios ---
         const currentYear = new Date().getFullYear();
@@ -167,6 +232,7 @@
         const generarPdfButton = document.getElementById('generarPdfButton'); // Botón para PDF del Acta de Entrega
         const generarCitaPdfButton = document.getElementById('generarCitaPdfButton'); // Nuevo botón para PDF de la cita
         const screenshotRecommendation = document.getElementById('screenshotRecommendation'); // Nuevo elemento para la recomendación de pantallazo
+        const submitButton = document.getElementById('submitButton'); // Referencia al botón de submit
 
         // Variable para almacenar los detalles de la cita agendada temporalmente
         let lastBookedAppointment = null;
@@ -205,7 +271,21 @@
 
         // Actualizar horarios disponibles
         async function actualizarHorariosDisponibles() {
+            // Asegurarse de que la colección de Firestore esté inicializada y el usuario autenticado.
+            // Si no, intentar autenticar de nuevo.
+            if (!citasCollection || !userId) {
+                console.warn("Firestore collection or user not ready. Attempting re-authentication for `actualizarHorariosDisponibles`.");
+                await authenticateFirebase();
+                // Si después de re-autenticar, la colección o el usuario aún no están listos, salir.
+                if (!citasCollection || !userId) {
+                    console.error("Firestore collection or user still not ready after re-authentication attempt in `actualizarHorariosDisponibles`.");
+                    loadingHoursP.style.display = 'none';
+                    return;
+                }
+            }
+
             const fechaSeleccionada = diaSelect.value;
+            console.log("Fecha seleccionada para buscar horarios:", fechaSeleccionada); // Log de depuración
             horaSelect.innerHTML = '<option value="" disabled selected>Seleccione una hora</option>'; // Reset
             horaSelect.disabled = true;
             loadingHoursP.style.display = 'block';
@@ -216,27 +296,33 @@
             }
 
             try {
-                const querySnapshot = await citasCollection.where('fecha', '==', fechaSeleccionada).get();
+                // Consulta a Firestore para obtener los horarios ya ocupados para la fecha seleccionada
+                const q = query(citasCollection, where('fecha', '==', fechaSeleccionada));
+                const querySnapshot = await getDocs(q);
                 const horariosOcupados = querySnapshot.docs.map(doc => doc.data().hora); // Estos están en 24h
+                console.log("Horarios ocupados obtenidos de Firestore para", fechaSeleccionada, ":", horariosOcupados); // Log de depuración
                 
-                const horariosBase = obtenerHorariosParaDia(fechaSeleccionada); // Estos están en 24h
+                const horariosBase = obtenerHorariosParaDia(fechaSeleccionada); // Obtiene todos los horarios posibles para ese día (en 24h)
                 
                 horariosBase.forEach(hora24 => { // hora24 es el formato interno "HH:MM"
                     const option = document.createElement('option');
-                    option.value = hora24; // El valor sigue siendo 24h para guardar en DB
-                    option.textContent = convertTo12HourFormat(hora24); // Mostrar en formato 12h
+                    option.value = hora24; // El valor del option sigue siendo 24h para guardar en DB
+                    option.textContent = convertTo12HourFormat(hora24); // Mostrar en formato 12h para el usuario
                     if (horariosOcupados.includes(hora24)) {
-                        option.disabled = true;
-                        option.textContent += ' (Ocupado)';
+                        option.disabled = true; // Deshabilita la opción si está ocupada
+                        option.textContent += ' (Ocupado)'; // Añade un texto indicando que está ocupado
+                        console.log(`Horario ${hora24} marcado como OCUPADO.`); // Log de depuración
+                    } else {
+                        console.log(`Horario ${hora24} marcado como DISPONIBLE.`); // Log de depuración
                     }
                     horaSelect.appendChild(option);
                 });
-                horaSelect.disabled = false;
+                horaSelect.disabled = false; // Habilita el select de horas una vez cargado
             } catch (error) {
-                console.error("Error obteniendo horarios ocupados: ", error);
-                mostrarFeedback("Error al cargar horarios. Intente de nuevo.", true);
+                console.error("Error obteniendo horarios ocupados de Firestore: ", error);
+                mostrarFeedback(`Error al cargar horarios disponibles. Esto puede deberse a problemas de conexión o reglas de seguridad de Firebase. Detalles: ${error.message}`, true);
             } finally {
-                loadingHoursP.style.display = 'none';
+                loadingHoursP.style.display = 'none'; // Oculta el mensaje de carga
             }
         }
 
@@ -267,49 +353,99 @@
         // Manejar envío del formulario
         citaForm.addEventListener('submit', async function(event) {
             event.preventDefault();
+
+            // Deshabilitar el botón y cambiar texto para indicar procesamiento
+            submitButton.disabled = true;
+            submitButton.textContent = 'Agendando...';
+            submitButton.classList.add('opacity-50', 'cursor-not-allowed');
+
+
+            // Asegurarse de que la colección de Firestore esté inicializada y el usuario autenticado.
+            if (!citasCollection || !userId) {
+                console.error("La aplicación no está lista para agendar citas. La colección de Firebase no está inicializada o el usuario no está autenticado.");
+                await authenticateFirebase(); // Intentar autenticar de nuevo
+                if (!citasCollection || !userId) { // Si aún no está lista después de re-autenticar, informar y salir.
+                    mostrarFeedback("La aplicación no está lista para agendar citas. Por favor, espere un momento o recargue la página. Asegúrese de que Firebase está configurado correctamente.", true);
+                    // Re-habilitar botón en caso de error inicial
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Agendar Cita';
+                    submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                    return;
+                }
+            }
+
             const fabricante = document.getElementById('fabricante').value;
             const fecha = diaSelect.value;
             const hora24 = horaSelect.value; // Este es el valor en formato 24h
 
-            if (!fabricante || !fecha || !hora24) { // Se eliminó 'telefono'
+            if (!fabricante || !fecha || !hora24) {
                 mostrarFeedback("Por favor, complete todos los campos.", true);
+                // Re-habilitar botón si faltan campos
+                submitButton.disabled = false;
+                submitButton.textContent = 'Agendar Cita';
+                submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
                 return;
             }
 
-            try {
-                const snapshot = await citasCollection.where('fecha', '==', fecha).where('hora', '==', hora24).get();
-                if (!snapshot.empty) {
-                    mostrarFeedback("Lo sentimos, este horario acaba de ser ocupado. Por favor, seleccione otro.", true);
-                    actualizarHorariosDisponibles(); 
-                    return;
-                }
+            // Generar un retardo aleatorio entre 1 y 5 segundos
+            const randomDelay = Math.floor(Math.random() * 4000) + 1000; // Entre 1000ms y 5000ms
+            console.log(`Aplicando un retardo aleatorio de ${randomDelay / 1000} segundos...`);
 
-                await citasCollection.add({
-                    fabricante: fabricante,
-                    // Se eliminó el campo 'telefono'
-                    fecha: fecha,
-                    hora: hora24, 
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                const hora12Display = convertTo12HourFormat(hora24);
-                const fechaFormateada = new Date(fecha + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                // Almacenar los detalles de la cita para el PDF
-                lastBookedAppointment = {
-                    fabricante: fabricante,
-                    // Se eliminó el campo 'telefono'
-                    fecha: fechaFormateada,
-                    hora: hora12Display
-                };
-                mostrarFeedback(`¡Cita agendada para ${fabricante} el ${fechaFormateada} a las ${hora12Display} con éxito!`, false, true);
-                
-                citaForm.reset();
-                horaSelect.innerHTML = '<option value="" disabled selected>Seleccione una hora</option>';
-                horaSelect.disabled = true;
-                diaSelect.value = "";
-            } catch (error) {
-                console.error("Error agendando la cita: ", error);
-                mostrarFeedback("Error al agendar la cita. Inténtelo de nuevo.", true, false);
-            }
+            setTimeout(async () => {
+                try {
+                    // Log de depuración para ver los datos que se intentan guardar
+                    const dataToSave = {
+                        fabricante: fabricante,
+                        fecha: fecha,
+                        hora: hora24, 
+                        timestamp: serverTimestamp()
+                    };
+                    console.log("Intentando guardar cita con los siguientes datos después del retardo:", dataToSave);
+
+                    // Antes de guardar, verificar si el horario ya fue ocupado por otro usuario
+                    // (Esto es una doble verificación para evitar colisiones)
+                    const q = query(citasCollection, where('fecha', '==', fecha), where('hora', '==', hora24));
+                    const snapshot = await getDocs(q);
+                    if (!snapshot.empty) {
+                        mostrarFeedback("Lo sentimos, este horario acaba de ser ocupado por otro usuario. Por favor, seleccione otro.", true);
+                        actualizarHorariosDisponibles(); // Vuelve a cargar los horarios para reflejar el cambio
+                        return;
+                    }
+
+                    // Agendar la cita si el horario está disponible
+                    await addDoc(citasCollection, dataToSave);
+                    
+                    const hora12Display = convertTo12HourFormat(hora24);
+                    const fechaFormateada = new Date(fecha + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    
+                    // Almacenar los detalles de la cita para el PDF
+                    lastBookedAppointment = {
+                        fabricante: fabricante,
+                        fecha: fechaFormateada,
+                        hora: hora12Display
+                    };
+                    mostrarFeedback(`¡Cita agendada para ${fabricante} el ${fechaFormateada} a las ${hora12Display} con éxito!`, false, true);
+                    
+                    // Limpiar el formulario y actualizar los horarios
+                    citaForm.reset();
+                    horaSelect.innerHTML = '<option value="" disabled selected>Seleccione una hora</option>';
+                    horaSelect.disabled = true;
+                    diaSelect.value = "";
+                    actualizarHorariosDisponibles(); // Recargar horarios para mostrar el recién ocupado
+                } catch (error) {
+                    console.error("Error agendando la cita: ", error);
+                    let errorMessage = "Error al agendar la cita. Esto puede deberse a las reglas de seguridad de Firebase, la falta de índices o problemas de conexión. Inténtelo de nuevo.";
+                    if (error.message) {
+                        errorMessage += ` Detalles: ${error.message}`;
+                    }
+                    mostrarFeedback(errorMessage, true, false);
+                } finally {
+                    // Siempre re-habilitar el botón y restaurar su texto al finalizar
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Agendar Cita';
+                    submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            }, randomDelay);
         });
         // Función para generar el PDF del Acta de Entrega
         function generarActaEntregaPDF() {
@@ -430,15 +566,6 @@
             doc.setFont(undefined, 'normal');
             doc.text(citaDetails.fabricante, margen + 30, yPos);
             yPos += 10;
-
-            // Se eliminó la línea de teléfono del PDF
-            /*
-            doc.setFont(undefined, 'bold');
-            doc.text("Teléfono:", margen, yPos);
-            doc.setFont(undefined, 'normal');
-            doc.text(citaDetails.telefono, margen + 30, yPos);
-            yPos += 10;
-            */
 
             doc.setFont(undefined, 'bold');
             doc.text("Fecha:", margen, yPos);
