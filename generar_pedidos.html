@@ -453,8 +453,15 @@
 
                 if (coincideAsesor && coincideBusqueda && coincideDespacho) {
                     registroElement.style.display = 'block'; // Show the record
-                    totalPares += parseInt(registroElement.querySelector('.num_pares')?.innerText.split(': ')[1] || 0);
-                    valorTotalFiltrado += parseFloat(registroElement.querySelector('.valor_total_raw')?.innerText || 0);
+                    // Only sum if the record is currently visible
+                    const numParesElement = registroElement.querySelector('.num_pares');
+                    if (numParesElement) {
+                        totalPares += parseInt(numParesElement.innerText.split(': ')[1] || 0);
+                    }
+                    const valorTotalRawElement = registroElement.querySelector('.valor_total_raw');
+                    if (valorTotalRawElement) {
+                        valorTotalFiltrado += parseFloat(valorTotalRawElement.innerText || 0);
+                    }
                 } else {
                     registroElement.style.display = 'none'; // Hide the record
                 }
@@ -560,12 +567,14 @@
 
                             let recordContentHtml = '';
                             if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                                // Simplified view
+                                // Simplified view for 'Despachados' and 'No Despachados'
                                 recordContentHtml = `
                                     <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
-                                    <p>Número de Pares: ${registro.num_pares || 0}</p>
-                                    <p>Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
+                                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
                                     <p>Hora: ${horaFormateada}</p>
+                                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                                 `;
                             } else {
                                 // Full view (for 'all' filter)
@@ -1093,6 +1102,12 @@
 
         // Event listeners para los nuevos botones de filtro de despacho
         document.addEventListener('DOMContentLoaded', () => {
+            // Remove any existing dynamic filter buttons to prevent duplication on re-render
+            const existingFilterContainer = document.querySelector('.flex.space-x-2.mt-1.mb-4');
+            if (existingFilterContainer) {
+                existingFilterContainer.remove();
+            }
+
             const filterAllButton = document.createElement('button');
             filterAllButton.id = 'filterAllButton';
             filterAllButton.className = 'dispatch-filter-button';
@@ -1100,7 +1115,7 @@
             filterAllButton.addEventListener('click', () => {
                 currentDispatchFilter = 'all';
                 setActiveDispatchFilterButton('all');
-                filtrarYBuscarPedidos();
+                iniciarVistaPedidosEnTiempoReal(); // Re-render the list based on the new filter
             });
 
             const filterDespachadosButton = document.createElement('button');
@@ -1110,7 +1125,7 @@
             filterDespachadosButton.addEventListener('click', () => {
                 currentDispatchFilter = 'despachados';
                 setActiveDispatchFilterButton('despachados');
-                filtrarYBuscarPedidos();
+                iniciarVistaPedidosEnTiempoReal(); // Re-render the list based on the new filter
             });
 
             const filterNoDespachadosButton = document.createElement('button');
@@ -1120,7 +1135,7 @@
             filterNoDespachadosButton.addEventListener('click', () => {
                 currentDispatchFilter = 'noDespachados';
                 setActiveDispatchFilterButton('noDespachados');
-                filtrarYBuscarPedidos();
+                iniciarVistaPedidosEnTiempoReal(); // Re-render the list based on the new filter
             });
 
             const filterContainer = document.createElement('div');
@@ -1142,23 +1157,6 @@
             // Set initial active button
             setActiveDispatchFilterButton(currentDispatchFilter);
         });
-
-        // This function will be removed or commented out if clearAllFilters is not defined elsewhere
-        // If clearAllFilters is intended to clear *all* filters, including search and asesor dropdown
-        // then integrate the dispatch filter reset into that function.
-        // For now, I'm just adding the dispatch filter reset directly where it's used.
-        /*
-        const originalClearAllFilters = window.clearAllFilters; // Guardar referencia a la función original si existe
-        window.clearAllFilters = function() {
-            if (originalClearAllFilters) {
-                originalClearAllFilters(); // Llamar a la función original si existe
-            }
-            // Resetear los filtros de despacho
-            currentDispatchFilter = 'all';
-            setActiveDispatchFilterButton('all');
-            filtrarYBuscarPedidos(); // Re-aplicar todos los filtros
-        };
-        */
 
         // New warning modal for "Número de Pares"
         function showWarningModal() {
@@ -1310,10 +1308,6 @@
             <div class="form-field search-bar-container">
                 <label for="search_term">Buscar Pedido (Cliente, Código, Asesor, Producto):</label>
                 <input type="text" id="search_term" placeholder="Escriba para buscar...">
-            </div>
-            <div class="flex space-x-2 mt-1 mb-4"> <button id="filterAllButton" class="dispatch-filter-button">Todos</button>
-                <button id="filterDespachadosButton" class="dispatch-filter-button">Despachados</button>
-                <button id="filterNoDespachadosButton" class="dispatch-filter-button">No Despachados</button>
             </div>
             <div class="form-field">
                 <label>Filtrar por Asesor:</label>
