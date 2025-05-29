@@ -268,8 +268,6 @@
             authDomain: "lazapateria-c4157.firebaseapp.com",
             projectId: "lazapateria-c4157",
             storageBucket: "lazapateria-c4157.firebasestorage.app",
-            messagingSenderId: "300241769138",
-            appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
             measurementId: "G-HVG7615JEE"
         };
         firebase.initializeApp(firebaseConfig);
@@ -426,9 +424,9 @@
             
             let totalPares = 0;
             let valorTotalFiltrado = 0;
-            let visibleTotalCount = 0; // New: count for currently visible records
-            let visibleDespachadosCount = 0; // New: counts for currently visible despachados
-            let visibleNoDespachadosCount = 0; // New: counts for currently visible no despachados
+            let visibleTotalCount = 0; // Count for the currently displayed tab (all, despachados, noDespachados)
+            let totalDespachadosFiltered = 0; // Count for despachados matching asesor/search
+            let totalNoDespachadosFiltered = 0; // Count for noDespachados matching asesor/search
 
 
             const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
@@ -466,10 +464,26 @@
                     coincideUsuario = usuarioDelRegistro === currentUserId;
                 }
 
-                if (coincideAsesor && coincideBusqueda && recordShouldBeDisplayedBasedOnDispatchFilter && coincideUsuario) {
-                    recordElement.style.display = 'block'; // Show the record
-                    visibleTotalCount++; // Increment count for currently visible records
-                    // Only sum if the record is currently visible
+                // Calculate the counts for the buttons *before* applying the currentDispatchFilter for display
+                if (coincideAsesor && coincideBusqueda && coincideUsuario) {
+                    if (despachadoDelRegistro) {
+                        totalDespachadosFiltered++;
+                    } else {
+                        totalNoDespachadosFiltered++;
+                    }
+                }
+
+                // Now, determine if the record should be displayed based on the currentDispatchFilter
+                let recordShouldBeDisplayed = true;
+                if (currentDispatchFilter === 'despachados') {
+                    recordShouldBeDisplayed = despachadoDelRegistro;
+                } else if (currentDispatchFilter === 'noDespachados') {
+                    recordShouldBeDisplayed = !despachadoDelRegistro;
+                }
+
+                if (coincideAsesor && coincideBusqueda && coincideUsuario && recordShouldBeDisplayed) {
+                    recordElement.style.display = 'block';
+                    visibleTotalCount++; // This counts only records visible in the *current tab*
                     const numParesElement = recordElement.querySelector('.num_pares');
                     if (numParesElement) {
                         totalPares += parseInt(numParesElement.innerText.split(': ')[1] || 0);
@@ -478,25 +492,18 @@
                     if (valorTotalRawElement) {
                         valorTotalFiltrado += parseFloat(valorTotalRawElement.innerText || 0);
                     }
-
-                    // Increment filtered dispatch counts only for records that are currently visible
-                    if (despachadoDelRegistro) {
-                        visibleDespachadosCount++;
-                    } else {
-                        visibleNoDespachadosCount++;
-                    }
                 } else {
-                    recordElement.style.display = 'none'; // Hide the record
+                    recordElement.style.display = 'none';
                 }
             });
-            // Update summary totals
+
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
             document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
 
-            // Update the button counts based on currently visible records
-            document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`;
-            document.getElementById('filterDespachadosButton').textContent = `Despachados (${visibleDespachadosCount})`;
-            document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${visibleNoDespachadosCount})`;
+            // Update the button counts using the newly calculated totals, which are independent of the current display filter
+            document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`; // This is still correct for 'all' tab
+            document.getElementById('filterDespachadosButton').textContent = `Despachados (${totalDespachadosFiltered})`;
+            document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${totalNoDespachadosFiltered})`;
         }
         
         function iniciarVistaPedidosEnTiempoReal() {
@@ -530,9 +537,6 @@
                 let pedidosHTML = '';
                 let asesores = new Set(); // To populate asesor filter dropdown
                 let resumenAsesores = {}; // For admin summary
-                // totalPedidosCountForButtons, despachadosCountForButtons, noDespachadosCountForButtons
-                // are now calculated in filtrarYBuscarPedidos for dynamic filtering.
-                // These variables are no longer needed here for button counts.
 
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
