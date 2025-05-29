@@ -212,6 +212,7 @@
             border-radius: 4px;
             cursor: pointer;
             transition: all 0.2s ease;
+            margin-right: 5px; /* Espacio entre botones */
         }
         .dispatch-filter-button:hover {
             background-color: #e0e0e0;
@@ -222,18 +223,10 @@
             border-color: #4CAF50;
             box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
         }
-        .dispatch-filter-button.active.bg-yellow-500 {
-            background-color: #DAA520; /* Darker yellow for active */
-            border-color: #DAA520;
-        }
-        .dispatch-filter-button.active.bg-green-500 {
-            background-color: #388E3C; /* Darker green for active */
-            border-color: #388E3C;
-        }
-        .dispatch-filter-button.active.bg-gray-300 {
-            background-color: #616161; /* Darker gray for active */
-            border-color: #616161;
-            color: white;
+        /* Estilo específico para el botón "No Despachados" cuando está activo */
+        .dispatch-filter-button.active.no-despachados-active {
+            background-color: #dc3545; /* Rojo */
+            border-color: #dc3545;
         }
         /* Styles for product/abono items in modification modal */
         .product-item, .abono-item {
@@ -562,15 +555,21 @@
                             const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
                             // Format date and time
                             const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
+                            const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
 
-                            pedidosHTML += `
-                                <div class="record" 
-                                     data-id="${doc.id}" 
-                                     data-asesor="${registro.asesor || 'N/A'}" 
-                                     data-cliente="${registro.cliente || 'N/A'}"
-                                     data-codigo="${registro.codigo_unico || 'N/A'}"
-                                     data-productos="${productosTextoParaBusqueda.trim()}"
-                                     data-despachado="${estaDespachado}">
+
+                            let recordContentHtml = '';
+                            if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
+                                // Simplified view
+                                recordContentHtml = `
+                                    <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
+                                    <p>Número de Pares: ${registro.num_pares || 0}</p>
+                                    <p>Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                                    <p>Hora: ${horaFormateada}</p>
+                                `;
+                            } else {
+                                // Full view (for 'all' filter)
+                                recordContentHtml = `
                                     <p><strong>Registro ${index + 1}</strong></p>
                                     <p>Fecha y Hora: ${fechaHoraFormateada}</p>
                                     <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
@@ -584,9 +583,31 @@
                                     <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                                     <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                                     ${statusTextHTML}
-                                    ${controlesHTML} ${estaDespachado ? '<div class="despachado-sello">DESPACHADO</div>' : ''}
-                                    <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
-                                    <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
+                                    ${controlesHTML}
+                                `;
+                            }
+
+                            // Add the despachado-sello conditionally
+                            const despachadoSelloHtml = estaDespachado && currentDispatchFilter === 'despachados' ? '<div class="despachado-sello">DESPACHADO</div>' : '';
+
+                            // Always include modification/deletion buttons
+                            const buttonsHtml = `
+                                <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
+                                <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
+                            `;
+
+
+                            pedidosHTML += `
+                                <div class="record" 
+                                     data-id="${doc.id}" 
+                                     data-asesor="${registro.asesor || 'N/A'}" 
+                                     data-cliente="${registro.cliente || 'N/A'}"
+                                     data-codigo="${registro.codigo_unico || 'N/A'}"
+                                     data-productos="${productosTextoParaBusqueda.trim()}"
+                                     data-despachado="${estaDespachado}">
+                                    ${recordContentHtml}
+                                    ${despachadoSelloHtml}
+                                    ${buttonsHtml}
                                     <hr>
                                 </div>
                             `;
@@ -1058,6 +1079,7 @@
             const allDispatchButtons = document.querySelectorAll('.dispatch-filter-button');
             allDispatchButtons.forEach(button => {
                 button.classList.remove('active');
+                button.classList.remove('no-despachados-active'); // Remove specific class for red
             });
             if (filterType === 'all') {
                 document.getElementById('filterAllButton').classList.add('active');
@@ -1065,6 +1087,7 @@
                 document.getElementById('filterDespachadosButton').classList.add('active');
             } else if (filterType === 'noDespachados') {
                 document.getElementById('filterNoDespachadosButton').classList.add('active');
+                document.getElementById('filterNoDespachadosButton').classList.add('no-despachados-active'); // Add specific class for red
             }
         }
 
@@ -1072,7 +1095,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const filterAllButton = document.createElement('button');
             filterAllButton.id = 'filterAllButton';
-            filterAllButton.className = 'dispatch-filter-button'; // Adjusted class for general style
+            filterAllButton.className = 'dispatch-filter-button';
             filterAllButton.textContent = 'Todos';
             filterAllButton.addEventListener('click', () => {
                 currentDispatchFilter = 'all';
@@ -1082,7 +1105,7 @@
 
             const filterDespachadosButton = document.createElement('button');
             filterDespachadosButton.id = 'filterDespachadosButton';
-            filterDespachadosButton.className = 'dispatch-filter-button'; // Adjusted class
+            filterDespachadosButton.className = 'dispatch-filter-button';
             filterDespachadosButton.textContent = 'Despachados';
             filterDespachadosButton.addEventListener('click', () => {
                 currentDispatchFilter = 'despachados';
@@ -1092,7 +1115,7 @@
 
             const filterNoDespachadosButton = document.createElement('button');
             filterNoDespachadosButton.id = 'filterNoDespachadosButton';
-            filterNoDespachadosButton.className = 'dispatch-filter-button'; // Adjusted class
+            filterNoDespachadosButton.className = 'dispatch-filter-button';
             filterNoDespachadosButton.textContent = 'No Despachados';
             filterNoDespachadosButton.addEventListener('click', () => {
                 currentDispatchFilter = 'noDespachados';
@@ -1287,6 +1310,10 @@
             <div class="form-field search-bar-container">
                 <label for="search_term">Buscar Pedido (Cliente, Código, Asesor, Producto):</label>
                 <input type="text" id="search_term" placeholder="Escriba para buscar...">
+            </div>
+            <div class="flex space-x-2 mt-1 mb-4"> <button id="filterAllButton" class="dispatch-filter-button">Todos</button>
+                <button id="filterDespachadosButton" class="dispatch-filter-button">Despachados</button>
+                <button id="filterNoDespachadosButton" class="dispatch-filter-button">No Despachados</button>
             </div>
             <div class="form-field">
                 <label>Filtrar por Asesor:</label>
