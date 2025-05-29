@@ -426,8 +426,8 @@
             
             let totalPares = 0;
             let valorTotalFiltrado = 0;
-            let visibleDespachadosCount = 0;
-            let visibleNoDespachadosCount = 0;
+            // No longer calculating visibleDespachadosCount and visibleNoDespachadosCount here
+            // as they are now calculated in iniciarVistaPedidosEnTiempoReal based on all relevant data
 
             const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
             const currentUserId = datosUsuario.usuario;
@@ -457,7 +457,7 @@
                     coincideDespacho = !despachadoDelRegistro;
                 }
 
-                // Add operator-specific filtering for visibility and counts
+                // Add operator-specific filtering for visibility
                 let coincideUsuario = true;
                 if (isOperator) {
                     coincideUsuario = usuarioDelRegistro === currentUserId;
@@ -474,12 +474,6 @@
                     if (valorTotalRawElement) {
                         valorTotalFiltrado += parseFloat(valorTotalRawElement.innerText || 0);
                     }
-                    // Count visible despachados/no despachados
-                    if (despachadoDelRegistro) {
-                        visibleDespachadosCount++;
-                    } else {
-                        visibleNoDespachadosCount++;
-                    }
                 } else {
                     recordElement.style.display = 'none'; // Hide the record
                 }
@@ -488,9 +482,8 @@
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
             document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
 
-            // Update button counts based on visible records
-            document.getElementById('filterDespachadosButton').textContent = `Despachados (${visibleDespachadosCount})`;
-            document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${visibleNoDespachadosCount})`;
+            // The button counts are now updated in iniciarVistaPedidosEnTiempoReal
+            // This function only handles visibility and totals for the currently displayed subset.
         }
         
         function iniciarVistaPedidosEnTiempoReal() {
@@ -516,7 +509,12 @@
                     let pedidosHTML = '';
                     let asesores = new Set(); // To populate asesor filter dropdown
                     let resumenAsesores = {}; // For admin summary
-                    let totalPedidosCountForUser = 0; // New variable for user-specific total
+                    let totalPedidosCountForUser = 0; 
+                    let despachadosCountForUser = 0; // New: counts for user-specific despachados
+                    let noDespachadosCountForUser = 0; // New: counts for user-specific no despachados
+
+                    const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
+                    const currentUserId = datosUsuario.usuario;
 
                     querySnapshot.forEach((doc, index) => {
                         const registro = doc.data();
@@ -528,6 +526,13 @@
                         // Only process records visible to the current user for display and counts
                         if (esAdministrador || esPropietario) {
                             totalPedidosCountForUser++; // Increment total for the user
+
+                            // Calculate despachados/no despachados counts for the current user
+                            if (estaDespachado) {
+                                despachadosCountForUser++;
+                            } else {
+                                noDespachadosCountForUser++;
+                            }
 
                             if(registro.asesor) asesores.add(registro.asesor); // Add asesor to set
 
@@ -565,7 +570,7 @@
                             let statusTextHTML = ''; // HTML for status text for non-admins
 
                             if (esAdministrador) {
-                                // Show "Marcar como Despachado" checkbox only if not in 'all' filter
+                                // Show "Marcar como Despachado" checkbox only if current filter is 'despachados' or 'noDespachados'
                                 if (currentDispatchFilter !== 'all') {
                                     controlesHTML += `
                                         <div class="control-container control-container-despachado">
@@ -573,7 +578,7 @@
                                             <label for="despachar_${doc.id}">Marcar como Despachado</label>
                                         </div>`;
                                 }
-                                // Show "Bloquear Pedido" checkbox only if in 'all' filter
+                                // Show "Bloquear Pedido" checkbox only if current filter is 'all'
                                 if (currentDispatchFilter === 'all') {
                                     controlesHTML += `
                                         <div class="control-container">
@@ -680,10 +685,10 @@
                         filtroAsesorDropdown.value = valorActualFiltro;
                     }
 
-                    // Update button counts based on total fetched records initially
-                    // For 'Todos' button, use the user-specific count
+                    // Update button counts based on total fetched records for the current user
                     document.getElementById('filterAllButton').textContent = `Todos (${totalPedidosCountForUser})`;
-                    // The other two counts will be updated by filtrarYBuscarPedidos
+                    document.getElementById('filterDespachadosButton').textContent = `Despachados (${despachadosCountForUser})`;
+                    document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${noDespachadosCountForUser})`;
                     
                     filtrarYBuscarPedidos(); // Apply current filters and search term
                     setActiveDispatchFilterButton(currentDispatchFilter); // Set initial active dispatch filter button
