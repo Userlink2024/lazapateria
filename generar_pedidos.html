@@ -426,8 +426,7 @@
             
             let totalPares = 0;
             let valorTotalFiltrado = 0;
-            // No longer calculating visibleDespachadosCount and visibleNoDespachadosCount here
-            // as they are now calculated in iniciarVistaPedidosEnTiempoReal based on all relevant data
+            let visibleTotalCount = 0; // New: count for currently visible records
 
             const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
             const currentUserId = datosUsuario.usuario;
@@ -465,6 +464,7 @@
 
                 if (coincideAsesor && coincideBusqueda && coincideDespacho && coincideUsuario) {
                     recordElement.style.display = 'block'; // Show the record
+                    visibleTotalCount++; // Increment count for currently visible records
                     // Only sum if the record is currently visible
                     const numParesElement = recordElement.querySelector('.num_pares');
                     if (numParesElement) {
@@ -482,8 +482,11 @@
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
             document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
 
-            // The button counts are now updated in iniciarVistaPedidosEnTiempoReal
-            // This function only handles visibility and totals for the currently displayed subset.
+            // Update the "Todos" button count based on currently visible records
+            document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`;
+
+            // The despachados/no despachados counts are updated in iniciarVistaPedidosEnTiempoReal
+            // and represent the total accessible counts, not filtered by asesor/search.
         }
         
         function iniciarVistaPedidosEnTiempoReal() {
@@ -497,213 +500,216 @@
                 pedidosListenerUnsubscribe();
             }
 
-            // Listen for real-time updates, order by fecha_hora ascending (earliest first)
-            pedidosListenerUnsubscribe = db.collection('registros').orderBy('fecha_hora', 'asc') 
-                .onSnapshot(querySnapshot => {
-                    console.log("Datos de pedidos recibidos/actualizados.");
-                    
-                    if (!isInitialLoadPedidos) { // Save scroll position if not initial load
-                        scrollPosPedidos = listaPedidosContainer.scrollTop;
+            // Determine the query based on user permissions
+            let query = db.collection('registros').orderBy('fecha_hora', 'asc');
+            const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
+            const currentUserId = datosUsuario.usuario;
+
+            // If operator, filter by their user ID
+            if (isOperator) {
+                query = query.where('usuario', '==', currentUserId);
+            }
+
+            pedidosListenerUnsubscribe = query.onSnapshot(querySnapshot => {
+                console.log("Datos de pedidos recibidos/actualizados.");
+                
+                if (!isInitialLoadPedidos) { // Save scroll position if not initial load
+                    scrollPosPedidos = listaPedidosContainer.scrollTop;
+                }
+
+                let pedidosHTML = '';
+                let asesores = new Set(); // To populate asesor filter dropdown
+                let resumenAsesores = {}; // For admin summary
+                let totalPedidosCountForButtons = 0; // Total count for "Todos" button (before asesor/search filter)
+                let despachadosCountForButtons = 0; // Total count for "Despachados" button
+                let noDespachadosCountForButtons = 0; // Total count for "No Despachados" button
+
+                querySnapshot.forEach((doc, index) => {
+                    const registro = doc.data();
+                    const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
+                    const esPropietario = registro.usuario === datosUsuario.usuario;
+                    const estaBloqueado = registro.bloqueado === true;
+                    const estaDespachado = registro.despachado === true;
+
+                    // These counts are for the buttons, reflecting the total accessible records for the user
+                    totalPedidosCountForButtons++; 
+                    if (estaDespachado) {
+                        despachadosCountForButtons++;
+                    } else {
+                        noDespachadosCountForButtons++;
                     }
 
-                    let pedidosHTML = '';
-                    let asesores = new Set(); // To populate asesor filter dropdown
-                    let resumenAsesores = {}; // For admin summary
-                    let totalPedidosCountForUser = 0; 
-                    let despachadosCountForUser = 0; // New: counts for user-specific despachados
-                    let noDespachadosCountForUser = 0; // New: counts for user-specific no despachados
+                    if(registro.asesor) asesores.add(registro.asesor); // Add asesor to set
 
-                    const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
-                    const currentUserId = datosUsuario.usuario;
-
-                    querySnapshot.forEach((doc, index) => {
-                        const registro = doc.data();
-                        const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
-                        const esPropietario = registro.usuario === datosUsuario.usuario;
-                        const estaBloqueado = registro.bloqueado === true;
-                        const estaDespachado = registro.despachado === true;
-
-                        // Only process records visible to the current user for display and counts
-                        if (esAdministrador || esPropietario) {
-                            totalPedidosCountForUser++; // Increment total for the user
-
-                            // Calculate despachados/no despachados counts for the current user
-                            if (estaDespachado) {
-                                despachadosCountForUser++;
-                            } else {
-                                noDespachadosCountForUser++;
-                            }
-
-                            if(registro.asesor) asesores.add(registro.asesor); // Add asesor to set
-
-                            // Calculate summary for admin
-                            if (registro.asesor && !resumenAsesores[registro.asesor]) {
-                                resumenAsesores[registro.asesor] = { num_pares: 0, valor_vendido: 0 };
-                            }
-                            if(registro.asesor){ // Ensure asesor exists before adding to summary
-                                resumenAsesores[registro.asesor].num_pares += parseInt(registro.num_pares || 0);
-                                resumenAsesores[registro.asesor].valor_vendido += parseFloat(registro.valor_total || 0);
-                            }
-                            
-                            let productosTextoParaBusqueda = ""; // Concatenated product info for searching
-                            let productosHTMLList = 'Sin productos';
-                            if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                                productosHTMLList = '<ul>';
-                                registro.productos.forEach((producto, i) => {
-                                    const prodText = `${producto.referencia || 'N/A'} - ${producto.color || 'N/A'} - ${producto.talla || 'N/A'} - $${(producto.precio || 0).toLocaleString('es-CO')}`;
-                                    productosHTMLList += `<li>Producto ${i + 1}: ${prodText}</li>`;
-                                    productosTextoParaBusqueda += `${producto.referencia} ${producto.color} ${producto.talla} `;
-                                });
-                                productosHTMLList += '</ul>';
-                            }
-
-                            let abonosHTMLList = 'Sin abonos';
-                            if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                                abonosHTMLList = '<ul>';
-                                registro.abonos.forEach((abono, j) => {
-                                    abonosHTMLList += `<li>Abono ${j + 1}: ${abono.fecha || 'N/A'} - $${(abono.monto || 0).toLocaleString('es-CO')}</li>`;
-                                });
-                                abonosHTMLList += '</ul>';
-                            }
-
-                            let controlesHTML = ''; // HTML for admin controls (checkboxes)
-                            let statusTextHTML = ''; // HTML for status text for non-admins
-
-                            if (esAdministrador) {
-                                // Show "Marcar como Despachado" checkbox only if current filter is 'despachados' or 'noDespachados'
-                                if (currentDispatchFilter !== 'all') {
-                                    controlesHTML += `
-                                        <div class="control-container control-container-despachado">
-                                            <input type="checkbox" id="despachar_${doc.id}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${doc.id}', this.checked)">
-                                            <label for="despachar_${doc.id}">Marcar como Despachado</label>
-                                        </div>`;
-                                }
-                                // Show "Bloquear Pedido" checkbox only if current filter is 'all'
-                                if (currentDispatchFilter === 'all') {
-                                    controlesHTML += `
-                                        <div class="control-container">
-                                            <input type="checkbox" id="bloquear_${doc.id}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${doc.id}', this.checked)">
-                                            <label for="bloquear_${doc.id}">Bloquear Pedido</label>
-                                        </div>`;
-                                }
-                            } else { // For non-admins, show status text
-                                if (estaBloqueado) {
-                                     statusTextHTML += `<p class="status-bloqueado">Pedido Bloqueado</p>`;
-                                }
-                                if (estaDespachado) {
-                                     statusTextHTML += `<p class="status-despachado">Pedido Despachado</p>`;
-                                }
-                            }
-                            
-                            // Operators cannot modify/delete if blocked OR dispatched
-                            const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
-                            // Format date and time
-                            const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
-                            const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
-
-
-                            let recordContentHtml = '';
-                            if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                                // Simplified view for 'Despachados' and 'No Despachados'
-                                recordContentHtml = `
-                                    <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
-                                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                                    <p>Hora: ${horaFormateada}</p>
-                                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                                `;
-                            } else {
-                                // Full view (for 'all' filter)
-                                recordContentHtml = `
-                                    <p><strong>Registro ${index + 1}</strong></p>
-                                    <p>Fecha y Hora: ${fechaHoraFormateada}</p>
-                                    <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
-                                    <p>Cliente: ${registro.cliente || 'N/A'}</p>
-                                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                                    ${productosHTMLList}
-                                    ${abonosHTMLList}
-                                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                                    <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
-                                    ${statusTextHTML}
-                                `;
-                            }
-
-                            // Add the despachado-sello conditionally
-                            const despachadoSelloHtml = estaDespachado && currentDispatchFilter === 'despachados' ? '<div class="despachado-sello">DESPACHADO</div>' : '';
-
-                            // Always include modification/deletion buttons
-                            const buttonsHtml = `
-                                <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
-                                <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
-                            `;
-
-
-                            pedidosHTML += `
-                                <div class="record" 
-                                     data-id="${doc.id}" 
-                                     data-asesor="${registro.asesor || 'N/A'}" 
-                                     data-cliente="${registro.cliente || 'N/A'}"
-                                     data-codigo="${registro.codigo_unico || 'N/A'}"
-                                     data-productos="${productosTextoParaBusqueda.trim()}"
-                                     data-despachado="${estaDespachado}"
-                                     data-usuario="${registro.usuario || 'N/A'}"> ${recordContentHtml}
-                                    ${despachadoSelloHtml}
-                                    ${controlesHTML} ${buttonsHtml}
-                                    <hr>
-                                </div>
-                            `;
+                    // Calculate summary for admin
+                    if (esAdministrador) { // Only admins see the summary
+                        if (registro.asesor && !resumenAsesores[registro.asesor]) {
+                            resumenAsesores[registro.asesor] = { num_pares: 0, valor_vendido: 0 };
                         }
-                    }); // End querySnapshot.forEach
+                        if(registro.asesor){ // Ensure asesor exists before adding to summary
+                            resumenAsesores[registro.asesor].num_pares += parseInt(registro.num_pares || 0);
+                            resumenAsesores[registro.asesor].valor_vendido += parseFloat(registro.valor_total || 0);
+                        }
+                    }
                     
-                    listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>'; // Update pedidos list
+                    let productosTextoParaBusqueda = ""; // Concatenated product info for searching
+                    let productosHTMLList = 'Sin productos';
+                    if (Array.isArray(registro.productos) && registro.productos.length > 0) {
+                        productosHTMLList = '<ul>';
+                        registro.productos.forEach((producto, i) => {
+                            const prodText = `${producto.referencia || 'N/A'} - ${producto.color || 'N/A'} - ${producto.talla || 'N/A'} - $${(producto.precio || 0).toLocaleString('es-CO')}`;
+                            productosHTMLList += `<li>Producto ${i + 1}: ${prodText}</li>`;
+                            productosTextoParaBusqueda += `${producto.referencia} ${producto.color} ${producto.talla} `;
+                        });
+                        productosHTMLList += '</ul>';
+                    }
+
+                    let abonosHTMLList = 'Sin abonos';
+                    if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
+                        abonosHTMLList = '<ul>';
+                        registro.abonos.forEach((abono, j) => {
+                            abonosHTMLList += `<li>Abono ${j + 1}: ${abono.fecha || 'N/A'} - $${(abono.monto || 0).toLocaleString('es-CO')}</li>`;
+                        });
+                        abonosHTMLList += '</ul>';
+                    }
+
+                    let controlesHTML = ''; // HTML for admin controls (checkboxes)
+                    let statusTextHTML = ''; // HTML for status text for non-admins
+
+                    if (esAdministrador) {
+                        // Show "Marcar como Despachado" checkbox only if current filter is 'despachados' or 'noDespachados'
+                        if (currentDispatchFilter !== 'all') {
+                            controlesHTML += `
+                                <div class="control-container control-container-despachado">
+                                    <input type="checkbox" id="despachar_${doc.id}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${doc.id}', this.checked)">
+                                    <label for="despachar_${doc.id}">Marcar como Despachado</label>
+                                </div>`;
+                        }
+                        // Show "Bloquear Pedido" checkbox only if current filter is 'all'
+                        if (currentDispatchFilter === 'all') {
+                            controlesHTML += `
+                                <div class="control-container">
+                                    <input type="checkbox" id="bloquear_${doc.id}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${doc.id}', this.checked)">
+                                    <label for="bloquear_${doc.id}">Bloquear Pedido</label>
+                                </div>`;
+                        }
+                    } else { // For non-admins, show status text
+                        if (estaBloqueado) {
+                             statusTextHTML += `<p class="status-bloqueado">Pedido Bloqueado</p>`;
+                        }
+                        if (estaDespachado) {
+                             statusTextHTML += `<p class="status-despachado">Pedido Despachado</p>`;
+                        }
+                    }
                     
-                    // Show summary if admin
-                    if (datosUsuario.permisos.toLowerCase() === 'administrador') {
-                        mostrarResumenAsesores(resumenAsesores);
+                    // Operators cannot modify/delete if blocked OR dispatched
+                    const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
+                    // Format date and time
+                    const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
+                    const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
+
+
+                    let recordContentHtml = '';
+                    if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
+                        // Simplified view for 'Despachados' and 'No Despachados'
+                        recordContentHtml = `
+                            <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
+                            <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                            <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
+                            <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                            <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                            <p>Hora: ${horaFormateada}</p>
+                            <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                        `;
                     } else {
-                         document.getElementById('resumen_asesores').innerHTML = ''; // Clear summary if not admin
+                        // Full view (for 'all' filter)
+                        recordContentHtml = `
+                            <p><strong>Registro ${index + 1}</strong></p>
+                            <p>Fecha y Hora: ${fechaHoraFormateada}</p>
+                            <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
+                            <p>Cliente: ${registro.cliente || 'N/A'}</p>
+                            <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                            ${productosHTMLList}
+                            ${abonosHTMLList}
+                            <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
+                            <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                            <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                            <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                            <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
+                            ${statusTextHTML}
+                        `;
                     }
 
-                    // Populate asesor filter dropdown
-                    const filtroAsesorDropdown = document.getElementById('filtro_asesor');
-                    const valorActualFiltro = filtroAsesorDropdown.value; // Save current filter value
-                    
-                    resetearComboBoxAsesor(); // Clear and add "Todos" option
-                    asesores.forEach(asesor => {
-                        const option = document.createElement('option');
-                        option.value = asesor;
-                        option.textContent = asesor;
-                        filtroAsesorDropdown.appendChild(option);
-                    });
-                    // Restore filter selection if possible
-                    if (Array.from(filtroAsesorDropdown.options).some(opt => opt.value === valorActualFiltro)) {
-                        filtroAsesorDropdown.value = valorActualFiltro;
-                    }
+                    // Add the despachado-sello conditionally
+                    const despachadoSelloHtml = estaDespachado && currentDispatchFilter === 'despachados' ? '<div class="despachado-sello">DESPACHADO</div>' : '';
 
-                    // Update button counts based on total fetched records for the current user
-                    document.getElementById('filterAllButton').textContent = `Todos (${totalPedidosCountForUser})`;
-                    document.getElementById('filterDespachadosButton').textContent = `Despachados (${despachadosCountForUser})`;
-                    document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${noDespachadosCountForUser})`;
-                    
-                    filtrarYBuscarPedidos(); // Apply current filters and search term
-                    setActiveDispatchFilterButton(currentDispatchFilter); // Set initial active dispatch filter button
+                    // Always include modification/deletion buttons
+                    const buttonsHtml = `
+                        <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
+                        <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
+                    `;
 
-                    // Restore scroll position
-                    if (isInitialLoadPedidos) {
-                        isInitialLoadPedidos = false; // No longer initial load
-                    } else {
-                        listaPedidosContainer.scrollTop = scrollPosPedidos;
-                    }
 
-                }, error => {
-                    console.error("Error al escuchar los pedidos:", error);
-                    listaPedidosContainer.innerHTML = '<p>Error al cargar los pedidos. Intente de nuevo.</p>';
+                    pedidosHTML += `
+                        <div class="record" 
+                             data-id="${doc.id}" 
+                             data-asesor="${registro.asesor || 'N/A'}" 
+                             data-cliente="${registro.cliente || 'N/A'}"
+                             data-codigo="${registro.codigo_unico || 'N/A'}"
+                             data-productos="${productosTextoParaBusqueda.trim()}"
+                             data-despachado="${estaDespachado}"
+                             data-usuario="${registro.usuario || 'N/A'}"> ${recordContentHtml}
+                            ${despachadoSelloHtml}
+                            ${controlesHTML} ${buttonsHtml}
+                            <hr>
+                        </div>
+                    `;
+                }); // End querySnapshot.forEach
+                
+                listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>'; // Update pedidos list
+                
+                // Show summary if admin
+                if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+                    mostrarResumenAsesores(resumenAsesores);
+                } else {
+                     document.getElementById('resumen_asesores').innerHTML = ''; // Clear summary if not admin
+                }
+
+                // Populate asesor filter dropdown
+                const filtroAsesorDropdown = document.getElementById('filtro_asesor');
+                const valorActualFiltro = filtroAsesorDropdown.value; // Save current filter value
+                
+                resetearComboBoxAsesor(); // Clear and add "Todos" option
+                asesores.forEach(asesor => {
+                    const option = document.createElement('option');
+                    option.value = asesor;
+                    option.textContent = asesor;
+                    filtroAsesorDropdown.appendChild(option);
                 });
+                // Restore filter selection if possible
+                if (Array.from(filtroAsesorDropdown.options).some(opt => opt.value === valorActualFiltro)) {
+                    filtroAsesorDropdown.value = valorActualFiltro;
+                }
+
+                // Update button counts based on total fetched records for the current user
+                document.getElementById('filterAllButton').textContent = `Todos (${totalPedidosCountForButtons})`;
+                document.getElementById('filterDespachadosButton').textContent = `Despachados (${despachadosCountForButtons})`;
+                document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${noDespachadosCountForButtons})`;
+                
+                filtrarYBuscarPedidos(); // Apply current filters and search term
+                setActiveDispatchFilterButton(currentDispatchFilter); // Set initial active dispatch filter button
+
+                // Restore scroll position
+                if (isInitialLoadPedidos) {
+                    isInitialLoadPedidos = false; // No longer initial load
+                } else {
+                    listaPedidosContainer.scrollTop = scrollPosPedidos;
+                }
+
+            }, error => {
+                console.error("Error al escuchar los pedidos:", error);
+                listaPedidosContainer.innerHTML = '<p>Error al cargar los pedidos. Intente de nuevo.</p>';
+            });
         }
         
         async function toggleBloqueoPedido(id, nuevoEstadoBloqueo) {
