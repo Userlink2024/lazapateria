@@ -493,6 +493,61 @@
             document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${totalNoDespachadosFiltered})`;
         }
         
+        // Helper function to update the display of a single record
+        function updateRecordStatusAndButtons(docId, updatedRegistro) {
+            const recordElement = document.querySelector(`.record[data-id="${docId}"]`);
+            if (!recordElement) return;
+
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const estaBloqueado = updatedRegistro.bloqueado === true;
+            const estaDespachado = updatedRegistro.despachado === true;
+
+            // Update data attributes
+            recordElement.dataset.bloqueado = estaBloqueado;
+            recordElement.dataset.despachado = estaDespachado;
+
+            // Update status text
+            const statusMessagesContainer = recordElement.querySelector(`#status-messages-${docId}`);
+            if (statusMessagesContainer) {
+                let newStatusHtml = '';
+                if (!isAdministrator) { // Only operators see status text in this container
+                    if (currentDispatchFilter === 'all' || currentDispatchFilter === 'despachados') {
+                        if (estaBloqueado) {
+                            newStatusHtml += `<p class="status-bloqueado">Pedido Revisado</p>`;
+                        }
+                        if (estaDespachado) {
+                            newStatusHtml += `<p class="status-despachado">Pedido Despachado</p>`;
+                        }
+                    }
+                }
+                statusMessagesContainer.innerHTML = newStatusHtml;
+            }
+
+            // Update buttons disabled state
+            const puedeModificarEliminar = isAdministrator || (!estaBloqueado && !estaDespachado);
+            const modificarButton = recordElement.querySelector('button[onclick*="modificarPedido"]');
+            const eliminarButton = recordElement.querySelector('button[onclick*="eliminarPedido"]');
+
+            if (modificarButton) {
+                modificarButton.disabled = !puedeModificarEliminar;
+                modificarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
+            }
+            if (eliminarButton) {
+                eliminarButton.disabled = !puedeModificarEliminar;
+                eliminarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
+            }
+
+            // Update despachado seal
+            const despachadoSelloContainer = recordElement.querySelector(`#despachado-sello-container-${docId}`);
+            if (despachadoSelloContainer) {
+                if (estaDespachado && currentDispatchFilter === 'despachados') {
+                    despachadoSelloContainer.innerHTML = '<div class="despachado-sello">DESPACHADO</div>';
+                } else {
+                    despachadoSelloContainer.innerHTML = '';
+                }
+            }
+        }
+
         function iniciarVistaPedidosEnTiempoReal() {
             console.log("Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos');
@@ -542,7 +597,6 @@
                     console.log(`Usuario del registro: ${registro.usuario}, Usuario actual (datosUsuario.usuario): ${currentUserId}`);
 
                     const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
-                    const esPropietario = registro.usuario === datosUsuario.usuario;
                     const estaBloqueado = registro.bloqueado === true;
                     const estaDespachado = registro.despachado === true;
 
@@ -581,7 +635,6 @@
                     }
 
                     let controlesHTML = ''; // HTML for admin controls (checkboxes)
-                    let statusTextHTML = ''; // HTML for status text for non-admins
 
                     if (esAdministrador) {
                         // Show "Marcar como Despachado" checkbox only if current filter is 'despachados' or 'noDespachados'
@@ -600,16 +653,6 @@
                                     <label for="bloquear_${doc.id}">Bloquear Pedido</label>
                                 </div>`;
                         }
-                    } else { // For non-admins (operators), show status text
-                        if (currentDispatchFilter === 'all' || currentDispatchFilter === 'despachados') { // MODIFIED LINE: Now show "Revisado" in "Despachados" tab too
-                            if (estaBloqueado) {
-                                statusTextHTML += `<p class="status-bloqueado">Pedido Revisado</p>`; 
-                            }
-                            if (estaDespachado) {
-                                statusTextHTML += `<p class="status-despachado">Pedido Despachado</p>`;
-                            }
-                        }
-                        // For 'noDespachados' tab, statusTextHTML remains empty for operators
                     }
                     
                     // Operators cannot modify/delete if blocked OR dispatched
@@ -630,7 +673,6 @@
                             <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
                             <p>Hora: ${horaFormateada}</p>
                             <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                            ${statusTextHTML}
                         `;
                     } else {
                         // Full view (for 'all' filter)
@@ -647,19 +689,8 @@
                             <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
                             <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                             <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
-                            ${statusTextHTML}
                         `;
                     }
-
-                    // Add the despachado-sello conditionally
-                    const despachadoSelloHtml = estaDespachado && currentDispatchFilter === 'despachados' ? '<div class="despachado-sello">DESPACHADO</div>' : '';
-
-                    // Always include modification/deletion buttons
-                    const buttonsHtml = `
-                        <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
-                        <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
-                    `;
-
 
                     pedidosHTML += `
                         <div class="record" 
@@ -669,9 +700,16 @@
                              data-codigo="${registro.codigo_unico || 'N/A'}"
                              data-productos="${productosTextoParaBusqueda.trim()}"
                              data-despachado="${estaDespachado}"
-                             data-usuario="${registro.usuario || 'N/A'}"> ${recordContentHtml}
-                            ${despachadoSelloHtml}
-                            ${controlesHTML} ${buttonsHtml}
+                             data-bloqueado="${estaBloqueado}"
+                             data-usuario="${registro.usuario || 'N/A'}"> 
+                            ${recordContentHtml}
+                            <div class="status-messages-container" id="status-messages-${doc.id}"></div>
+                            <div class="despachado-sello-container" id="despachado-sello-container-${doc.id}"></div>
+                            ${controlesHTML} 
+                            <div class="record-buttons">
+                                <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
+                                <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
+                            </div>
                             <hr>
                         </div>
                     `;
@@ -679,6 +717,12 @@
                 
                 listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>'; // Update pedidos list
                 
+                // After initial render, apply status and button logic to each record
+                querySnapshot.forEach(doc => {
+                    const registro = doc.data();
+                    updateRecordStatusAndButtons(doc.id, registro);
+                });
+
                 // Show summary if admin
                 if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                     mostrarResumenAsesores(resumenAsesores);
@@ -729,8 +773,12 @@
             try {
                 await db.collection('registros').doc(id).update({ bloqueado: nuevoEstadoBloqueo });
                 console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo}`);
-                // Explicitly re-initiate the view to ensure counts are updated immediately
-                iniciarVistaPedidosEnTiempoReal(); 
+                // Fetch the updated document to get the latest state including 'despachado'
+                const docSnap = await db.collection('registros').doc(id).get();
+                if (docSnap.exists) {
+                    updateRecordStatusAndButtons(id, docSnap.data());
+                }
+                filtrarYBuscarPedidos(); // Re-run filter to update counts and visibility if needed
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
                 alert("Error al cambiar el estado de bloqueo del pedido.");
@@ -750,8 +798,12 @@
             try {
                 await db.collection('registros').doc(id).update({ despachado: nuevoEstadoDespachado });
                 console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado}`);
-                // Explicitly re-initiate the view to ensure counts are updated immediately
-                iniciarVistaPedidosEnTiempoReal(); 
+                // Fetch the updated document to get the latest state including 'bloqueado'
+                const docSnap = await db.collection('registros').doc(id).get();
+                if (docSnap.exists) {
+                    updateRecordStatusAndButtons(id, docSnap.data());
+                }
+                filtrarYBuscarPedidos(); // Re-run filter to update counts and visibility if needed
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
                 alert("Error al cambiar el estado de despachado del pedido.");
