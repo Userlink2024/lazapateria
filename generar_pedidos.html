@@ -276,12 +276,13 @@
 
         let productos = [], abonos = [], valorTotal = 0;
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
-        console.log("Datos del usuario:", datosUsuario);
+        console.log("DEBUG: Datos del usuario al inicio:", datosUsuario);
 
         if (!datosUsuario || !datosUsuario.permisos) {
             // Using alert for simplicity, consider custom modal for better UX
             alert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, inicie sesión de nuevo.");
             datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
+            console.error("DEBUG: Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
         }
 
         let pedidosListenerUnsubscribe = null;
@@ -450,22 +451,8 @@
                                       productosDelRegistro.includes(searchTerm);
                 }
 
-                // This `coincideDespacho` logic is for the *display* of the record, not the button counts
-                let recordShouldBeDisplayedBasedOnDispatchFilter = true;
-                if (currentDispatchFilter === 'despachados') {
-                    recordShouldBeDisplayedBasedOnDispatchFilter = despachadoDelRegistro;
-                } else if (currentDispatchFilter === 'noDespachados') {
-                    recordShouldBeDisplayedBasedOnDispatchFilter = !despachadoDelRegistro;
-                }
-
-                // Add operator-specific filtering for visibility
-                let coincideUsuario = true;
-                if (isOperator) {
-                    coincideUsuario = usuarioDelRegistro === currentUserId;
-                }
-
                 // Calculate the counts for the buttons *before* applying the currentDispatchFilter for display
-                if (coincideAsesor && coincideBusqueda && coincideUsuario) {
+                if (coincideAsesor && coincideBusqueda && (isOperator ? usuarioDelRegistro === currentUserId : true)) {
                     if (despachadoDelRegistro) {
                         totalDespachadosFiltered++;
                     } else {
@@ -481,7 +468,7 @@
                     recordShouldBeDisplayed = !despachadoDelRegistro;
                 }
 
-                if (coincideAsesor && coincideBusqueda && coincideUsuario && recordShouldBeDisplayed) {
+                if (coincideAsesor && coincideBusqueda && (isOperator ? usuarioDelRegistro === currentUserId : true) && recordShouldBeDisplayed) {
                     recordElement.style.display = 'block';
                     visibleTotalCount++; // This counts only records visible in the *current tab*
                     const numParesElement = recordElement.querySelector('.num_pares');
@@ -507,7 +494,7 @@
         }
         
         function iniciarVistaPedidosEnTiempoReal() {
-            console.log("Iniciando vista de pedidos en tiempo real...");
+            console.log("DEBUG: Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos');
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
             listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>'; // Initial loading message
@@ -521,6 +508,8 @@
             let query = db.collection('registros').orderBy('fecha_hora', 'asc');
             const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
             const currentUserId = datosUsuario.usuario;
+            console.log("DEBUG: Rol del usuario para la consulta:", datosUsuario.permisos);
+            console.log("DEBUG: ID de usuario para la consulta (si es operador):", currentUserId);
 
             // If operator, filter by their user ID
             if (isOperator) {
@@ -528,7 +517,8 @@
             }
 
             pedidosListenerUnsubscribe = query.onSnapshot(querySnapshot => {
-                console.log("Datos de pedidos recibidos/actualizados.");
+                console.log("DEBUG: Datos de pedidos recibidos/actualizados.");
+                console.log("DEBUG: Número de documentos recibidos:", querySnapshot.size);
                 
                 if (!isInitialLoadPedidos) { // Save scroll position if not initial load
                     scrollPosPedidos = listaPedidosContainer.scrollTop;
@@ -538,8 +528,19 @@
                 let asesores = new Set(); // To populate asesor filter dropdown
                 let resumenAsesores = {}; // For admin summary
 
+                if (querySnapshot.empty && isOperator) {
+                    pedidosHTML = '<p>No hay pedidos asignados a este operador o no se encontraron pedidos con los filtros actuales.</p>';
+                    console.log("DEBUG: QuerySnapshot está vacío para el operador. Posiblemente no hay pedidos o el ID de usuario no coincide.");
+                } else if (querySnapshot.empty) {
+                    pedidosHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
+                    console.log("DEBUG: QuerySnapshot está vacío. No hay pedidos para mostrar.");
+                }
+
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
+                    console.log(`DEBUG: Procesando documento ${doc.id}:`, registro);
+                    console.log(`DEBUG: Usuario del registro: ${registro.usuario}, Usuario actual (datosUsuario.usuario): ${currentUserId}`);
+
                     const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
                     const esPropietario = registro.usuario === datosUsuario.usuario;
                     const estaBloqueado = registro.bloqueado === true;
@@ -709,7 +710,7 @@
                 }
 
             }, error => {
-                console.error("Error al escuchar los pedidos:", error);
+                console.error("DEBUG: Error al escuchar los pedidos:", error);
                 listaPedidosContainer.innerHTML = '<p>Error al cargar los pedidos. Intente de nuevo.</p>';
             });
         }
