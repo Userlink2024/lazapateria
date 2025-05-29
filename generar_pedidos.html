@@ -427,6 +427,9 @@
             let totalPares = 0;
             let valorTotalFiltrado = 0;
             let visibleTotalCount = 0; // New: count for currently visible records
+            let visibleDespachadosCount = 0; // New: counts for currently visible despachados
+            let visibleNoDespachadosCount = 0; // New: counts for currently visible no despachados
+
 
             const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
             const currentUserId = datosUsuario.usuario;
@@ -449,11 +452,12 @@
                                       productosDelRegistro.includes(searchTerm);
                 }
 
-                let coincideDespacho = true;
+                // This `coincideDespacho` logic is for the *display* of the record, not the button counts
+                let recordShouldBeDisplayedBasedOnDispatchFilter = true;
                 if (currentDispatchFilter === 'despachados') {
-                    coincideDespacho = despachadoDelRegistro;
+                    recordShouldBeDisplayedBasedOnDispatchFilter = despachadoDelRegistro;
                 } else if (currentDispatchFilter === 'noDespachados') {
-                    coincideDespacho = !despachadoDelRegistro;
+                    recordShouldBeDisplayedBasedOnDispatchFilter = !despachadoDelRegistro;
                 }
 
                 // Add operator-specific filtering for visibility
@@ -462,7 +466,7 @@
                     coincideUsuario = usuarioDelRegistro === currentUserId;
                 }
 
-                if (coincideAsesor && coincideBusqueda && coincideDespacho && coincideUsuario) {
+                if (coincideAsesor && coincideBusqueda && recordShouldBeDisplayedBasedOnDispatchFilter && coincideUsuario) {
                     recordElement.style.display = 'block'; // Show the record
                     visibleTotalCount++; // Increment count for currently visible records
                     // Only sum if the record is currently visible
@@ -474,6 +478,13 @@
                     if (valorTotalRawElement) {
                         valorTotalFiltrado += parseFloat(valorTotalRawElement.innerText || 0);
                     }
+
+                    // Increment filtered dispatch counts only for records that are currently visible
+                    if (despachadoDelRegistro) {
+                        visibleDespachadosCount++;
+                    } else {
+                        visibleNoDespachadosCount++;
+                    }
                 } else {
                     recordElement.style.display = 'none'; // Hide the record
                 }
@@ -482,11 +493,10 @@
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
             document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
 
-            // Update the "Todos" button count based on currently visible records
+            // Update the button counts based on currently visible records
             document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`;
-
-            // The despachados/no despachados counts are updated in iniciarVistaPedidosEnTiempoReal
-            // and represent the total accessible counts, not filtered by asesor/search.
+            document.getElementById('filterDespachadosButton').textContent = `Despachados (${visibleDespachadosCount})`;
+            document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${visibleNoDespachadosCount})`;
         }
         
         function iniciarVistaPedidosEnTiempoReal() {
@@ -520,9 +530,9 @@
                 let pedidosHTML = '';
                 let asesores = new Set(); // To populate asesor filter dropdown
                 let resumenAsesores = {}; // For admin summary
-                let totalPedidosCountForButtons = 0; // Total count for "Todos" button (before asesor/search filter)
-                let despachadosCountForButtons = 0; // Total count for "Despachados" button
-                let noDespachadosCountForButtons = 0; // Total count for "No Despachados" button
+                // totalPedidosCountForButtons, despachadosCountForButtons, noDespachadosCountForButtons
+                // are now calculated in filtrarYBuscarPedidos for dynamic filtering.
+                // These variables are no longer needed here for button counts.
 
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
@@ -530,14 +540,6 @@
                     const esPropietario = registro.usuario === datosUsuario.usuario;
                     const estaBloqueado = registro.bloqueado === true;
                     const estaDespachado = registro.despachado === true;
-
-                    // These counts are for the buttons, reflecting the total accessible records for the user
-                    totalPedidosCountForButtons++; 
-                    if (estaDespachado) {
-                        despachadosCountForButtons++;
-                    } else {
-                        noDespachadosCountForButtons++;
-                    }
 
                     if(registro.asesor) asesores.add(registro.asesor); // Add asesor to set
 
@@ -691,12 +693,8 @@
                     filtroAsesorDropdown.value = valorActualFiltro;
                 }
 
-                // Update button counts based on total fetched records for the current user
-                document.getElementById('filterAllButton').textContent = `Todos (${totalPedidosCountForButtons})`;
-                document.getElementById('filterDespachadosButton').textContent = `Despachados (${despachadosCountForButtons})`;
-                document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${noDespachadosCountForButtons})`;
-                
-                filtrarYBuscarPedidos(); // Apply current filters and search term
+                // Call filtrarYBuscarPedidos to update all button counts based on the current filters
+                filtrarYBuscarPedidos(); 
                 setActiveDispatchFilterButton(currentDispatchFilter); // Set initial active dispatch filter button
 
                 // Restore scroll position
