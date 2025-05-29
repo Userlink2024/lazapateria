@@ -450,6 +450,20 @@
                                       productosDelRegistro.includes(searchTerm);
                 }
 
+                // This `coincideDespacho` logic is for the *display* of the record, not the button counts
+                let recordShouldBeDisplayedBasedOnDispatchFilter = true;
+                if (currentDispatchFilter === 'despachados') {
+                    recordShouldBeDisplayedBasedOnDispatchFilter = despachadoDelRegistro;
+                } else if (currentDispatchFilter === 'noDespachados') {
+                    recordShouldBeDisplayedBasedOnDispatchFilter = !despachadoDelRegistro;
+                }
+
+                // Add operator-specific filtering for visibility
+                let coincideUsuario = true;
+                if (isOperator) {
+                    coincideUsuario = usuarioDelRegistro === currentUserId;
+                }
+
                 // Calculate the counts for the buttons *before* applying the currentDispatchFilter for display
                 if (coincideAsesor && coincideBusqueda && coincideUsuario) {
                     if (despachadoDelRegistro) {
@@ -710,27 +724,8 @@
             try {
                 await db.collection('registros').doc(id).update({ bloqueado: nuevoEstadoBloqueo });
                 console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo}`);
-                
-                // Find the record element and update its data attribute
-                const recordElement = document.querySelector(`.record[data-id="${id}"]`);
-                if (recordElement) {
-                    recordElement.dataset.bloqueado = nuevoEstadoBloqueo;
-                    // Optionally update a visual indicator if needed for the 'all' tab
-                    const statusP = recordElement.querySelector('.status-bloqueado');
-                    if (nuevoEstadoBloqueo) {
-                        if (!statusP) {
-                            const newP = document.createElement('p');
-                            newP.className = 'status-bloqueado';
-                            newP.textContent = 'Pedido Bloqueado';
-                            recordElement.appendChild(newP);
-                        }
-                    } else {
-                        if (statusP) {
-                            statusP.remove();
-                        }
-                    }
-                }
-                filtrarYBuscarPedidos(); // Re-run filter to update counts
+                // Explicitly re-initiate the view to ensure counts are updated immediately
+                iniciarVistaPedidosEnTiempoReal(); 
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
                 alert("Error al cambiar el estado de bloqueo del pedido.");
@@ -750,26 +745,8 @@
             try {
                 await db.collection('registros').doc(id).update({ despachado: nuevoEstadoDespachado });
                 console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado}`);
-                
-                // Find the record element and update its data attribute and sello
-                const recordElement = document.querySelector(`.record[data-id="${id}"]`);
-                if (recordElement) {
-                    recordElement.dataset.despachado = nuevoEstadoDespachado;
-                    let despachadoSello = recordElement.querySelector('.despachado-sello');
-                    if (nuevoEstadoDespachado) {
-                        if (!despachadoSello) {
-                            despachadoSello = document.createElement('div');
-                            despachadoSello.className = 'despachado-sello';
-                            despachadoSello.textContent = 'DESPACHADO';
-                            recordElement.appendChild(despachadoSello);
-                        }
-                    } else {
-                        if (despachadoSello) {
-                            despachadoSello.remove();
-                        }
-                    }
-                }
-                filtrarYBuscarPedidos(); // Re-run filter to update counts
+                // Explicitly re-initiate the view to ensure counts are updated immediately
+                iniciarVistaPedidosEnTiempoReal(); 
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
                 alert("Error al cambiar el estado de despachado del pedido.");
