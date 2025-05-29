@@ -426,6 +426,8 @@
             
             let totalPares = 0;
             let valorTotalFiltrado = 0;
+            let visibleDespachadosCount = 0;
+            let visibleNoDespachadosCount = 0;
 
             records.forEach(recordElement => {
                 const asesorDelRegistro = recordElement.dataset.asesor;
@@ -462,6 +464,12 @@
                     if (valorTotalRawElement) {
                         valorTotalFiltrado += parseFloat(valorTotalRawElement.innerText || 0);
                     }
+                    // Count visible despachados/no despachados
+                    if (despachadoDelRegistro) {
+                        visibleDespachadosCount++;
+                    } else {
+                        visibleNoDespachadosCount++;
+                    }
                 } else {
                     recordElement.style.display = 'none'; // Hide the record
                 }
@@ -469,6 +477,10 @@
             // Update summary totals
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
             document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
+
+            // Update button counts based on visible records
+            document.getElementById('filterDespachadosButton').textContent = `Despachados (${visibleDespachadosCount})`;
+            document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${visibleNoDespachadosCount})`;
         }
         
         function iniciarVistaPedidosEnTiempoReal() {
@@ -494,8 +506,7 @@
                     let pedidosHTML = '';
                     let asesores = new Set(); // To populate asesor filter dropdown
                     let resumenAsesores = {}; // For admin summary
-                    let despachadosCount = 0;
-                    let noDespachadosCount = 0;
+                    let totalPedidosCount = querySnapshot.size; // Total count of all fetched records
 
                     querySnapshot.forEach((doc, index) => {
                         const registro = doc.data();
@@ -503,13 +514,6 @@
                         const esPropietario = registro.usuario === datosUsuario.usuario;
                         const estaBloqueado = registro.bloqueado === true;
                         const estaDespachado = registro.despachado === true;
-
-                        // Count despachados and no despachados
-                        if (estaDespachado) {
-                            despachadosCount++;
-                        } else {
-                            noDespachadosCount++;
-                        }
 
                         // Show record if admin or owner
                         if (esAdministrador || esPropietario) {
@@ -549,7 +553,7 @@
                             let statusTextHTML = ''; // HTML for status text for non-admins
 
                             if (esAdministrador) {
-                                // Only show "Marcar como Despachado" checkbox if not in 'all' filter
+                                // Show "Marcar como Despachado" checkbox only if not in 'all' filter
                                 if (currentDispatchFilter !== 'all') {
                                     controlesHTML += `
                                         <div class="control-container control-container-despachado">
@@ -557,12 +561,14 @@
                                             <label for="despachar_${doc.id}">Marcar como Despachado</label>
                                         </div>`;
                                 }
-                                // Always show "Bloquear Pedido" for admin
-                                controlesHTML += `
-                                    <div class="control-container">
-                                        <input type="checkbox" id="bloquear_${doc.id}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${doc.id}', this.checked)">
-                                        <label for="bloquear_${doc.id}">Bloquear Pedido</label>
-                                    </div>`;
+                                // Show "Bloquear Pedido" checkbox only if in 'all' filter
+                                if (currentDispatchFilter === 'all') {
+                                    controlesHTML += `
+                                        <div class="control-container">
+                                            <input type="checkbox" id="bloquear_${doc.id}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${doc.id}', this.checked)">
+                                            <label for="bloquear_${doc.id}">Bloquear Pedido</label>
+                                        </div>`;
+                                }
                             } else { // For non-admins, show status text
                                 if (estaBloqueado) {
                                      statusTextHTML += `<p class="status-bloqueado">Pedido Bloqueado</p>`;
@@ -661,12 +667,10 @@
                         filtroAsesorDropdown.value = valorActualFiltro;
                     }
 
-                    // Update button counts
-                    document.getElementById('filterAllButton').textContent = `Todos (${querySnapshot.size})`;
-                    document.getElementById('filterDespachadosButton').textContent = `Despachados (${despachadosCount})`;
-                    document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${noDespachadosCount})`;
-
-
+                    // Update button counts based on total fetched records initially
+                    document.getElementById('filterAllButton').textContent = `Todos (${totalPedidosCount})`;
+                    // The other two counts will be updated by filtrarYBuscarPedidos
+                    
                     filtrarYBuscarPedidos(); // Apply current filters and search term
                     setActiveDispatchFilterButton(currentDispatchFilter); // Set initial active dispatch filter button
 
