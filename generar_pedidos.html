@@ -422,17 +422,17 @@
             const filtroAsesorValue = document.getElementById('filtro_asesor').value;
             const searchTerm = document.getElementById('search_term').value.toLowerCase(); // Get search term and convert to lowercase
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
-            const registros = listaPedidosContainer.querySelectorAll('.record'); // Get all record elements
+            const records = listaPedidosContainer.querySelectorAll('.record'); // Get all record elements
             
             let totalPares = 0;
             let valorTotalFiltrado = 0;
 
-            registros.forEach(registroElement => {
-                const asesorDelRegistro = registroElement.dataset.asesor;
-                const clienteDelRegistro = registroElement.dataset.cliente ? registroElement.dataset.cliente.toLowerCase() : '';
-                const codigoDelRegistro = registroElement.dataset.codigo ? registroElement.dataset.codigo.toLowerCase() : '';
-                const productosDelRegistro = registroElement.dataset.productos ? registroElement.dataset.productos.toLowerCase() : '';
-                const despachadoDelRegistro = registroElement.dataset.despachado === 'true'; // Convert string to boolean
+            records.forEach(recordElement => {
+                const asesorDelRegistro = recordElement.dataset.asesor;
+                const clienteDelRegistro = recordElement.dataset.cliente ? recordElement.dataset.cliente.toLowerCase() : '';
+                const codigoDelRegistro = recordElement.dataset.codigo ? recordElement.dataset.codigo.toLowerCase() : '';
+                const productosDelRegistro = recordElement.dataset.productos ? recordElement.dataset.productos.toLowerCase() : '';
+                const despachadoDelRegistro = recordElement.dataset.despachado === 'true'; // Convert string to boolean
 
                 const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
                 
@@ -452,18 +452,18 @@
                 }
 
                 if (coincideAsesor && coincideBusqueda && coincideDespacho) {
-                    registroElement.style.display = 'block'; // Show the record
+                    recordElement.style.display = 'block'; // Show the record
                     // Only sum if the record is currently visible
-                    const numParesElement = registroElement.querySelector('.num_pares');
+                    const numParesElement = recordElement.querySelector('.num_pares');
                     if (numParesElement) {
                         totalPares += parseInt(numParesElement.innerText.split(': ')[1] || 0);
                     }
-                    const valorTotalRawElement = registroElement.querySelector('.valor_total_raw');
+                    const valorTotalRawElement = recordElement.querySelector('.valor_total_raw');
                     if (valorTotalRawElement) {
                         valorTotalFiltrado += parseFloat(valorTotalRawElement.innerText || 0);
                     }
                 } else {
-                    registroElement.style.display = 'none'; // Hide the record
+                    recordElement.style.display = 'none'; // Hide the record
                 }
             });
             // Update summary totals
@@ -494,6 +494,8 @@
                     let pedidosHTML = '';
                     let asesores = new Set(); // To populate asesor filter dropdown
                     let resumenAsesores = {}; // For admin summary
+                    let despachadosCount = 0;
+                    let noDespachadosCount = 0;
 
                     querySnapshot.forEach((doc, index) => {
                         const registro = doc.data();
@@ -501,6 +503,13 @@
                         const esPropietario = registro.usuario === datosUsuario.usuario;
                         const estaBloqueado = registro.bloqueado === true;
                         const estaDespachado = registro.despachado === true;
+
+                        // Count despachados and no despachados
+                        if (estaDespachado) {
+                            despachadosCount++;
+                        } else {
+                            noDespachadosCount++;
+                        }
 
                         // Show record if admin or owner
                         if (esAdministrador || esPropietario) {
@@ -540,14 +549,19 @@
                             let statusTextHTML = ''; // HTML for status text for non-admins
 
                             if (esAdministrador) {
-                                controlesHTML = `
+                                // Only show "Marcar como Despachado" checkbox if not in 'all' filter
+                                if (currentDispatchFilter !== 'all') {
+                                    controlesHTML += `
+                                        <div class="control-container control-container-despachado">
+                                            <input type="checkbox" id="despachar_${doc.id}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${doc.id}', this.checked)">
+                                            <label for="despachar_${doc.id}">Marcar como Despachado</label>
+                                        </div>`;
+                                }
+                                // Always show "Bloquear Pedido" for admin
+                                controlesHTML += `
                                     <div class="control-container">
                                         <input type="checkbox" id="bloquear_${doc.id}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${doc.id}', this.checked)">
                                         <label for="bloquear_${doc.id}">Bloquear Pedido</label>
-                                    </div>
-                                    <div class="control-container control-container-despachado">
-                                        <input type="checkbox" id="despachar_${doc.id}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${doc.id}', this.checked)">
-                                        <label for="despachar_${doc.id}">Marcar como Despachado</label>
                                     </div>`;
                             } else { // For non-admins, show status text
                                 if (estaBloqueado) {
@@ -592,7 +606,6 @@
                                     <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                                     <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                                     ${statusTextHTML}
-                                    ${controlesHTML}
                                 `;
                             }
 
@@ -616,7 +629,7 @@
                                      data-despachado="${estaDespachado}">
                                     ${recordContentHtml}
                                     ${despachadoSelloHtml}
-                                    ${buttonsHtml}
+                                    ${controlesHTML} ${buttonsHtml}
                                     <hr>
                                 </div>
                             `;
@@ -647,6 +660,12 @@
                     if (Array.from(filtroAsesorDropdown.options).some(opt => opt.value === valorActualFiltro)) {
                         filtroAsesorDropdown.value = valorActualFiltro;
                     }
+
+                    // Update button counts
+                    document.getElementById('filterAllButton').textContent = `Todos (${querySnapshot.size})`;
+                    document.getElementById('filterDespachadosButton').textContent = `Despachados (${despachadosCount})`;
+                    document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${noDespachadosCount})`;
+
 
                     filtrarYBuscarPedidos(); // Apply current filters and search term
                     setActiveDispatchFilterButton(currentDispatchFilter); // Set initial active dispatch filter button
