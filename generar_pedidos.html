@@ -276,13 +276,13 @@
 
         let productos = [], abonos = [], valorTotal = 0;
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
-        console.log("DEBUG: Datos del usuario al inicio:", datosUsuario);
+        console.log("Datos del usuario al inicio:", datosUsuario);
 
         if (!datosUsuario || !datosUsuario.permisos) {
             // Using alert for simplicity, consider custom modal for better UX
             alert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, inicie sesión de nuevo.");
             datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
-            console.error("DEBUG: Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
+            console.error("Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
         }
 
         let pedidosListenerUnsubscribe = null;
@@ -494,7 +494,7 @@
         }
         
         function iniciarVistaPedidosEnTiempoReal() {
-            console.log("DEBUG: Iniciando vista de pedidos en tiempo real...");
+            console.log("Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos');
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
             listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>'; // Initial loading message
@@ -508,8 +508,8 @@
             let query = db.collection('registros').orderBy('fecha_hora', 'asc');
             const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
             const currentUserId = datosUsuario.usuario;
-            console.log("DEBUG: Rol del usuario para la consulta:", datosUsuario.permisos);
-            console.log("DEBUG: ID de usuario para la consulta (si es operador):", currentUserId);
+            console.log("Rol del usuario para la consulta:", datosUsuario.permisos);
+            console.log("ID de usuario para la consulta (si es operador):", currentUserId);
 
             // If operator, filter by their user ID
             if (isOperator) {
@@ -517,8 +517,8 @@
             }
 
             pedidosListenerUnsubscribe = query.onSnapshot(querySnapshot => {
-                console.log("DEBUG: Datos de pedidos recibidos/actualizados.");
-                console.log("DEBUG: Número de documentos recibidos:", querySnapshot.size);
+                console.log("Datos de pedidos recibidos/actualizados.");
+                console.log("Número de documentos recibidos:", querySnapshot.size);
                 
                 if (!isInitialLoadPedidos) { // Save scroll position if not initial load
                     scrollPosPedidos = listaPedidosContainer.scrollTop;
@@ -530,16 +530,16 @@
 
                 if (querySnapshot.empty && isOperator) {
                     pedidosHTML = '<p>No hay pedidos asignados a este operador o no se encontraron pedidos con los filtros actuales.</p>';
-                    console.log("DEBUG: QuerySnapshot está vacío para el operador. Posiblemente no hay pedidos o el ID de usuario no coincide.");
+                    console.log("QuerySnapshot está vacío para el operador. Posiblemente no hay pedidos o el ID de usuario no coincide.");
                 } else if (querySnapshot.empty) {
                     pedidosHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
-                    console.log("DEBUG: QuerySnapshot está vacío. No hay pedidos para mostrar.");
+                    console.log("QuerySnapshot está vacío. No hay pedidos para mostrar.");
                 }
 
                 querySnapshot.forEach((doc, index) => {
                     const registro = doc.data();
-                    console.log(`DEBUG: Procesando documento ${doc.id}:`, registro);
-                    console.log(`DEBUG: Usuario del registro: ${registro.usuario}, Usuario actual (datosUsuario.usuario): ${currentUserId}`);
+                    console.log(`Procesando documento ${doc.id}:`, registro);
+                    console.log(`Usuario del registro: ${registro.usuario}, Usuario actual (datosUsuario.usuario): ${currentUserId}`);
 
                     const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
                     const esPropietario = registro.usuario === datosUsuario.usuario;
@@ -600,13 +600,20 @@
                                     <label for="bloquear_${doc.id}">Bloquear Pedido</label>
                                 </div>`;
                         }
-                    } else { // For non-admins (operators), show status text
-                        if (estaBloqueado) {
-                             statusTextHTML += `<p class="status-bloqueado">Pedido Revisado</p>`; // Changed "Bloqueado" to "Revisado"
+                    } else { // For non-admins (operators), show status text based on currentDispatchFilter
+                        if (currentDispatchFilter === 'all') {
+                            if (estaBloqueado) {
+                                statusTextHTML += `<p class="status-bloqueado">Pedido Revisado</p>`; // Changed "Bloqueado" to "Revisado"
+                            }
+                            if (estaDespachado) {
+                                statusTextHTML += `<p class="status-despachado">Pedido Despachado</p>`;
+                            }
+                        } else if (currentDispatchFilter === 'despachados') {
+                            if (estaDespachado) {
+                                statusTextHTML += `<p class="status-despachado">Pedido Despachado</p>`;
+                            }
                         }
-                        if (estaDespachado) {
-                             statusTextHTML += `<p class="status-despachado">Pedido Despachado</p>`;
-                        }
+                        // For 'noDespachados' tab, statusTextHTML remains empty for operators
                     }
                     
                     // Operators cannot modify/delete if blocked OR dispatched
@@ -710,7 +717,7 @@
                 }
 
             }, error => {
-                console.error("DEBUG: Error al escuchar los pedidos:", error);
+                console.error("Error al escuchar los pedidos:", error);
                 listaPedidosContainer.innerHTML = '<p>Error al cargar los pedidos. Intente de nuevo.</p>';
             });
         }
