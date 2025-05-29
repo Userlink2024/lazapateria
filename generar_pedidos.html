@@ -429,12 +429,16 @@
             let visibleDespachadosCount = 0;
             let visibleNoDespachadosCount = 0;
 
+            const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
+            const currentUserId = datosUsuario.usuario;
+
             records.forEach(recordElement => {
                 const asesorDelRegistro = recordElement.dataset.asesor;
                 const clienteDelRegistro = recordElement.dataset.cliente ? recordElement.dataset.cliente.toLowerCase() : '';
                 const codigoDelRegistro = recordElement.dataset.codigo ? recordElement.dataset.codigo.toLowerCase() : '';
                 const productosDelRegistro = recordElement.dataset.productos ? recordElement.dataset.productos.toLowerCase() : '';
                 const despachadoDelRegistro = recordElement.dataset.despachado === 'true'; // Convert string to boolean
+                const usuarioDelRegistro = recordElement.dataset.usuario; // Get user ID from data attribute
 
                 const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
                 
@@ -453,7 +457,13 @@
                     coincideDespacho = !despachadoDelRegistro;
                 }
 
-                if (coincideAsesor && coincideBusqueda && coincideDespacho) {
+                // Add operator-specific filtering for visibility and counts
+                let coincideUsuario = true;
+                if (isOperator) {
+                    coincideUsuario = usuarioDelRegistro === currentUserId;
+                }
+
+                if (coincideAsesor && coincideBusqueda && coincideDespacho && coincideUsuario) {
                     recordElement.style.display = 'block'; // Show the record
                     // Only sum if the record is currently visible
                     const numParesElement = recordElement.querySelector('.num_pares');
@@ -506,7 +516,7 @@
                     let pedidosHTML = '';
                     let asesores = new Set(); // To populate asesor filter dropdown
                     let resumenAsesores = {}; // For admin summary
-                    let totalPedidosCount = querySnapshot.size; // Total count of all fetched records
+                    let totalPedidosCountForUser = 0; // New variable for user-specific total
 
                     querySnapshot.forEach((doc, index) => {
                         const registro = doc.data();
@@ -515,8 +525,10 @@
                         const estaBloqueado = registro.bloqueado === true;
                         const estaDespachado = registro.despachado === true;
 
-                        // Show record if admin or owner
+                        // Only process records visible to the current user for display and counts
                         if (esAdministrador || esPropietario) {
+                            totalPedidosCountForUser++; // Increment total for the user
+
                             if(registro.asesor) asesores.add(registro.asesor); // Add asesor to set
 
                             // Calculate summary for admin
@@ -633,8 +645,8 @@
                                      data-cliente="${registro.cliente || 'N/A'}"
                                      data-codigo="${registro.codigo_unico || 'N/A'}"
                                      data-productos="${productosTextoParaBusqueda.trim()}"
-                                     data-despachado="${estaDespachado}">
-                                    ${recordContentHtml}
+                                     data-despachado="${estaDespachado}"
+                                     data-usuario="${registro.usuario || 'N/A'}"> ${recordContentHtml}
                                     ${despachadoSelloHtml}
                                     ${controlesHTML} ${buttonsHtml}
                                     <hr>
@@ -669,7 +681,8 @@
                     }
 
                     // Update button counts based on total fetched records initially
-                    document.getElementById('filterAllButton').textContent = `Todos (${totalPedidosCount})`;
+                    // For 'Todos' button, use the user-specific count
+                    document.getElementById('filterAllButton').textContent = `Todos (${totalPedidosCountForUser})`;
                     // The other two counts will be updated by filtrarYBuscarPedidos
                     
                     filtrarYBuscarPedidos(); // Apply current filters and search term
@@ -1077,7 +1090,7 @@
         // --- Funciones de Carga de Página y Salida ---
         window.onload = function() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
-                alert("No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
+                alert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
                 document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>"; // Critical error message
                 return;
             }
