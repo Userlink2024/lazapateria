@@ -501,6 +501,8 @@
                 mostrarBarraCargando();
                 console.log("Enviando formulario...");
 
+                const selectedBodegueros = Array.from(document.getElementById('bodeguero_select').selectedOptions).map(option => option.value);
+
                 const datos = {
                     fecha_hora: firebase.firestore.Timestamp.fromDate(new Date()),
                     codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
@@ -513,6 +515,7 @@
                     abonos,
                     asesor: datosUsuario.nombreCompleto,
                     usuario: datosUsuario.usuario,
+                    bodegueros_encargados: selectedBodegueros, // Add bodegueros
                     bloqueado: false,
                     despachado: false
                 };
@@ -537,7 +540,8 @@
                 if (datosUsuario && datosUsuario.nombreCompleto) {
                     document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
                 }
-                 ocultarBarraCargando();
+                populateBodegueroSelect(); // Reset bodeguero select
+                ocultarBarraCargando();
             }
         }
 
@@ -797,6 +801,11 @@
                     const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
                     const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
 
+                    // Display Bodeguero(s)
+                    const bodeguerosEncargados = Array.isArray(registro.bodegueros_encargados) && registro.bodegueros_encargados.length > 0
+                        ? registro.bodegueros_encargados.join(', ')
+                        : 'N/A';
+
 
                     let recordContentHtml = '';
                     if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
@@ -806,6 +815,7 @@
                             <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
                             <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                             <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                            <p>Bodeguero(s): ${bodeguerosEncargados}</p>
                             <p>Hora: ${horaFormateada}</p>
                             <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                         `;
@@ -821,6 +831,7 @@
                             <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
                             <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                             <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                            <p>Bodeguero(s): ${bodeguerosEncargados}</p>
                             <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                             <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                         `;
@@ -995,6 +1006,7 @@
                     "Observaciones": registro.observaciones,
                     "Saldo a Favor": registro.saldo_a_favor,
                     "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
+                    "Bodeguero(s)": (registro.bodegueros_encargados || []).join(', '), // Add bodegueros to export
                     "Bloqueado": registro.bloqueado ? 'Sí' : 'No',
                     "Despachado": registro.despachado ? 'Sí' : 'No'
                 });
@@ -1033,6 +1045,7 @@
 
                 renderModificarProductos(registro.productos || []);
                 renderModificarAbonos(registro.abonos || []);
+                populateBodegueroSelect(registro.bodegueros_encargados || [], 'modificar_bodeguero_select'); // Populate bodeguero select for modification
                 
                 actualizarValorTotalModificar();
 
@@ -1186,6 +1199,8 @@
                 monto: parseFloat(el.querySelector('.mod_abono_monto').value) || 0
             }));
 
+            const bodeguerosActualizados = Array.from(document.getElementById('modificar_bodeguero_select').selectedOptions).map(option => option.value);
+
             const datosActualizados = { 
                 cliente: ref('modificar_cliente'),
                 num_pares: parseInt(ref('modificar_num_pares')) || 0,
@@ -1193,7 +1208,8 @@
                 observaciones: ref('modificar_observaciones'),
                 saldo_a_favor: ref('modificar_saldo_a_favor'),
                 productos: productosActualizados,
-                abonos: abonosActualizados
+                abonos: abonosActualizados,
+                bodegueros_encargados: bodeguerosActualizados // Save updated bodegueros
             };
 
             const productsChanged = JSON.stringify(originalProductsForModification) !== JSON.stringify(productosActualizados);
@@ -1305,6 +1321,54 @@
             }
         }
 
+        // New function to fetch bodegueros
+        async function fetchBodegueros() {
+            try {
+                // Assuming 'users' collection and 'permisos' field for role
+                const bodeguerosSnapshot = await db.collection('users').where('permisos', '==', 'bodeguero').get();
+                const bodegueros = [];
+                bodeguerosSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.nombreCompleto) {
+                        bodegueros.push(data.nombreCompleto);
+                    }
+                });
+                return bodegueros;
+            } catch (error) {
+                console.error("Error fetching bodegueros:", error);
+                return [];
+            }
+        }
+
+        // Function to populate the bodeguero select dropdown
+        async function populateBodegueroSelect(selectedBodegueros = [], selectId = 'bodeguero_select') {
+            const bodegueroSelect = document.getElementById(selectId);
+            if (!bodegueroSelect) return;
+
+            bodegueroSelect.innerHTML = ''; // Clear existing options
+
+            const bodegueros = await fetchBodegueros();
+
+            if (bodegueros.length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No hay bodegueros disponibles';
+                option.disabled = true;
+                bodegueroSelect.appendChild(option);
+                return;
+            }
+
+            bodegueros.forEach(bodegueroName => {
+                const option = document.createElement('option');
+                option.value = bodegueroName;
+                option.textContent = bodegueroName;
+                if (selectedBodegueros.includes(bodegueroName)) {
+                    option.selected = true;
+                }
+                bodegueroSelect.appendChild(option);
+            });
+        }
+
         window.onload = function() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
                 alert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
@@ -1354,6 +1418,8 @@
 
             updateCountdown(); // Initial call to display countdown
             setInterval(updateCountdown, 1000); // Update countdown every second
+
+            populateBodegueroSelect(); // Populate bodeguero select on initial load
         }
 
         window.onbeforeunload = function(event) {
@@ -1639,6 +1705,11 @@
                     <input type="number" id="valor_total" name="valor_total" required readonly>
                 </div>
                 <div class="form-field">
+                    <label for="bodeguero_select">Bodeguero(s):</label>
+                    <select id="bodeguero_select" name="bodegueros" multiple>
+                        </select>
+                </div>
+                <div class="form-field">
                     <label>Observaciones:</label>
                     <textarea name="observaciones"></textarea>
                 </div>
@@ -1728,6 +1799,11 @@
                 <div class="form-field">
                     <label>Valor Total:</label>
                     <input type="number" id="modificar_valor_total" step="any" required readonly>
+                </div>
+                <div class="form-field">
+                    <label for="modificar_bodeguero_select">Bodeguero(s):</label>
+                    <select id="modificar_bodeguero_select" name="modificar_bodegueros" multiple>
+                        </select>
                 </div>
                 <div class="form-field">
                     <label>Observaciones:</label>
