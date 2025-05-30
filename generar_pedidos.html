@@ -335,8 +335,10 @@
 
         // Admin blocking variables
         let isBlockEnabledByAdmin = false; // True if admin has checked the box to enable time-based blocking
+        let isImmediateBlockEnabledByAdmin = false; // New: True if admin has checked the box for immediate blocking
         const BLOCK_HOUR = 17; // 5 PM
         const BLOCK_MINUTE = 40; // 40 minutes
+        let passwordModalContext = null; // 'timeBased' or 'immediate' to know which blocking type is being unlocked
 
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
@@ -361,6 +363,7 @@
             if (id === 'password_modal') {
                 document.getElementById('password_input').value = ''; // Clear password input
                 document.getElementById('password_error_message').style.display = 'none'; // Hide error
+                passwordModalContext = null; // Clear context
             }
         };
 
@@ -1226,12 +1229,14 @@
             if (datosUsuario.permisos.toLowerCase() === 'operador') {
                 document.getElementById('exportar').style.display = 'none';
                 document.getElementById('resumen_asesores').style.display = 'none';
-                document.getElementById('admin_block_control').style.display = 'none'; // Hide admin control for operators
+                document.getElementById('admin_block_controls').style.display = 'none'; // Hide admin controls for operators
             } else if (datosUsuario.permisos.toLowerCase() === 'administrador') {
-                document.getElementById('admin_block_control').style.display = 'flex'; // Show admin control for administrators
-                // Load saved state of the blocking checkbox
+                document.getElementById('admin_block_controls').style.display = 'block'; // Show admin controls for administrators
+                // Load saved state of the blocking checkboxes
                 isBlockEnabledByAdmin = localStorage.getItem('isBlockEnabledByAdmin') === 'true';
                 document.getElementById('block_orders_checkbox').checked = isBlockEnabledByAdmin;
+                isImmediateBlockEnabledByAdmin = localStorage.getItem('isImmediateBlockEnabledByAdmin') === 'true';
+                document.getElementById('immediate_block_checkbox').checked = isImmediateBlockEnabledByAdmin;
             }
 
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Set asesor name
@@ -1354,7 +1359,11 @@
             const agregarPedidoButton = document.getElementById('agregar_pedido_button');
             const blockingOverlay = document.getElementById('blocking_overlay');
 
-            if (datosUsuario.permisos.toLowerCase() === 'administrador' && isBlockEnabledByAdmin && isTimePastBlock) {
+            // Determine if blocking should be active
+            // Immediate block takes precedence
+            const shouldBlock = isImmediateBlockEnabledByAdmin || (isBlockEnabledByAdmin && isTimePastBlock);
+
+            if (datosUsuario.permisos.toLowerCase() === 'administrador' && shouldBlock) {
                 agregarPedidoButton.disabled = true;
                 blockingOverlay.style.display = 'flex'; // Show overlay
             } else {
@@ -1363,7 +1372,7 @@
             }
         }
 
-        function toggleAdminBlocking() {
+        function toggleTimeBasedBlocking() {
             const blockOrdersCheckbox = document.getElementById('block_orders_checkbox');
             if (blockOrdersCheckbox.checked) {
                 isBlockEnabledByAdmin = true;
@@ -1371,6 +1380,20 @@
                 updateBlockingStatus(); // Apply blocking immediately if conditions met
             } else {
                 // If unchecking, prompt for password
+                passwordModalContext = 'timeBased';
+                mostrarModal('password_modal');
+            }
+        }
+
+        function toggleImmediateBlocking() {
+            const immediateBlockCheckbox = document.getElementById('immediate_block_checkbox');
+            if (immediateBlockCheckbox.checked) {
+                isImmediateBlockEnabledByAdmin = true;
+                localStorage.setItem('isImmediateBlockEnabledByAdmin', 'true');
+                updateBlockingStatus(); // Apply blocking immediately
+            } else {
+                // If unchecking, prompt for password
+                passwordModalContext = 'immediate';
                 mostrarModal('password_modal');
             }
         }
@@ -1382,9 +1405,15 @@
             const correctPassword = "upm1022"; // The specified password
 
             if (enteredPassword === correctPassword) {
-                isBlockEnabledByAdmin = false;
-                localStorage.setItem('isBlockEnabledByAdmin', 'false');
-                document.getElementById('block_orders_checkbox').checked = false; // Uncheck the box
+                if (passwordModalContext === 'timeBased') {
+                    isBlockEnabledByAdmin = false;
+                    localStorage.setItem('isBlockEnabledByAdmin', 'false');
+                    document.getElementById('block_orders_checkbox').checked = false; // Uncheck the box
+                } else if (passwordModalContext === 'immediate') {
+                    isImmediateBlockEnabledByAdmin = false;
+                    localStorage.setItem('isImmediateBlockEnabledByAdmin', 'false');
+                    document.getElementById('immediate_block_checkbox').checked = false; // Uncheck the box
+                }
                 updateBlockingStatus(); // Remove blocking
                 cerrarModal('password_modal');
             } else {
@@ -1399,10 +1428,17 @@
         <h1>Generar Pedidos</h1>
         <div id="formulario">
             <h2>Agregar Registro</h2>
-            <div class="form-field admin-control" id="admin_block_control" style="display: none;">
-                <label for="block_orders_checkbox">
-                    <input type="checkbox" id="block_orders_checkbox" onchange="toggleAdminBlocking()"> Bloquear subida de pedidos después de las 5:40 p.m.
-                </label>
+            <div class="form-field admin-control" id="admin_block_controls" style="display: none;">
+                <div class="control-container">
+                    <label for="block_orders_checkbox">
+                        <input type="checkbox" id="block_orders_checkbox" onchange="toggleTimeBasedBlocking()"> Bloquear subida de pedidos después de las 5:40 p.m.
+                    </label>
+                </div>
+                <div class="control-container">
+                    <label for="immediate_block_checkbox">
+                        <input type="checkbox" id="immediate_block_checkbox" onchange="toggleImmediateBlocking()"> Bloqueo Inmediato
+                    </label>
+                </div>
             </div>
             <form onsubmit="enviarFormulario(event);">
                 <div class="form-field">
