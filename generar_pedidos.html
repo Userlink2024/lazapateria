@@ -709,6 +709,124 @@
             }
         }
 
+        // Helper function to create a new record element
+        function createRecordElement(docId, registro, index) {
+            const recordElement = document.createElement('div');
+            recordElement.className = 'record';
+            recordElement.dataset.id = docId;
+
+            const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const estaBloqueado = registro.bloqueado === true;
+            const estaDespachado = registro.despachado === true;
+
+            // Set initial data attributes
+            recordElement.dataset.asesor = registro.asesor || 'N/A';
+            recordElement.dataset.cliente = registro.cliente || 'N/A';
+            recordElement.dataset.codigo = registro.codigo_unico || 'N/A';
+            recordElement.dataset.despachado = estaDespachado;
+            recordElement.dataset.bloqueado = estaBloqueado;
+            recordElement.dataset.usuario = registro.usuario || 'N/A';
+
+            let productosTextoParaBusqueda = "";
+            let productosHTMLList = 'Sin productos';
+            if (Array.isArray(registro.productos) && registro.productos.length > 0) {
+                productosHTMLList = '<ul>';
+                registro.productos.forEach((producto, i) => {
+                    const prodText = `${producto.referencia || 'N/A'} - ${producto.color || 'N/A'} - ${producto.talla || 'N/A'} - $${(producto.precio || 0).toLocaleString('es-CO')}`;
+                    productosHTMLList += `<li>Producto ${i + 1}: ${prodText}</li>`;
+                    productosTextoParaBusqueda += `${producto.referencia} ${producto.color} ${producto.talla} `;
+                });
+                productosHTMLList += '</ul>';
+            }
+            recordElement.dataset.productos = productosTextoParaBusqueda.trim();
+
+            let abonosHTMLList = 'Sin abonos';
+            if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
+                abonosHTMLList = '<ul>';
+                registro.abonos.forEach((abono, j) => {
+                    abonosHTMLList += `<li>Abono ${j + 1}: ${abono.fecha || 'N/A'} - $${(abono.monto || 0).toLocaleString('es-CO')}</li>`;
+                });
+                abonosHTMLList += '</ul>';
+            }
+
+            let controlesHTML = '';
+            if (esAdministrador) {
+                if (currentDispatchFilter !== 'all') {
+                    controlesHTML += `
+                        <div class="control-container control-container-despachado">
+                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)">
+                            <label for="despachar_${docId}">Marcar como Despachado</label>
+                        </div>`;
+                }
+                if (currentDispatchFilter === 'all') {
+                    controlesHTML += `
+                        <div class="control-container">
+                            <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)">
+                            <label for="bloquear_${docId}">Bloquear Pedido</label>
+                        </div>`;
+                }
+            }
+            
+            const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
+            const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
+            const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
+            const bodeguerosEncargados = Array.isArray(registro.bodegueros_encargados) && registro.bodegueros_encargados.length > 0
+                ? registro.bodegueros_encargados.join(', ')
+                : 'N/A';
+
+            let recordContentHtml = '';
+            if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
+                recordContentHtml = `
+                    <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
+                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
+                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                    <p>Bodeguero(s): ${bodeguerosEncargados}</p>
+                    <p>Hora: ${horaFormateada}</p>
+                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                `;
+            } else {
+                recordContentHtml = `
+                    <p><strong>Registro ${index + 1}</strong></p>
+                    <p>Fecha y Hora: ${fechaHoraFormateada}</p>
+                    <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
+                    <p>Cliente: ${registro.cliente || 'N/A'}</p>
+                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                    ${productosHTMLList}
+                    ${abonosHTMLList}
+                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
+                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                    <p>Bodeguero(s): ${bodeguerosEncargados}</p>
+                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                    <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
+                `;
+            }
+
+            recordElement.innerHTML = `
+                ${recordContentHtml}
+                <div class="status-messages-container" id="status-messages-${docId}"></div>
+                <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
+                ${controlesHTML} 
+                <div class="record-buttons">
+                    <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
+                    <button onclick="eliminarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
+                </div>
+                <hr>
+            `;
+            return recordElement;
+        }
+
+        // Helper function to update an existing record element by replacing it
+        function updateExistingRecordElement(existingElement, updatedRegistro, index) {
+            const newRecordElement = createRecordElement(existingElement.dataset.id, updatedRegistro, index);
+            existingElement.parentNode.replaceChild(newRecordElement, existingElement);
+            // No need to call updateRecordStatusAndButtons here, createRecordElement already sets initial status
+            // and the overall onSnapshot loop will call filtrarYBuscarPedidos which handles visibility.
+        }
+
+
         function iniciarVistaPedidosEnTiempoReal() {
             console.log("Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos'); // This will show the modal
@@ -743,38 +861,77 @@
                 query = query.where('usuario', '==', currentUserId);
             }
 
-            pedidosListenerUnsubscribe = query.onSnapshot(querySnapshot => {
+            pedidosListenerUnsubscribe = query.onSnapshot(snapshot => {
                 console.log("Datos de pedidos recibidos/actualizados.");
-                console.log("Número de documentos recibidos:", querySnapshot.size);
+                console.log("Número de documentos recibidos:", snapshot.size);
                 
                 if (!isInitialLoadPedidos) {
                     scrollPosPedidos = listaPedidosContainer.scrollTop;
                 }
 
-                let pedidosHTML = '';
-                let asesores = new Set();
-                let resumenAsesores = {};
+                // Keep track of current records in the DOM to efficiently update/remove
+                const existingRecordElements = new Map();
+                listaPedidosContainer.querySelectorAll('.record').forEach(el => {
+                    existingRecordElements.set(el.dataset.id, el);
+                });
 
-                if (querySnapshot.empty && isOperator) {
-                    pedidosHTML = '<p>No hay pedidos asignados a este operador o no se encontraron pedidos con los filtros actuales.</p>';
-                    console.log("QuerySnapshot está vacío para el operador. Posiblemente no hay pedidos o el ID de usuario no coincide.");
-                } else if (querySnapshot.empty) {
-                    pedidosHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
-                    console.log("QuerySnapshot está vacío. No hay pedidos para mostrar.");
+                // Clear the container if it's the initial load or if the snapshot is empty after filtering
+                if (isInitialLoadPedidos || snapshot.empty) {
+                    listaPedidosContainer.innerHTML = '';
+                    if (snapshot.empty && isOperator) {
+                        listaPedidosContainer.innerHTML = '<p>No hay pedidos asignados a este operador o no se encontraron pedidos con los filtros actuales.</p>';
+                    } else if (snapshot.empty) {
+                        listaPedidosContainer.innerHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
+                    }
                 }
 
-                querySnapshot.forEach((doc, index) => {
+                snapshot.docChanges().forEach(change => {
+                    const doc = change.doc;
                     const registro = doc.data();
-                    console.log(`Procesando documento ${doc.id}:`, registro);
-                    console.log(`Usuario del registro: ${registro.usuario}, Usuario actual (datosUsuario.usuario): ${currentUserId}`);
+                    const docId = doc.id;
+                    const currentDocIndex = snapshot.docs.findIndex(d => d.id === docId);
 
-                    const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
-                    const estaBloqueado = registro.bloqueado === true;
-                    const estaDespachado = registro.despachado === true;
+                    if (change.type === 'added') {
+                        console.log("Added record:", docId);
+                        const newRecordElement = createRecordElement(docId, registro, currentDocIndex);
+                        // Insert the new element at the correct sorted position
+                        const nextElement = listaPedidosContainer.children[currentDocIndex];
+                        if (nextElement) {
+                            listaPedidosContainer.insertBefore(newRecordElement, nextElement);
+                        } else {
+                            listaPedidosContainer.appendChild(newRecordElement);
+                        }
+                        updateRecordStatusAndButtons(docId, registro); // Apply initial status
+                    } else if (change.type === 'modified') {
+                        console.log("Modified record:", docId);
+                        const existingElement = existingRecordElements.get(docId);
+                        if (existingElement) {
+                            // If the element's position might change due to sorting, re-insert it.
+                            // Otherwise, just update its content. For simplicity and to avoid flicker,
+                            // we'll replace the element, which is a common pattern.
+                            updateExistingRecordElement(existingElement, registro, currentDocIndex);
+                        }
+                    } else if (change.type === 'removed') {
+                        console.log("Removed record:", docId);
+                        const existingElement = existingRecordElements.get(docId);
+                        if (existingElement) {
+                            existingElement.remove();
+                        }
+                    }
+                });
 
+                // After processing changes, re-run filter to ensure correct visibility and counts
+                filtrarYBuscarPedidos();
+
+                // Also need to handle asesores and resumenAsesores dynamically
+                // This part might still require iterating through all *current* displayed records or re-calculating from the snapshot.
+                // For now, let's keep the `asesores` and `resumenAsesores` calculation as it was, but ensure it's based on the *current* state of the data in the snapshot.
+                let asesores = new Set();
+                let resumenAsesores = {};
+                snapshot.forEach(doc => {
+                    const registro = doc.data();
                     if(registro.asesor) asesores.add(registro.asesor);
-
-                    if (esAdministrador) {
+                    if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                         if (registro.asesor && !resumenAsesores[registro.asesor]) {
                             resumenAsesores[registro.asesor] = { num_pares: 0, valor_vendido: 0 };
                         }
@@ -783,115 +940,6 @@
                             resumenAsesores[registro.asesor].valor_vendido += parseFloat(registro.valor_total || 0);
                         }
                     }
-                    
-                    let productosTextoParaBusqueda = "";
-                    let productosHTMLList = 'Sin productos';
-                    if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                        productosHTMLList = '<ul>';
-                        registro.productos.forEach((producto, i) => {
-                            const prodText = `${producto.referencia || 'N/A'} - ${producto.color || 'N/A'} - ${producto.talla || 'N/A'} - $${(producto.precio || 0).toLocaleString('es-CO')}`;
-                            productosHTMLList += `<li>Producto ${i + 1}: ${prodText}</li>`;
-                            productosTextoParaBusqueda += `${producto.referencia} ${producto.color} ${producto.talla} `;
-                        });
-                        productosHTMLList += '</ul>';
-                    }
-
-                    let abonosHTMLList = 'Sin abonos';
-                    if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                        abonosHTMLList = '<ul>';
-                        registro.abonos.forEach((abono, j) => {
-                            abonosHTMLList += `<li>Abono ${j + 1}: ${abono.fecha || 'N/A'} - $${(abono.monto || 0).toLocaleString('es-CO')}</li>`;
-                        });
-                        abonosHTMLList += '</ul>';
-                    }
-
-                    let controlesHTML = '';
-
-                    if (esAdministrador) {
-                        if (currentDispatchFilter !== 'all') {
-                            controlesHTML += `
-                                <div class="control-container control-container-despachado">
-                                    <input type="checkbox" id="despachar_${doc.id}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${doc.id}', this.checked)">
-                                    <label for="despachar_${doc.id}">Marcar como Despachado</label>
-                                </div>`;
-                        }
-                        if (currentDispatchFilter === 'all') {
-                            controlesHTML += `
-                                <div class="control-container">
-                                    <input type="checkbox" id="bloquear_${doc.id}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${doc.id}', this.checked)">
-                                    <label for="bloquear_${doc.id}">Bloquear Pedido</label>
-                                </div>`;
-                        }
-                    }
-                    
-                    const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
-                    const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
-                    const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
-
-                    // Display Bodeguero(s)
-                    const bodeguerosEncargados = Array.isArray(registro.bodegueros_encargados) && registro.bodegueros_encargados.length > 0
-                        ? registro.bodegueros_encargados.join(', ')
-                        : 'N/A';
-
-
-                    let recordContentHtml = '';
-                    if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                        recordContentHtml = `
-                            <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
-                            <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                            <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                            <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                            <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                            <p>Bodeguero(s): ${bodeguerosEncargados}</p>
-                            <p>Hora: ${horaFormateada}</p>
-                            <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                        `;
-                    } else {
-                        recordContentHtml = `
-                            <p><strong>Registro ${index + 1}</strong></p>
-                            <p>Fecha y Hora: ${fechaHoraFormateada}</p>
-                            <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
-                            <p>Cliente: ${registro.cliente || 'N/A'}</p>
-                            <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                            ${productosHTMLList}
-                            ${abonosHTMLList}
-                            <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                            <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                            <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                            <p>Bodeguero(s): ${bodeguerosEncargados}</p>
-                            <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                            <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
-                        `;
-                    }
-
-                    pedidosHTML += `
-                        <div class="record" 
-                             data-id="${doc.id}" 
-                             data-asesor="${registro.asesor || 'N/A'}" 
-                             data-cliente="${registro.cliente || 'N/A'}"
-                             data-codigo="${registro.codigo_unico || 'N/A'}"
-                             data-productos="${productosTextoParaBusqueda.trim()}"
-                             data-despachado="${estaDespachado}"
-                             data-bloqueado="${estaBloqueado}"
-                             data-usuario="${registro.usuario || 'N/A'}"> 
-                            ${recordContentHtml}
-                            <div class="status-messages-container" id="status-messages-${doc.id}"></div>
-                            <div class="despachado-sello-container" id="despachado-sello-container-${doc.id}"></div>
-                            ${controlesHTML} 
-                            <div class="record-buttons">
-                                <button onclick="modificarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
-                                <button onclick="eliminarPedido('${doc.id}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
-                            </div>
-                            <hr>
-                        </div>
-                    `;
-                });
-                
-                listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>';
-                
-                querySnapshot.forEach(doc => {
-                    const registro = doc.data();
-                    updateRecordStatusAndButtons(doc.id, registro);
                 });
 
                 if (datosUsuario.permisos.toLowerCase() === 'administrador') {
@@ -902,7 +950,6 @@
 
                 const filtroAsesorDropdown = document.getElementById('filtro_asesor');
                 const valorActualFiltro = filtroAsesorDropdown.value;
-                
                 resetearComboBoxAsesor();
                 asesores.forEach(asesor => {
                     const option = document.createElement('option');
@@ -914,15 +961,9 @@
                     filtroAsesorDropdown.value = valorActualFiltro;
                 }
 
-                // Apply filtering after a small delay to ensure DOM is ready
-                console.log("Calling filtrarYBuscarPedidos with setTimeout...");
-                setTimeout(() => {
-                    console.log("setTimeout callback fired. Calling filtrarYBuscarPedidos.");
-                    filtrarYBuscarPedidos(); 
-                    setActiveDispatchFilterButton(currentDispatchFilter);
-                }, 300); // Increased delay to 300ms
+                setActiveDispatchFilterButton(currentDispatchFilter);
 
-
+                // Restore scroll position
                 if (isInitialLoadPedidos) {
                     isInitialLoadPedidos = false;
                 } else {
@@ -954,11 +995,7 @@
             try {
                 await db.collection('registros').doc(id).update({ bloqueado: nuevoEstadoBloqueo });
                 console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo}`);
-                const docSnap = await db.collection('registros').doc(id).get();
-                if (docSnap.exists) {
-                    updateRecordStatusAndButtons(id, docSnap.data());
-                }
-                filtrarYBuscarPedidos();
+                // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
                 alert("Error al cambiar el estado de bloqueo del pedido.");
@@ -977,11 +1014,7 @@
             try {
                 await db.collection('registros').doc(id).update({ despachado: nuevoEstadoDespachado });
                 console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado}`);
-                const docSnap = await db.collection('registros').doc(id).get();
-                if (docSnap.exists) {
-                    updateRecordStatusAndButtons(id, docSnap.data());
-                }
-                filtrarYBuscarPedidos();
+                // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
                 alert("Error al cambiar el estado de despachado del pedido.");
