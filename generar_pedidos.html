@@ -351,6 +351,19 @@
             font-weight: normal;
             cursor: pointer;
         }
+
+        /* Estilo para el contador regresivo */
+        #countdown_timer {
+            text-align: center;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #007bff; /* Un color que destaque */
+            margin-bottom: 15px;
+            padding: 8px;
+            border: 1px solid #007bff;
+            border-radius: 5px;
+            background-color: #e7f3ff;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -391,6 +404,8 @@
 
         // --- NUEVAS VARIABLES PARA EL BLOQUEO ---
         const BLOCK_PASSWORD = "upm1022";
+        const BLOCK_HOUR = 17; // 5 PM
+        const BLOCK_MINUTE = 40; // 40 minutes
         let isTimeBlocked = false; // Bloqueo automático por hora
         let isGlobalManualBlock = false; // Bloqueo manual/inmediato global, controlado por Firestore
         let currentPasswordModalTargetCheckbox = null; // Para saber qué checkbox se intentó desmarcar
@@ -1263,6 +1278,33 @@
             }
         }
 
+        // Función para actualizar el contador regresivo
+        function updateCountdown() {
+            const now = new Date();
+            const targetTime = new Date(now);
+            targetTime.setHours(BLOCK_HOUR, BLOCK_MINUTE, 0, 0); // 5:40 PM hoy
+
+            // Si ya pasó la hora de bloqueo para hoy, establece la hora de bloqueo para mañana
+            if (now.getTime() > targetTime.getTime()) {
+                targetTime.setDate(targetTime.getDate() + 1);
+            }
+
+            const timeLeftMs = targetTime.getTime() - now.getTime();
+
+            const hours = Math.floor(timeLeftMs / (1000 * 60 * 60));
+            const minutes = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((timeLeftMs % (1000 * 60)) / 1000);
+
+            const countdownElement = document.getElementById('countdown_timer');
+            if (countdownElement) {
+                if (timeLeftMs <= 0) {
+                    countdownElement.textContent = "¡Bloqueo automático activado!";
+                } else {
+                    countdownElement.textContent = `Bloqueo automático en: ${hours}h ${minutes}m ${seconds}s`;
+                }
+            }
+        }
+
         window.onload = function() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
                 alert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
@@ -1308,7 +1350,10 @@
             });
 
             checkTimeBlock();
-            setInterval(checkTimeBlock, 60 * 1000);
+            setInterval(checkTimeBlock, 60 * 1000); // Check for block status every minute
+
+            updateCountdown(); // Initial call to display countdown
+            setInterval(updateCountdown, 1000); // Update countdown every second
         }
 
         window.onbeforeunload = function(event) {
@@ -1447,10 +1492,7 @@
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
-            const blockHour = 17;
-            const blockMinute = 40;
-
-            if (currentHour > blockHour || (currentHour === blockHour && currentMinute >= blockMinute)) {
+            if (currentHour > BLOCK_HOUR || (currentHour === BLOCK_HOUR && currentMinute >= BLOCK_MINUTE)) {
                 isTimeBlocked = true;
                 console.log("Bloqueo por tiempo activado: Es después de las 5:40 PM.");
             } else {
@@ -1568,7 +1610,7 @@
             <span id="gear_icon" style="font-size: 2em; cursor: pointer; color: #4CAF50; position: fixed; top: 20px; right: 20px; z-index: 2001; display: none;" title="Opciones de Bloqueo" onclick="mostrarModal('block_options_modal')">&#9881;</span>
 
             <form onsubmit="enviarFormulario(event);">
-                <div class="form-field">
+                <div id="countdown_timer"></div> <div class="form-field">
                     <label>Nombre del Cliente:</label>
                     <input type="text" name="cliente" required>
                 </div>
