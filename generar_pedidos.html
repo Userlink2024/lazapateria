@@ -258,6 +258,77 @@
         .add-item-button:hover {
             background-color: #218838;
         }
+
+        /* --- NUEVOS ESTILOS PARA EL BLOQUEO --- */
+        /* Overlay para el bloqueo visual */
+        .block-overlay {
+            display: none; /* Se muestra con JS */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); /* Fondo semi-transparente oscuro */
+            z-index: 2000; /* Asegura que esté por encima de todo */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            font-size: 1.5em;
+            text-align: center;
+        }
+
+        /* Círculo rojo giratorio */
+        .block-circle {
+            width: 150px;
+            height: 150px;
+            border: 10px solid #f3f3f3; /* Light grey */
+            border-top: 10px solid #dc3545; /* Red */
+            border-radius: 50%;
+            animation: spin 2s linear infinite; /* Animación de giro */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 0.8em; /* Tamaño de fuente dentro del círculo */
+            font-weight: bold;
+            color: #dc3545; /* Color del texto dentro del círculo */
+            background-color: rgba(255, 255, 255, 0.9); /* Fondo blanco semi-transparente */
+        }
+
+        /* Animación de giro */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Estilos para el modal de contraseña */
+        #password_modal .modal-content {
+            max-width: 350px;
+            padding: 25px;
+        }
+        #password_modal label {
+            text-align: left;
+            margin-bottom: 10px;
+        }
+        #password_modal input[type="password"] {
+            width: calc(100% - 20px); /* Ajustar para padding */
+            margin-bottom: 15px;
+            padding: 10px;
+            font-size: 1.1em;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #password_modal button {
+            width: 100%;
+            padding: 10px;
+            font-size: 1em;
+        }
+        #password_modal .error-message {
+            color: #dc3545;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -294,6 +365,13 @@
         let originalProductsForModification = [];
         let originalAbonosForModification = [];
 
+        // --- NUEVAS VARIABLES PARA EL BLOQUEO ---
+        const BLOCK_PASSWORD = "upm1022";
+        let isTimeBlocked = false; // Bloqueo automático por hora
+        let isManuallyBlocked = localStorage.getItem('isManuallyBlocked') === 'true'; // Bloqueo manual persistente
+        let isImmediateBlocked = localStorage.getItem('isImmediateBlocked') === 'true'; // Bloqueo inmediato persistente
+        let currentPasswordModalTargetCheckbox = null; // Para saber qué checkbox se intentó desmarcar
+
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
             if (id === 'modal_producto') {
@@ -313,6 +391,10 @@
             }
             if (id === 'modal_pares_warning') {
                 // Optionally do something when the warning modal is closed
+            }
+            if (id === 'password_modal') {
+                document.getElementById('password_input').value = ''; // Limpiar campo de contraseña
+                document.getElementById('password_error').textContent = ''; // Limpiar mensaje de error
             }
         };
 
@@ -363,6 +445,14 @@
 
         async function enviarFormulario(event) {
             event.preventDefault();
+
+            // Verificar si el formulario está bloqueado antes de enviar
+            if (document.getElementById('agregar_pedido_btn').disabled) {
+                // No usamos alert(), pero podemos loggear o mostrar un mensaje en la UI si fuera necesario
+                console.warn("Intento de enviar formulario bloqueado.");
+                return;
+            }
+
             // Replace window.confirm with a custom modal if possible in the future for better UX
             const confirmacion = window.confirm("¿Desea enviar el formulario?");
             if (confirmacion) {
@@ -1170,8 +1260,12 @@
             // Hide elements based on user permissions
             if (datosUsuario.permisos.toLowerCase() === 'operador') {
                 document.getElementById('exportar').style.display = 'none';
-                 document.getElementById('resumen_asesores').style.display = 'none';
+                document.getElementById('resumen_asesores').style.display = 'none';
+                document.getElementById('admin_block_controls').style.display = 'none'; // Ocultar controles de bloqueo para operadores
+            } else { // Si es administrador, asegurar que los controles de bloqueo estén visibles
+                document.getElementById('admin_block_controls').style.display = 'block';
             }
+
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Set asesor name
             ocultarBarraCargando(); // Hide loading bar if it was visible
 
@@ -1180,6 +1274,17 @@
             if(searchTermInput) {
                 searchTermInput.addEventListener('input', filtrarYBuscarPedidos); // Call filter/search on input
             }
+
+            // --- Lógica de bloqueo al cargar la página ---
+            // Sincronizar el estado de los checkboxes con localStorage
+            document.getElementById('manual_block_checkbox').checked = isManuallyBlocked;
+            document.getElementById('immediate_block_checkbox').checked = isImmediateBlocked;
+
+            // Iniciar la verificación de bloqueo por tiempo y aplicar el estado general
+            checkTimeBlock();
+            applyBlockStatus();
+            // Actualizar el bloqueo por tiempo cada minuto
+            setInterval(checkTimeBlock, 60 * 1000); // Cada minuto
         }
 
         window.onbeforeunload = function(event) { // Warn user before leaving if form has unsaved data
@@ -1271,6 +1376,162 @@
         function showWarningModal() {
             document.getElementById('modal_pares_warning').style.display = 'flex';
         }
+
+        // --- NUEVAS FUNCIONES DE BLOQUEO ---
+
+        /**
+         * Verifica si la hora actual en Colombia (GMT-5) es posterior a las 5:40 PM.
+         * Actualiza la variable `isTimeBlocked`.
+         */
+        function checkTimeBlock() {
+            const now = new Date();
+            // Ajustar a la hora de Colombia (GMT-5).
+            // La diferencia horaria de UTC a Colombia es -5 horas.
+            // new Date() ya obtiene la hora local del navegador, que si el usuario está en Colombia, será la correcta.
+            // Si el usuario no está en Colombia, necesitaríamos una lógica más compleja para obtener la hora de Colombia,
+            // pero para una aplicación de navegador, se asume que el reloj del usuario es relevante o que está en la zona horaria correcta.
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+
+            // 5:40 PM es 17:40 en formato de 24 horas
+            const blockHour = 17; // 5 PM
+            const blockMinute = 40; // 40 minutes
+
+            if (currentHour > blockHour || (currentHour === blockHour && currentMinute >= blockMinute)) {
+                isTimeBlocked = true;
+                console.log("Bloqueo por tiempo activado: Es después de las 5:40 PM.");
+            } else {
+                isTimeBlocked = false;
+                console.log("Bloqueo por tiempo desactivado: Es antes de las 5:40 PM.");
+            }
+            applyBlockStatus(); // Aplicar el estado de bloqueo después de la verificación de tiempo
+        }
+
+        /**
+         * Aplica el estado de bloqueo general a los botones y muestra/oculta el overlay.
+         * El bloqueo se activa si:
+         * 1. Es después de las 5:40 PM (isTimeBlocked)
+         * 2. El bloqueo manual está activado (isManuallyBlocked)
+         * 3. El bloqueo inmediato está activado (isImmediateBlocked)
+         * El botón "Ver Pedidos" siempre debe estar habilitado.
+         */
+        function applyBlockStatus() {
+            const agregarPedidoBtn = document.getElementById('agregar_pedido_btn');
+            const verPedidosBtn = document.getElementById('ver_pedidos');
+            const blockOverlay = document.getElementById('block_overlay');
+
+            // Determinar si debe haber un bloqueo activo
+            const shouldBeBlocked = isTimeBlocked || isManuallyBlocked || isImmediateBlocked;
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+
+            if (agregarPedidoBtn) {
+                // El botón "Agregar Pedido" se deshabilita si hay un bloqueo activo
+                agregarPedidoBtn.disabled = shouldBeBlocked;
+                agregarPedidoBtn.title = shouldBeBlocked ? "La funcionalidad de agregar pedidos está bloqueada temporalmente." : "";
+            }
+
+            if (verPedidosBtn) {
+                // El botón "Ver Pedidos" siempre debe estar habilitado
+                verPedidosBtn.disabled = false;
+                verPedidosBtn.title = "";
+            }
+
+            if (blockOverlay) {
+                // Mostrar u ocultar el overlay de bloqueo
+                blockOverlay.style.display = shouldBeBlocked ? 'flex' : 'none';
+            }
+
+            // Actualizar el estado de los checkboxes de bloqueo para el administrador
+            if (isAdministrator) {
+                const manualCheckbox = document.getElementById('manual_block_checkbox');
+                const immediateCheckbox = document.getElementById('immediate_block_checkbox');
+                if (manualCheckbox) manualCheckbox.checked = isManuallyBlocked;
+                if (immediateCheckbox) immediateCheckbox.checked = isImmediateBlocked;
+            }
+        }
+
+        /**
+         * Maneja el cambio del checkbox de bloqueo manual.
+         * Solicita contraseña si se intenta desmarcar.
+         * @param {HTMLInputElement} checkbox El checkbox que se ha cambiado.
+         */
+        function toggleManualBlockCheckbox(checkbox) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                checkbox.checked = !checkbox.checked; // Revertir si no es admin
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+
+            if (!checkbox.checked) { // Si se está intentando desmarcar
+                currentPasswordModalTargetCheckbox = checkbox;
+                showPasswordModal('manual');
+            } else { // Si se está marcando
+                isManuallyBlocked = true;
+                localStorage.setItem('isManuallyBlocked', 'true');
+                applyBlockStatus();
+            }
+        }
+
+        /**
+         * Maneja el cambio del checkbox de bloqueo inmediato.
+         * Solicita contraseña si se intenta desmarcar.
+         * @param {HTMLInputElement} checkbox El checkbox que se ha cambiado.
+         */
+        function toggleImmediateBlockCheckbox(checkbox) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                checkbox.checked = !checkbox.checked; // Revertir si no es admin
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+
+            if (!checkbox.checked) { // Si se está intentando desmarcar
+                currentPasswordModalTargetCheckbox = checkbox;
+                showPasswordModal('immediate');
+            } else { // Si se está marcando
+                isImmediateBlocked = true;
+                localStorage.setItem('isImmediateBlocked', 'true');
+                applyBlockStatus();
+            }
+        }
+
+        /**
+         * Muestra el modal para introducir la contraseña.
+         * @param {string} type 'manual' o 'immediate' para saber qué bloqueo se está intentando deshabilitar.
+         */
+        function showPasswordModal(type) {
+            document.getElementById('password_modal').style.display = 'flex';
+            document.getElementById('password_input').value = '';
+            document.getElementById('password_error').textContent = '';
+            document.getElementById('password_modal_type').value = type; // Guardar el tipo de bloqueo
+        }
+
+        /**
+         * Verifica la contraseña introducida en el modal.
+         */
+        function verifyPassword() {
+            const passwordInput = document.getElementById('password_input');
+            const errorMessage = document.getElementById('password_error');
+            const enteredPassword = passwordInput.value;
+            const blockType = document.getElementById('password_modal_type').value;
+
+            if (enteredPassword === BLOCK_PASSWORD) {
+                if (blockType === 'manual') {
+                    isManuallyBlocked = false;
+                    localStorage.setItem('isManuallyBlocked', 'false');
+                } else if (blockType === 'immediate') {
+                    isImmediateBlocked = false;
+                    localStorage.setItem('isImmediateBlocked', 'false');
+                }
+                cerrarModal('password_modal');
+                applyBlockStatus(); // Reaplicar el estado de bloqueo
+            } else {
+                errorMessage.textContent = "Contraseña incorrecta. Inténtelo de nuevo.";
+                // Revertir el estado del checkbox si la contraseña es incorrecta
+                if (currentPasswordModalTargetCheckbox) {
+                    currentPasswordModalTargetCheckbox.checked = true; // Mantener marcado
+                }
+            }
+        }
     </script>
 </head>
 <body>
@@ -1278,6 +1539,18 @@
         <h1>Generar Pedidos</h1>
         <div id="formulario">
             <h2>Agregar Registro</h2>
+            <div id="admin_block_controls" style="display: none; margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; background-color: #f9f9f9;">
+                <h3>Controles de Bloqueo (Solo Administrador)</h3>
+                <div class="form-field">
+                    <input type="checkbox" id="manual_block_checkbox" onchange="toggleManualBlockCheckbox(this)">
+                    <label for="manual_block_checkbox">Bloqueo Manual de Pedidos (requiere contraseña para deshabilitar)</label>
+                </div>
+                <div class="form-field">
+                    <input type="checkbox" id="immediate_block_checkbox" onchange="toggleImmediateBlockCheckbox(this)">
+                    <label for="immediate_block_checkbox">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
+                </div>
+            </div>
+
             <form onsubmit="enviarFormulario(event);">
                 <div class="form-field">
                     <label>Nombre del Cliente:</label>
@@ -1315,7 +1588,7 @@
                     <label>Saldo a Favor:</label>
                     <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required>
                 </div>
-                <input type="submit" value="Agregar Pedido">
+                <input type="submit" value="Agregar Pedido" id="agregar_pedido_btn">
             </form>
             <div id="loading-bar" style="width: 100%; background-color: #ddd; margin-top:10px; display: none;">
                 <div id="loading-bar-fill" style="height: 24px; width: 0%; background-color: #4CAF50; text-align: center; line-height: 24px; color: white;">0%</div>
@@ -1441,5 +1714,27 @@
             <button type="button" onclick="cerrarModal('modal_pares_warning')">Entendido</button>
         </div>
     </div>
+
+    <div id="password_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('password_modal')">&times;</span>
+            <h2>Desbloquear Funcionalidad</h2>
+            <p>Por favor, ingrese la contraseña para deshabilitar el bloqueo.</p>
+            <div class="form-field">
+                <label for="password_input">Contraseña:</label>
+                <input type="password" id="password_input" placeholder="Ingrese la contraseña">
+                <input type="hidden" id="password_modal_type" value=""> <p id="password_error" class="error-message"></p>
+            </div>
+            <button type="button" onclick="verifyPassword()">Confirmar</button>
+        </div>
+    </div>
+
+    <div id="block_overlay" class="block-overlay">
+        <div class="block-circle">
+            <p>BLOQUEADO</p>
+        </div>
+        <p>Temporalmente bloqueado y a la espera de desbloqueo.</p>
+    </div>
+
 </body>
 </html>
