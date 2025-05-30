@@ -258,6 +258,45 @@
         .add-item-button:hover {
             background-color: #218838;
         }
+
+        /* Styles for the blocking overlay */
+        .blocking-overlay {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 0, 0, 0.3); /* Semi-transparent red */
+            z-index: 2000; /* Higher than other modals */
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px); /* Optional: blur background */
+        }
+
+        .blocking-circle {
+            width: 250px; /* Large circle */
+            height: 250px;
+            border: 10px solid rgba(255, 0, 0, 0.5); /* Red border */
+            border-top: 10px solid red; /* Part of the border for spinning effect */
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            animation: spin 1.5s linear infinite; /* Spinning animation */
+            color: red;
+            font-weight: bold;
+            font-size: 1.2em;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.9); /* White background for text */
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -294,6 +333,11 @@
         let originalProductsForModification = [];
         let originalAbonosForModification = [];
 
+        // Admin blocking variables
+        let isBlockEnabledByAdmin = false; // True if admin has checked the box to enable time-based blocking
+        const BLOCK_HOUR = 17; // 5 PM
+        const BLOCK_MINUTE = 40; // 40 minutes
+
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
             if (id === 'modal_producto') {
@@ -313,6 +357,10 @@
             }
             if (id === 'modal_pares_warning') {
                 // Optionally do something when the warning modal is closed
+            }
+            if (id === 'password_modal') {
+                document.getElementById('password_input').value = ''; // Clear password input
+                document.getElementById('password_error_message').style.display = 'none'; // Hide error
             }
         };
 
@@ -363,6 +411,13 @@
 
         async function enviarFormulario(event) {
             event.preventDefault();
+
+            // Check if blocking is active
+            if (document.getElementById('agregar_pedido_button').disabled) {
+                alert("La subida de pedidos está temporalmente bloqueada.");
+                return;
+            }
+
             // Replace window.confirm with a custom modal if possible in the future for better UX
             const confirmacion = window.confirm("¿Desea enviar el formulario?");
             if (confirmacion) {
@@ -1105,7 +1160,7 @@
                 const docSnap = await docRef.get();
                 if (docSnap.exists) {
                     const registro = docSnap.data();
-                    if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
+                    if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.bloqueado === true)) {
                         alert("Este pedido está bloqueado o despachado y no puede ser eliminado.");
                         return;
                     }
@@ -1170,8 +1225,15 @@
             // Hide elements based on user permissions
             if (datosUsuario.permisos.toLowerCase() === 'operador') {
                 document.getElementById('exportar').style.display = 'none';
-                 document.getElementById('resumen_asesores').style.display = 'none';
+                document.getElementById('resumen_asesores').style.display = 'none';
+                document.getElementById('admin_block_control').style.display = 'none'; // Hide admin control for operators
+            } else if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+                document.getElementById('admin_block_control').style.display = 'flex'; // Show admin control for administrators
+                // Load saved state of the blocking checkbox
+                isBlockEnabledByAdmin = localStorage.getItem('isBlockEnabledByAdmin') === 'true';
+                document.getElementById('block_orders_checkbox').checked = isBlockEnabledByAdmin;
             }
+
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Set asesor name
             ocultarBarraCargando(); // Hide loading bar if it was visible
 
@@ -1180,6 +1242,12 @@
             if(searchTermInput) {
                 searchTermInput.addEventListener('input', filtrarYBuscarPedidos); // Call filter/search on input
             }
+
+            // Initial check for blocking status
+            updateBlockingStatus();
+
+            // Set up interval to check blocking status every minute (or more frequently if needed)
+            setInterval(updateBlockingStatus, 60 * 1000); // Check every minute
         }
 
         window.onbeforeunload = function(event) { // Warn user before leaving if form has unsaved data
@@ -1271,6 +1339,59 @@
         function showWarningModal() {
             document.getElementById('modal_pares_warning').style.display = 'flex';
         }
+
+        // --- Admin Blocking Logic ---
+        function updateBlockingStatus() {
+            const now = new Date();
+            // Get current time in Colombia (GMT-5)
+            // Adjust for UTC offset if browser is not in Colombia timezone
+            const colombiaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+            const currentHour = colombiaTime.getHours();
+            const currentMinute = colombiaTime.getMinutes();
+
+            const isTimePastBlock = (currentHour > BLOCK_HOUR) || (currentHour === BLOCK_HOUR && currentMinute >= BLOCK_MINUTE);
+            
+            const agregarPedidoButton = document.getElementById('agregar_pedido_button');
+            const blockingOverlay = document.getElementById('blocking_overlay');
+
+            if (datosUsuario.permisos.toLowerCase() === 'administrador' && isBlockEnabledByAdmin && isTimePastBlock) {
+                agregarPedidoButton.disabled = true;
+                blockingOverlay.style.display = 'flex'; // Show overlay
+            } else {
+                agregarPedidoButton.disabled = false;
+                blockingOverlay.style.display = 'none'; // Hide overlay
+            }
+        }
+
+        function toggleAdminBlocking() {
+            const blockOrdersCheckbox = document.getElementById('block_orders_checkbox');
+            if (blockOrdersCheckbox.checked) {
+                isBlockEnabledByAdmin = true;
+                localStorage.setItem('isBlockEnabledByAdmin', 'true');
+                updateBlockingStatus(); // Apply blocking immediately if conditions met
+            } else {
+                // If unchecking, prompt for password
+                mostrarModal('password_modal');
+            }
+        }
+
+        function checkPassword() {
+            const passwordInput = document.getElementById('password_input');
+            const passwordErrorMessage = document.getElementById('password_error_message');
+            const enteredPassword = passwordInput.value;
+            const correctPassword = "upm1022"; // The specified password
+
+            if (enteredPassword === correctPassword) {
+                isBlockEnabledByAdmin = false;
+                localStorage.setItem('isBlockEnabledByAdmin', 'false');
+                document.getElementById('block_orders_checkbox').checked = false; // Uncheck the box
+                updateBlockingStatus(); // Remove blocking
+                cerrarModal('password_modal');
+            } else {
+                passwordErrorMessage.style.display = 'block'; // Show error message
+                passwordInput.value = ''; // Clear input
+            }
+        }
     </script>
 </head>
 <body>
@@ -1278,6 +1399,11 @@
         <h1>Generar Pedidos</h1>
         <div id="formulario">
             <h2>Agregar Registro</h2>
+            <div class="form-field admin-control" id="admin_block_control" style="display: none;">
+                <label for="block_orders_checkbox">
+                    <input type="checkbox" id="block_orders_checkbox" onchange="toggleAdminBlocking()"> Bloquear subida de pedidos después de las 5:40 p.m.
+                </label>
+            </div>
             <form onsubmit="enviarFormulario(event);">
                 <div class="form-field">
                     <label>Nombre del Cliente:</label>
@@ -1315,7 +1441,7 @@
                     <label>Saldo a Favor:</label>
                     <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required>
                 </div>
-                <input type="submit" value="Agregar Pedido">
+                <input type="submit" value="Agregar Pedido" id="agregar_pedido_button">
             </form>
             <div id="loading-bar" style="width: 100%; background-color: #ddd; margin-top:10px; display: none;">
                 <div id="loading-bar-fill" style="height: 24px; width: 0%; background-color: #4CAF50; text-align: center; line-height: 24px; color: white;">0%</div>
@@ -1439,6 +1565,26 @@
             <h2>Advertencia de Pares</h2>
             <p>Se han realizado cambios en los productos del pedido. Por favor, **verifique y ajuste el "Número de Pares"** para asegurar que sea correcto antes de continuar.</p>
             <button type="button" onclick="cerrarModal('modal_pares_warning')">Entendido</button>
+        </div>
+    </div>
+
+    <div id="password_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('password_modal')">&times;</span>
+            <h2>Desbloquear Pedidos</h2>
+            <div class="form-field">
+                <label for="password_input">Contraseña:</label>
+                <input type="password" id="password_input" required>
+            </div>
+            <button type="button" onclick="checkPassword()">Desbloquear</button>
+            <p id="password_error_message" style="color: red; display: none; margin-top: 10px;">Contraseña incorrecta.</p>
+        </div>
+    </div>
+
+    <div id="blocking_overlay" class="blocking-overlay">
+        <div class="blocking-circle">
+            <p>BLOQUEADO TEMPORALMENTE</p>
+            <p>A la espera de desbloqueo</p>
         </div>
     </div>
 </body>
