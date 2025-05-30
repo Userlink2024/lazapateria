@@ -269,7 +269,8 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0, 0, 0, 0.7); /* Fondo semi-transparente oscuro */
-            z-index: 999; /* Z-index más bajo para permitir que los modales y el icono de tuerca estén por encima */
+            /* Z-index más bajo para permitir que los modales y el icono de tuerca estén por encima */
+            z-index: 999;
             justify-content: center;
             align-items: center;
             flex-direction: column;
@@ -366,12 +367,14 @@
         const db = firebase.firestore();
         console.log("Firebase configurado correctamente.");
 
+        // Referencia al documento de configuración global en Firestore
+        const globalSettingsRef = db.collection('settings').doc('global_block');
+
         let productos = [], abonos = [], valorTotal = 0;
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
         console.log("Datos del usuario al inicio:", datosUsuario);
 
         if (!datosUsuario || !datosUsuario.permisos) {
-            // Using alert for simplicity, consider custom modal for better UX
             alert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, inicie sesión de nuevo.");
             datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
             console.error("Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
@@ -389,8 +392,7 @@
         // --- NUEVAS VARIABLES PARA EL BLOQUEO ---
         const BLOCK_PASSWORD = "upm1022";
         let isTimeBlocked = false; // Bloqueo automático por hora
-        let isManuallyBlocked = localStorage.getItem('isManuallyBlocked') === 'true'; // Bloqueo manual persistente
-        let isImmediateBlocked = localStorage.getItem('isImmediateBlocked') === 'true'; // Bloqueo inmediato persistente
+        let isGlobalManualBlock = false; // Bloqueo manual/inmediato global, controlado por Firestore
         let currentPasswordModalTargetCheckbox = null; // Para saber qué checkbox se intentó desmarcar
 
         const mostrarModal = id => {
@@ -398,14 +400,19 @@
             // Si el modal de opciones de bloqueo se abre, actualiza el estado de los checkboxes
             if (id === 'block_options_modal') {
                 document.getElementById('auto_block_checkbox').checked = isTimeBlocked;
-                document.getElementById('manual_block_checkbox').checked = isManuallyBlocked;
-                document.getElementById('immediate_block_checkbox').checked = isImmediateBlocked;
+                document.getElementById('global_manual_block_checkbox').checked = isGlobalManualBlock;
             }
             if (id === 'modal_producto') {
                 document.getElementById('producto_referencia').value = '';
                 document.getElementById('producto_color').value = '';
                 document.getElementById('producto_talla').value = '';
                 document.getElementById('producto_precio').value = '';
+            }
+            // Fix: Clear search term when "Ver Pedidos" modal is opened
+            if (id === 'modal_pedidos') {
+                document.getElementById('search_term').value = '';
+                // Re-apply filter after clearing search term to show all items
+                filtrarYBuscarPedidos();
             }
         };
 
@@ -475,51 +482,49 @@
 
             // Verificar si el formulario está bloqueado antes de enviar
             if (document.getElementById('agregar_pedido_btn').disabled) {
-                // No usamos alert(), pero podemos loggear o mostrar un mensaje en la UI si fuera necesario
                 console.warn("Intento de enviar formulario bloqueado.");
                 return;
             }
 
-            // Replace window.confirm with a custom modal if possible in the future for better UX
             const confirmacion = window.confirm("¿Desea enviar el formulario?");
             if (confirmacion) {
                 mostrarBarraCargando();
                 console.log("Enviando formulario...");
 
                 const datos = {
-                    fecha_hora: firebase.firestore.Timestamp.fromDate(new Date()), // Use Firebase Timestamp for correct ordering
+                    fecha_hora: firebase.firestore.Timestamp.fromDate(new Date()),
                     codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
                     cliente: document.querySelector('input[name="cliente"]').value,
-                    productos, // Array of product objects
-                    num_pares: parseInt(document.querySelector('input[name="num_pares"]').value) || 0, // Ensure num_pares is an integer
+                    productos,
+                    num_pares: parseInt(document.querySelector('input[name="num_pares"]').value) || 0,
                     valor_total: Math.round(valorTotal),
                     observaciones: document.querySelector('textarea[name="observaciones"]').value,
                     saldo_a_favor: document.querySelector('input[name="saldo_a_favor"]').value,
-                    abonos, // Array of abono objects
+                    abonos,
                     asesor: datosUsuario.nombreCompleto,
                     usuario: datosUsuario.usuario,
-                    bloqueado: false, // Default to not blocked
-                    despachado: false // Default to not dispatched
+                    bloqueado: false,
+                    despachado: false
                 };
                 console.log("Datos a guardar:", datos);
 
                 try {
                     await db.collection('registros').add(datos);
                     console.log("Datos guardados en Firebase:", datos);
-                    alert("Pedido agregado exitosamente!"); // Replace with custom modal
+                    alert("Pedido agregado exitosamente!");
                 } catch (error) {
                     console.error("Error guardando en Firebase:", error);
-                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo."); // Replace with custom modal
+                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
                 }
 
-                document.querySelector('form').reset(); // Reset the form
-                productos = []; // Clear products array
-                abonos = []; // Clear abonos array
-                valorTotal = 0; // Reset total value
-                actualizarLista('productos', productos); // Update UI
-                actualizarLista('abonos', abonos); // Update UI
-                actualizarValorTotal(); // Update UI
-                if (datosUsuario && datosUsuario.nombreCompleto) { // Set asesor field if user data is available
+                document.querySelector('form').reset();
+                productos = [];
+                abonos = [];
+                valorTotal = 0;
+                actualizarLista('productos', productos);
+                actualizarLista('abonos', abonos);
+                actualizarValorTotal();
+                if (datosUsuario && datosUsuario.nombreCompleto) {
                     document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
                 }
                  ocultarBarraCargando();
@@ -528,24 +533,21 @@
 
         function resetearComboBoxAsesor() {
             const filtroAsesor = document.getElementById('filtro_asesor');
-            // Preserve "Todos" option or create it
             const todosOptionHTML = filtroAsesor.options[0] && filtroAsesor.options[0].value === "" ? filtroAsesor.options[0].outerHTML : '<option value="">Todos</option>';
             filtroAsesor.innerHTML = todosOptionHTML;
         }
 
-        // Combined filter and search function
         function filtrarYBuscarPedidos() {
             const filtroAsesorValue = document.getElementById('filtro_asesor').value;
-            const searchTerm = document.getElementById('search_term').value.toLowerCase(); // Get search term and convert to lowercase
+            const searchTerm = document.getElementById('search_term').value.toLowerCase();
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
             const records = listaPedidosContainer.querySelectorAll('.record'); 
             
             let totalPares = 0;
             let valorTotalFiltrado = 0;
-            let visibleTotalCount = 0; // Count for the currently displayed tab (all, despachados, noDespachados)
-            let totalDespachadosFiltered = 0; // Count for despachados matching asesor/search
-            let totalNoDespachadosFiltered = 0; // Count for noDespachados matching asesor/search
-
+            let visibleTotalCount = 0;
+            let totalDespachadosFiltered = 0;
+            let totalNoDespachadosFiltered = 0;
 
             const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
             const currentUserId = datosUsuario.usuario;
@@ -555,8 +557,8 @@
                 const clienteDelRegistro = recordElement.dataset.cliente ? recordElement.dataset.cliente.toLowerCase() : '';
                 const codigoDelRegistro = recordElement.dataset.codigo ? recordElement.dataset.codigo.toLowerCase() : '';
                 const productosDelRegistro = recordElement.dataset.productos ? recordElement.dataset.productos.toLowerCase() : '';
-                const despachadoDelRegistro = recordElement.dataset.despachado === 'true'; // Convert string to boolean
-                const usuarioDelRegistro = recordElement.dataset.usuario; // Get user ID from data attribute
+                const despachadoDelRegistro = recordElement.dataset.despachado === 'true';
+                const usuarioDelRegistro = recordElement.dataset.usuario;
 
                 const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
                 
@@ -568,7 +570,6 @@
                                       productosDelRegistro.includes(searchTerm);
                 }
 
-                // Calculate the counts for the buttons *before* applying the currentDispatchFilter for display
                 if (coincideAsesor && coincideBusqueda && (isOperator ? usuarioDelRegistro === currentUserId : true)) {
                     if (despachadoDelRegistro) {
                         totalDespachadosFiltered++;
@@ -577,7 +578,6 @@
                     }
                 }
 
-                // Now, determine if the record should be displayed based on the currentDispatchFilter
                 let recordShouldBeDisplayed = true;
                 if (currentDispatchFilter === 'despachados') {
                     recordShouldBeDisplayed = despachadoDelRegistro;
@@ -587,7 +587,7 @@
 
                 if (coincideAsesor && coincideBusqueda && (isOperator ? usuarioDelRegistro === currentUserId : true) && recordShouldBeDisplayed) {
                     recordElement.style.display = 'block';
-                    visibleTotalCount++; // This counts only records visible in the *current tab*
+                    visibleTotalCount++;
                     const numParesElement = recordElement.querySelector('.num_pares');
                     if (numParesElement) {
                         totalPares += parseInt(numParesElement.innerText.split(': ')[1] || 0);
@@ -604,14 +604,11 @@
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
             document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
 
-
-            // Update the button counts using the newly calculated totals, which are independent of the current display filter
-            document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`; // This is still correct for 'all' tab
+            document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`;
             document.getElementById('filterDespachadosButton').textContent = `Despachados (${totalDespachadosFiltered})`;
             document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${totalNoDespachadosFiltered})`;
         }
         
-        // Helper function to update the display of a single record
         function updateRecordStatusAndButtons(docId, updatedRegistro) {
             const recordElement = document.querySelector(`.record[data-id="${docId}"]`);
             if (!recordElement) return;
@@ -620,15 +617,13 @@
             const estaBloqueado = updatedRegistro.bloqueado === true;
             const estaDespachado = updatedRegistro.despachado === true;
 
-            // Update data attributes
             recordElement.dataset.bloqueado = estaBloqueado;
             recordElement.dataset.despachado = estaDespachado;
 
-            // Update status text
             const statusMessagesContainer = recordElement.querySelector(`#status-messages-${docId}`);
             if (statusMessagesContainer) {
                 let newStatusHtml = '';
-                if (!isAdministrator) { // Only operators see status text in this container
+                if (!isAdministrator) {
                     if (currentDispatchFilter === 'all' || currentDispatchFilter === 'despachados') {
                         if (estaBloqueado) {
                             newStatusHtml += `<p class="status-bloqueado">Pedido Revisado</p>`;
@@ -641,7 +636,6 @@
                 statusMessagesContainer.innerHTML = newStatusHtml;
             }
 
-            // Update buttons disabled state
             const puedeModificarEliminar = isAdministrator || (!estaBloqueado && !estaDespachado);
             const modificarButton = recordElement.querySelector('button[onclick*="modificarPedido"]');
             const eliminarButton = recordElement.querySelector('button[onclick*="eliminarPedido"]');
@@ -655,7 +649,6 @@
                 eliminarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
             }
 
-            // Update despachado seal
             const despachadoSelloContainer = recordElement.querySelector(`#despachado-sello-container-${docId}`);
             if (despachadoSelloContainer) {
                 if (estaDespachado && currentDispatchFilter === 'despachados') {
@@ -670,21 +663,19 @@
             console.log("Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos');
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
-            listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>'; // Initial loading message
-            isInitialLoadPedidos = true; // Flag for initial load
+            listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>';
+            isInitialLoadPedidos = true;
 
-            if (pedidosListenerUnsubscribe) { // If a listener already exists, unsubscribe
+            if (pedidosListenerUnsubscribe) {
                 pedidosListenerUnsubscribe();
             }
 
-            // Determine the query based on user permissions
             let query = db.collection('registros').orderBy('fecha_hora', 'asc');
             const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
             const currentUserId = datosUsuario.usuario;
             console.log("Rol del usuario para la consulta:", datosUsuario.permisos);
             console.log("ID de usuario para la consulta (si es operador):", currentUserId);
 
-            // If operator, filter by their user ID
             if (isOperator) {
                 query = query.where('usuario', '==', currentUserId);
             }
@@ -693,13 +684,13 @@
                 console.log("Datos de pedidos recibidos/actualizados.");
                 console.log("Número de documentos recibidos:", querySnapshot.size);
                 
-                if (!isInitialLoadPedidos) { // Save scroll position if not initial load
+                if (!isInitialLoadPedidos) {
                     scrollPosPedidos = listaPedidosContainer.scrollTop;
                 }
 
                 let pedidosHTML = '';
-                let asesores = new Set(); // To populate asesor filter dropdown
-                let resumenAsesores = {}; // For admin summary
+                let asesores = new Set();
+                let resumenAsesores = {};
 
                 if (querySnapshot.empty && isOperator) {
                     pedidosHTML = '<p>No hay pedidos asignados a este operador o no se encontraron pedidos con los filtros actuales.</p>';
@@ -718,20 +709,19 @@
                     const estaBloqueado = registro.bloqueado === true;
                     const estaDespachado = registro.despachado === true;
 
-                    if(registro.asesor) asesores.add(registro.asesor); // Add asesor to set
+                    if(registro.asesor) asesores.add(registro.asesor);
 
-                    // Calculate summary for admin
-                    if (esAdministrador) { // Only admins see the summary
+                    if (esAdministrador) {
                         if (registro.asesor && !resumenAsesores[registro.asesor]) {
                             resumenAsesores[registro.asesor] = { num_pares: 0, valor_vendido: 0 };
                         }
-                        if(registro.asesor){ // Ensure asesor exists before adding to summary
+                        if(registro.asesor){
                             resumenAsesores[registro.asesor].num_pares += parseInt(registro.num_pares || 0);
                             resumenAsesores[registro.asesor].valor_vendido += parseFloat(registro.valor_total || 0);
                         }
                     }
                     
-                    let productosTextoParaBusqueda = ""; // Concatenated product info for searching
+                    let productosTextoParaBusqueda = "";
                     let productosHTMLList = 'Sin productos';
                     if (Array.isArray(registro.productos) && registro.productos.length > 0) {
                         productosHTMLList = '<ul>';
@@ -752,10 +742,9 @@
                         abonosHTMLList += '</ul>';
                     }
 
-                    let controlesHTML = ''; // HTML for admin controls (checkboxes)
+                    let controlesHTML = '';
 
                     if (esAdministrador) {
-                        // Show "Marcar como Despachado" checkbox only if current filter is 'despachados' or 'noDespachados'
                         if (currentDispatchFilter !== 'all') {
                             controlesHTML += `
                                 <div class="control-container control-container-despachado">
@@ -763,7 +752,6 @@
                                     <label for="despachar_${doc.id}">Marcar como Despachado</label>
                                 </div>`;
                         }
-                        // Show "Bloquear Pedido" checkbox only if current filter is 'all'
                         if (currentDispatchFilter === 'all') {
                             controlesHTML += `
                                 <div class="control-container">
@@ -773,16 +761,13 @@
                         }
                     }
                     
-                    // Operators cannot modify/delete if blocked OR dispatched
                     const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
-                    // Format date and time
                     const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
                     const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
 
 
                     let recordContentHtml = '';
                     if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                        // Simplified view for 'Despachados' and 'No Despachados'
                         recordContentHtml = `
                             <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
                             <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
@@ -793,7 +778,6 @@
                             <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                         `;
                     } else {
-                        // Full view (for 'all' filter)
                         recordContentHtml = `
                             <p><strong>Registro ${index + 1}</strong></p>
                             <p>Fecha y Hora: ${fechaHoraFormateada}</p>
@@ -831,46 +815,40 @@
                             <hr>
                         </div>
                     `;
-                }); // End querySnapshot.forEach
+                });
                 
-                listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>'; // Update pedidos list
+                listaPedidosContainer.innerHTML = pedidosHTML || '<p>No hay pedidos para mostrar.</p>';
                 
-                // After initial render, apply status and button logic to each record
                 querySnapshot.forEach(doc => {
                     const registro = doc.data();
                     updateRecordStatusAndButtons(doc.id, registro);
                 });
 
-                // Show summary if admin
                 if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                     mostrarResumenAsesores(resumenAsesores);
                 } else {
-                     document.getElementById('resumen_asesores').innerHTML = ''; // Clear summary if not admin
+                     document.getElementById('resumen_asesores').innerHTML = '';
                 }
 
-                // Populate asesor filter dropdown
                 const filtroAsesorDropdown = document.getElementById('filtro_asesor');
-                const valorActualFiltro = filtroAsesorDropdown.value; // Save current filter value
+                const valorActualFiltro = filtroAsesorDropdown.value;
                 
-                resetearComboBoxAsesor(); // Clear and add "Todos" option
+                resetearComboBoxAsesor();
                 asesores.forEach(asesor => {
                     const option = document.createElement('option');
                     option.value = asesor;
                     option.textContent = asesor;
                     filtroAsesorDropdown.appendChild(option);
                 });
-                // Restore filter selection if possible
                 if (Array.from(filtroAsesorDropdown.options).some(opt => opt.value === valorActualFiltro)) {
                     filtroAsesorDropdown.value = valorActualFiltro;
                 }
 
-                // Call filtrarYBuscarPedidos to update all button counts based on the current filters
                 filtrarYBuscarPedidos(); 
-                setActiveDispatchFilterButton(currentDispatchFilter); // Set initial active dispatch filter button
+                setActiveDispatchFilterButton(currentDispatchFilter);
 
-                // Restore scroll position
                 if (isInitialLoadPedidos) {
-                    isInitialLoadPedidos = false; // No longer initial load
+                    isInitialLoadPedidos = false;
                 } else {
                     listaPedidosContainer.scrollTop = scrollPosPedidos;
                 }
@@ -884,52 +862,48 @@
         async function toggleBloqueoPedido(id, nuevoEstadoBloqueo) {
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 alert("Esta acción solo puede ser realizada por un administrador.");
-                const checkbox = document.getElementById(`bloquear_${id}`); // Revert checkbox if not admin
+                const checkbox = document.getElementById(`bloquear_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
                 return;
             }
             try {
                 await db.collection('registros').doc(id).update({ bloqueado: nuevoEstadoBloqueo });
                 console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo}`);
-                // Fetch the updated document to get the latest state including 'despachado'
                 const docSnap = await db.collection('registros').doc(id).get();
                 if (docSnap.exists) {
                     updateRecordStatusAndButtons(id, docSnap.data());
                 }
-                filtrarYBuscarPedidos(); // Re-run filter to update counts and visibility if needed
+                filtrarYBuscarPedidos();
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
                 alert("Error al cambiar el estado de bloqueo del pedido.");
-                const checkbox = document.getElementById(`bloquear_${id}`); // Revert checkbox on error
+                const checkbox = document.getElementById(`bloquear_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
             }
         }
 
-        // New function to toggle 'despachado' status
         async function toggleDespachadoPedido(id, nuevoEstadoDespachado) {
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 alert("Esta acción solo puede ser realizada por un administrador.");
-                const checkbox = document.getElementById(`despachar_${id}`); // Revert checkbox if not admin
+                const checkbox = document.getElementById(`despachar_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
                 return;
             }
             try {
                 await db.collection('registros').doc(id).update({ despachado: nuevoEstadoDespachado });
                 console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado}`);
-                // Fetch the updated document to get the latest state including 'bloqueado'
                 const docSnap = await db.collection('registros').doc(id).get();
                 if (docSnap.exists) {
                     updateRecordStatusAndButtons(id, docSnap.data());
                 }
-                filtrarYBuscarPedidos(); // Re-run filter to update counts and visibility if needed
+                filtrarYBuscarPedidos();
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
                 alert("Error al cambiar el estado de despachado del pedido.");
-                const checkbox = document.getElementById(`despachar_${id}`); // Revert checkbox on error
+                const checkbox = document.getElementById(`despachar_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
             }
         }
-
 
         function mostrarResumenAsesores(resumen) {
             let resumenHTML = '<h3>Resumen de Asesores</h3><div>';
@@ -947,19 +921,17 @@
 
         async function exportarAExcel() {
             console.log("Exportando a Excel...");
-            // Get data directly for export, ordered as displayed (or as needed for Excel)
             const querySnapshot = await db.collection('registros').orderBy('fecha_hora', 'asc').get();
             let registros = [];
 
             querySnapshot.forEach(doc => {
                 const registro = doc.data();
                 let fechaHoraFormateada = 'N/A';
-                if (registro.fecha_hora && typeof registro.fecha_hora.toDate === 'function') { // Ensure toDate() exists
+                if (registro.fecha_hora && typeof registro.fecha_hora.toDate === 'function') {
                     const dateObj = registro.fecha_hora.toDate();
-                    const datePart = dateObj.toLocaleDateString('es-CO'); // e.g., "26/5/2025"
-                    let timePart = dateObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }); // e.g., "05:26:32 p. m."
+                    const datePart = dateObj.toLocaleDateString('es-CO');
+                    let timePart = dateObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
                     
-                    // Modify timePart to change "p. m." to "p.m." and "a. m." to "a.m."
                     timePart = timePart.replace(/(\s[ap])\.\s?m\./i, '$1.m.');
                     
                     fechaHoraFormateada = `${datePart}, ${timePart}`;
@@ -977,14 +949,14 @@
                     "Saldo a Favor": registro.saldo_a_favor,
                     "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
                     "Bloqueado": registro.bloqueado ? 'Sí' : 'No',
-                    "Despachado": registro.despachado ? 'Sí' : 'No' // Include 'despachado' status in Excel
+                    "Despachado": registro.despachado ? 'Sí' : 'No'
                 });
             });
             const worksheet = XLSX.utils.json_to_sheet(registros);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
 
-            XLSX.writeFile(workbook, 'registros_pedidos.xlsx'); // Save Excel file
+            XLSX.writeFile(workbook, 'registros_pedidos.xlsx');
         }
 
         async function modificarPedido(id) {
@@ -998,42 +970,37 @@
                 }
                 const registro = docSnap.data();
 
-                // Operator cannot modify if blocked OR dispatched
                 if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
                     alert("Este pedido está bloqueado o despachado y no puede ser modificado.");
                     return;
                 }
 
-                // Store original products and abonos for comparison
                 originalProductsForModification = JSON.parse(JSON.stringify(registro.productos || []));
                 originalAbonosForModification = JSON.parse(JSON.stringify(registro.abonos || []));
 
-                // Populate modification form
                 document.getElementById('modificar_cliente').value = registro.cliente;
                 document.getElementById('modificar_num_pares').value = registro.num_pares; 
                 document.getElementById('modificar_valor_total').value = registro.valor_total;
                 document.getElementById('modificar_observaciones').value = registro.observaciones;
                 document.getElementById('modificar_saldo_a_favor').value = registro.saldo_a_favor;
 
-                // Render dynamic product and abono fields
                 renderModificarProductos(registro.productos || []);
                 renderModificarAbonos(registro.abonos || []);
                 
-                actualizarValorTotalModificar(); // Set initial total based on products
+                actualizarValorTotalModificar();
 
                 const botonGuardar = document.querySelector('#modal_modificar button[type="submit"]');
-                botonGuardar.onclick = (event) => guardarCambios(event, id); // Pass event and id
+                botonGuardar.onclick = (event) => guardarCambios(event, id);
 
                 const modal = document.getElementById('modal_modificar');
                 modal.style.display = 'flex';
-                modal.style.zIndex = '1001'; // Ensure it's above other modals if any overlap
+                modal.style.zIndex = '1001';
             } catch (error) {
                 console.error("Error al cargar el pedido para modificar:", error);
                 alert("Error al cargar el pedido. " + error.message);
             }
         }
 
-        // Functions for dynamic product management in modification modal
         function renderModificarProductos(products) {
             const container = document.getElementById('modificar_productos_list');
             let html = '';
@@ -1057,7 +1024,6 @@
 
         function addProductModificar() {
             const container = document.getElementById('modificar_productos_list');
-            // Remove initial "No hay productos..." message if present
             if (container.querySelector('p')) {
                 container.innerHTML = '';
             }
@@ -1074,25 +1040,22 @@
                 </div>
             `;
             container.insertAdjacentHTML('beforeend', newProductHtml);
-            actualizarValorTotalModificar(); // Update total after adding
+            actualizarValorTotalModificar();
         }
 
         function removeProductModificar(buttonElement) {
             const productItem = buttonElement.closest('.product-item');
             productItem.remove();
-            actualizarValorTotalModificar(); // Update total after removing
-            // Re-index displayed product numbers
+            actualizarValorTotalModificar();
             Array.from(document.querySelectorAll('#modificar_productos_list .product-item')).forEach((item, index) => {
                 item.dataset.index = index;
                 item.querySelector('label').textContent = `Producto ${index + 1}:`;
             });
-            // If no products remain, display a message
             if (document.querySelectorAll('#modificar_productos_list .product-item').length === 0) {
                 document.getElementById('modificar_productos_list').innerHTML = '<p>No hay productos en este pedido. Agregue uno:</p>';
             }
         }
 
-        // Functions for dynamic abono management in modification modal
         function renderModificarAbonos(abonos) {
             const container = document.getElementById('modificar_abonos_list');
             let html = '';
@@ -1114,7 +1077,6 @@
 
         function addAbonoModificar() {
             const container = document.getElementById('modificar_abonos_list');
-             // Remove initial "No hay abonos..." message if present
             if (container.querySelector('p')) {
                 container.innerHTML = '';
             }
@@ -1129,7 +1091,6 @@
                 </div>
             `;
             container.insertAdjacentHTML('beforeend', newAbonoHtml);
-            // Re-index displayed abono numbers
             Array.from(document.querySelectorAll('#modificar_abonos_list .abono-item')).forEach((item, index) => {
                 item.dataset.index = index;
                 item.querySelector('label').textContent = `Abono ${index + 1}:`;
@@ -1139,21 +1100,19 @@
         function removeAbonoModificar(buttonElement) {
             const abonoItem = buttonElement.closest('.abono-item');
             abonoItem.remove();
-            // Re-index displayed abono numbers
             Array.from(document.querySelectorAll('#modificar_abonos_list .abono-item')).forEach((item, index) => {
                 item.dataset.index = index;
                 item.querySelector('label').textContent = `Abono ${index + 1}:`;
             });
-            // If no abonos remain, display a message
             if (document.querySelectorAll('#modificar_abonos_list .abono-item').length === 0) {
                 document.getElementById('modificar_abonos_list').innerHTML = '<p>No hay abonos en este pedido. Agregue uno:</p>';
             }
         }
 
         async function guardarCambios(event, id) {
-            event.preventDefault(); // Prevent default form submission
+            event.preventDefault();
             
-            try { // Check status again before saving (in case it changed while modal was open)
+            try {
                 const docSnap = await db.collection('registros').doc(id).get();
                 if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
                     alert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios.");
@@ -1166,7 +1125,6 @@
                 return;
             }
 
-            // Get updated data from form
             const ref = elId => document.getElementById(elId).value;
             
             const productosActualizados = Array.from(document.querySelectorAll('#modificar_productos_list .product-item')).map((el) => ({
@@ -1191,7 +1149,6 @@
                 abonos: abonosActualizados
             };
 
-            // Check if products have changed (deep comparison of content, not just reference)
             const productsChanged = JSON.stringify(originalProductsForModification) !== JSON.stringify(productosActualizados);
 
             try {
@@ -1200,9 +1157,8 @@
                 cerrarModal('modal_modificar');
 
                 if (productsChanged) {
-                    showWarningModal(); // Show warning about num_pares
+                    showWarningModal();
                 }
-                // List will update automatically via onSnapshot listener
             } catch (error) {
                 console.error("Error al modificar el pedido:", error);
                 alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
@@ -1212,13 +1168,13 @@
         function actualizarValorTotalModificar() {
             const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos_list .mod_product_precio')).map((el) => parseFloat(el.value) || 0);
             const valorTotalCalculado = preciosProductos.reduce((total, precio) => total + precio, 0);
-            document.getElementById('modificar_valor_total').value = valorTotalCalculado.toFixed(2); // Format to 2 decimal places
+            document.getElementById('modificar_valor_total').value = valorTotalCalculado.toFixed(2);
         }
 
         async function eliminarPedido(id) {
             console.log("Eliminando pedido:", id);
 
-            try { // Check status before deleting
+            try {
                 const docRef = db.collection('registros').doc(id);
                 const docSnap = await docRef.get();
                 if (docSnap.exists) {
@@ -1237,12 +1193,11 @@
                  return;
             }
 
-            const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?"); // Replace with custom modal
+            const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?");
             if (confirmacion) {
                 try {
                     await db.collection('registros').doc(id).delete();
                     alert("Pedido eliminado correctamente.");
-                    // List will update automatically via onSnapshot listener
                 } catch (error) {
                     console.error("Error al eliminar el pedido:", error);
                     alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
@@ -1250,13 +1205,12 @@
             }
         }
         
-        // --- Funciones de la Barra de Cargando ---
         function mostrarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
             if(loadingBar && loadingBarFill) {
                 loadingBar.style.display = "block";
-                loadingBarFill.style.width = "0%"; // Reset width
+                loadingBarFill.style.width = "0%";
                 var width = 0;
                 var interval = setInterval(function() {
                     if (width >= 100) {
@@ -1266,7 +1220,7 @@
                         loadingBarFill.style.width = width + "%";
                         loadingBarFill.innerText = width + "%";
                     }
-                }, 20); // Adjust timing for smoother animation if needed
+                }, 20);
             }
         }
 
@@ -1277,55 +1231,68 @@
             }
         }
 
-        // --- Funciones de Carga de Página y Salida ---
         window.onload = function() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
                 alert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
-                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>"; // Critical error message
+                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>";
                 return;
             }
             console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
-            // Hide elements based on user permissions
+            
             if (datosUsuario.permisos.toLowerCase() === 'operador') {
                 document.getElementById('exportar').style.display = 'none';
                 document.getElementById('resumen_asesores').style.display = 'none';
-                document.getElementById('gear_icon').style.display = 'none'; // Ocultar icono de tuerca para operadores
-            } else { // Si es administrador, asegurar que el icono de tuerca esté visible
+                document.getElementById('gear_icon').style.display = 'none';
+            } else {
                 document.getElementById('gear_icon').style.display = 'inline-block';
             }
 
-            document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto; // Set asesor name
-            ocultarBarraCargando(); // Hide loading bar if it was visible
+            document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
+            ocultarBarraCargando();
 
-            // Add event listener for the search bar
             const searchTermInput = document.getElementById('search_term');
             if(searchTermInput) {
-                searchTermInput.addEventListener('input', filtrarYBuscarPedidos); // Call filter/search on input
+                searchTermInput.addEventListener('input', filtrarYBuscarPedidos);
             }
 
-            // Iniciar la verificación de bloqueo por tiempo y aplicar el estado general
+            // Listener para el estado de bloqueo global desde Firestore
+            globalSettingsRef.onSnapshot(doc => {
+                if (doc.exists) {
+                    isGlobalManualBlock = doc.data().isBlocked || false;
+                    console.log("Estado de bloqueo global desde Firestore:", isGlobalManualBlock);
+                } else {
+                    // Si el documento no existe, crearlo con un estado inicial
+                    globalSettingsRef.set({ isBlocked: false }).then(() => {
+                        isGlobalManualBlock = false;
+                        console.log("Documento de configuración global creado.");
+                    }).catch(error => {
+                        console.error("Error al crear documento de configuración global:", error);
+                    });
+                }
+                applyBlockStatus(); // Aplicar el estado de bloqueo después de obtenerlo de Firestore
+            }, error => {
+                console.error("Error al escuchar el estado de bloqueo global:", error);
+            });
+
             checkTimeBlock();
-            applyBlockStatus();
-            // Actualizar el bloqueo por tiempo cada minuto
-            setInterval(checkTimeBlock, 60 * 1000); // Cada minuto
+            setInterval(checkTimeBlock, 60 * 1000);
         }
 
-        window.onbeforeunload = function(event) { // Warn user before leaving if form has unsaved data
+        window.onbeforeunload = function(event) {
             const cliente = document.querySelector('input[name="cliente"]').value;
             const numPares = document.querySelector('input[name="num_pares"]').value;
-            if (productos.length > 0 || abonos.length > 0 || cliente || numPares > 0) { // Check if any data is entered
+            if (productos.length > 0 || abonos.length > 0 || cliente || numPares > 0) {
                 const mensaje = "¿Estás seguro de que quieres salir? Perderás la información del pedido actual que no ha sido guardada.";
-                event.returnValue = mensaje; // For standard browsers
-                return mensaje; // For some older browsers
+                event.returnValue = mensaje;
+                return mensaje;
             }
         };
 
-        // Función para establecer el botón de filtro de despacho activo
         function setActiveDispatchFilterButton(filterType) {
             const allDispatchButtons = document.querySelectorAll('.dispatch-filter-button');
             allDispatchButtons.forEach(button => {
                 button.classList.remove('active');
-                button.classList.remove('no-despachados-active'); // Remove specific class for red
+                button.classList.remove('no-despachados-active');
             });
             if (filterType === 'all') {
                 document.getElementById('filterAllButton').classList.add('active');
@@ -1333,13 +1300,11 @@
                 document.getElementById('filterDespachadosButton').classList.add('active');
             } else if (filterType === 'noDespachados') {
                 document.getElementById('filterNoDespachadosButton').classList.add('active');
-                document.getElementById('filterNoDespachadosButton').classList.add('no-despachados-active'); // Add specific class for red
+                document.getElementById('filterNoDespachadosButton').classList.add('no-despachados-active');
             }
         }
 
-        // Event listeners para los nuevos botones de filtro de despacho
         document.addEventListener('DOMContentLoaded', () => {
-            // Remove any existing dynamic filter buttons to prevent duplication on re-render
             const existingFilterContainer = document.querySelector('.flex.space-x-2.mt-1.mb-4');
             if (existingFilterContainer) {
                 existingFilterContainer.remove();
@@ -1352,7 +1317,7 @@
             filterAllButton.addEventListener('click', () => {
                 currentDispatchFilter = 'all';
                 setActiveDispatchFilterButton('all');
-                iniciarVistaPedidosEnTiempoReal(); // Re-render the list based on the new filter
+                iniciarVistaPedidosEnTiempoReal();
             });
 
             const filterDespachadosButton = document.createElement('button');
@@ -1362,7 +1327,7 @@
             filterDespachadosButton.addEventListener('click', () => {
                 currentDispatchFilter = 'despachados';
                 setActiveDispatchFilterButton('despachados');
-                iniciarVistaPedidosEnTiempoReal(); // Re-render the list based on the new filter
+                iniciarVistaPedidosEnTiempoReal();
             });
 
             const filterNoDespachadosButton = document.createElement('button');
@@ -1372,11 +1337,11 @@
             filterNoDespachadosButton.addEventListener('click', () => {
                 currentDispatchFilter = 'noDespachados';
                 setActiveDispatchFilterButton('noDespachados');
-                iniciarVistaPedidosEnTiempoReal(); // Re-render the list based on the new filter
+                iniciarVistaPedidosEnTiempoReal();
             });
 
             const filterContainer = document.createElement('div');
-            filterContainer.className = 'flex space-x-2 mt-1 mb-4'; // Added mb-4 for spacing and flex for alignment
+            filterContainer.className = 'flex space-x-2 mt-1 mb-4';
             filterContainer.appendChild(filterAllButton);
             filterContainer.appendChild(filterDespachadosButton);
             filterContainer.appendChild(filterNoDespachadosButton);
@@ -1384,41 +1349,26 @@
             const modalPedidosContent = document.querySelector('#modal_pedidos .modal-content');
             const searchBarContainer = modalPedidosContent.querySelector('.search-bar-container');
             
-            // Insert the new filter container after the search bar
             if (searchBarContainer) {
                 searchBarContainer.parentNode.insertBefore(filterContainer, searchBarContainer.nextSibling);
             } else {
                 modalPedidosContent.insertBefore(filterContainer, modalPedidosContent.firstChild);
             }
 
-            // Set initial active button
             setActiveDispatchFilterButton(currentDispatchFilter);
         });
 
-        // New warning modal for "Número de Pares"
         function showWarningModal() {
             document.getElementById('modal_pares_warning').style.display = 'flex';
         }
 
-        // --- NUEVAS FUNCIONES DE BLOQUEO ---
-
-        /**
-         * Verifica si la hora actual en Colombia (GMT-5) es posterior a las 5:40 PM.
-         * Actualiza la variable `isTimeBlocked`.
-         */
         function checkTimeBlock() {
             const now = new Date();
-            // Ajustar a la hora de Colombia (GMT-5).
-            // La diferencia horaria de UTC a Colombia es -5 horas.
-            // new Date() ya obtiene la hora local del navegador, que si el usuario está en Colombia, será la correcta.
-            // Si el usuario no está en Colombia, necesitaríamos una lógica más compleja para obtener la hora de Colombia,
-            // pero para una aplicación de navegador, se asume que el reloj del usuario es relevante o que está en la zona horaria correcta.
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
-            // 5:40 PM es 17:40 en formato de 24 horas
-            const blockHour = 17; // 5 PM
-            const blockMinute = 40; // 40 minutes
+            const blockHour = 17;
+            const blockMinute = 40;
 
             if (currentHour > blockHour || (currentHour === blockHour && currentMinute >= blockMinute)) {
                 isTimeBlocked = true;
@@ -1427,29 +1377,20 @@
                 isTimeBlocked = false;
                 console.log("Bloqueo por tiempo desactivado: Es antes de las 5:40 PM.");
             }
-            applyBlockStatus(); // Aplicar el estado de bloqueo después de la verificación de tiempo
+            applyBlockStatus();
         }
 
-        /**
-         * Aplica el estado de bloqueo general a los botones y muestra/oculta el overlay.
-         * El bloqueo se activa si:
-         * 1. Es después de las 5:40 PM (isTimeBlocked)
-         * 2. El bloqueo manual está activado (isManuallyBlocked)
-         * 3. El bloqueo inmediato está activado (isImmediateBlocked)
-         * El botón "Ver Pedidos" siempre debe estar habilitado.
-         */
         function applyBlockStatus() {
             const agregarPedidoBtn = document.getElementById('agregar_pedido_btn');
             const verPedidosBtn = document.getElementById('ver_pedidos');
             const blockOverlay = document.getElementById('block_overlay');
             const autoBlockCheckbox = document.getElementById('auto_block_checkbox');
+            const globalManualBlockCheckbox = document.getElementById('global_manual_block_checkbox');
 
-            // Determinar si debe haber un bloqueo activo
-            const shouldBeBlocked = isTimeBlocked || isManuallyBlocked || isImmediateBlocked;
+            const shouldBeBlocked = isTimeBlocked || isGlobalManualBlock;
             const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
 
             if (agregarPedidoBtn) {
-                // El botón "Agregar Pedido" se deshabilita si hay un bloqueo activo
                 agregarPedidoBtn.disabled = shouldBeBlocked;
                 agregarPedidoBtn.title = shouldBeBlocked ? "La funcionalidad de agregar pedidos está bloqueada temporalmente." : "";
             }
@@ -1461,100 +1402,75 @@
             }
 
             if (blockOverlay) {
-                // Mostrar u ocultar el overlay de bloqueo
-                blockOverlay.style.display = shouldBeBlocked ? 'flex' : 'none';
+                // El overlay se muestra solo si el usuario NO es administrador y hay un bloqueo activo
+                blockOverlay.style.display = (shouldBeBlocked && !isAdministrator) ? 'flex' : 'none';
             }
 
             // Actualizar el estado de los checkboxes de bloqueo en el modal de opciones para el administrador
             if (isAdministrator) {
-                const manualCheckbox = document.getElementById('manual_block_checkbox');
-                const immediateCheckbox = document.getElementById('immediate_block_checkbox');
-                
-                if (autoBlockCheckbox) autoBlockCheckbox.checked = isTimeBlocked; // Actualizar el estado del checkbox de bloqueo automático
-                if (manualCheckbox) manualCheckbox.checked = isManuallyBlocked;
-                if (immediateCheckbox) immediateCheckbox.checked = isImmediateBlocked;
+                if (autoBlockCheckbox) autoBlockCheckbox.checked = isTimeBlocked;
+                if (globalManualBlockCheckbox) globalManualBlockCheckbox.checked = isGlobalManualBlock;
             }
         }
 
-        /**
-         * Maneja el cambio del checkbox de bloqueo manual.
-         * Solicita contraseña si se intenta desmarcar.
-         * @param {HTMLInputElement} checkbox El checkbox que se ha cambiado.
-         */
-        function toggleManualBlockCheckbox(checkbox) {
+        async function toggleGlobalManualBlockCheckbox(checkbox) {
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                checkbox.checked = !checkbox.checked; // Revertir si no es admin
+                checkbox.checked = !checkbox.checked;
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
 
             if (!checkbox.checked) { // Si se está intentando desmarcar
                 currentPasswordModalTargetCheckbox = checkbox;
-                showPasswordModal('manual');
+                showPasswordModal('global_manual');
             } else { // Si se está marcando
-                isManuallyBlocked = true;
-                localStorage.setItem('isManuallyBlocked', 'true');
-                applyBlockStatus();
+                try {
+                    await globalSettingsRef.set({ isBlocked: true }, { merge: true });
+                    isGlobalManualBlock = true;
+                    applyBlockStatus();
+                    console.log("Bloqueo inmediato activado globalmente.");
+                } catch (error) {
+                    console.error("Error al activar bloqueo inmediato:", error);
+                    alert("Error al activar el bloqueo inmediato.");
+                    checkbox.checked = false; // Revertir el estado del checkbox en caso de error
+                }
             }
         }
 
-        /**
-         * Maneja el cambio del checkbox de bloqueo inmediato.
-         * Solicita contraseña si se intenta desmarcar.
-         * @param {HTMLInputElement} checkbox El checkbox que se ha cambiado.
-         */
-        function toggleImmediateBlockCheckbox(checkbox) {
-            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                checkbox.checked = !checkbox.checked; // Revertir si no es admin
-                alert("Esta acción solo puede ser realizada por un administrador.");
-                return;
-            }
-
-            if (!checkbox.checked) { // Si se está intentando desmarcar
-                currentPasswordModalTargetCheckbox = checkbox;
-                showPasswordModal('immediate');
-            } else { // Si se está marcando
-                isImmediateBlocked = true;
-                localStorage.setItem('isImmediateBlocked', 'true');
-                applyBlockStatus();
-            }
-        }
-
-        /**
-         * Muestra el modal para introducir la contraseña.
-         * @param {string} type 'manual' o 'immediate' para saber qué bloqueo se está intentando deshabilitar.
-         */
         function showPasswordModal(type) {
             document.getElementById('password_modal').style.display = 'flex';
             document.getElementById('password_input').value = '';
             document.getElementById('password_error').textContent = '';
-            document.getElementById('password_modal_type').value = type; // Guardar el tipo de bloqueo
+            document.getElementById('password_modal_type').value = type;
         }
 
-        /**
-         * Verifica la contraseña introducida en el modal.
-         */
-        function verifyPassword() {
+        async function verifyPassword() {
             const passwordInput = document.getElementById('password_input');
             const errorMessage = document.getElementById('password_error');
             const enteredPassword = passwordInput.value;
             const blockType = document.getElementById('password_modal_type').value;
 
             if (enteredPassword === BLOCK_PASSWORD) {
-                if (blockType === 'manual') {
-                    isManuallyBlocked = false;
-                    localStorage.setItem('isManuallyBlocked', 'false');
-                } else if (blockType === 'immediate') {
-                    isImmediateBlocked = false;
-                    localStorage.setItem('isImmediateBlocked', 'false');
+                if (blockType === 'global_manual') {
+                    try {
+                        await globalSettingsRef.set({ isBlocked: false }, { merge: true });
+                        isGlobalManualBlock = false;
+                        console.log("Bloqueo inmediato deshabilitado globalmente.");
+                    } catch (error) {
+                        console.error("Error al deshabilitar bloqueo inmediato:", error);
+                        errorMessage.textContent = "Error al deshabilitar el bloqueo. Inténtelo de nuevo.";
+                        if (currentPasswordModalTargetCheckbox) {
+                            currentPasswordModalTargetCheckbox.checked = true;
+                        }
+                        return;
+                    }
                 }
                 cerrarModal('password_modal');
-                applyBlockStatus(); // Reaplicar el estado de bloqueo
+                applyBlockStatus();
             } else {
                 errorMessage.textContent = "Contraseña incorrecta. Inténtelo de nuevo.";
-                // Revertir el estado del checkbox si la contraseña es incorrecta
                 if (currentPasswordModalTargetCheckbox) {
-                    currentPasswordModalTargetCheckbox.checked = true; // Mantener marcado
+                    currentPasswordModalTargetCheckbox.checked = true;
                 }
             }
         }
@@ -1754,12 +1670,8 @@
                 <label for="auto_block_checkbox">Bloqueo Automático (5:40 p.m. hora Colombia)</label>
             </div>
             <div class="form-field">
-                <input type="checkbox" id="manual_block_checkbox" onchange="toggleManualBlockCheckbox(this)">
-                <label for="manual_block_checkbox">Bloqueo Manual de Pedidos (requiere contraseña para deshabilitar)</label>
-            </div>
-            <div class="form-field">
-                <input type="checkbox" id="immediate_block_checkbox" onchange="toggleImmediateBlockCheckbox(this)">
-                <label for="immediate_block_checkbox">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
+                <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)">
+                <label for="global_manual_block_checkbox">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
             </div>
         </div>
     </div>
