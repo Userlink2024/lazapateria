@@ -1,12 +1,14 @@
-<!DOCTYPE <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generar Guía Envía - La Zapatería</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
+        /* Estilos generales del cuerpo y contenedores */
         body {
-            font-family: Arial, sans-serif;
+            font-family: Arial, sans-serif; /* Restaurado a Arial */
             background-color: #ffe0e0; /* Fondo rojo claro */
             margin: 0;
             padding: 20px;
@@ -31,6 +33,11 @@
             text-align: center;
             color: #cc0000; /* Texto rojo oscuro */
             margin-bottom: 25px;
+            /* Nuevos estilos para centrar el icono de ayuda */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px; /* Espacio entre el título y el icono */
         }
         label {
             display: block;
@@ -41,7 +48,17 @@
         }
         input[type="text"],
         input[type="date"],
-        input[type="number"] {
+        input[type="number"] { /* 'select' removido de aquí */
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #d3d3d3;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 1em;
+        }
+        /* Estilo específico para el nuevo select del filtro */
+        select {
             width: 100%;
             padding: 12px;
             margin-bottom: 15px;
@@ -61,6 +78,7 @@
             margin-top: 8px;
             width: 100%;
             box-sizing: border-box;
+            /* Hover original de envia.txt */
         }
         button:hover {
             background-color: #aa0000; /* Rojo oscuro más intenso al pasar el mouse */
@@ -93,7 +111,7 @@
             width: 95%;
             box-sizing: border-box;
         }
-        #buscadorGuias {
+        #buscadorGuias, #filtroAsesor { /* Estilos para el buscador y el filtro de asesor */
             width: 100%;
             padding: 10px;
             margin-bottom: 15px;
@@ -123,19 +141,122 @@
             margin-top: 10px;
         }
         .accion-btn {
-            background-color: #007bff;
+            background-color: #007bff; /* Azul para Editar, restaurado */
             color: white;
             border: none;
             padding: 8px 10px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 0.8em;
+            /* Hover original de envia.txt */
         }
         .accion-btn.eliminar {
-            background-color: #dc3545;
+            background-color: #dc3545; /* Rojo para Eliminar */
         }
         .accion-btn:hover {
-            opacity: 0.8;
+            opacity: 0.8; /* Hover original de envia.txt */
+        }
+
+        /* Estilos para el icono de ayuda (NUEVO) */
+        .help-icon {
+            cursor: pointer;
+            color: #007bff;
+            font-size: 1.2em;
+            transition: color 0.3s ease;
+        }
+        .help-icon:hover {
+            color: #0056b3;
+        }
+
+        /* Estilos para el modal personalizado (NUEVO) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 90%;
+            text-align: left;
+            position: relative;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.active .modal-content {
+            transform: translateY(0);
+        }
+        .modal-content h3 {
+            color: #cc0000;
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.8em;
+        }
+        .modal-content p {
+            margin-bottom: 10px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .modal-content p strong {
+            color: #cc0000;
+        }
+        .modal-close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #888;
+            transition: color 0.3s ease;
+            width: auto; /* Anular el 100% de width para este botón */
+            padding: 0;
+            margin: 0;
+        }
+        .modal-close-btn:hover {
+            color: #333;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-actions button {
+            width: auto;
+            padding: 10px 20px;
+            font-size: 0.9em;
+        }
+        .modal-actions .confirm-btn {
+            background-color: #dc3545;
+        }
+        .modal-actions .confirm-btn:hover {
+            background-color: #c82333;
+        }
+        .modal-actions .cancel-btn {
+            background-color: #6c757d;
+        }
+        .modal-actions .cancel-btn:hover {
+            background-color: #5a6268;
         }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
@@ -143,7 +264,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
-const firebaseConfig = {
+        // Configuración de Firebase (asegúrate de que esta configuración sea correcta para tu proyecto)
+        const firebaseConfig = {
             apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
             authDomain: "lazapateria-c4157.firebaseapp.com",
             projectId: "lazapateria-c4157",
@@ -151,21 +273,28 @@ const firebaseConfig = {
             messagingSenderId: "300241769138",
             appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
             measurementId: "G-HVG7615JEE"
-                };
-
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const collectionGuias = db.collection('guias_envia'); // Referencia a la nueva colección
-        let guiasInterrapidissimo = [];
-        let guiaAEditarId = null;
-
-        window.onload = () => {
-            cargarUsuarioLogueado();
-            verificarRolParaExportar();
-            establecerListenersParaSuma();
-            cargarGuias();
         };
 
+        // Inicializa Firebase y obtiene referencias a los servicios
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const collectionGuias = db.collection('guias_envia'); // Referencia a la colección de guías
+        let guiasInterrapidissimo = []; // Almacena todas las guías cargadas
+        let guiaAEditarId = null; // ID de la guía que se está editando
+        let currentDeleteGuiaId = null; // ID de la guía a eliminar en el modal de confirmación
+
+        // Se ejecuta cuando la ventana ha cargado completamente
+        window.onload = () => {
+            cargarUsuarioLogueado(); // Carga el usuario desde localStorage
+            verificarRolParaExportar(); // Muestra/oculta el botón de exportar según el rol
+            establecerListenersParaSuma(); // Configura listeners para el cálculo del valor total
+            cargarGuias(); // Carga y muestra las guías desde Firestore
+        };
+
+        /**
+         * Configura los event listeners para los campos de valor de mercancía y flete
+         * para calcular el valor total automáticamente.
+         */
         function establecerListenersParaSuma() {
             const valorMercanciaInput = document.getElementById('valorMercancia');
             const valorFleteInput = document.getElementById('valorFlete');
@@ -178,15 +307,23 @@ const firebaseConfig = {
             }
         }
 
+        /**
+         * Calcula el valor total sumando el valor de la mercancía y el flete.
+         * Redondea el resultado al entero más cercano.
+         */
         function calcularValorTotal() {
             const valorMercancia = parseFloat(document.getElementById('valorMercancia').value) || 0;
             const valorFlete = parseFloat(document.getElementById('valorFlete').value) || 0;
             const valorTotalInput = document.getElementById('valorTotal');
             if (valorTotalInput) {
-                valorTotalInput.value = Math.round(valorMercancia + valorFlete); // Usamos Math.round() para redondear al entero más cercano
+                valorTotalInput.value = Math.round(valorMercancia + valorFlete);
             }
         }
 
+        /**
+         * Carga el nombre del usuario logueado desde localStorage y lo muestra en el campo.
+         * Hace el campo de solo lectura y arrastrable.
+         */
         async function cargarUsuarioLogueado() {
             const usuarioLogueadoElement = document.getElementById('usuarioLogueado');
             const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
@@ -206,6 +343,10 @@ const firebaseConfig = {
             }
         }
 
+        /**
+         * Verifica el rol del usuario logueado y muestra u oculta el botón de exportar a Excel.
+         * Solo los usuarios con rol 'administrador' pueden ver el botón.
+         */
         function verificarRolParaExportar() {
             const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
             const exportarExcelBtn = document.getElementById('exportarExcelBtn');
@@ -217,6 +358,10 @@ const firebaseConfig = {
             }
         }
 
+        /**
+         * Guarda una nueva guía o actualiza una existente en Firestore.
+         * Valida los campos y muestra mensajes de error/éxito.
+         */
         async function guardarGuia() {
             const usuario = document.getElementById('usuarioLogueado').value;
             const fecha = document.getElementById('fechaGuia').value;
@@ -229,59 +374,63 @@ const firebaseConfig = {
             errorMessageElement.textContent = '';
             const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
 
+            // Validación de campos obligatorios
             if (!fecha || !nombreCliente || !usuario || isNaN(valorMercancia) || isNaN(valorFlete) || !numeroGuia) {
                 errorMessageElement.textContent = 'Por favor, completa todos los campos de valor y los obligatorios.';
-                alert('Por favor, completa todos los campos de valor y los obligatorios.');
+                showMessageModal('Error de Validación', 'Por favor, completa todos los campos obligatorios y asegúrate de que los valores numéricos sean correctos.', 'error');
                 return;
             }
 
+            // Datos de la guía a guardar/actualizar
             const guiaData = {
-                usuario: usuario,
+                usuario: usuario, // El usuario logueado actúa como el asesor
                 fecha: fecha,
                 nombreCliente: nombreCliente,
                 valorTotal: parseFloat(valorTotal),
                 valorMercancia: valorMercancia,
                 valorFlete: valorFlete,
                 numeroGuia: numeroGuia,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                timestamp: firebase.firestore.FieldValue.serverTimestamp() // Marca de tiempo del servidor
             };
 
             if (guiaAEditarId) {
+                // Si hay un ID de guía a editar, actualiza la guía existente
                 console.log("Actualizando guía con ID:", guiaAEditarId, guiaData);
                 collectionGuias.doc(guiaAEditarId).update(guiaData)
                     .then(() => {
-                        errorMessageElement.textContent = 'Guía de Envía actualizada exitosamente.';
-                        setTimeout(() => {
-                            errorMessageElement.textContent = '';
-                        }, 3000);
-                        alert('Guía de Envía actualizada exitosamente.');
-                        guardarBtn.textContent = 'Guardar Guía';
-                        guiaAEditarId = null;
-                        document.getElementById('generarGuiaForm').reset();
-                        cargarGuias();
+                        showMessageModal('Éxito', 'Guía de Envía actualizada exitosamente.', 'success');
+                        guardarBtn.textContent = 'Guardar Guía'; // Restaura el texto del botón
+                        guiaAEditarId = null; // Limpia el ID de edición
+                        document.getElementById('generarGuiaForm').reset(); // Resetea el formulario
+                        cargarGuias(); // Recarga las guías para actualizar la lista
                     })
                     .catch((error) => {
                         console.error("Error al actualizar la guía: ", error);
-                        errorMessageElement.textContent = 'Error al actualizar la guía de Envía. Inténtalo de nuevo.';
+                        showMessageModal('Error', 'Error al actualizar la guía de Envía. Inténtalo de nuevo.', 'error');
                     });
             } else {
+                // Si no hay ID de guía a editar, guarda una nueva guía
                 console.log("Guardando nueva guía:", guiaData);
                 try {
                     await collectionGuias.add(guiaData);
-                    alert('Guía de Envía registrada exitosamente.');
+                    showMessageModal('Éxito', 'Guía de Envía registrada exitosamente.', 'success');
                     document.getElementById('generarGuiaForm').reset();
-                    cargarUsuarioLogueado();
+                    cargarUsuarioLogueado(); // Recarga el usuario logueado (por si se resetea)
                     cargarGuias();
                 } catch (error) {
                     console.error("Error al guardar la guía: ", error);
-                    errorMessageElement.textContent = 'Error al guardar la guía de Envía. Inténtalo de nuevo.';
+                    showMessageModal('Error', 'Error al guardar la guía de Envía. Inténtalo de nuevo.', 'error');
                 }
             }
         }
 
+        /**
+         * Exporta todas las guías de Envía a un archivo Excel (.xlsx).
+         * Solo disponible para usuarios administradores.
+         */
         async function exportarGuiasExcel() {
             try {
-                const querySnapshot = await collectionGuias.get(); // Usar la nueva referencia
+                const querySnapshot = await collectionGuias.get();
                 const data = [];
                 querySnapshot.forEach(doc => {
                     data.push(doc.data());
@@ -293,58 +442,100 @@ const firebaseConfig = {
                     XLSX.utils.book_append_sheet(workbook, worksheet, 'Guias Envia');
                     XLSX.writeFile(workbook, 'guias_envia.xlsx');
                 } else {
-                    alert('No hay guías de Envía para exportar.');
+                    showMessageModal('Información', 'No hay guías de Envía para exportar.', 'info');
                 }
             } catch (error) {
                 console.error("Error al exportar guías a Excel: ", error);
-                alert('Error al exportar guías a Excel.');
+                showMessageModal('Error', 'Error al exportar guías a Excel.', 'error');
             }
         }
 
+        /**
+         * Muestra el módulo de listado de guías y carga las guías.
+         */
         function mostrarModuloGuias() {
             document.getElementById('guiasModulo').style.display = 'block';
             cargarGuias();
         }
 
+        /**
+         * Carga todas las guías desde Firestore, las almacena y las muestra en la lista.
+         * También actualiza el filtro de asesor con los usuarios únicos.
+         */
         async function cargarGuias() {
             const listaGuiasElement = document.getElementById('listaGuias');
             listaGuiasElement.innerHTML = '';
-            guiasInterrapidissimo = [];
+            guiasInterrapidissimo = []; // Limpia el array antes de cargar
 
             try {
-                const querySnapshot = await collectionGuias.orderBy('timestamp', 'desc').get(); // Usar la nueva referencia
-                console.log("Snapshot de la consulta:", querySnapshot); // <-- LOG 1
+                const querySnapshot = await collectionGuias.orderBy('timestamp', 'desc').get();
+                const asesoresUnicos = new Set(); // Para almacenar asesores únicos
+
                 querySnapshot.forEach(doc => {
                     const guia = doc.data();
                     guia.id = doc.id;
                     guiasInterrapidissimo.push(guia);
-                    console.log("Guía cargada:", guia); // <-- LOG 2
+                    if (guia.usuario) { // Asegura que el campo 'usuario' existe
+                        asesoresUnicos.add(guia.usuario);
+                    }
                 });
-                console.log("Guias a mostrar:", guiasInterrapidissimo); // <-- LOG 3
-                mostrarGuiasFiltradas(guiasInterrapidissimo);
+
+                // Actualiza el filtro de asesor
+                const filtroAsesorSelect = document.getElementById('filtroAsesor');
+                filtroAsesorSelect.innerHTML = '<option value="">Todos los Asesores</option>'; // Opción por defecto
+                asesoresUnicos.forEach(asesor => {
+                    const option = document.createElement('option');
+                    option.value = asesor;
+                    option.textContent = asesor;
+                    filtroAsesorSelect.appendChild(option);
+                });
+
+                mostrarGuiasFiltradas(guiasInterrapidissimo); // Muestra todas las guías inicialmente
             } catch (error) {
                 console.error("Error al cargar las guías: ", error);
-                alert('Error al cargar las guías de Envía.');
+                showMessageModal('Error', 'Error al cargar las guías de Envía.', 'error');
             }
         }
 
+        /**
+         * Muestra las guías en la lista, aplicando los filtros actuales (búsqueda y asesor).
+         * @param {Array} guias El array de guías a mostrar.
+         */
         function mostrarGuiasFiltradas(guias) {
             const listaGuiasElement = document.getElementById('listaGuias');
             listaGuiasElement.innerHTML = '';
 
-            if (guias.length === 0) {
-                listaGuiasElement.innerHTML = '<li>No se encontraron guías.</li>';
+            const filtroBusqueda = document.getElementById('buscadorGuias').value.toLowerCase();
+            const filtroAsesor = document.getElementById('filtroAsesor').value;
+
+            const guiasFiltradas = guias.filter(guia => {
+                // Filtro por búsqueda general
+                const coincideBusqueda = Object.values(guia).some(valor => {
+                    if (typeof valor === 'string' || typeof valor === 'number') {
+                        return String(valor).toLowerCase().includes(filtroBusqueda);
+                    }
+                    return false;
+                });
+
+                // Filtro por asesor
+                const coincideAsesor = filtroAsesor === "" || (guia.usuario && guia.usuario === filtroAsesor);
+
+                return coincideBusqueda && coincideAsesor;
+            });
+
+            if (guiasFiltradas.length === 0) {
+                listaGuiasElement.innerHTML = '<li>No se encontraron guías que coincidan con los filtros.</li>';
                 return;
             }
 
-            guias.forEach(guia => {
+            guiasFiltradas.forEach(guia => {
                 const listItem = document.createElement('li');
                 listItem.innerHTML = `
                     <div><strong>Número de Guía:</strong> ${guia.numeroGuia}</div>
                     <div><strong>Nombre del Cliente:</strong> ${guia.nombreCliente}</div>
                     <div><strong>Fecha:</strong> ${guia.fecha}</div>
                     <div><strong>Valor Total:</strong> ${guia.valorTotal ? guia.valorTotal : 'N/A'} (Mercancía: ${guia.valorMercancia ? Math.round(guia.valorMercancia) : 'N/A'}, Flete: ${guia.valorFlete ? Math.round(guia.valorFlete) : 'N/A'})</div>
-                    <div><strong>Usuario:</strong> ${guia.usuario}</div>
+                    <div><strong>Usuario (Asesor):</strong> ${guia.usuario}</div>
                     <div class="guia-acciones">
                         <button class="accion-btn editar-btn" data-id="${guia.id}">Editar</button>
                         <button class="accion-btn eliminar-btn" data-id="${guia.id}">Eliminar</button>
@@ -365,10 +556,16 @@ const firebaseConfig = {
             document.querySelectorAll('.eliminar-btn').forEach(button => {
                 button.addEventListener('click', function() {
                     const id = this.getAttribute('data-id');
-                    eliminarGuia(id);
+                    showConfirmModal('Confirmar Eliminación', '¿Estás seguro de que deseas eliminar esta guía?', () => eliminarGuia(id));
                 });
             });
-        }function cargarDatosParaEdicion(guiaId) {
+        }
+
+        /**
+         * Carga los datos de una guía específica en el formulario para su edición.
+         * @param {string} guiaId El ID de la guía a editar.
+         */
+        function cargarDatosParaEdicion(guiaId) {
             console.log("Cargando datos para edición con ID:", guiaId);
             const guiaParaEditar = guiasInterrapidissimo.find(guia => guia.id === guiaId);
 
@@ -385,46 +582,113 @@ const firebaseConfig = {
                 guiaAEditarId = guiaId;
                 const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
                 guardarBtn.textContent = 'Actualizar Guía';
-                document.getElementById('guiasModulo').style.display = 'none'; // Ocultar la lista
+                document.getElementById('guiasModulo').style.display = 'none'; // Ocultar la lista de guías
                 document.querySelector('.container:first-child').style.display = 'block'; // Mostrar el formulario
             } else {
                 console.error("No se encontró la guía con ID:", guiaId);
-                alert("Error: No se pudo cargar la guía para editar.");
+                showMessageModal('Error', 'No se pudo cargar la guía para editar.', 'error');
             }
         }
 
+        /**
+         * Elimina una guía de Firestore.
+         * @param {string} id El ID de la guía a eliminar.
+         */
         async function eliminarGuia(id) {
-            if (confirm('¿Estás seguro de que deseas eliminar esta guía?')) {
-                try {
-                    await collectionGuias.doc(id).delete();
-                    alert('Guía eliminada exitosamente.');
-                    cargarGuias();
-                } catch (error) {
-                    console.error("Error al eliminar la guía: ", error);
-                    alert('Error al eliminar la guía.');
-                }
+            try {
+                await collectionGuias.doc(id).delete();
+                showMessageModal('Éxito', 'Guía eliminada exitosamente.', 'success');
+                cargarGuias(); // Recarga la lista de guías
+            } catch (error) {
+                console.error("Error al eliminar la guía: ", error);
+                showMessageModal('Error', 'Error al eliminar la guía.', 'error');
             }
         }
 
+        /**
+         * Filtra las guías mostradas en la lista basándose en el texto de búsqueda.
+         */
         function filtrarGuias() {
-            const filtro = document.getElementById('buscadorGuias').value.toLowerCase();
-            const guiasFiltradas = guiasInterrapidissimo.filter(guia => {
-                return Object.values(guia).some(valor => {
-                    if (typeof valor === 'string' || typeof valor === 'number') {
-                        return String(valor).toLowerCase().includes(filtro);
-                    }
-                    return false;
-                });
-            });
-            mostrarGuiasFiltradas(guiasFiltradas);
+            mostrarGuiasFiltradas(guiasInterrapidissimo);
         }
+
+        /**
+         * Muestra el modal de ayuda con las definiciones de estado.
+         */
+        function mostrarAyudaModal() {
+            const helpModal = document.getElementById('helpModal');
+            helpModal.classList.add('active');
+        }
+
+        /**
+         * Cierra el modal de ayuda.
+         */
+        function cerrarAyudaModal() {
+            const helpModal = document.getElementById('helpModal');
+            helpModal.classList.remove('active');
+        }
+
+        /**
+         * Muestra un modal de mensaje genérico.
+         * @param {string} title Título del modal.
+         * @param {string} message Mensaje a mostrar.
+         * @param {string} type Tipo de mensaje ('success', 'error', 'info').
+         */
+        function showMessageModal(title, message, type) {
+            const messageModal = document.getElementById('messageModal');
+            const messageModalTitle = document.getElementById('messageModalTitle');
+            const messageModalBody = document.getElementById('messageModalBody');
+            const messageModalCloseBtn = document.getElementById('messageModalCloseBtn');
+
+            messageModalTitle.textContent = title;
+            messageModalBody.textContent = message;
+
+            // Opcional: Cambiar estilos según el tipo de mensaje
+            messageModalTitle.style.color = ''; // Reset color
+            if (type === 'success') {
+                messageModalTitle.style.color = '#4CAF50';
+            } else if (type === 'error') {
+                messageModalTitle.style.color = '#dc3545';
+            } else if (type === 'info') {
+                messageModalTitle.style.color = '#007bff';
+            }
+
+            messageModal.classList.add('active');
+            messageModalCloseBtn.onclick = () => messageModal.classList.remove('active');
+        }
+
+        /**
+         * Muestra un modal de confirmación con botones de sí/no.
+         * @param {string} title Título del modal.
+         * @param {string} message Mensaje de confirmación.
+         * @param {function} onConfirm Callback a ejecutar si se confirma.
+         */
+        function showConfirmModal(title, message, onConfirm) {
+            const confirmModal = document.getElementById('confirmModal');
+            const confirmModalTitle = document.getElementById('confirmModalTitle');
+            const confirmModalBody = document.getElementById('confirmModalBody');
+            const confirmBtn = document.getElementById('confirmActionBtn');
+            const cancelBtn = document.getElementById('cancelActionBtn');
+
+            confirmModalTitle.textContent = title;
+            confirmModalBody.textContent = message;
+
+            confirmModal.classList.add('active');
+
+            confirmBtn.onclick = () => {
+                onConfirm();
+                confirmModal.classList.remove('active');
+            };
+            cancelBtn.onclick = () => confirmModal.classList.remove('active');
+        }
+
     </script>
 </head>
 <body>
     <div class="container">
         <h2>Generar guía de Envía</h2>
         <form id="generarGuiaForm" onsubmit="event.preventDefault(); guardarGuia();">
-            <label for="usuarioLogueado">Usuario:</label>
+            <label for="usuarioLogueado">Usuario (Asesor):</label>
             <input type="text" id="usuarioLogueado" readonly draggable="true" ondragstart="event.dataTransfer.setData('text', this.value)">
 
             <label for="fechaGuia">Fecha:</label>
@@ -450,11 +714,55 @@ const firebaseConfig = {
             <button type="button" id="verGuiasBtn" onclick="mostrarModuloGuias()">Ver Guías</button>
             <p id="error-message" class="error-message"></p>
         </form>
-    </div><div class="container" id="guiasModulo">
-        <h2>Listado de Guías de Envía</h2>
-        <input type="text" id="buscadorGuias" onkeyup="filtrarGuias()"placeholder="Buscar en todas las guías...">
-        <ul id="listaGuias">
-        </ul>
     </div>
+
+    <div class="container" id="guiasModulo">
+        <h2>
+            Listado de Guías de Envía
+            <i class="fas fa-question-circle help-icon" onclick="mostrarAyudaModal()"></i>
+        </h2>
+        <input type="text" id="buscadorGuias" onkeyup="filtrarGuias()" placeholder="Buscar en todas las guías...">
+
+        <label for="filtroAsesor" class="mt-4">Filtrar por Asesor:</label>
+        <select id="filtroAsesor" onchange="filtrarGuias()">
+            <option value="">Todos los Asesores</option>
+            </select>
+
+        <ul id="listaGuias">
+            </ul>
+    </div>
+
+    <div id="helpModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="cerrarAyudaModal()">&times;</button>
+            <h3>Estados de Envío</h3>
+            <p><strong>NOVEDAD:</strong> El envío presenta demoras en los pagos.</p>
+            <p><strong>PENDIENTE:</strong> El envío aún no tiene guía asignada.</p>
+            <p><strong>ANULADO:</strong> Se ha devuelto el paquete a la bodega.</p>
+        </div>
+    </div>
+
+    <div id="messageModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" id="messageModalCloseBtn">&times;</button>
+            <h3 id="messageModalTitle"></h3>
+            <p id="messageModalBody"></p>
+            <div class="modal-actions">
+                <button class="cancel-btn" onclick="document.getElementById('messageModal').classList.remove('active');">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="confirmModalTitle"></h3>
+            <p id="confirmModalBody"></p>
+            <div class="modal-actions">
+                <button class="confirm-btn" id="confirmActionBtn">Sí</button>
+                <button class="cancel-btn" id="cancelActionBtn">No</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
