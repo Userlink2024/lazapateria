@@ -261,6 +261,25 @@
         .modal-actions .cancel-btn:hover {
             background-color: #5a6268;
         }
+        /* Estilos para los filtros dentro del modal */
+        .filter-options {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .filter-options label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: normal;
+            font-size: 1em;
+            color: #333;
+        }
+        .filter-options input[type="checkbox"] {
+            margin-right: 8px;
+            width: auto;
+            margin-bottom: 0; /* Override default input margin-bottom */
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
@@ -288,7 +307,8 @@
             cargarUsuarioLogueado();
             verificarRolParaExportar();
             establecerListenersParaSuma();
-            setupPendienteCheckListener(); // NUEVO: Configura el listener para el checkbox PENDIENTE
+            setupPendienteCheckListener(); // Configura el listener para el checkbox PENDIENTE
+            setupFilterModalListeners(); // NUEVO: Configura los listeners para los filtros del modal
             cargarGuias(); // Carga las guías al iniciar
         };
 
@@ -317,6 +337,16 @@
                     numeroGuiaInput.value = ''; // Vacía el campo si está pendiente
                 }
             }
+        }
+
+        /**
+         * Configura los event listeners para los checkboxes de filtro en el modal.
+         */
+        function setupFilterModalListeners() {
+            const filterCheckboxes = document.querySelectorAll('#filterModal .filter-options input[type="checkbox"]');
+            filterCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', filtrarGuias);
+            });
         }
 
         function establecerListenersParaSuma() {
@@ -407,7 +437,9 @@
                 numeroGuia: pendienteCheck.checked ? '' : numeroGuia, // Guarda vacío si PENDIENTE está marcado
                 pendiente: pendienteCheck.checked, // Guarda el estado del checkbox PENDIENTE
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                verificado: false // Campo de verificación por defecto
+                verificado: false, // Campo de verificación por defecto
+                novedad: false, // NUEVO: Campo de novedad por defecto
+                anulado: false // NUEVO: Campo de anulado por defecto
             };
 
             try {
@@ -512,6 +544,12 @@
             const filtroBusqueda = document.getElementById('buscadorGuias').value.toLowerCase();
             const filtroAsesor = document.getElementById('filtroAsesor').value;
 
+            // Obtener el estado de los checkboxes de filtro del modal
+            const filtroPendiente = document.getElementById('pendienteFilter').checked;
+            const filtroVerificado = document.getElementById('verificadoFilter').checked;
+            const filtroAnulado = document.getElementById('anuladoFilter').checked;
+            const filtroNovedad = document.getElementById('novedadFilter').checked;
+
             const guiasFiltradas = guias.filter(guia => {
                 const coincideBusqueda = Object.values(guia).some(valor => {
                     if (typeof valor === 'string' || typeof valor === 'number') {
@@ -522,7 +560,13 @@
 
                 const coincideAsesor = filtroAsesor === "" || (guia.usuario && guia.usuario === filtroAsesor);
 
-                return coincideBusqueda && coincideAsesor;
+                // Aplicar los filtros de estado
+                const coincidePendiente = !filtroPendiente || guia.pendiente === true;
+                const coincideVerificado = !filtroVerificado || guia.verificado === true;
+                const coincideAnulado = !filtroAnulado || guia.anulado === true;
+                const coincideNovedad = !filtroNovedad || guia.novedad === true;
+
+                return coincideBusqueda && coincideAsesor && coincidePendiente && coincideVerificado && coincideAnulado && coincideNovedad;
             });
 
             if (guiasFiltradas.length === 0) {
@@ -532,8 +576,11 @@
 
             guiasFiltradas.forEach(guia => {
                 const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+                const isAdministrador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'administrador';
                 const isVerificado = guia.verificado === true;
-                const disableActions = isOperador && isVerificado;
+                const isNovedad = guia.novedad === true;
+                const isAnulado = guia.anulado === true;
+                const disableActions = isOperador && (isVerificado || isNovedad || isAnulado);
 
                 const listItem = document.createElement('li');
                 // Construye los atributos `disabled` y `onclick` condicionalmente
@@ -548,7 +595,7 @@
                     <div><strong>Usuario (Asesor):</strong> ${guia.usuario}</div>
                     <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 5px;">
                         ${guia.pendiente ? '<div><strong>Estado:</strong> PENDIENTE</div>' : ''}
-                        ${datosUsuario && datosUsuario.permisos.toLowerCase() === 'administrador' ? `
+                        ${isAdministrador ? `
                             <label style="margin-bottom: 0; font-weight: normal;">
                                 <input type="checkbox"
                                        id="verificado-${guia.id}"
@@ -557,7 +604,28 @@
                                        style="margin-right: 5px; width: auto;"
                                 > Verificado
                             </label>
-                        ` : (isVerificado ? '<div><strong>Verificado:</strong> Sí</div>' : '')}
+                            <label style="margin-bottom: 0; font-weight: normal;">
+                                <input type="checkbox"
+                                       id="novedad-${guia.id}"
+                                       ${guia.novedad ? 'checked' : ''}
+                                       onchange="toggleNovedad('${guia.id}', this.checked)"
+                                       style="margin-right: 5px; width: auto;"
+                                > Novedad
+                            </label>
+                        ` : `
+                            ${isVerificado ? '<div><strong>Verificado:</strong> Sí</div>' : ''}
+                            ${isNovedad ? '<div><strong>Novedad:</strong> Sí</div>' : ''}
+                        `}
+                        ${isAdministrador || isOperador ? `
+                            <label style="margin-bottom: 0; font-weight: normal;">
+                                <input type="checkbox"
+                                       id="anulado-${guia.id}"
+                                       ${guia.anulado ? 'checked' : ''}
+                                       onchange="toggleAnulado('${guia.id}', this.checked)"
+                                       style="margin-right: 5px; width: auto;"
+                                > Anulado
+                            </label>
+                        ` : (isAnulado ? '<div><strong>Anulado:</strong> Sí</div>' : '')}
                     </div>
                     <div class="guia-acciones">
                         <button class="accion-btn ${disableActions ? 'disabled-btn' : ''}" ${editButtonAttrs}>Editar</button>
@@ -580,6 +648,30 @@
             }
         }
 
+        // Función para alternar el estado de novedad
+        async function toggleNovedad(guiaId, isChecked) {
+            try {
+                await collectionGuias.doc(guiaId).update({ novedad: isChecked });
+                showMessageModal('Éxito', `Guía ${isChecked ? 'marcada con novedad' : 'sin novedad'} exitosamente.`, 'success');
+                // La recarga se maneja por el onSnapshot
+            } catch (error) {
+                console.error("Error al actualizar el estado de novedad: ", error);
+                showMessageModal('Error', 'Error al actualizar el estado de novedad.', 'error');
+            }
+        }
+
+        // Función para alternar el estado de anulado
+        async function toggleAnulado(guiaId, isChecked) {
+            try {
+                await collectionGuias.doc(guiaId).update({ anulado: isChecked });
+                showMessageModal('Éxito', `Guía ${isChecked ? 'marcada como anulada' : 'desmarcada como anulada'} exitosamente.`, 'success');
+                // La recarga se maneja por el onSnapshot
+            } catch (error) {
+                console.error("Error al actualizar el estado de anulado: ", error);
+                showMessageModal('Error', 'Error al actualizar el estado de anulado.', 'error');
+            }
+        }
+
         function cargarDatosParaEdicion(guiaId) {
             console.log("Cargando datos para edición con ID:", guiaId);
             const guiaParaEditar = guiasEnvia.find(guia => guia.id === guiaId); // Usar guiasEnvia
@@ -587,9 +679,11 @@
             if (guiaParaEditar) {
                 const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
                 const isVerificado = guiaParaEditar.verificado === true;
+                const isNovedad = guiaParaEditar.novedad === true;
+                const isAnulado = guiaParaEditar.anulado === true;
 
-                if (isOperador && isVerificado) {
-                    showMessageModal('Acción Restringida', 'No puedes editar guías verificadas como Operador.', 'info');
+                if (isOperador && (isVerificado || isNovedad || isAnulado)) {
+                    showMessageModal('Acción Restringida', 'No puedes editar guías verificadas, con novedad o anuladas como Operador.', 'info');
                     return;
                 }
 
@@ -619,9 +713,11 @@
             const guiaAEliminar = guiasEnvia.find(guia => guia.id === id); // Usar guiasEnvia
             const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
             const isVerificado = guiaAEliminar && guiaAEliminar.verificado === true;
+            const isNovedad = guiaAEliminar && guiaAEliminar.novedad === true;
+            const isAnulado = guiaAEliminar && guiaAEliminar.anulado === true;
 
-            if (isOperador && isVerificado) {
-                showMessageModal('Acción Restringida', 'No puedes eliminar guías verificadas como Operador.', 'info');
+            if (isOperador && (isVerificado || isNovedad || isAnulado)) {
+                showMessageModal('Acción Restringida', 'No puedes eliminar guías verificadas, con novedad o anuladas como Operador.', 'info');
                 return;
             }
 
@@ -641,19 +737,19 @@
         }
 
         /**
-         * Muestra el modal de ayuda con las definiciones de estado.
+         * Muestra el modal de filtros y ayuda.
          */
-        function mostrarAyudaModal() {
-            const helpModal = document.getElementById('helpModal');
-            helpModal.classList.add('active');
+        function mostrarFiltrosModal() {
+            const filterModal = document.getElementById('filterModal');
+            filterModal.classList.add('active');
         }
 
         /**
-         * Cierra el modal de ayuda.
+         * Cierra el modal de filtros y ayuda.
          */
-        function cerrarAyudaModal() {
-            const helpModal = document.getElementById('helpModal');
-            helpModal.classList.remove('active');
+        function cerrarFiltrosModal() {
+            const filterModal = document.getElementById('filterModal');
+            filterModal.classList.remove('active');
         }
 
         /**
@@ -751,7 +847,7 @@
     <div class="container" id="guiasModulo">
         <h2>
             Listado de Guías de Envía
-            <i class="fas fa-question-circle help-icon" onclick="mostrarAyudaModal()"></i>
+            <i class="fas fa-cog help-icon" onclick="mostrarFiltrosModal()"></i>
         </h2>
         <input type="text" id="buscadorGuias" onkeyup="filtrarGuias()" placeholder="Buscar en todas las guías...">
 
@@ -764,13 +860,33 @@
             </ul>
     </div>
 
-    <div id="helpModal" class="modal-overlay">
+    <div id="filterModal" class="modal-overlay">
         <div class="modal-content">
-            <button class="modal-close-btn" onclick="cerrarAyudaModal()">&times;</button>
-            <h3>Estados de Envío</h3>
-            <p><strong>NOVEDAD:</strong> El envío presenta demoras en los pagos.</p>
-            <p><strong>PENDIENTE:</strong> El envío aún no tiene guía asignada.</p>
-            <p><strong>ANULADO:</strong> Se ha devuelto el paquete a la bodega.</p>
+            <button class="modal-close-btn" onclick="cerrarFiltrosModal()">&times;</button>
+            <h3>Opciones de Filtrado y Ayuda</h3>
+
+            <div class="filter-options">
+                <h4>Filtrar por Estado:</h4>
+                <label>
+                    <input type="checkbox" id="pendienteFilter"> Pendientes
+                </label>
+                <label>
+                    <input type="checkbox" id="verificadoFilter"> Verificados
+                </label>
+                <label>
+                    <input type="checkbox" id="anuladoFilter"> Anulados
+                </label>
+                <label>
+                    <input type="checkbox" id="novedadFilter"> Novedad
+                </label>
+            </div>
+
+            <div class="help-text">
+                <h4>Estados de Envío:</h4>
+                <p><strong>NOVEDAD:</strong> El envío presenta demoras en los pagos.</p>
+                <p><strong>PENDIENTE:</strong> El envío aún no tiene guía asignada.</p>
+                <p><strong>ANULADO:</strong> Se ha devuelto el paquete a la bodega.</p>
+            </div>
         </div>
     </div>
 
