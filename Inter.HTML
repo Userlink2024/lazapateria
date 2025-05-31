@@ -289,7 +289,7 @@
         window.onload = () => {
             cargarUsuarioLogueado();
             verificarRolParaExportar();
-            setupPendienteCheckListener(); // NUEVO: Configura el listener para el checkbox PENDIENTE
+            setupPendienteCheckListener(); // Configura el listener para el checkbox PENDIENTE
             cargarGuias(); // Carga las guías al iniciar
         };
 
@@ -383,7 +383,8 @@
                 numeroGuia: pendienteCheck.checked ? '' : numeroGuia, // Guarda vacío si PENDIENTE está marcado
                 pendiente: pendienteCheck.checked, // Guarda el estado del checkbox PENDIENTE
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                verificado: false // Campo de verificación por defecto
+                verificado: false, // Campo de verificación por defecto
+                novedad: false // NUEVO: Campo de novedad por defecto
             };
 
             try {
@@ -535,7 +536,15 @@
                                        style="margin-right: 5px; width: auto;"
                                 > Verificado
                             </label>
-                        ` : (isVerificado ? '<div><strong>Verificado:</strong> Sí</div>' : '')}
+                            <label style="margin-bottom: 0; font-weight: normal;">
+                                <input type="checkbox"
+                                       id="novedad-${guia.id}"
+                                       ${guia.novedad ? 'checked' : ''}
+                                       onchange="toggleNovedad('${guia.id}', this.checked)"
+                                       style="margin-right: 5px; width: auto;"
+                                > Novedad
+                            </label>
+                        ` : (isVerificado ? '<div><strong>Verificado:</strong> Sí</div>' : (guia.novedad ? '<div><strong>Novedad:</strong> Sí</div>' : ''))}
                     </div>
                     <div class="guia-acciones">
                         <button class="accion-btn ${disableActions ? 'disabled-btn' : ''}" ${editButtonAttrs}>Editar</button>
@@ -555,6 +564,18 @@
             } catch (error) {
                 console.error("Error al actualizar el estado de verificación: ", error);
                 showMessageModal('Error', 'Error al actualizar el estado de verificación.', 'error');
+            }
+        }
+
+        // NUEVO: Función para alternar el estado de novedad
+        async function toggleNovedad(guiaId, isChecked) {
+            try {
+                await collectionGuias.doc(guiaId).update({ novedad: isChecked });
+                showMessageModal('Éxito', `Guía ${isChecked ? 'marcada con novedad' : 'sin novedad'} exitosamente.`, 'success');
+                // La recarga se maneja por el onSnapshot
+            } catch (error) {
+                console.error("Error al actualizar el estado de novedad: ", error);
+                showMessageModal('Error', 'Error al actualizar el estado de novedad.', 'error');
             }
         }
 
