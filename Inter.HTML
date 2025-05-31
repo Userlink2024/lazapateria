@@ -155,6 +155,12 @@
         .accion-btn:hover {
             opacity: 0.8;
         }
+        /* Estilo para botones deshabilitados (NUEVO) */
+        .accion-btn:disabled {
+            background-color: #cccccc !important;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
 
         /* Estilos para el icono de ayuda (NUEVO) */
         .help-icon {
@@ -278,18 +284,17 @@
         const collectionGuias = db.collection('guias_interrapidissimo'); // Referencia a la colección de guías
         let guiasInterrapidissimo = [];
         let guiaAEditarId = null;
-        let currentDeleteGuiaId = null; // Variable para almacenar el ID de la guía a eliminar
+        let datosUsuario = null; // Variable global para almacenar los datos del usuario
 
         window.onload = () => {
             cargarUsuarioLogueado();
             verificarRolParaExportar();
-            // No hay establecerListenersParaSuma en inter.txt, así que no se llama
             cargarGuias(); // Carga las guías al iniciar
         };
 
         async function cargarUsuarioLogueado() {
             const usuarioLogueadoElement = document.getElementById('usuarioLogueado');
-            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
+            datosUsuario = JSON.parse(localStorage.getItem('datosUsuario')); // Asigna a la variable global
 
             if (datosUsuario && datosUsuario.nombreCompleto) {
                 usuarioLogueadoElement.value = datosUsuario.nombreCompleto;
@@ -307,7 +312,7 @@
         }
 
         function verificarRolParaExportar() {
-            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
+            // Usa la variable global datosUsuario
             const exportarExcelBtn = document.getElementById('exportarExcelBtn');
 
             if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
@@ -339,7 +344,8 @@
                 nombreCliente: nombreCliente,
                 valorMercancia: parseFloat(valorMercancia),
                 numeroGuia: numeroGuia,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                verificado: false // NUEVO: Campo de verificación por defecto
             };
 
             try {
@@ -454,6 +460,11 @@
             }
 
             guiasFiltradas.forEach(guia => {
+                // Determinar si los botones de editar/eliminar deben estar deshabilitados
+                const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+                const isVerificado = guia.verificado === true;
+                const disableActions = isOperador && isVerificado;
+
                 const listItem = document.createElement('li');
                 listItem.innerHTML = `
                     <div><strong>Número de Guía:</strong> ${guia.numeroGuia}</div>
@@ -461,9 +472,25 @@
                     <div><strong>Fecha:</strong> ${guia.fecha}</div>
                     <div><strong>Valor:</strong> ${guia.valorMercancia}</div>
                     <div><strong>Usuario (Asesor):</strong> ${guia.usuario}</div>
+                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 5px;">
+                        ${datosUsuario && datosUsuario.permisos.toLowerCase() === 'administrador' ? `
+                            <label style="margin-bottom: 0; font-weight: normal;">
+                                <input type="checkbox"
+                                       id="verificado-${guia.id}"
+                                       ${guia.verificado ? 'checked' : ''}
+                                       onchange="toggleVerificado('${guia.id}', this.checked)"
+                                       style="margin-right: 5px; width: auto;"
+                                > Verificado
+                            </label>
+                        ` : (isVerificado ? '<div><strong>Verificado:</strong> Sí</div>' : '')}
+                    </div>
                     <div class="guia-acciones">
-                        <button class="accion-btn" onclick="cargarDatosParaEdicion('${guia.id}')">Editar</button>
-                        <button class="accion-btn eliminar" onclick="showConfirmModal('Confirmar Eliminación', '¿Estás seguro de que deseas eliminar esta guía?', () => eliminarGuia('${guia.id}'))">Eliminar</button>
+                        <button class="accion-btn ${disableActions ? 'disabled-btn' : ''}"
+                                onclick="${disableActions ? 'showMessageModal(\'Acción Restringida\', \'No puedes editar guías verificadas como Operador.\', \'info\');' : `cargarDatosParaEdicion('${guia.id}')`}"
+                                ${disableActions ? 'disabled' : ''}>Editar</button>
+                        <button class="accion-btn eliminar ${disableActions ? 'disabled-btn' : ''}"
+                                onclick="${disableActions ? 'showMessageModal(\'Acción Restringida\', \'No puedes eliminar guías verificadas como Operador.\', \'info\');' : `showConfirmModal('Confirmar Eliminación', '¿Estás seguro de que deseas eliminar esta guía?', () => eliminarGuia('${guia.id}'))`}"
+                                ${disableActions ? 'disabled' : ''}>Eliminar</button>
                     </div>
                     <hr style="border-top: 1px solid #ccc; margin-top: 10px; margin-bottom: 10px;">
                 `;
@@ -471,11 +498,31 @@
             });
         }
 
+        async function toggleVerificado(guiaId, isChecked) {
+            try {
+                await collectionGuias.doc(guiaId).update({ verificado: isChecked });
+                showMessageModal('Éxito', `Guía ${isChecked ? 'verificada' : 'desverificada'} exitosamente.`, 'success');
+                cargarGuias(); // Recargar para actualizar el estado visual de los botones
+            } catch (error) {
+                console.error("Error al actualizar el estado de verificación: ", error);
+                showMessageModal('Error', 'Error al actualizar el estado de verificación.', 'error');
+            }
+        }
+
         function cargarDatosParaEdicion(guiaId) {
             console.log("Cargando datos para edición con ID:", guiaId);
             const guiaParaEditar = guiasInterrapidissimo.find(guia => guia.id === guiaId);
 
             if (guiaParaEditar) {
+                // Verificar si el usuario es operador y la guía está verificada
+                const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+                const isVerificado = guiaParaEditar.verificado === true;
+
+                if (isOperador && isVerificado) {
+                    showMessageModal('Acción Restringida', 'No puedes editar guías verificadas como Operador.', 'info');
+                    return;
+                }
+
                 console.log("Guía encontrada para editar:", guiaParaEditar);
                 document.getElementById('usuarioLogueado').value = guiaParaEditar.usuario;
                 document.getElementById('fechaGuia').value = guiaParaEditar.fecha;
@@ -495,6 +542,16 @@
         }
 
         async function eliminarGuia(id) {
+            const guiaAEliminar = guiasInterrapidissimo.find(guia => guia.id === id);
+            // Verificar si el usuario es operador y la guía está verificada
+            const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+            const isVerificado = guiaAEliminar && guiaAEliminar.verificado === true;
+
+            if (isOperador && isVerificado) {
+                showMessageModal('Acción Restringida', 'No puedes eliminar guías verificadas como Operador.', 'info');
+                return;
+            }
+
             try {
                 await collectionGuias.doc(id).delete();
                 showMessageModal('Éxito', 'Guía eliminada exitosamente.', 'success');
