@@ -288,8 +288,36 @@
             cargarUsuarioLogueado();
             verificarRolParaExportar();
             establecerListenersParaSuma();
+            setupPendienteCheckListener(); // NUEVO: Configura el listener para el checkbox PENDIENTE
             cargarGuias(); // Carga las guías al iniciar
         };
+
+        /**
+         * Configura el event listener para el checkbox PENDIENTE.
+         */
+        function setupPendienteCheckListener() {
+            const pendienteCheck = document.getElementById('pendienteCheck');
+            if (pendienteCheck) {
+                pendienteCheck.addEventListener('change', toggleNumeroGuiaInput);
+                toggleNumeroGuiaInput(); // Llama una vez al cargar para establecer el estado inicial
+            }
+        }
+
+        /**
+         * Habilita o deshabilita el campo "Número de Guía" basado en el estado del checkbox "PENDIENTE".
+         * También vacía el campo si se deshabilita.
+         */
+        function toggleNumeroGuiaInput() {
+            const numeroGuiaInput = document.getElementById('numeroGuia');
+            const pendienteCheck = document.getElementById('pendienteCheck');
+
+            if (numeroGuiaInput && pendienteCheck) {
+                numeroGuiaInput.disabled = pendienteCheck.checked;
+                if (pendienteCheck.checked) {
+                    numeroGuiaInput.value = ''; // Vacía el campo si está pendiente
+                }
+            }
+        }
 
         function establecerListenersParaSuma() {
             const valorMercanciaInput = document.getElementById('valorMercancia');
@@ -348,14 +376,24 @@
             const valorTotal = document.getElementById('valorTotal').value;
             const valorMercancia = parseFloat(document.getElementById('valorMercancia').value) || 0;
             const valorFlete = parseFloat(document.getElementById('valorFlete').value) || 0;
-            const numeroGuia = document.getElementById('numeroGuia').value;
+            const numeroGuiaInput = document.getElementById('numeroGuia');
+            const numeroGuia = numeroGuiaInput.value;
+            const pendienteCheck = document.getElementById('pendienteCheck');
             const errorMessageElement = document.getElementById('error-message');
             errorMessageElement.textContent = '';
             const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
 
-            if (!fecha || !nombreCliente || !usuario || isNaN(valorMercancia) || isNaN(valorFlete) || !numeroGuia) {
-                errorMessageElement.textContent = 'Por favor, completa todos los campos de valor y los obligatorios.';
-                showMessageModal('Error de Validación', 'Por favor, completa todos los campos de valor y los obligatorios.', 'error');
+            // Validación de campos obligatorios
+            if (!fecha || !nombreCliente || !usuario || isNaN(valorMercancia) || isNaN(valorFlete)) {
+                errorMessageElement.textContent = 'Por favor, completa todos los campos obligatorios.';
+                showMessageModal('Error de Validación', 'Por favor, completa todos los campos obligatorios.', 'error');
+                return;
+            }
+
+            // Validación específica para el número de guía y el checkbox PENDIENTE
+            if (!pendienteCheck.checked && !numeroGuia) {
+                errorMessageElement.textContent = 'El campo "Número de Guía" no puede estar vacío a menos que el check "PENDIENTE" esté activo.';
+                showMessageModal('Error de Validación', 'El campo "Número de Guía" no puede estar vacío a menos que el check "PENDIENTE" esté activo.', 'error');
                 return;
             }
 
@@ -366,9 +404,10 @@
                 valorTotal: parseFloat(valorTotal),
                 valorMercancia: valorMercancia,
                 valorFlete: valorFlete,
-                numeroGuia: numeroGuia,
+                numeroGuia: pendienteCheck.checked ? '' : numeroGuia, // Guarda vacío si PENDIENTE está marcado
+                pendiente: pendienteCheck.checked, // Guarda el estado del checkbox PENDIENTE
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                verificado: false // NUEVO: Campo de verificación por defecto
+                verificado: false // Campo de verificación por defecto
             };
 
             try {
@@ -385,6 +424,7 @@
                 }
                 document.getElementById('generarGuiaForm').reset();
                 cargarUsuarioLogueado();
+                toggleNumeroGuiaInput(); // Restablece el estado del campo y checkbox
                 // No es necesario llamar a cargarGuias() aquí, onSnapshot lo hará
             } catch (error) {
                 console.error("Error al guardar/actualizar la guía: ", error);
@@ -501,12 +541,13 @@
                 const deleteButtonAttrs = `${disableActions ? 'disabled' : ''} ${disableActions ? '' : `onclick="showConfirmModal('Confirmar Eliminación', '¿Estás seguro de que deseas eliminar esta guía?', () => eliminarGuia('${guia.id}'))"`}`;
 
                 listItem.innerHTML = `
-                    <div><strong>Número de Guía:</strong> ${guia.numeroGuia}</div>
+                    <div><strong>Número de Guía:</strong> ${guia.numeroGuia || (guia.pendiente ? 'PENDIENTE' : 'N/A')}</div>
                     <div><strong>Nombre del Cliente:</strong> ${guia.nombreCliente}</div>
                     <div><strong>Fecha:</strong> ${guia.fecha}</div>
                     <div><strong>Valor Total:</strong> ${guia.valorTotal ? guia.valorTotal : 'N/A'} (Mercancía: ${guia.valorMercancia ? Math.round(guia.valorMercancia) : 'N/A'}, Flete: ${guia.valorFlete ? Math.round(guia.valorFlete) : 'N/A'})</div>
                     <div><strong>Usuario (Asesor):</strong> ${guia.usuario}</div>
                     <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 5px;">
+                        ${guia.pendiente ? '<div><strong>Estado:</strong> PENDIENTE</div>' : ''}
                         ${datosUsuario && datosUsuario.permisos.toLowerCase() === 'administrador' ? `
                             <label style="margin-bottom: 0; font-weight: normal;">
                                 <input type="checkbox"
@@ -560,6 +601,8 @@
                 document.getElementById('valorFlete').value = guiaParaEditar.valorFlete;
                 document.getElementById('valorTotal').value = guiaParaEditar.valorTotal;
                 document.getElementById('numeroGuia').value = guiaParaEditar.numeroGuia;
+                document.getElementById('pendienteCheck').checked = guiaParaEditar.pendiente || false; // Setear el estado del checkbox
+                toggleNumeroGuiaInput(); // Ajustar el campo de número de guía al cargar para edición
 
                 guiaAEditarId = guiaId;
                 const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
@@ -691,7 +734,12 @@
             <input type="text" id="valorTotal" readonly>
 
             <label for="numeroGuia">Número de Guía:</label>
-            <input type="text" id="numeroGuia" required>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                <input type="number" id="numeroGuia" style="flex-grow: 1;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
+                <label for="pendienteCheck" style="margin-bottom: 0; font-weight: normal; display: flex; align-items: center;">
+                    <input type="checkbox" id="pendienteCheck" style="margin-right: 5px; width: auto;"> PENDIENTE
+                </label>
+            </div>
 
             <button type="submit">Guardar Guía</button>
             <button type="button" id="exportarExcelBtn" onclick="exportarGuiasExcel()" style="display:none;">Exportar a Excel</button>
