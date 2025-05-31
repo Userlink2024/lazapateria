@@ -362,7 +362,7 @@
                 }
                 document.getElementById('generarGuiaForm').reset();
                 cargarUsuarioLogueado();
-                cargarGuias();
+                // No es necesario llamar a cargarGuias() aquí, onSnapshot lo hará
             } catch (error) {
                 console.error("Error al guardar/actualizar la guía: ", error);
                 errorMessageElement.textContent = `Error al ${guiaAEditarId ? 'actualizar' : 'guardar'} la guía de Inter Rapidisimo. Inténtalo de nuevo.`;
@@ -394,42 +394,53 @@
 
         function mostrarModuloGuias() {
             document.getElementById('guiasModulo').style.display = 'block';
-            cargarGuias();
+            // No es necesario llamar a cargarGuias() aquí, onSnapshot ya está activo
         }
 
-        async function cargarGuias() {
+        /**
+         * Carga todas las guías desde Firestore en tiempo real usando onSnapshot.
+         * También actualiza el filtro de asesor con los usuarios únicos.
+         */
+        function cargarGuias() {
             const listaGuiasElement = document.getElementById('listaGuias');
             listaGuiasElement.innerHTML = '';
             guiasInterrapidissimo = [];
 
-            try {
-                const querySnapshot = await collectionGuias.orderBy('timestamp', 'desc').get();
-                const asesoresUnicos = new Set(); // Para almacenar asesores únicos
+            // Configura el listener en tiempo real
+            collectionGuias.orderBy('timestamp', 'desc').onSnapshot(snapshot => {
+                guiasInterrapidissimo = []; // Limpia el array antes de cargar los nuevos datos
+                const asesoresUnicos = new Set();
 
-                querySnapshot.forEach(doc => {
+                snapshot.forEach(doc => {
                     const guia = doc.data();
                     guia.id = doc.id;
                     guiasInterrapidissimo.push(guia);
-                    if (guia.usuario) { // Asegura que el campo 'usuario' existe
+                    if (guia.usuario) {
                         asesoresUnicos.add(guia.usuario);
                     }
                 });
 
                 // Actualiza el filtro de asesor
                 const filtroAsesorSelect = document.getElementById('filtroAsesor');
-                filtroAsesorSelect.innerHTML = '<option value="">Todos los Asesores</option>'; // Opción por defecto
+                const currentSelectedAsesor = filtroAsesorSelect.value; // Guarda la selección actual
+                filtroAsesorSelect.innerHTML = '<option value="">Todos los Asesores</option>';
                 asesoresUnicos.forEach(asesor => {
                     const option = document.createElement('option');
                     option.value = asesor;
                     option.textContent = asesor;
                     filtroAsesorSelect.appendChild(option);
                 });
+                // Restaura la selección si el asesor sigue existiendo
+                if (asesoresUnicos.has(currentSelectedAsesor)) {
+                    filtroAsesorSelect.value = currentSelectedAsesor;
+                }
+
 
                 mostrarGuiasFiltradas(guiasInterrapidissimo);
-            } catch (error) {
-                console.error("Error al cargar las guías: ", error);
-                showMessageModal('Error', 'Error al cargar las guías de Inter Rapidisimo.', 'error');
-            }
+            }, error => {
+                console.error("Error al cargar las guías en tiempo real: ", error);
+                showMessageModal('Error', 'Error al cargar las guías de Inter Rapidisimo en tiempo real.', 'error');
+            });
         }
 
         function mostrarGuiasFiltradas(guias) {
@@ -437,10 +448,9 @@
             listaGuiasElement.innerHTML = '';
 
             const filtroBusqueda = document.getElementById('buscadorGuias').value.toLowerCase();
-            const filtroAsesor = document.getElementById('filtroAsesor').value; // Obtener el valor del filtro de asesor
+            const filtroAsesor = document.getElementById('filtroAsesor').value;
 
             const guiasFiltradas = guias.filter(guia => {
-                // Filtro por búsqueda general
                 const coincideBusqueda = Object.values(guia).some(valor => {
                     if (typeof valor === 'string' || typeof valor === 'number') {
                         return String(valor).toLowerCase().includes(filtroBusqueda);
@@ -448,7 +458,6 @@
                     return false;
                 });
 
-                // Filtro por asesor
                 const coincideAsesor = filtroAsesor === "" || (guia.usuario && guia.usuario === filtroAsesor);
 
                 return coincideBusqueda && coincideAsesor;
@@ -460,7 +469,6 @@
             }
 
             guiasFiltradas.forEach(guia => {
-                // Determinar si los botones de editar/eliminar deben estar deshabilitados
                 const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
                 const isVerificado = guia.verificado === true;
                 const disableActions = isOperador && isVerificado;
@@ -502,7 +510,7 @@
             try {
                 await collectionGuias.doc(guiaId).update({ verificado: isChecked });
                 showMessageModal('Éxito', `Guía ${isChecked ? 'verificada' : 'desverificada'} exitosamente.`, 'success');
-                cargarGuias(); // Recargar para actualizar el estado visual de los botones
+                // La recarga se maneja por el onSnapshot
             } catch (error) {
                 console.error("Error al actualizar el estado de verificación: ", error);
                 showMessageModal('Error', 'Error al actualizar el estado de verificación.', 'error');
@@ -514,7 +522,6 @@
             const guiaParaEditar = guiasInterrapidissimo.find(guia => guia.id === guiaId);
 
             if (guiaParaEditar) {
-                // Verificar si el usuario es operador y la guía está verificada
                 const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
                 const isVerificado = guiaParaEditar.verificado === true;
 
@@ -543,7 +550,6 @@
 
         async function eliminarGuia(id) {
             const guiaAEliminar = guiasInterrapidissimo.find(guia => guia.id === id);
-            // Verificar si el usuario es operador y la guía está verificada
             const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
             const isVerificado = guiaAEliminar && guiaAEliminar.verificado === true;
 
@@ -555,8 +561,9 @@
             try {
                 await collectionGuias.doc(id).delete();
                 showMessageModal('Éxito', 'Guía eliminada exitosamente.', 'success');
-                cargarGuias();
-            } catch (error) {
+                // La recarga se maneja por el onSnapshot
+            }
+            catch (error) {
                 console.error("Error al eliminar la guía: ", error);
                 showMessageModal('Error', 'Error al eliminar la guía.', 'error');
             }
