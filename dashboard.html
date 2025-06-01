@@ -507,6 +507,15 @@
         </div>
     </div>
 
+    <div id="message_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('message_modal')">&times;</span>
+            <h2 id="message_modal_title" class="text-2xl font-bold mb-4"></h2>
+            <p id="message_modal_content" class="text-gray-700 mb-6"></p>
+            <button class="btn btn-primary" onclick="cerrarModal('message_modal')">Aceptar</button>
+        </div>
+    </div>
+
     <div id="loading_overlay" class="loading-overlay">
         <div class="loading-spinner"></div>
         <p class="text-xl font-semibold text-gray-700">Cargando datos...</p>
@@ -599,16 +608,37 @@
         }
 
         /**
-         * Returns the ISO week number for a given date.
+         * Shows a general message modal.
+         * @param {string} title - The title of the message.
+         * @param {string} message - The content of the message.
+         */
+        function showMessageModal(title, message) {
+            document.getElementById('message_modal_title').textContent = title;
+            document.getElementById('message_modal_content').textContent = message;
+            mostrarModal('message_modal');
+        }
+
+        /**
+         * Returns a simple sequential week number for a given date, starting from 1 for Jan 1st's week.
+         * Formats as 'YYYY-WW' where WW is 01, 02, etc.
          * @param {Date} d - The date object.
          * @returns {string} A string in 'YYYY-WW' format.
          */
         function getWeekNumber(d) {
-            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-            var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-            var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-            return d.getUTCFullYear() + '-' + (weekNo < 10 ? '0' : '') + weekNo;
+            const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            const yearStart = new Date(date.getFullYear(), 0, 1);
+            
+            // Calculate the number of days since the start of the year
+            const diffTime = date.getTime() - yearStart.getTime();
+            const oneDay = 1000 * 60 * 60 * 24;
+            const daysSinceYearStart = Math.floor(diffTime / oneDay);
+
+            // Calculate the week number (simple sequential, Jan 1st is always in Week 1)
+            let weekNo = Math.floor(daysSinceYearStart / 7) + 1;
+
+            const year = d.getFullYear();
+            const paddedWeekNo = weekNo < 10 ? '0' + weekNo : '' + weekNo;
+            return `${year}-${paddedWeekNo}`;
         }
 
         /**
@@ -620,7 +650,7 @@
             for (let i = 0; i < 12; i++) {
                 const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
                 const monthName = date.toLocaleString('es-CO', { month: 'long', year: 'numeric' });
-                const monthValue = date.toISOString().slice(0, 7); // YYYY-MM format
+                const monthValue = date.toISOString().slice(0, 7); //YYYY-MM format
                 const option = document.createElement('option');
                 option.value = monthValue;
                 option.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1); // Capitalize first letter
@@ -848,7 +878,7 @@
 
                 // For Weekly Asesor Performance
                 if (order.asesor && order.fecha_hora instanceof Date) {
-                    const weekId = getWeekNumber(order.fecha_hora);
+                    const weekId = getWeekNumber(order.fecha_hora); // Using the updated getWeekNumber
                     if (!weeklyAsesorPerformance[weekId]) {
                         weeklyAsesorPerformance[weekId] = {};
                     }
@@ -896,7 +926,7 @@
             let commissionHtml = '<table class="commission-table"><thead><tr><th>Asesor</th><th>Pares Vendidos (Período)</th><th>Valor Vendido (Período)</th>';
             
             // Conditionally add Monthly Commission column header
-            if (filterMode === 'quick_month' || filterMode === 'quick_week') {
+            if (filterMode === 'quick_month' || filterMode === 'custom_date_range') { 
                 commissionHtml += '<th>Comisión Mensual</th>';
             }
             
@@ -909,12 +939,12 @@
                 const { totalSales: overallTotalSales, totalPairs: overallTotalPairs } = asesorOverallPerformance[asesor];
                 let totalAsesorCommission = 0;
                 let monthlyCommission = 0;
-                let weeklyCommission = 0;
                 let monthlyCommissionDetails = [];
+                let weeklyCommission = 0;
                 let weeklyCommissionDetails = [];
 
                 // --- Monthly Commission Calculation (only if quick filter is active) ---
-                if (filterMode === 'quick_month' || filterMode === 'quick_week') {
+                if (filterMode === 'quick_month' || filterMode === 'custom_date_range') { 
                     if (monthlyCompanyPairsThreshold > 0) {
                         if (companyMeetsMonthlyPairsTarget) {
                             if (monthlyIndividualPairsThreshold > 0 && overallTotalPairs >= monthlyIndividualPairsThreshold) {
@@ -937,6 +967,7 @@
 
 
                 // --- Weekly Commission Calculation ---
+                // Get all weeks for the current asesor and sort them
                 const weeksForAsesor = Object.keys(weeklyAsesorPerformance).filter(weekId => weeklyAsesorPerformance[weekId][asesor]);
                 weeksForAsesor.sort();
 
@@ -951,10 +982,13 @@
                     const { totalSales: weeklyTotalSales } = weeklyAsesorPerformance[weekId][asesor];
                     let currentWeekCommission = 0;
                     let weekDetails = [];
+                    let meetsWeeklyCriteria = false; // Flag to determine color
 
+                    // Check for base commission
                     if (weeklyValueBaseThreshold > 0 && weeklyTotalSales >= weeklyValueBaseThreshold) {
                         currentWeekCommission += weeklyBaseCommissionAmount;
                         weekDetails.push(`Base: ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(weeklyBaseCommissionAmount)}`);
+                        meetsWeeklyCriteria = true; // Met base threshold
                     } else if (weeklyValueBaseThreshold > 0) {
                         weekDetails.push(`Base: No cumple (${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(weeklyTotalSales)}/${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(weeklyValueBaseThreshold)})`);
                     }
@@ -967,12 +1001,22 @@
                             const incrementalBonus = increments * weeklyIncrementalBonusAmount;
                             currentWeekCommission += incrementalBonus;
                             weekDetails.push(`Inc: ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(incrementalBonus)} (${increments}x${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(weeklyIncrementalValueThreshold)})`);
+                            meetsWeeklyCriteria = true; // Earned incremental bonus
                         }
                     }
 
                     weeklyCommission += currentWeekCommission;
+
+                    // Determine the color for the weekly commission amount
+                    let commissionColorClass = meetsWeeklyCriteria ? 'text-green-600' : 'text-red-600';
+                    let formattedCurrentWeekCommission = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(currentWeekCommission);
+
+                    // Add the weekly commission details with color
                     if (weekDetails.length > 0) {
-                        weeklyCommissionDetails.push(`${weekId}: ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(currentWeekCommission)} (${weekDetails.join(', ')})`);
+                        weeklyCommissionDetails.push(`${weekId}: <span class="${commissionColorClass}">${formattedCurrentWeekCommission}</span> (${weekDetails.join(', ')})`);
+                    } else {
+                        // If no details and no commission, still show 0 with red color
+                        weeklyCommissionDetails.push(`${weekId}: <span class="text-red-600">${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(0)}</span> (No cumple)`);
                     }
                 });
                 totalAsesorCommission += weeklyCommission;
@@ -984,7 +1028,7 @@
                         <td>${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(overallTotalSales)}</td>
                 `;
                 // Conditionally add Monthly Commission column data
-                if (filterMode === 'quick_month' || filterMode === 'quick_week') {
+                if (filterMode === 'quick_month' || filterMode === 'custom_date_range') { 
                     commissionHtml += `
                         <td>
                             ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(monthlyCommission)}
@@ -1027,13 +1071,13 @@
             const shouldSavePermanently = saveSettingsPermanentlyCheckbox.checked;
 
             // Basic validation
-            if (isNaN(newMonthlyCompanyPairsThreshold) || newMonthlyCompanyPairsThreshold < 0) { alert("Por favor, ingrese un valor válido para el Tope de Pares (Empresa)."); return; }
-            if (isNaN(newMonthlyCompanyCommissionAmount) || newMonthlyCompanyCommissionAmount < 0) { alert("Por favor, ingrese un valor válido para el Monto Comisión (Empresa)."); return; }
-            if (isNaN(newMonthlyIndividualPairsThreshold) || newMonthlyIndividualPairsThreshold < 0) { alert("Por favor, ingrese un valor válido para el Tope Pares (Asesor Individual)."); return; }
-            if (isNaN(newWeeklyValueBaseThreshold) || newWeeklyValueBaseThreshold < 0) { alert("Por favor, ingrese un valor válido para el Tope Valor Base (Semanal)."); return; }
-            if (isNaN(newWeeklyBaseCommissionAmount) || newWeeklyBaseCommissionAmount < 0) { alert("Por favor, ingrese un valor válido para el Monto Comisión Base (Semanal)."); return; }
-            if (isNaN(newWeeklyIncrementalValueThreshold) || newWeeklyIncrementalValueThreshold < 0) { alert("Por favor, ingrese un valor válido para el Valor para Bono Incremental (Semanal)."); return; }
-            if (isNaN(newWeeklyIncrementalBonusAmount) || newWeeklyIncrementalBonusAmount < 0) { alert("Por favor, ingrese un valor válido para el Monto Bono Incremental (Semanal)."); return; }
+            if (isNaN(newMonthlyCompanyPairsThreshold) || newMonthlyCompanyPairsThreshold < 0) { showMessageModal("Error de Configuración", "Por favor, ingrese un valor válido para el Tope de Pares (Empresa)."); return; }
+            if (isNaN(newMonthlyCompanyCommissionAmount) || newMonthlyCompanyCommissionAmount < 0) { showMessageModal("Error de Configuración", "Por favor, ingrese un valor válido para el Monto Comisión (Empresa)."); return; }
+            if (isNaN(newMonthlyIndividualPairsThreshold) || newMonthlyIndividualPairsThreshold < 0) { showMessageModal("Error de Configuración", "Por favor, ingrese un valor válido para el Tope Pares (Asesor Individual)."); return; }
+            if (isNaN(newWeeklyValueBaseThreshold) || newWeeklyValueBaseThreshold < 0) { showMessageModal("Error de Configuración", "Por favor, ingrese un valor válido para el Tope Valor Base (Semanal)."); return; }
+            if (isNaN(newWeeklyBaseCommissionAmount) || newWeeklyBaseCommissionAmount < 0) { showMessageModal("Error de Configuración", "Por favor, ingrese un valor válido para el Monto Comisión Base (Semanal)."); return; }
+            if (isNaN(newWeeklyIncrementalValueThreshold) || newWeeklyIncrementalValueThreshold < 0) { showMessageModal("Error de Configuración", "Por favor, ingrese un valor válido para el Valor para Bono Incremental (Semanal)."); return; }
+            if (isNaN(newWeeklyIncrementalBonusAmount) || newWeeklyIncrementalBonusAmount < 0) { showMessageModal("Error de Configuración", "Por favor, ingrese un valor válido para el Monto Bono Incremental (Semanal)."); return; }
 
             monthlyCompanyPairsThreshold = newMonthlyCompanyPairsThreshold;
             monthlyCompanyCommissionAmount = newMonthlyCompanyCommissionAmount;
@@ -1068,7 +1112,7 @@
 
             cerrarModal('commission_settings_modal');
             loadAndFilterData(); // Reload dashboard with new commission settings
-            alert("Configuración de comisiones guardada.");
+            showMessageModal("Configuración Guardada", "Configuración de comisiones guardada correctamente.");
         }
 
         /**
@@ -1169,7 +1213,7 @@
         async function handleExcelUpload() {
             const file = excelFileInputModal.files[0]; // Use the input from the modal
             if (!file) {
-                alert("Por favor, selecciona un archivo Excel para subir.");
+                showMessageModal("Error de Archivo", "Por favor, selecciona un archivo Excel para subir.");
                 return;
             }
 
@@ -1210,7 +1254,7 @@
                             return;
                         }
 
-                        const dateKey = fechaHora.toISOString().split('T')[0]; // YYYY-MM-DD
+                        const dateKey = fechaHora.toISOString().split('T')[0]; //YYYY-MM-DD
                         const asesorName = row['Asesor'] || 'Desconocido';
                         const docId = `${dateKey}_${asesorName}`;
 
@@ -1244,9 +1288,9 @@
 
                     if (uploadCount > 0) {
                         await batch.commit();
-                        alert(`Archivo Excel procesado y ${uploadCount} resúmenes diarios subidos/actualizados en Firestore.`);
+                        showMessageModal("Carga Exitosa", `Archivo Excel procesado y ${uploadCount} resúmenes diarios subidos/actualizados en Firestore.`);
                     } else {
-                        alert("Archivo Excel procesado, pero no se encontraron datos válidos para subir.");
+                        showMessageModal("Carga Completada", "Archivo Excel procesado, pero no se encontraron datos válidos para subir.");
                     }
                     
                     excelFileInputModal.value = ''; // Clear file input in modal
@@ -1255,7 +1299,7 @@
 
                 } catch (error) {
                     console.error("Error al procesar o subir el archivo Excel:", error);
-                    alert("Error al procesar o subir el archivo Excel. Revisa la consola para más detalles.");
+                    showMessageModal("Error", "Error al procesar o subir el archivo Excel. Revisa la consola para más detalles.");
                 } finally {
                     hideLoading();
                 }
@@ -1281,7 +1325,7 @@
                 const snapshot = await collectionRef.get();
                 
                 if (snapshot.empty) {
-                    alert("No hay datos de Excel cargados para eliminar.");
+                    showMessageModal("Información", "No hay datos de Excel cargados para eliminar.");
                     return;
                 }
 
@@ -1291,12 +1335,12 @@
                 });
 
                 await batch.commit();
-                alert(`Se eliminaron ${snapshot.size} documentos de la colección 'excel_daily_summaries'.`);
+                showMessageModal("Eliminación Exitosa", `Se eliminaron ${snapshot.size} documentos de la colección 'excel_daily_summaries'.`);
                 cerrarModal('excel_actions_modal'); // Close the excel actions modal after deletion
                 loadAndFilterData(); // Reload dashboard after deletion
             } catch (error) {
                 console.error("Error al eliminar datos de Excel de Firestore:", error);
-                alert("Error al eliminar datos de Excel. Revisa la consola para más detalles.");
+                showMessageModal("Error", "Error al eliminar datos de Excel. Revisa la consola para más detalles.");
             } finally {
                 hideLoading();
             }
@@ -1315,7 +1359,7 @@
             localStorage.setItem('includeExcelData', false); // Save checkbox state
             currentFilterMode = 'custom_date_range'; // Reset filter mode
             loadAndFilterData(); // Reload only with Firestore data
-            alert("Dashboard reiniciado.");
+            showMessageModal("Dashboard Reiniciado", "El dashboard ha sido reiniciado a su estado inicial.");
         }
 
         // Event Listeners
