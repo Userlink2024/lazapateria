@@ -239,6 +239,19 @@
             transform: rotate(30deg);
             color: #334155;
         }
+        /* Gear icon next to "Cargar Excel" */
+        .excel-gear-icon {
+            font-size: 1.5em; /* Smaller than main gear icon */
+            cursor: pointer;
+            color: #64748B;
+            margin-left: 0.5rem; /* Space from label */
+            transition: transform 0.3s ease;
+        }
+        .excel-gear-icon:hover {
+            transform: rotate(30deg);
+            color: #334155;
+        }
+
 
         /* Commission Table Styles */
         .commission-table-container {
@@ -311,6 +324,35 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Confirmation Modal Specific Styles */
+        .confirmation-modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .confirmation-modal-content h2 {
+            color: #EF4444; /* Red for warning */
+            margin-bottom: 1rem;
+        }
+        .confirmation-modal-content p {
+            font-size: 1.1rem;
+            color: #475569;
+            margin-bottom: 1.5rem;
+        }
+        .confirmation-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -320,10 +362,13 @@
         <span class="gear-icon" title="Configuración de Comisiones" onclick="mostrarModal('commission_settings_modal')">&#9881;</span>
 
         <div class="bg-white p-6 rounded-xl shadow-md flex flex-col gap-4">
-            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2 w-full">
                 <label for="excel_file_input" class="text-lg font-semibold text-gray-700">Cargar Excel:</label>
-                <input type="file" id="excel_file_input" accept=".xlsx, .xls" class="flex-grow">
-                <button id="upload_excel_btn" class="btn btn-primary w-full md:w-auto">Subir Excel</button>
+                <span class="excel-gear-icon" title="Acciones de Excel" onclick="mostrarModal('excel_actions_modal')">&#9881;</span>
+                <div class="form-field-checkbox ml-auto">
+                    <input type="checkbox" id="include_excel_data_checkbox">
+                    <label for="include_excel_data_checkbox">Incluir datos de Excel cargados</label>
+                </div>
             </div>
 
             <div class="flex flex-col md:flex-row items-center gap-4 w-full">
@@ -438,6 +483,30 @@
         </div>
     </div>
 
+    <div id="excel_actions_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('excel_actions_modal')">&times;</span>
+            <h2>Acciones de Archivo Excel</h2>
+            <div class="form-field">
+                <label for="excel_file_input_modal" class="text-lg font-semibold text-gray-700">Seleccionar archivo:</label>
+                <input type="file" id="excel_file_input_modal" accept=".xlsx, .xls">
+            </div>
+            <button id="upload_excel_btn_modal" class="btn btn-primary">Subir Excel</button>
+            <button id="delete_excel_data_btn_modal" class="btn btn-danger">Eliminar Datos Excel Cargados</button>
+        </div>
+    </div>
+
+    <div id="delete_confirmation_modal" class="modal">
+        <div class="confirmation-modal-content">
+            <h2>Confirmar Eliminación</h2>
+            <p>¿Estás seguro de que quieres eliminar TODOS los datos cargados desde archivos Excel? Esta acción es irreversible.</p>
+            <div class="confirmation-buttons">
+                <button class="btn btn-danger" onclick="confirmDeleteExcelData()">Eliminar Definitivamente</button>
+                <button class="btn btn-secondary" onclick="cerrarModal('delete_confirmation_modal')">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <div id="loading_overlay" class="loading-overlay">
         <div class="loading-spinner"></div>
         <p class="text-xl font-semibold text-gray-700">Cargando datos...</p>
@@ -454,7 +523,7 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        console.log("Firebase configured correctly for the Dashboard.");
+        console.log("Firebase configurado correctamente para el Dashboard.");
 
         // Global variables for charts
         let salesByDateChart;
@@ -463,19 +532,22 @@
 
         // Loaded data (combination of Firestore and Excel)
         let allOrdersData = [];
-        let excelData = []; // This will now be used to store aggregated Excel data from Firestore
 
         // DOM elements
-        const excelFileInput = document.getElementById('excel_file_input');
-        const uploadExcelBtn = document.getElementById('upload_excel_btn'); // New button
+        const excelFileInputMain = document.getElementById('excel_file_input'); // Main hidden input
+        const excelFileInputModal = document.getElementById('excel_file_input_modal'); // Input inside modal
+        const uploadExcelBtnModal = document.getElementById('upload_excel_btn_modal'); // Button inside modal
+        const deleteExcelDataBtnModal = document.getElementById('delete_excel_data_btn_modal'); // Button inside modal
+
         const startDateInput = document.getElementById('start_date');
         const endDateInput = document.getElementById('end_date');
         const filterDataBtn = document.getElementById('filter_data_btn');
         const resetDashboardBtn = document.getElementById('reset_dashboard_btn');
-        const monthSelector = document.getElementById('month_selector'); // New month selector
-        const filterCurrentWeekBtn = document.getElementById('filter_current_week_btn'); // New button
-        const filterCurrentMonthBtn = document.getElementById('filter_current_month_btn'); // New button
+        const monthSelector = document.getElementById('month_selector');
+        const filterCurrentWeekBtn = document.getElementById('filter_current_week_btn');
+        const filterCurrentMonthBtn = document.getElementById('filter_current_month_btn');
         const loadingOverlay = document.getElementById('loading_overlay');
+        const includeExcelDataCheckbox = document.getElementById('include_excel_data_checkbox');
 
 
         const totalParesMetric = document.getElementById('total_pares_metric');
@@ -488,7 +560,7 @@
         const monthlyCompanyCommissionAmountInput = document.getElementById('monthly_company_commission_amount_input');
         const monthlyIndividualPairsThresholdInput = document.getElementById('monthly_individual_pairs_threshold_input');
         const weeklyValueBaseThresholdInput = document.getElementById('weekly_value_base_threshold_input');
-        const weeklyBaseCommissionAmountInput = document.getElementById('weekly_base_commission_amount_input');
+        const weeklyBaseCommissionAmountInput = document = document.getElementById('weekly_base_commission_amount_input');
         const weeklyIncrementalValueThresholdInput = document.getElementById('weekly_incremental_value_threshold_input');
         const weeklyIncrementalBonusAmountInput = document.getElementById('weekly_incremental_bonus_amount_input');
         const saveSettingsPermanentlyCheckbox = document.getElementById('save_settings_permanently_checkbox');
@@ -502,8 +574,11 @@
         let weeklyBaseCommissionAmount = parseFloat(localStorage.getItem('weeklyBaseCommissionAmount')) || 0;
         let weeklyIncrementalValueThreshold = parseFloat(localStorage.getItem('weeklyIncrementalValueThreshold')) || 0;
         let weeklyIncrementalBonusAmount = parseFloat(localStorage.getItem('weeklyIncrementalBonusAmount')) || 0;
-        // Default to true for permanent saving, or load from localStorage
         let saveSettingsPermanently = (localStorage.getItem('saveSettingsPermanently') === 'false') ? false : true;
+        let includeExcelData = (localStorage.getItem('includeExcelData') === 'true'); // Default to false, or load from localStorage
+
+        // Variable to track the current filter type for commission display
+        let currentFilterMode = 'custom_date_range'; // Default
 
 
         // Define the value of one million for calculations
@@ -557,6 +632,7 @@
          * Sets the date range for the current week and applies filter.
          */
         function filterCurrentWeek() {
+            currentFilterMode = 'quick_week';
             const today = new Date();
             const dayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
             const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to Monday
@@ -572,6 +648,7 @@
          * Sets the date range for the current month and applies filter.
          */
         function filterCurrentMonth() {
+            currentFilterMode = 'quick_month';
             const today = new Date();
             const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
             const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
@@ -585,6 +662,7 @@
          * Handles month selection from the dropdown.
          */
         function handleMonthSelection() {
+            currentFilterMode = 'quick_month'; // Month selector is a quick filter
             const selectedMonth = monthSelector.value;
             if (selectedMonth) {
                 const year = parseInt(selectedMonth.split('-')[0]);
@@ -619,6 +697,8 @@
                 weeklyIncrementalValueThresholdInput.value = weeklyIncrementalValueThreshold;
                 weeklyIncrementalBonusAmountInput.value = weeklyIncrementalBonusAmount;
                 saveSettingsPermanentlyCheckbox.checked = saveSettingsPermanently; // Set checkbox state
+            } else if (id === 'excel_actions_modal') {
+                // No specific values to load for excel_actions_modal
             }
         }
 
@@ -801,8 +881,8 @@
             pairsByProductChart.data.datasets[0].data = Object.values(pairsByProduct);
             pairsByProductChart.update();
 
-            // Calculate and display commissions
-            displayAsesorCommissions(asesorPerformance, totalCompanyPairsFilteredPeriod, weeklyAsesorPerformance);
+            // Calculate and display commissions based on currentFilterMode
+            displayAsesorCommissions(asesorPerformance, totalCompanyPairsFilteredPeriod, weeklyAsesorPerformance, currentFilterMode);
         }
 
         /**
@@ -810,9 +890,18 @@
          * @param {Object} asesorOverallPerformance - Object containing totalSales and totalPairs for each asesor over the entire filtered period.
          * @param {number} totalCompanyPairsFilteredPeriod - Total pairs sold by the company in the filtered period.
          * @param {Object} weeklyAsesorPerformance - Object containing totalSales and totalPairs for each asesor, grouped by week.
+         * @param {string} filterMode - The current filter mode ('quick_month', 'quick_week', 'custom_date_range').
          */
-        function displayAsesorCommissions(asesorOverallPerformance, totalCompanyPairsFilteredPeriod, weeklyAsesorPerformance) {
-            let commissionHtml = '<table class="commission-table"><thead><tr><th>Asesor</th><th>Pares Vendidos (Período)</th><th>Valor Vendido (Período)</th><th>Comisión Mensual</th><th>Comisión Semanal</th><th>Comisión Total</th></tr></thead><tbody>';
+        function displayAsesorCommissions(asesorOverallPerformance, totalCompanyPairsFilteredPeriod, weeklyAsesorPerformance, filterMode) {
+            let commissionHtml = '<table class="commission-table"><thead><tr><th>Asesor</th><th>Pares Vendidos (Período)</th><th>Valor Vendido (Período)</th>';
+            
+            // Conditionally add Monthly Commission column header
+            if (filterMode === 'quick_month' || filterMode === 'quick_week') {
+                commissionHtml += '<th>Comisión Mensual</th>';
+            }
+            
+            // Always add Weekly Commission column header
+            commissionHtml += '<th>Comisión Semanal</th><th>Comisión Total</th></tr></thead><tbody>';
 
             const companyMeetsMonthlyPairsTarget = (monthlyCompanyPairsThreshold > 0 && totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold);
 
@@ -824,31 +913,32 @@
                 let monthlyCommissionDetails = [];
                 let weeklyCommissionDetails = [];
 
-                // --- Monthly Commission Calculation ---
-                if (monthlyCompanyPairsThreshold > 0) { // Only calculate if threshold is set
-                    if (companyMeetsMonthlyPairsTarget) {
-                        if (monthlyIndividualPairsThreshold > 0 && overallTotalPairs >= monthlyIndividualPairsThreshold) {
-                            monthlyCommission = monthlyCompanyCommissionAmount;
-                            monthlyCommissionDetails.push(`Cumple (Empresa: ${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares, Personal: ${overallTotalPairs}/${monthlyIndividualPairsThreshold} pares)`);
-                        } else if (monthlyIndividualPairsThreshold > 0) {
-                            monthlyCommissionDetails.push(`Empresa cumple, pero Asesor NO (${overallTotalPairs}/${monthlyIndividualPairsThreshold} pares)`);
-                        } else { // If no individual threshold is set, and company meets target, asesor gets it.
-                            monthlyCommission = monthlyCompanyCommissionAmount;
-                            monthlyCommissionDetails.push(`Cumple (Empresa: ${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares)`);
+                // --- Monthly Commission Calculation (only if quick filter is active) ---
+                if (filterMode === 'quick_month' || filterMode === 'quick_week') {
+                    if (monthlyCompanyPairsThreshold > 0) {
+                        if (companyMeetsMonthlyPairsTarget) {
+                            if (monthlyIndividualPairsThreshold > 0 && overallTotalPairs >= monthlyIndividualPairsThreshold) {
+                                monthlyCommission = monthlyCompanyCommissionAmount;
+                                monthlyCommissionDetails.push(`Cumple (Empresa: ${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares, Personal: ${overallTotalPairs}/${monthlyIndividualPairsThreshold} pares)`);
+                            } else if (monthlyIndividualPairsThreshold > 0) {
+                                monthlyCommissionDetails.push(`Empresa cumple, pero Asesor NO (${overallTotalPairs}/${monthlyIndividualPairsThreshold} pares)`);
+                            } else {
+                                monthlyCommission = monthlyCompanyCommissionAmount;
+                                monthlyCommissionDetails.push(`Cumple (Empresa: ${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares)`);
+                            }
+                        } else {
+                            monthlyCommissionDetails.push(`Empresa NO cumple (${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares)`);
                         }
                     } else {
-                        monthlyCommissionDetails.push(`Empresa NO cumple (${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares)`);
+                        monthlyCommissionDetails.push(`Topes mensuales no configurados.`);
                     }
-                } else {
-                    monthlyCommissionDetails.push(`Topes mensuales no configurados.`);
+                    totalAsesorCommission += monthlyCommission;
                 }
-                totalAsesorCommission += monthlyCommission;
 
 
                 // --- Weekly Commission Calculation ---
-                // Iterate through weeks for this asesor
                 const weeksForAsesor = Object.keys(weeklyAsesorPerformance).filter(weekId => weeklyAsesorPerformance[weekId][asesor]);
-                weeksForAsesor.sort(); // Sort weeks for consistent display
+                weeksForAsesor.sort();
 
                 if (weeksForAsesor.length === 0 && (weeklyValueBaseThreshold > 0 || weeklyIncrementalValueThreshold > 0)) {
                     weeklyCommissionDetails.push("No hay ventas semanales para este asesor en el período.");
@@ -862,7 +952,6 @@
                     let currentWeekCommission = 0;
                     let weekDetails = [];
 
-                    // Base Weekly Commission
                     if (weeklyValueBaseThreshold > 0 && weeklyTotalSales >= weeklyValueBaseThreshold) {
                         currentWeekCommission += weeklyBaseCommissionAmount;
                         weekDetails.push(`Base: ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(weeklyBaseCommissionAmount)}`);
@@ -870,10 +959,9 @@
                         weekDetails.push(`Base: No cumple (${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(weeklyTotalSales)}/${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(weeklyValueBaseThreshold)})`);
                     }
 
-                    // Incremental Weekly Bonus
-                    if (weeklyIncrementalValueThreshold > 0 && weeklyTotalSales > weeklyValueBaseThreshold) { // Incremental starts after base threshold
+                    if (weeklyIncrementalValueThreshold > 0 && weeklyTotalSales > weeklyValueBaseThreshold) {
                         const excessValue = weeklyTotalSales - weeklyValueBaseThreshold;
-                        const increments = Math.floor(excessValue / weeklyIncrementalValueThreshold); // Number of full increments
+                        const increments = Math.floor(excessValue / weeklyIncrementalValueThreshold);
                         if (increments > 0) {
                             const incrementalBonus = increments * weeklyIncrementalBonusAmount;
                             currentWeekCommission += incrementalBonus;
@@ -893,10 +981,18 @@
                         <td>${asesor}</td>
                         <td>${overallTotalPairs.toLocaleString('es-CO')}</td>
                         <td>${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(overallTotalSales)}</td>
+                `;
+                // Conditionally add Monthly Commission column data
+                if (filterMode === 'quick_month' || filterMode === 'quick_week') {
+                    commissionHtml += `
                         <td>
                             ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(monthlyCommission)}
                             <br><small>${monthlyCommissionDetails.join('<br>')}</small>
                         </td>
+                    `;
+                }
+                
+                commissionHtml += `
                         <td>
                             ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(weeklyCommission)}
                             <br><small>${weeklyCommissionDetails.join('<br>')}</small>
@@ -981,8 +1077,8 @@
         async function fetchOrdersFromFirestore() {
             showLoading();
             try {
-                const ordersSnapshot = await db.collection('registros').orderBy('fecha_hora', 'asc').get();
                 const orders = [];
+                const ordersSnapshot = await db.collection('registros').orderBy('fecha_hora', 'asc').get();
                 ordersSnapshot.forEach(doc => {
                     const data = doc.data();
                     if (data.fecha_hora && data.fecha_hora.toDate) {
@@ -992,84 +1088,36 @@
                 });
                 console.log("Orders loaded from 'registros':", orders.length);
 
-                const excelSummariesSnapshot = await db.collection('excel_daily_summaries').get();
-                const excelSummaries = [];
-                excelSummariesSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    // Ensure date is a Date object
-                    const dateParts = doc.id.split('-'); // Assuming doc.id is 'YYYY-MM-DD'
-                    const dateObj = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
-                    
-                    // Reconstruct data for compatibility with existing logic
-                    // This assumes excel_daily_summaries stores aggregated values for the day
-                    // and potentially asesor-specific daily summaries.
-                    // For simplicity, we'll convert it to a format similar to individual orders
-                    // but representing a daily aggregate.
-                    // If Excel data is truly a summary, it needs to be handled differently
-                    // when combining with 'registros' (e.g., sum up, or prioritize).
-                    // For now, we'll treat each daily summary as a single "order" for the day
-                    // with aggregated values. This might not be ideal if you want to see
-                    // individual orders from Firestore AND daily summaries from Excel.
-                    // A better approach would be to aggregate 'registros' by day/asesor
-                    // and then combine with 'excel_daily_summaries'.
+                let combinedData = [...orders];
 
-                    // Let's refine this: Excel data should be treated as daily aggregates.
-                    // We need to sum up `registros` by day/asesor first, then add Excel data.
+                // Only include excel data if the checkbox is checked
+                if (includeExcelDataCheckbox.checked) {
+                    const excelSummaries = [];
+                    const excelSummariesSnapshot = await db.collection('excel_daily_summaries').get();
+                    excelSummariesSnapshot.forEach(doc => {
+                        const data = doc.data();
+                        let fechaHoraDate = null;
+                        if (data.fecha_hora && data.fecha_hora.toDate) {
+                            fechaHoraDate = data.fecha_hora.toDate();
+                        } else if (typeof data.fecha_hora === 'string') {
+                            fechaHoraDate = new Date(data.fecha_hora);
+                        }
 
-                    // For now, I'll assume excel_daily_summaries contains records that can be
-                    // added to the overall data stream for calculation, similar to individual orders.
-                    // This might require the Excel data to have 'asesor', 'num_pares', 'valor_total' fields.
-                    // If your excel_daily_summaries structure is different, this part needs adjustment.
-                    
-                    // Assuming excel_daily_summaries documents look like:
-                    // { date: 'YYYY-MM-DD', total_pares: X, total_valor: Y, asesor_summaries: { 'Asesor1': { pares: A, valor: B }, ... } }
-                    // To combine, we need to flatten this into "order-like" objects.
-                    // This is a crucial point for accurate merging.
+                        const excelDataEntry = {
+                            id: doc.id,
+                            source: 'excel_summary',
+                            asesor: data.asesor || 'Desconocido',
+                            num_pares: data.num_pares || 0,
+                            valor_total: data.valor_total || 0,
+                            fecha_hora: fechaHoraDate
+                        };
+                        excelSummaries.push(excelDataEntry);
+                    });
+                    console.log("Summaries loaded from 'excel_daily_summaries':", excelSummaries.length);
+                    combinedData = combinedData.concat(excelSummaries);
+                }
 
-                    // For now, let's assume `excel_daily_summaries` directly stores records
-                    // that can be treated like orders, or we need to aggregate them.
-                    // Given the user's previous Excel data structure (Cliente, Num Pares, Valor Total, Asesor, Fecha),
-                    // it implies the Excel is a list of individual transactions/summaries.
-                    // Let's assume the excel_daily_summaries collection stores documents like:
-                    // { date: Date, asesor: 'Name', num_pares: X, valor_total: Y, source: 'excel_summary' }
-                    // If the Excel is truly a *daily summary* of *all* sales for a day,
-                    // then we should *replace* the `registros` data for that specific day with the Excel data.
-                    // This is complex.
-
-                    // Let's simplify: `excel_daily_summaries` stores daily *aggregated* data per asesor
-                    // from Excel. We will combine this with aggregated data from `registros`.
-
-                    // Re-evaluating the user's intent: "al finalizar el día entonces yo cargo el archivo de excel"
-                    // This suggests the Excel is a *snapshot* of the day's total, possibly overriding real-time.
-                    // However, merging real-time individual orders with aggregated daily Excel data is tricky.
-                    // The safest approach for now is that `excel_daily_summaries` stores daily *summary records*
-                    // that are *additional* to `registros`. If the Excel is meant to be the *definitive* source
-                    // for a day, the user would need to ensure no `registros` exist for that day, or we need
-                    // a more complex merging strategy (e.g., mark `registros` as "processed by Excel").
-
-                    // For the current implementation, I will treat `excel_daily_summaries` as containing
-                    // daily aggregate entries that supplement the `registros` collection.
-                    // Assuming each document in `excel_daily_summaries` looks like:
-                    // { date: 'YYYY-MM-DD', asesor: 'AsesorName', total_pares_dia: X, total_valor_dia: Y }
-                    // We need to convert this into a format compatible with `allOrdersData`.
-                    // This means creating "virtual" order objects from the daily summaries.
-
-                    // Let's assume the excel_daily_summaries document has `asesor`, `num_pares`, `valor_total`
-                    // and `fecha_hora` (as a string 'YYYY-MM-DD' or Firestore Timestamp).
-                    const excelDataEntry = {
-                        id: doc.id, // YYYY-MM-DD
-                        source: 'excel_summary',
-                        asesor: data.asesor || 'Desconocido',
-                        num_pares: data.num_pares || 0,
-                        valor_total: data.valor_total || 0,
-                        fecha_hora: dateObj // Already a Date object
-                    };
-                    excelSummaries.push(excelDataEntry);
-                });
-                console.log("Summaries loaded from 'excel_daily_summaries':", excelSummaries.length);
-
-                // Combine and return
-                return orders.concat(excelSummaries);
+                return combinedData;
 
             } catch (error) {
                 console.error("Error fetching data from Firestore:", error);
@@ -1118,7 +1166,7 @@
          * @param {Event} event - The click event from the upload button.
          */
         async function handleExcelUpload() {
-            const file = excelFileInput.files[0];
+            const file = excelFileInputModal.files[0]; // Use the input from the modal
             if (!file) {
                 alert("Por favor, selecciona un archivo Excel para subir.");
                 return;
@@ -1138,7 +1186,7 @@
                     console.log("Datos de Excel cargados (raw):", json);
 
                     // Aggregate Excel data by date and asesor for daily summaries
-                    const dailySummariesToUpload = {}; // { 'YYYY-MM-DD': { 'AsesorName': { num_pares: X, valor_total: Y } } }
+                    const dailySummariesToUpload = {}; // { 'YYYY-MM-DD_AsesorName': { fecha_hora: Date, asesor: 'Name', num_pares: X, valor_total: Y } }
 
                     json.forEach(row => {
                         let fechaHora;
@@ -1163,34 +1211,34 @@
 
                         const dateKey = fechaHora.toISOString().split('T')[0]; // YYYY-MM-DD
                         const asesorName = row['Asesor'] || 'Desconocido';
-                        const numPares = parseInt(row['Num Pares']) || 0;
-                        const valorTotal = parseFloat(row['Valor Total']) || 0;
+                        const docId = `${dateKey}_${asesorName}`;
 
-                        if (!dailySummariesToUpload[dateKey]) {
-                            dailySummariesToUpload[dateKey] = {};
+                        if (!dailySummariesToUpload[docId]) {
+                            dailySummariesToUpload[docId] = {
+                                fecha_hora: fechaHora,
+                                asesor: asesorName,
+                                num_pares: 0,
+                                valor_total: 0
+                            };
                         }
-                        if (!dailySummariesToUpload[dateKey][asesorName]) {
-                            dailySummariesToUpload[dateKey][asesorName] = { num_pares: 0, valor_total: 0 };
-                        }
-                        dailySummariesToUpload[dateKey][asesorName].num_pares += numPares;
-                        dailySummariesToUpload[dateKey][asesorName].valor_total += valorTotal;
+                        dailySummariesToUpload[docId].num_pares += parseInt(row['Num Pares']) || 0;
+                        dailySummariesToUpload[docId].valor_total += parseFloat(row['Valor Total']) || 0;
                     });
 
                     // Save aggregated data to Firestore
                     const batch = db.batch();
                     let uploadCount = 0;
-                    for (const dateKey in dailySummariesToUpload) {
-                        for (const asesorName in dailySummariesToUpload[dateKey]) {
-                            const docRef = db.collection('excel_daily_summaries').doc(`${dateKey}_${asesorName}`); // Unique ID per day per asesor
-                            batch.set(docRef, {
-                                fecha_hora: firebase.firestore.Timestamp.fromDate(new Date(dateKey)),
-                                asesor: asesorName,
-                                num_pares: dailySummariesToUpload[dateKey][asesorName].num_pares,
-                                valor_total: dailySummariesToUpload[dateKey][asesorName].valor_total,
-                                source: 'excel_upload'
-                            });
-                            uploadCount++;
-                        }
+                    for (const docId in dailySummariesToUpload) {
+                        const dataToSave = dailySummariesToUpload[docId];
+                        const docRef = db.collection('excel_daily_summaries').doc(docId);
+                        batch.set(docRef, {
+                            fecha_hora: firebase.firestore.Timestamp.fromDate(dataToSave.fecha_hora),
+                            asesor: dataToSave.asesor,
+                            num_pares: dataToSave.num_pares,
+                            valor_total: dataToSave.valor_total,
+                            source: 'excel_upload'
+                        });
+                        uploadCount++;
                     }
 
                     if (uploadCount > 0) {
@@ -1200,7 +1248,8 @@
                         alert("Archivo Excel procesado, pero no se encontraron datos válidos para subir.");
                     }
                     
-                    excelFileInput.value = ''; // Clear file input
+                    excelFileInputModal.value = ''; // Clear file input in modal
+                    cerrarModal('excel_actions_modal'); // Close modal
                     loadAndFilterData(); // Reload dashboard with new Firestore data
 
                 } catch (error) {
@@ -1213,16 +1262,57 @@
             reader.readAsArrayBuffer(file);
         }
 
+        /**
+         * Shows a confirmation modal before deleting all Excel data.
+         */
+        function showDeleteConfirmation() {
+            mostrarModal('delete_confirmation_modal');
+        }
+
+        /**
+         * Deletes all documents from the 'excel_daily_summaries' collection in Firestore.
+         */
+        async function confirmDeleteExcelData() {
+            cerrarModal('delete_confirmation_modal'); // Close confirmation modal
+            showLoading();
+            try {
+                const collectionRef = db.collection('excel_daily_summaries');
+                const snapshot = await collectionRef.get();
+                
+                if (snapshot.empty) {
+                    alert("No hay datos de Excel cargados para eliminar.");
+                    return;
+                }
+
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+
+                await batch.commit();
+                alert(`Se eliminaron ${snapshot.size} documentos de la colección 'excel_daily_summaries'.`);
+                cerrarModal('excel_actions_modal'); // Close the excel actions modal after deletion
+                loadAndFilterData(); // Reload dashboard after deletion
+            } catch (error) {
+                console.error("Error al eliminar datos de Excel de Firestore:", error);
+                alert("Error al eliminar datos de Excel. Revisa la consola para más detalles.");
+            } finally {
+                hideLoading();
+            }
+        }
+
 
         /**
          * Resets the dashboard, clearing data and filters.
          */
         function resetDashboard() {
-            // excelData is now fetched from Firestore, so no need to clear local excelData
             startDateInput.value = '';
             endDateInput.value = '';
-            excelFileInput.value = ''; // Clear file input
+            excelFileInputModal.value = ''; // Clear file input in modal
             monthSelector.value = ''; // Reset month selector
+            includeExcelDataCheckbox.checked = false; // Reset checkbox
+            localStorage.setItem('includeExcelData', false); // Save checkbox state
+            currentFilterMode = 'custom_date_range'; // Reset filter mode
             loadAndFilterData(); // Reload only with Firestore data
             alert("Dashboard reiniciado.");
         }
@@ -1231,6 +1321,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             initializeCharts(); // Initialize charts on page load
             populateMonthSelector(); // Populate month selector
+            
             // Load commission caps from localStorage on startup
             monthlyCompanyPairsThreshold = parseFloat(localStorage.getItem('monthlyCompanyPairsThreshold')) || 0;
             monthlyCompanyCommissionAmount = parseFloat(localStorage.getItem('monthlyCompanyCommissionAmount')) || 0;
@@ -1239,16 +1330,36 @@
             weeklyBaseCommissionAmount = parseFloat(localStorage.getItem('weeklyBaseCommissionAmount')) || 0;
             weeklyIncrementalValueThreshold = parseFloat(localStorage.getItem('weeklyIncrementalValueThreshold')) || 0;
             weeklyIncrementalBonusAmount = parseFloat(localStorage.getItem('weeklyIncrementalBonusAmount')) || 0;
-            saveSettingsPermanently = (localStorage.getItem('saveSettingsPermanently') === 'false') ? false : true; // Load checkbox state
+            saveSettingsPermanently = (localStorage.getItem('saveSettingsPermanently') === 'false') ? false : true;
+            includeExcelData = (localStorage.getItem('includeExcelData') === 'true'); // Load checkbox state
+            includeExcelDataCheckbox.checked = includeExcelData; // Set checkbox state on load
+
             loadAndFilterData(); // Load initial data from Firestore
         });
 
-        uploadExcelBtn.addEventListener('click', handleExcelUpload); // Event listener for the new upload button
-        filterDataBtn.addEventListener('click', loadAndFilterData);
+        // Event listener for the main filter button (custom date range)
+        filterDataBtn.addEventListener('click', () => {
+            currentFilterMode = 'custom_date_range';
+            loadAndFilterData();
+        });
+
+        // Event listeners for quick filters
+        monthSelector.addEventListener('change', handleMonthSelection);
+        filterCurrentWeekBtn.addEventListener('click', filterCurrentWeek);
+        filterCurrentMonthBtn.addEventListener('click', filterCurrentMonth);
+
+        // Event listeners for Excel actions (now in modal)
+        uploadExcelBtnModal.addEventListener('click', handleExcelUpload);
+        deleteExcelDataBtnModal.addEventListener('click', showDeleteConfirmation);
+
+        // Event listener for the "Include Excel Data" checkbox
+        includeExcelDataCheckbox.addEventListener('change', () => {
+            includeExcelData = includeExcelDataCheckbox.checked;
+            localStorage.setItem('includeExcelData', includeExcelData);
+            loadAndFilterData(); // Reload data based on new checkbox state
+        });
+
         resetDashboardBtn.addEventListener('click', resetDashboard);
-        monthSelector.addEventListener('change', handleMonthSelection); // New event listener for month selector
-        filterCurrentWeekBtn.addEventListener('click', filterCurrentWeek); // New event listener for current week button
-        filterCurrentMonthBtn.addEventListener('click', filterCurrentMonth); // New event listener for current month button
 
     </script>
 </body>
