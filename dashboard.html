@@ -210,6 +210,18 @@
             width: 100%;
             box-sizing: border-box;
         }
+        /* Style for checkbox */
+        .form-field-checkbox {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+            gap: 0.5rem; /* Space between checkbox and label */
+        }
+        .form-field-checkbox input[type="checkbox"] {
+            width: auto; /* Override full width for checkbox */
+            margin-top: 0;
+        }
+
 
         /* Gear icon */
         .gear-icon {
@@ -259,11 +271,18 @@
         .commission-table tr:nth-child(even) {
             background-color: #f8fafc; /* Alternate row color */
         }
+        /* Updated info-text styles */
         .info-text {
-            font-size: 0.9rem;
-            color: #64748B;
-            margin-top: 0.5rem;
+            font-size: 0.95rem; /* Slightly larger font */
+            color: #475569; /* Darker gray for better contrast */
+            background-color: #e0f2fe; /* Light blue background */
+            border: 1px solid #90cdf4; /* Blue border */
+            border-radius: 0.5rem; /* Rounded corners */
+            padding: 1rem; /* More padding */
+            margin-top: 1.5rem; /* More space from elements above */
             text-align: center;
+            line-height: 1.4; /* Improve readability */
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* Subtle shadow */
         }
     </style>
 </head>
@@ -290,11 +309,11 @@
             <button id="reset_dashboard_btn" class="btn btn-danger w-full md:w-auto">
                 Reiniciar Dashboard
             </button>
-            <p class="info-text w-full">
-                Para ver el rendimiento de un día específico, selecciona la misma fecha en 'Desde' y 'Hasta'.
-                Para un mes, selecciona el primer y último día del mes.
-            </p>
         </div>
+        <p class="info-text w-full">
+            Para ver el rendimiento de un día específico, selecciona la misma fecha en 'Desde' y 'Hasta'.
+            Para un mes, selecciona el primer y último día del mes.
+        </p>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3-lg gap-4">
             <div class="card">
@@ -366,6 +385,12 @@
                 <label for="weekly_incremental_bonus_amount_input">Monto Bono Incremental (Semanal, COP, ej: 10000):</label>
                 <input type="number" id="weekly_incremental_bonus_amount_input" value="0" min="0" step="1000">
             </div>
+            
+            <div class="form-field-checkbox">
+                <input type="checkbox" id="save_settings_permanently_checkbox">
+                <label for="save_settings_permanently_checkbox">Guardar configuración permanentemente</label>
+            </div>
+
             <button class="btn btn-primary" onclick="saveCommissionSettings()">Guardar Configuración</button>
         </div>
     </div>
@@ -412,6 +437,8 @@
         const weeklyBaseCommissionAmountInput = document.getElementById('weekly_base_commission_amount_input');
         const weeklyIncrementalValueThresholdInput = document.getElementById('weekly_incremental_value_threshold_input');
         const weeklyIncrementalBonusAmountInput = document.getElementById('weekly_incremental_bonus_amount_input');
+        const saveSettingsPermanentlyCheckbox = document.getElementById('save_settings_permanently_checkbox');
+
 
         // Global commission settings (default values)
         let monthlyCompanyPairsThreshold = parseFloat(localStorage.getItem('monthlyCompanyPairsThreshold')) || 0;
@@ -421,6 +448,9 @@
         let weeklyBaseCommissionAmount = parseFloat(localStorage.getItem('weeklyBaseCommissionAmount')) || 0;
         let weeklyIncrementalValueThreshold = parseFloat(localStorage.getItem('weeklyIncrementalValueThreshold')) || 0;
         let weeklyIncrementalBonusAmount = parseFloat(localStorage.getItem('weeklyIncrementalBonusAmount')) || 0;
+        // Default to true for permanent saving, or load from localStorage
+        let saveSettingsPermanently = (localStorage.getItem('saveSettingsPermanently') === 'false') ? false : true;
+
 
         // Define the value of one million for calculations
         const ONE_MILLION = 1000000;
@@ -452,6 +482,7 @@
                 weeklyBaseCommissionAmountInput.value = weeklyBaseCommissionAmount;
                 weeklyIncrementalValueThresholdInput.value = weeklyIncrementalValueThreshold;
                 weeklyIncrementalBonusAmountInput.value = weeklyIncrementalBonusAmount;
+                saveSettingsPermanentlyCheckbox.checked = saveSettingsPermanently; // Set checkbox state
             }
         }
 
@@ -658,18 +689,20 @@
                 let weeklyCommissionDetails = [];
 
                 // --- Monthly Commission Calculation ---
-                if (companyMeetsMonthlyPairsTarget) {
-                    if (monthlyIndividualPairsThreshold > 0 && overallTotalPairs >= monthlyIndividualPairsThreshold) {
-                        monthlyCommission = monthlyCompanyCommissionAmount;
-                        monthlyCommissionDetails.push(`Cumple (Empresa: ${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares, Personal: ${overallTotalPairs}/${monthlyIndividualPairsThreshold} pares)`);
-                    } else if (monthlyIndividualPairsThreshold > 0) {
-                        monthlyCommissionDetails.push(`Empresa cumple, pero Asesor NO (${overallTotalPairs}/${monthlyIndividualPairsThreshold} pares)`);
-                    } else { // If no individual threshold is set, and company meets target, asesor gets it.
-                        monthlyCommission = monthlyCompanyCommissionAmount;
-                        monthlyCommissionDetails.push(`Cumple (Empresa: ${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares)`);
+                if (monthlyCompanyPairsThreshold > 0) { // Only calculate if threshold is set
+                    if (companyMeetsMonthlyPairsTarget) {
+                        if (monthlyIndividualPairsThreshold > 0 && overallTotalPairs >= monthlyIndividualPairsThreshold) {
+                            monthlyCommission = monthlyCompanyCommissionAmount;
+                            monthlyCommissionDetails.push(`Cumple (Empresa: ${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares, Personal: ${overallTotalPairs}/${monthlyIndividualPairsThreshold} pares)`);
+                        } else if (monthlyIndividualPairsThreshold > 0) {
+                            monthlyCommissionDetails.push(`Empresa cumple, pero Asesor NO (${overallTotalPairs}/${monthlyIndividualPairsThreshold} pares)`);
+                        } else { // If no individual threshold is set, and company meets target, asesor gets it.
+                            monthlyCommission = monthlyCompanyCommissionAmount;
+                            monthlyCommissionDetails.push(`Cumple (Empresa: ${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares)`);
+                        }
+                    } else {
+                        monthlyCommissionDetails.push(`Empresa NO cumple (${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares)`);
                     }
-                } else if (monthlyCompanyPairsThreshold > 0) {
-                    monthlyCommissionDetails.push(`Empresa NO cumple (${totalCompanyPairsFilteredPeriod}/${monthlyCompanyPairsThreshold} pares)`);
                 } else {
                     monthlyCommissionDetails.push(`Topes mensuales no configurados.`);
                 }
@@ -758,6 +791,7 @@
             const newWeeklyBaseCommissionAmount = parseFloat(weeklyBaseCommissionAmountInput.value);
             const newWeeklyIncrementalValueThreshold = parseFloat(weeklyIncrementalValueThresholdInput.value);
             const newWeeklyIncrementalBonusAmount = parseFloat(weeklyIncrementalBonusAmountInput.value);
+            const shouldSavePermanently = saveSettingsPermanentlyCheckbox.checked;
 
             // Basic validation
             if (isNaN(newMonthlyCompanyPairsThreshold) || newMonthlyCompanyPairsThreshold < 0) { alert("Por favor, ingrese un valor válido para el Tope de Pares (Empresa)."); return; }
@@ -775,14 +809,29 @@
             weeklyBaseCommissionAmount = newWeeklyBaseCommissionAmount;
             weeklyIncrementalValueThreshold = newWeeklyIncrementalValueThreshold;
             weeklyIncrementalBonusAmount = newWeeklyIncrementalBonusAmount;
+            saveSettingsPermanently = shouldSavePermanently; // Update global state
 
-            localStorage.setItem('monthlyCompanyPairsThreshold', monthlyCompanyPairsThreshold);
-            localStorage.setItem('monthlyCompanyCommissionAmount', monthlyCompanyCommissionAmount);
-            localStorage.setItem('monthlyIndividualPairsThreshold', monthlyIndividualPairsThreshold);
-            localStorage.setItem('weeklyValueBaseThreshold', weeklyValueBaseThreshold);
-            localStorage.setItem('weeklyBaseCommissionAmount', weeklyBaseCommissionAmount);
-            localStorage.setItem('weeklyIncrementalValueThreshold', weeklyIncrementalValueThreshold);
-            localStorage.setItem('weeklyIncrementalBonusAmount', weeklyIncrementalBonusAmount);
+
+            if (shouldSavePermanently) {
+                localStorage.setItem('monthlyCompanyPairsThreshold', monthlyCompanyPairsThreshold);
+                localStorage.setItem('monthlyCompanyCommissionAmount', monthlyCompanyCommissionAmount);
+                localStorage.setItem('monthlyIndividualPairsThreshold', monthlyIndividualPairsThreshold);
+                localStorage.setItem('weeklyValueBaseThreshold', weeklyValueBaseThreshold);
+                localStorage.setItem('weeklyBaseCommissionAmount', weeklyBaseCommissionAmount);
+                localStorage.setItem('weeklyIncrementalValueThreshold', weeklyIncrementalValueThreshold);
+                localStorage.setItem('weeklyIncrementalBonusAmount', weeklyIncrementalBonusAmount);
+                localStorage.setItem('saveSettingsPermanently', shouldSavePermanently); // Save checkbox state
+            } else {
+                // If not saving permanently, clear previous settings from localStorage
+                localStorage.removeItem('monthlyCompanyPairsThreshold');
+                localStorage.removeItem('monthlyCompanyCommissionAmount');
+                localStorage.removeItem('monthlyIndividualPairsThreshold');
+                localStorage.removeItem('weeklyValueBaseThreshold');
+                localStorage.removeItem('weeklyBaseCommissionAmount');
+                localStorage.removeItem('weeklyIncrementalValueThreshold');
+                localStorage.removeItem('weeklyIncrementalBonusAmount');
+                localStorage.setItem('saveSettingsPermanently', shouldSavePermanently); // Still save checkbox state
+            }
 
             cerrarModal('commission_settings_modal');
             loadAndFilterData(); // Reload dashboard with new commission settings
@@ -932,6 +981,7 @@
             weeklyBaseCommissionAmount = parseFloat(localStorage.getItem('weeklyBaseCommissionAmount')) || 0;
             weeklyIncrementalValueThreshold = parseFloat(localStorage.getItem('weeklyIncrementalValueThreshold')) || 0;
             weeklyIncrementalBonusAmount = parseFloat(localStorage.getItem('weeklyIncrementalBonusAmount')) || 0;
+            saveSettingsPermanently = (localStorage.getItem('saveSettingsPermanently') === 'false') ? false : true; // Load checkbox state
             loadAndFilterData(); // Load initial data from Firestore
         });
 
