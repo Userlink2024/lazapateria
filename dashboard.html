@@ -478,7 +478,20 @@
         <div id="comision_general" class="tab-content">
             <h2 class="text-3xl">Comisión General (Mensual)</h2>
             <span class="gear-icon" title="Configuración de Comisión General" onclick="mostrarModal('commission_general_settings_modal')">&#9881;</span>
-            <div class="commission-table-container">
+            <div class="bg-white p-6 rounded-xl shadow-md flex flex-col gap-4 mt-4">
+                <div class="flex flex-col md:flex-row items-center gap-4 w-full">
+                    <label class="text-lg font-semibold text-gray-700">Filtro por Mes:</label>
+                    <select id="month_selector_general" class="flex-grow">
+                        </select>
+                    <button id="filter_data_btn_general" class="btn btn-primary w-full md:w-auto">
+                        Aplicar Filtro General
+                    </button>
+                    <button id="reset_filter_btn_general" class="btn btn-danger w-full md:w-auto">
+                        Reiniciar Filtro General
+                    </button>
+                </div>
+            </div>
+            <div class="commission-table-container mt-4">
                 <div id="general_commission_summary">
                     <p class="text-center text-gray-500">Cargando datos de comisión general...</p>
                 </div>
@@ -648,6 +661,7 @@
         // Flags
         let includeExcelData = true; // Default to true, loaded from localStorage
         let currentDashboardFilterMode = 'custom_date_range'; // For Dashboard tab
+        let currentGeneralMonthFilter = ''; // For General Commission tab
         let currentWeeklyFilterMode = 'custom_date_range'; // For Weekly Commission tab
         let currentHistoryAsesorFilter = ''; // For History tab
         let currentHistoryMonthFilter = ''; // For History tab
@@ -667,6 +681,13 @@
         const totalParesMetricDashboard = document.getElementById('total_pares_metric_dashboard');
         const totalValorMetricDashboard = document.getElementById('total_valor_metric_dashboard');
         const totalPedidosMetricDashboard = document.getElementById('total_pedidos_metric_dashboard');
+
+        // --- DOM Elements (for General Commission tab) ---
+        const monthSelectorGeneral = document.getElementById('month_selector_general');
+        const filterDataBtnGeneral = document.getElementById('filter_data_btn_general');
+        const resetFilterBtnGeneral = document.getElementById('reset_filter_btn_general');
+        const generalCommissionSummaryDiv = document.getElementById('general_commission_summary');
+
 
         // --- DOM Elements (for Weekly Commission tab) ---
         const startDateInputWeekly = document.getElementById('start_date_weekly');
@@ -772,6 +793,7 @@
                 initializeChartsDashboard();
                 loadAndFilterDashboardData();
             } else if (tabName === 'comision_general') {
+                populateMonthSelector(monthSelectorGeneral); // Populate for general commission tab
                 calculateAndDisplayGeneralCommissions();
             } else if (tabName === 'comision_semanal') {
                 // Initial load for weekly commission will happen when filter is applied
@@ -1377,15 +1399,29 @@
         // --- COMISION GENERAL Tab Functions ---
 
         /**
-         * Calculates and displays general (monthly) commissions.
+         * Calculates and displays general (monthly) commissions based on the selected month.
          */
         function calculateAndDisplayGeneralCommissions() {
-            const generalCommissionSummaryDiv = document.getElementById('general_commission_summary');
+            currentGeneralMonthFilter = monthSelectorGeneral.value;
+
+            let filteredData = [...allOrdersData]; // Start with all data
+
+            // Apply month filter if a month is selected
+            if (currentGeneralMonthFilter) {
+                const [year, month] = currentGeneralMonthFilter.split('-').map(Number);
+                const firstDayOfMonth = new Date(year, month - 1, 1); // Month is 0-indexed
+                const lastDayOfMonth = new Date(year, month, 0); // Last day of the selected month
+
+                filteredData = filteredData.filter(order => {
+                    const orderDate = order.fecha_hora;
+                    return orderDate >= firstDayOfMonth && orderDate <= lastDayOfMonth;
+                });
+            }
+
             let totalCompanyPairsFilteredPeriod = 0;
             const asesorMonthlyPerformance = {}; // { 'AsesorName': { totalSales: 0, totalPairs: 0 } }
 
-            // Use allOrdersData as it's the combined and real-time updated source
-            allOrdersData.forEach(order => {
+            filteredData.forEach(order => {
                 totalCompanyPairsFilteredPeriod += order.num_pares || 0;
                 if (order.asesor) {
                     if (!asesorMonthlyPerformance[order.asesor]) {
@@ -1397,7 +1433,7 @@
             });
 
             let commissionHtml = `
-                <h3 class="text-xl font-semibold mb-4">Resumen de Comisión General (Mensual)</h3>
+                <h3 class="text-xl font-semibold mb-4">Resumen de Comisión General ${currentGeneralMonthFilter ? `(Mes: ${new Date(currentGeneralMonthFilter + '-01').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })})` : '(Todos los períodos)'}</h3>
                 <p class="mb-2"><strong>Tope de Pares (Empresa):</strong> ${monthlyCompanyPairsThreshold.toLocaleString('es-CO')} pares</p>
                 <p class="mb-2"><strong>Total Pares Vendidos (Empresa en período filtrado):</strong> ${totalCompanyPairsFilteredPeriod.toLocaleString('es-CO')} pares</p>
                 <p class="mb-4"><strong>Empresa cumple el tope:</strong> ${totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold ? '<span class="text-green-600 font-bold">SÍ</span>' : '<span class="text-red-600 font-bold">NO</span>'}</p>
@@ -1423,12 +1459,18 @@
                 let statusColorClass = 'text-red-600';
 
                 if (companyMeetsMonthlyPairsTarget) {
-                    if (monthlyIndividualPairsThreshold > 0 && totalPairs >= monthlyIndividualPairsThreshold) {
-                        monthlyCommission = monthlyCompanyCommissionAmount;
-                        individualStatus = `Cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
-                        statusColorClass = 'text-green-600';
-                    } else if (monthlyIndividualPairsThreshold > 0) {
-                        individualStatus = `No cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                    if (monthlyIndividualPairsThreshold > 0) {
+                        if (totalPairs >= monthlyIndividualPairsThreshold) {
+                            monthlyCommission = monthlyCompanyCommissionAmount;
+                            individualStatus = `Cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                            statusColorClass = 'text-green-600';
+                        } else if (totalPairs >= (monthlyIndividualPairsThreshold / 2)) {
+                            monthlyCommission = monthlyCompanyCommissionAmount / 2;
+                            individualStatus = `Cumple (50% de tope: ${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                            statusColorClass = 'text-orange-500'; // A different color for partial fulfillment
+                        } else {
+                            individualStatus = `No cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                        }
                     } else { // No individual threshold set
                         monthlyCommission = monthlyCompanyCommissionAmount;
                         individualStatus = `Cumple (no requiere tope individual)`;
@@ -1452,7 +1494,7 @@
             generalCommissionSummaryDiv.innerHTML = commissionHtml;
 
             if (Object.keys(asesorMonthlyPerformance).length === 0) {
-                generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">No hay datos de asesores para calcular comisiones generales.</p>';
+                generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">No hay datos de asesores para calcular comisiones generales en el período seleccionado.</p>';
             }
         }
 
@@ -1484,6 +1526,16 @@
                 console.error("Error saving general commission settings:", error);
                 showMessageModal("Error", "Error al guardar la configuración de comisión general.");
             }
+        }
+
+        /**
+         * Resets the general commission filter.
+         */
+        function resetGeneralFilter() {
+            monthSelectorGeneral.value = ''; // Reset month selector
+            currentGeneralMonthFilter = ''; // Reset filter variable
+            calculateAndDisplayGeneralCommissions(); // Recalculate with no filters
+            showMessageModal("Filtro Reiniciado", "El filtro de Comisión General ha sido reiniciado.");
         }
 
 
@@ -1694,7 +1746,7 @@
             if (currentHistoryMonthFilter) {
                 filteredHistoryData = filteredHistoryData.filter(order => {
                     if (order.fecha_hora instanceof Date) {
-                        // Ensure comparison is done correctly with YYYY-MM string
+                        // Ensure comparison is done correctly with ISO string
                         return order.fecha_hora.toISOString().startsWith(currentHistoryMonthFilter);
                     }
                     return false;
@@ -1809,6 +1861,11 @@
                 localStorage.setItem('includeExcelData', includeExcelData);
                 loadAndFilterDashboardData(); // Reload data based on new checkbox state
             });
+
+            // General Commission Tab Event Listeners
+            filterDataBtnGeneral.addEventListener('click', calculateAndDisplayGeneralCommissions);
+            resetFilterBtnGeneral.addEventListener('click', resetGeneralFilter);
+
 
             // Weekly Commission Tab Event Listeners
             filterDataBtnWeekly.addEventListener('click', () => {
