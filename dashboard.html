@@ -513,6 +513,15 @@
                         Aplicar Filtro Semanal
                     </button>
                 </div>
+                <div class="flex flex-col md:flex-row items-center gap-4 w-full">
+                    <label class="text-lg font-semibold text-gray-700">Filtros Rápidos:</label>
+                    <button id="filter_current_week_btn_weekly" class="btn btn-secondary w-full md:w-auto">
+                        Esta Semana
+                    </button>
+                    <button id="filter_last_week_btn_weekly" class="btn btn-secondary w-full md:w-auto">
+                        Semana Pasada
+                    </button>
+                </div>
                 <button id="reset_filter_btn_weekly" class="btn btn-danger w-full">
                     Reiniciar Filtro Semanal
                 </button>
@@ -695,6 +704,8 @@
         const filterDataBtnWeekly = document.getElementById('filter_data_btn_weekly');
         const resetFilterBtnWeekly = document.getElementById('reset_filter_btn_weekly');
         const weeklyCommissionSummaryDiv = document.getElementById('weekly_commission_summary');
+        const filterCurrentWeekBtnWeekly = document.getElementById('filter_current_week_btn_weekly');
+        const filterLastWeekBtnWeekly = document.getElementById('filter_last_week_btn_weekly');
 
         // --- DOM Elements (for History tab) ---
         const filterAsesorHistory = document.getElementById('filter_asesor_history');
@@ -866,7 +877,8 @@
                 let combinedData = [...orders];
 
                 // Only include excel data if the checkbox is checked for the dashboard
-                if (includeExcelDataCheckbox.checked) {
+                // Use the global 'includeExcelData' flag which is updated by the checkbox
+                if (includeExcelData) { 
                     const excelSummaries = [];
                     const excelSummariesSnapshot = await db.collection('excel_daily_summaries').get();
                     excelSummariesSnapshot.forEach(doc => {
@@ -897,10 +909,12 @@
                 allOrdersData = combinedData; // Update global data array
                 return combinedData;
 
-            } catch (error) {
+            }
+            catch (error) {
                 console.error("Error fetching data from Firestore:", error);
                 return [];
-            } finally {
+            }
+            finally {
                 hideLoading();
             }
         }
@@ -1391,7 +1405,10 @@
             includeExcelDataCheckbox.checked = true; // Reset to default true
             localStorage.setItem('includeExcelData', true);
             currentDashboardFilterMode = 'custom_date_range';
-            loadAndFilterDashboardData();
+            // Re-fetch all data to ensure Excel data is included again
+            fetchAllOrdersFromFirestore().then(() => {
+                loadAndFilterDashboardData();
+            });
             showMessageModal("Dashboard Reiniciado", "Los filtros del Dashboard han sido reiniciados.");
         }
 
@@ -1517,7 +1534,7 @@
                 await db.collection('settings').doc('commission_settings').set({
                     monthlyCompanyPairsThreshold: newMonthlyCompanyPairsThreshold,
                     monthlyCompanyCommissionAmount: newMonthlyCompanyCommissionAmount,
-                    monthlyIndividualPairsThreshold: newMonthlyIndividualPairsThreshold
+                    fmonthlyIndividualPairsThreshold: newMonthlyIndividualPairsThreshold
                 }, { merge: true }); // Use merge to only update these fields
                 showMessageModal("Configuración Guardada", "Configuración de comisión general guardada correctamente.");
                 cerrarModal('commission_general_settings_modal');
@@ -1583,8 +1600,12 @@
                 }
             });
 
+            // For display purposes, use the values from the input fields directly
+            const displayStartDate = new Date(startDateInputWeekly.value + 'T00:00:00'); 
+            const displayEndDate = new Date(endDateInputWeekly.value + 'T00:00:00'); 
+
             let commissionHtml = `
-                <h3 class="text-xl font-semibold mb-4">Resumen de Comisión Semanal (${startDate.toLocaleDateString('es-CO')} - ${endDate.toLocaleDateString('es-CO')})</h3>
+                <h3 class="text-xl font-semibold mb-4">Resumen de Comisión Semanal (${displayStartDate.toLocaleDateString('es-CO')} - ${displayEndDate.toLocaleDateString('es-CO')})</h3>
                 <table class="commission-table">
                     <thead>
                         <tr>
@@ -1676,6 +1697,52 @@
                 console.error("Error saving weekly commission settings:", error);
                 showMessageModal("Error", "Error al guardar la configuración de comisión semanal.");
             }
+        }
+
+        /**
+         * Sets the date range for the current week (Monday to Saturday) and applies filter for weekly commission.
+         */
+        function filterCurrentWeekWeekly() {
+            const today = new Date();
+            const dayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+            
+            const monday = new Date(today);
+            monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); // Adjust to Monday
+            monday.setHours(0, 0, 0, 0); // Set to start of day
+
+            const saturday = new Date(monday);
+            saturday.setDate(monday.getDate() + 5); 
+            // Keep the time as 00:00:00 for the input value, the filtering logic handles the end of day
+            saturday.setHours(0, 0, 0, 0); 
+
+            startDateInputWeekly.value = monday.toISOString().split('T')[0];
+            endDateInputWeekly.value = saturday.toISOString().split('T')[0];
+            calculateAndDisplayWeeklyCommissions();
+        }
+
+        /**
+         * Sets the date range for the last week (Monday to Saturday) and applies filter for weekly commission.
+         */
+        function filterLastWeekWeekly() {
+            const today = new Date();
+            const dayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+            
+            const currentMonday = new Date(today);
+            currentMonday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); // Adjust to current Monday
+            currentMonday.setHours(0, 0, 0, 0); // Set to start of day
+
+            const lastMonday = new Date(currentMonday);
+            lastMonday.setDate(currentMonday.getDate() - 7); // Subtract 7 days to get last Monday
+            lastMonday.setHours(0, 0, 0, 0); // Set to start of day
+
+            const lastSaturday = new Date(lastMonday);
+            lastSaturday.setDate(lastMonday.getDate() + 5); 
+            // Keep the time as 00:00:00 for the input value, the filtering logic handles the end of day
+            lastSaturday.setHours(0, 0, 0, 0); 
+
+            startDateInputWeekly.value = lastMonday.toISOString().split('T')[0];
+            endDateInputWeekly.value = lastSaturday.toISOString().split('T')[0];
+            calculateAndDisplayWeeklyCommissions();
         }
 
         /**
@@ -1859,7 +1926,10 @@
             includeExcelDataCheckbox.addEventListener('change', () => {
                 includeExcelData = includeExcelDataCheckbox.checked;
                 localStorage.setItem('includeExcelData', includeExcelData);
-                loadAndFilterDashboardData(); // Reload data based on new checkbox state
+                // Re-fetch all data to ensure Excel data is included/excluded correctly
+                fetchAllOrdersFromFirestore().then(() => {
+                    loadAndFilterDashboardData(); // Then re-filter the dashboard view
+                });
             });
 
             // General Commission Tab Event Listeners
@@ -1873,6 +1943,8 @@
                 calculateAndDisplayWeeklyCommissions();
             });
             resetFilterBtnWeekly.addEventListener('click', resetWeeklyFilter);
+            filterCurrentWeekBtnWeekly.addEventListener('click', filterCurrentWeekWeekly); // New button
+            filterLastWeekBtnWeekly.addEventListener('click', filterLastWeekWeekly); // New button
 
             // History Tab Event Listeners
             applyFilterHistoryBtn.addEventListener('click', loadAndFilterHistoryData);
