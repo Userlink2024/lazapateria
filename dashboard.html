@@ -443,7 +443,8 @@
             </div>
             <p class="info-text w-full">
                 Para ver el rendimiento de un día específico, selecciona la misma fecha en 'Desde' y 'Hasta'.<br>
-                Para un mes, selecciona el primer y último día del mes, o usa el selector de mes.
+                Para un mes, selecciona el primer y último día del mes, o usa el selector de mes.<br>
+                **Aplica un filtro para ver los datos del dashboard.**
             </p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3-lg gap-4">
@@ -493,7 +494,7 @@
             </div>
             <div class="commission-table-container mt-4">
                 <div id="general_commission_summary">
-                    <p class="text-center text-gray-500">Cargando datos de comisión general...</p>
+                    <p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>
                 </div>
             </div>
         </div>
@@ -552,7 +553,7 @@
             </div>
             <div class="history-table-container mt-4">
                 <div id="sales_history_list">
-                    <p class="text-center text-gray-500">No hay historial de ventas para mostrar.</p>
+                    <p class="text-center text-gray-500">Aplica filtros para ver el historial de ventas.</p>
                 </div>
             </div>
         </div>
@@ -802,16 +803,28 @@
             // Specific actions when opening a tab
             if (tabName === 'dashboard') {
                 initializeChartsDashboard();
-                loadAndFilterDashboardData();
+                // Initially clear metrics and charts, data loads only on filter
+                totalParesMetricDashboard.textContent = '0';
+                totalValorMetricDashboard.textContent = '$0';
+                totalPedidosMetricDashboard.textContent = '0';
+                salesByDateChart_dashboard.data.labels = [];
+                salesByDateChart_dashboard.data.datasets[0].data = [];
+                salesByDateChart_dashboard.update();
+                salesByAsesorChart_dashboard.data.labels = [];
+                salesByAsesorChart_dashboard.data.datasets[0].data = [];
+                salesByAsesorChart_dashboard.update();
+                pairsByProductChart_dashboard.data.labels = [];
+                pairsByProductChart_dashboard.data.datasets[0].data = [];
+                pairsByProductChart_dashboard.update();
             } else if (tabName === 'comision_general') {
                 populateMonthSelector(monthSelectorGeneral); // Populate for general commission tab
-                calculateAndDisplayGeneralCommissions();
+                generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>';
             } else if (tabName === 'comision_semanal') {
                 // Initial load for weekly commission will happen when filter is applied
                 weeklyCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un rango de fechas para calcular la comisión semanal.</p>';
             } else if (tabName === 'historial_ventas') {
                 populateHistoryFilters();
-                loadAndFilterHistoryData();
+                salesHistoryList.innerHTML = '<p class="text-center text-gray-500">Aplica filtros para ver el historial de ventas.</p>';
             }
         }
 
@@ -923,21 +936,24 @@
          * Sets up real-time listener for all orders and updates relevant sections.
          */
         function setupRealtimeListeners() {
+            // Initial fetch to populate allOrdersData
+            fetchAllOrdersFromFirestore();
+
             // Listener for 'registros' collection
             db.collection('registros').onSnapshot(snapshot => {
                 console.log("Real-time update from 'registros' collection.");
                 fetchAllOrdersFromFirestore().then(() => {
-                    // Re-filter and update all active tabs
-                    if (document.getElementById('dashboard').classList.contains('active')) {
+                    // Re-filter and update only if tab is active and not pending manual filter
+                    if (document.getElementById('dashboard').classList.contains('active') && currentDashboardFilterMode !== 'initial') {
                         loadAndFilterDashboardData();
                     }
-                    if (document.getElementById('comision_general').classList.contains('active')) {
+                    if (document.getElementById('comision_general').classList.contains('active') && currentGeneralMonthFilter !== 'initial') {
                         calculateAndDisplayGeneralCommissions();
                     }
-                    if (document.getElementById('comision_semanal').classList.contains('active')) {
+                    if (document.getElementById('comision_semanal').classList.contains('active') && (startDateInputWeekly.value && endDateInputWeekly.value)) { // Only if dates are already selected
                         calculateAndDisplayWeeklyCommissions();
                     }
-                    if (document.getElementById('historial_ventas').classList.contains('active')) {
+                    if (document.getElementById('historial_ventas').classList.contains('active') && (currentHistoryAsesorFilter || currentHistoryMonthFilter)) { // Only if filters are applied
                         populateHistoryFilters(); // Re-populate asesores and months
                         loadAndFilterHistoryData();
                     }
@@ -951,17 +967,17 @@
             db.collection('excel_daily_summaries').onSnapshot(snapshot => {
                 console.log("Real-time update from 'excel_daily_summaries' collection.");
                 fetchAllOrdersFromFirestore().then(() => {
-                    // Re-filter and update all active tabs
-                    if (document.getElementById('dashboard').classList.contains('active')) {
+                    // Re-filter and update only if tab is active and not pending manual filter
+                    if (document.getElementById('dashboard').classList.contains('active') && currentDashboardFilterMode !== 'initial') {
                         loadAndFilterDashboardData();
                     }
-                    if (document.getElementById('comision_general').classList.contains('active')) {
+                    if (document.getElementById('comision_general').classList.contains('active') && currentGeneralMonthFilter !== 'initial') {
                         calculateAndDisplayGeneralCommissions();
                     }
-                    if (document.getElementById('comision_semanal').classList.contains('active')) {
+                    if (document.getElementById('comision_semanal').classList.contains('active') && (startDateInputWeekly.value && endDateInputWeekly.value)) {
                         calculateAndDisplayWeeklyCommissions();
                     }
-                    if (document.getElementById('historial_ventas').classList.contains('active')) {
+                    if (document.getElementById('historial_ventas').classList.contains('active') && (currentHistoryAsesorFilter || currentHistoryMonthFilter)) {
                         populateHistoryFilters(); // Re-populate asesores and months
                         loadAndFilterHistoryData();
                     }
@@ -984,11 +1000,11 @@
                     weeklyIncrementalBonusAmount = settings.weeklyIncrementalBonusAmount || weeklyIncrementalBonusAmount;
                     console.log("Commission settings loaded from Firestore:", settings);
 
-                    // Re-calculate commissions if relevant tabs are active
-                    if (document.getElementById('comision_general').classList.contains('active')) {
+                    // Re-calculate commissions if relevant tabs are active AND have filters applied
+                    if (document.getElementById('comision_general').classList.contains('active') && currentGeneralMonthFilter) {
                         calculateAndDisplayGeneralCommissions();
                     }
-                    if (document.getElementById('comision_semanal').classList.contains('active')) {
+                    if (document.getElementById('comision_semanal').classList.contains('active') && (startDateInputWeekly.value && endDateInputWeekly.value)) {
                         calculateAndDisplayWeeklyCommissions();
                     }
                 } else {
@@ -1391,7 +1407,7 @@
             } else {
                 startDateInputDashboard.value = '';
                 endDateInputDashboard.value = '';
-                loadAndFilterDashboardData();
+                loadAndFilterDashboardData(); // Load all data if no month selected
             }
         }
 
@@ -1404,12 +1420,25 @@
             monthSelectorDashboard.value = '';
             includeExcelDataCheckbox.checked = true; // Reset to default true
             localStorage.setItem('includeExcelData', true);
-            currentDashboardFilterMode = 'custom_date_range';
-            // Re-fetch all data to ensure Excel data is included again
+            currentDashboardFilterMode = 'custom_date_range'; // Reset mode
+
+            // Re-fetch all data to ensure Excel data is included again, then load empty state
             fetchAllOrdersFromFirestore().then(() => {
-                loadAndFilterDashboardData();
+                // Clear metrics and charts
+                totalParesMetricDashboard.textContent = '0';
+                totalValorMetricDashboard.textContent = '$0';
+                totalPedidosMetricDashboard.textContent = '0';
+                salesByDateChart_dashboard.data.labels = [];
+                salesByDateChart_dashboard.data.datasets[0].data = [];
+                salesByDateChart_dashboard.update();
+                salesByAsesorChart_dashboard.data.labels = [];
+                salesByAsesorChart_dashboard.data.datasets[0].data = [];
+                salesByAsesorChart_dashboard.update();
+                pairsByProductChart_dashboard.data.labels = [];
+                pairsByProductChart_dashboard.data.datasets[0].data = [];
+                pairsByProductChart_dashboard.update();
+                showMessageModal("Dashboard Reiniciado", "Los filtros del Dashboard han sido reiniciados. Aplica un nuevo filtro para ver los datos.");
             });
-            showMessageModal("Dashboard Reiniciado", "Los filtros del Dashboard han sido reiniciados.");
         }
 
 
@@ -1433,7 +1462,12 @@
                     const orderDate = order.fecha_hora;
                     return orderDate >= firstDayOfMonth && orderDate <= lastDayOfMonth;
                 });
+            } else {
+                // If no month is selected, clear the display or show a message
+                generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>';
+                return;
             }
+
 
             let totalCompanyPairsFilteredPeriod = 0;
             const asesorMonthlyPerformance = {}; // { 'AsesorName': { totalSales: 0, totalPairs: 0 } }
@@ -1534,11 +1568,15 @@
                 await db.collection('settings').doc('commission_settings').set({
                     monthlyCompanyPairsThreshold: newMonthlyCompanyPairsThreshold,
                     monthlyCompanyCommissionAmount: newMonthlyCompanyCommissionAmount,
-                    fmonthlyIndividualPairsThreshold: newMonthlyIndividualPairsThreshold
+                    monthlyIndividualPairsThreshold: newMonthlyIndividualPairsThreshold
                 }, { merge: true }); // Use merge to only update these fields
                 showMessageModal("Configuración Guardada", "Configuración de comisión general guardada correctamente.");
                 cerrarModal('commission_general_settings_modal');
                 // The real-time listener will trigger calculateAndDisplayGeneralCommissions()
+                // if a month is already selected
+                if (currentGeneralMonthFilter) {
+                    calculateAndDisplayGeneralCommissions();
+                }
             } catch (error) {
                 console.error("Error saving general commission settings:", error);
                 showMessageModal("Error", "Error al guardar la configuración de comisión general.");
@@ -1551,8 +1589,8 @@
         function resetGeneralFilter() {
             monthSelectorGeneral.value = ''; // Reset month selector
             currentGeneralMonthFilter = ''; // Reset filter variable
-            calculateAndDisplayGeneralCommissions(); // Recalculate with no filters
-            showMessageModal("Filtro Reiniciado", "El filtro de Comisión General ha sido reiniciado.");
+            generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>';
+            showMessageModal("Filtro Reiniciado", "El filtro de Comisión General ha sido reiniciado. Selecciona un mes para ver los datos.");
         }
 
 
@@ -1693,6 +1731,10 @@
                 showMessageModal("Configuración Guardada", "Configuración de comisión semanal guardada correctamente.");
                 cerrarModal('commission_weekly_settings_modal');
                 // The real-time listener will trigger calculateAndDisplayWeeklyCommissions()
+                // if dates are already selected
+                if (startDateInputWeekly.value && endDateInputWeekly.value) {
+                    calculateAndDisplayWeeklyCommissions();
+                }
             } catch (error) {
                 console.error("Error saving weekly commission settings:", error);
                 showMessageModal("Error", "Error al guardar la configuración de comisión semanal.");
@@ -1888,8 +1930,8 @@
             filterMonthHistory.value = '';
             currentHistoryAsesorFilter = '';
             currentHistoryMonthFilter = '';
-            loadAndFilterHistoryData();
-            showMessageModal("Filtros Reiniciados", "Los filtros del historial de ventas han sido reiniciados.");
+            salesHistoryList.innerHTML = '<p class="text-center text-gray-500">Aplica filtros para ver el historial de ventas.</p>';
+            showMessageModal("Filtros Reiniciados", "Los filtros del historial de ventas han sido reiniciados. Aplica un nuevo filtro para ver los datos.");
         }
 
 
@@ -1903,14 +1945,11 @@
             includeExcelData = (localStorage.getItem('includeExcelData') !== null) ? (localStorage.getItem('includeExcelData') === 'true') : true; 
             includeExcelDataCheckbox.checked = includeExcelData;
 
-            // Set up real-time listeners for all relevant collections
+            // Set up real-time listeners for all relevant collections (this also fetches initial allOrdersData in background)
             setupRealtimeListeners();
 
-            // Initial load of all data and display the first tab
-            fetchAllOrdersFromFirestore().then(() => {
-                // Activate the first tab (DASHBOARD) on load
-                document.querySelector('.tab-button').click(); 
-            });
+            // Activate the first tab (DASHBOARD) on load, but don't load data immediately
+            document.querySelector('.tab-button').click(); 
 
             // Dashboard Tab Event Listeners
             uploadExcelBtnDashboard.addEventListener('click', handleExcelUploadDashboard);
@@ -1928,7 +1967,24 @@
                 localStorage.setItem('includeExcelData', includeExcelData);
                 // Re-fetch all data to ensure Excel data is included/excluded correctly
                 fetchAllOrdersFromFirestore().then(() => {
-                    loadAndFilterDashboardData(); // Then re-filter the dashboard view
+                    // Only load dashboard data if a filter is already applied or it's a quick filter mode
+                    if (startDateInputDashboard.value || endDateInputDashboard.value || monthSelectorDashboard.value || currentDashboardFilterMode !== 'custom_date_range') {
+                         loadAndFilterDashboardData(); 
+                    } else {
+                        // If no filters are applied, just clear metrics and charts
+                        totalParesMetricDashboard.textContent = '0';
+                        totalValorMetricDashboard.textContent = '$0';
+                        totalPedidosMetricDashboard.textContent = '0';
+                        salesByDateChart_dashboard.data.labels = [];
+                        salesByDateChart_dashboard.data.datasets[0].data = [];
+                        salesByDateChart_dashboard.update();
+                        salesByAsesorChart_dashboard.data.labels = [];
+                        salesByAsesorChart_dashboard.data.datasets[0].data = [];
+                        salesByAsesorChart_dashboard.update();
+                        pairsByProductChart_dashboard.data.labels = [];
+                        pairsByProductChart_dashboard.data.datasets[0].data = [];
+                        pairsByProductChart_dashboard.update();
+                    }
                 });
             });
 
