@@ -1247,17 +1247,13 @@
 
                     json.forEach(row => {
                         let fechaHora;
-                        if (row['Fecha']) {
-                            if (typeof row['Fecha'] === 'number') {
-                                fechaHora = new Date(1899, 11, 30 + row['Fecha']);
-                            } else if (typeof row['Fecha'] === 'string') {
-                                fechaHora = new Date(row['Fecha']);
-                            }
-                        } else if (row['Fecha y Hora']) {
-                             if (typeof row['Fecha y Hora'] === 'number') {
-                                fechaHora = new Date(1899, 11, 30 + row['Fecha y Hora']);
-                            } else if (typeof row['Fecha y Hora'] === 'string') {
-                                fechaHora = new Date(row['Fecha y Hora']);
+                        // Use 'fecha_hora' as the primary key for date
+                        if (row['fecha_hora']) {
+                            if (typeof row['fecha_hora'] === 'number') {
+                                // XLSX date number to Date object (adjusting for Excel's epoch)
+                                fechaHora = new Date(Date.UTC(1899, 11, 30) + (row['fecha_hora'] * 24 * 60 * 60 * 1000));
+                            } else if (typeof row['fecha_hora'] === 'string') {
+                                fechaHora = new Date(row['fecha_hora']);
                             }
                         }
 
@@ -1267,7 +1263,7 @@
                         }
 
                         const dateKey = fechaHora.toISOString().split('T')[0];
-                        const asesorName = row['Asesor'] || 'Desconocido';
+                        const asesorName = row['asesor'] || 'Desconocido'; // Use 'asesor' header
                         const docId = `${dateKey}_${asesorName}`;
 
                         if (!dailySummariesToUpload[docId]) {
@@ -1278,8 +1274,8 @@
                                 valor_total: 0
                             };
                         }
-                        dailySummariesToUpload[docId].num_pares += parseInt(row['Num Pares']) || 0;
-                        dailySummariesToUpload[docId].valor_total += parseFloat(row['Valor Total']) || 0;
+                        dailySummariesToUpload[docId].num_pares += parseInt(row['num_pares']) || 0; // Use 'num_pares' header
+                        dailySummariesToUpload[docId].valor_total += parseFloat(row['valor_total']) || 0; // Use 'valor_total' header
                     });
 
                     const batch = db.batch();
@@ -1437,7 +1433,6 @@
                 pairsByProductChart_dashboard.data.labels = [];
                 pairsByProductChart_dashboard.data.datasets[0].data = [];
                 pairsByProductChart_dashboard.update();
-                showMessageModal("Dashboard Reiniciado", "Los filtros del Dashboard han sido reiniciados. Aplica un nuevo filtro para ver los datos.");
             });
         }
 
@@ -1780,7 +1775,7 @@
             const lastSaturday = new Date(lastMonday);
             lastSaturday.setDate(lastMonday.getDate() + 5); 
             // Keep the time as 00:00:00 for the input value, the filtering logic handles the end of day
-            lastSaturday.setHours(0, 0, 0, 0); 
+            saturday.setHours(0, 0, 0, 0); 
 
             startDateInputWeekly.value = lastMonday.toISOString().split('T')[0];
             endDateInputWeekly.value = lastSaturday.toISOString().split('T')[0];
