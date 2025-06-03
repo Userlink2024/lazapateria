@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAP Dashboard de Pedidos (Local)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Fondo suave */
+            color: #334155; /* Color de texto principal */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .sap-container {
+            width: 100%;
+            max-width: 1200px;
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .tabs-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .tab-button {
+            padding: 1rem 2rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #64748B;
+            cursor: pointer;
+            border: none;
+            background-color: transparent;
+            transition: all 0.3s ease;
+            position: relative;
+            top: 2px; /* Alinea con el borde inferior */
+        }
+        .tab-button.active {
+            color: #3B82F6;
+            border-bottom: 2px solid #3B82F6;
+        }
+        .tab-button:hover:not(.active) {
+            color: #1E40AF;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        h1, h2 {
+            color: #10B981; /* Emerald Green */
+            text-align: center;
+            font-weight: 700;
+        }
+        h1 {
+            font-size: 2.25rem; /* text-4xl */
+            margin-bottom: 1rem;
+        }
+        h2 {
+            font-size: 1.875rem; /* text-3xl */
+            margin-bottom: 1rem;
+        }
+        .card {
+            background-color: #f8fafc; /* Light Gray */
+            border-radius: 0.75rem; /* rounded-lg */
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2.5rem; /* text-5xl */
+            font-weight: 700; /* font-bold */
+            color: #10B981; /* Emerald Green */
+        }
+        .metric-label {
+            font-size: 1.125rem; /* text-lg */
+            color: #475569; /* Dark Gray */
+            margin-top: 0.5rem;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+            border: none;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background-color: #3B82F6; /* Primary Blue */
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+        }
+        .btn-primary:hover {
+            background-color: #2563EB; /* Darker Blue */
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+        }
+        .btn-secondary {
+            background-color: #6B7280; /* Secondary Gray */
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(107, 114, 128, 0.2);
+        }
+        .btn-secondary:hover {
+            background-color: #4B5563; /* Darker Gray */
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(107, 114, 128, 0.3);
+        }
+        .btn-danger {
+            background-color: #EF4444; /* Red */
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+        }
+        .btn-danger:hover {
+            background-color: #DC2626; /* Darker Red */
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+        }
+        input[type="date"], input[type="file"], input[type="number"], select, input[type="text"] {
+            padding: 0.75rem;
+            border: 1px solid #cbd5e1; /* border-slate-300 */
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            color: #475569;
+            background-color: #ffffff;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        input[type="date"]:focus, input[type="file"]:focus, input[type="number"]:focus, select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #3B82F6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+        .chart-container {
+            position: relative;
+            height: 400px; /* Fixed height for charts */
+            width: 100%;
+            background-color: #f8fafc;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+        /* Responsive adjustments */
+        @media (min-width: 768px) { /* md breakpoint */
+            .grid-cols-2-md {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .grid-cols-3-md {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+        @media (min-width: 1024px) { /* lg breakpoint */
+            .grid-cols-3-lg {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        /* Styles for Modals */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            justify-content: center; /* Center horizontally */
+            align-items: center; /* Center vertically */
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 2.5rem; /* Increased padding */
+            border-radius: 1rem; /* Rounded corners */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 90%;
+            max-width: 500px; /* Max width for modal */
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .modal-content .close {
+            color: #aaa;
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+            font-size: 2rem; /* Larger close button */
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .modal-content .close:hover,
+        .modal-content .close:focus {
+            color: black;
+            text-decoration: none;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 1rem;
+        }
+
+        .form-field label {
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .form-field input[type="number"] {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        /* Style for checkbox */
+        .form-field-checkbox {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+            gap: 0.5rem; /* Space between checkbox and label */
+        }
+        .form-field-checkbox input[type="checkbox"] {
+            width: auto; /* Override full width for checkbox */
+            margin-top: 0;
+        }
+
+
+        /* Gear icon */
+        .gear-icon {
+            font-size: 2.5em; /* Larger icon */
+            cursor: pointer;
+            color: #64748B; /* Slate gray */
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            transition: transform 0.3s ease;
+        }
+
+        .gear-icon:hover {
+            transform: rotate(30deg);
+            color: #334155;
+        }
+        /* Gear icon next to "Cargar Excel" */
+        .excel-gear-icon {
+            font-size: 1.5em; /* Smaller than main gear icon */
+            cursor: pointer;
+            color: #64748B;
+            margin-left: 0.5rem; /* Space from label */
+            transition: transform 0.3s ease;
+        }
+        .excel-gear-icon:hover {
+            transform: rotate(30deg);
+            color: #334155;
+        }
+
+
+        /* Commission Table Styles */
+        .commission-table-container, .history-table-container {
+            background-color: #f8fafc;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            overflow-x: auto; /* For responsive tables */
+        }
+
+        .commission-table, .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .commission-table th,
+        .commission-table td,
+        .history-table th,
+        .history-table td {
+            border: 1px solid #e2e8f0; /* border-slate-200 */
+            padding: 0.75rem;
+            text-align: left;
+        }
+
+        .commission-table th,
+        .history-table th {
+            background-color: #e2e8f0; /* Light gray for headers */
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .commission-table tr:nth-child(even),
+        .history-table tr:nth-child(even) {
+            background-color: #f8fafc; /* Alternate row color */
+        }
+        /* Updated info-text styles */
+        .info-text {
+            font-size: 0.95rem; /* Slightly larger font */
+            color: #475569; /* Darker gray for better contrast */
+            background-color: #e0f2fe; /* Light blue background */
+            border: 1px solid #90cdf4; /* Blue border */
+            border-radius: 0.5rem; /* Rounded corners */
+            padding: 1rem; /* More padding */
+            margin-top: 1.5rem; /* More space from elements above */
+            text-align: center;
+            line-height: 1.4; /* Improve readability */
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* Subtle shadow */
+        }
+        /* Loading overlay */
+        .loading-overlay {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            z-index: 1001;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .loading-spinner {
+            border: 8px solid #f3f3f3; /* Light grey */
+            border-top: 8px solid #3B82F6; /* Blue */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Confirmation Modal Specific Styles */
+        .confirmation-modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .confirmation-modal-content h2 {
+            color: #EF4444; /* Red for warning */
+            margin-bottom: 1rem;
+        }
+        .confirmation-modal-content p {
+            font-size: 1.1rem;
+            color: #475569;
+            margin-bottom: 1.5rem;
+        }
+        .confirmation-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="sap-container">
+        <h1 class="text-4xl">SAP Dashboard de Pedidos (Local)</h1>
+
+        <div class="tabs-container">
+            <button class="tab-button active" onclick="openTab(event, 'dashboard')">DASHBOARD</button>
+            <button class="tab-button" onclick="openTab(event, 'comision_general')">COMISIÓN GENERAL</button>
+            <button class="tab-button" onclick="openTab(event, 'comision_semanal')">COMISIÓN SEMANAL</button>
+            <button class="tab-button" onclick="openTab(event, 'historial_ventas')">VER HISTORIAL</button>
+        </div>
+
+        <div id="dashboard" class="tab-content active">
+            <div class="bg-white p-6 rounded-xl shadow-md flex flex-col gap-4">
+                <div class="flex items-center gap-2 w-full">
+                    <label for="excel_file_input_dashboard" class="text-lg font-semibold text-gray-700">Cargar Excel:</label>
+                    <input type="file" id="excel_file_input_dashboard" accept=".xlsx, .xls" class="flex-grow">
+                    <button id="upload_excel_btn_dashboard" class="btn btn-primary">Subir Excel</button>
+                    <button id="delete_excel_data_btn_dashboard" class="btn btn-danger">Eliminar Datos Excel</button>
+                </div>
+
+                <div class="flex flex-col md:flex-row items-center gap-4 w-full">
+                    <label class="text-lg font-semibold text-gray-700">Filtro Personalizado:</label>
+                    <label for="start_date_dashboard" class="text-gray-600">Desde:</label>
+                    <input type="date" id="start_date_dashboard" class="flex-grow">
+                    <label for="end_date_dashboard" class="text-gray-600">Hasta:</label>
+                    <input type="date" id="end_date_dashboard" class="flex-grow">
+                    <button id="filter_data_btn_dashboard" class="btn btn-primary w-full md:w-auto">
+                        Aplicar Filtros
+                    </button>
+                </div>
+
+                <div class="flex flex-col md:flex-row items-center gap-4 w-full">
+                    <label class="text-lg font-semibold text-gray-700">Filtros Rápidos:</label>
+                    <select id="month_selector_dashboard" class="flex-grow">
+                        </select>
+                    <button id="filter_current_week_btn_dashboard" class="btn btn-secondary w-full md:w-auto">
+                        Semana Actual
+                    </button>
+                    <button id="filter_current_month_btn_dashboard" class="btn btn-secondary w-full md:w-auto">
+                        Mes Actual
+                    </button>
+                </div>
+
+                <button id="reset_dashboard_btn_dashboard" class="btn btn-danger w-full">
+                    Reiniciar Dashboard
+                </button>
+            </div>
+            <p class="info-text w-full">
+                Para ver el rendimiento de un día específico, selecciona la misma fecha en 'Desde' y 'Hasta'.<br>
+                Para un mes, selecciona el primer y último día del mes, o usa el selector de mes.<br>
+                **Aplica un filtro para ver los datos del dashboard.**
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3-lg gap-4">
+                <div class="card">
+                    <div id="total_pares_metric_dashboard" class="metric-value">0</div>
+                    <div class="metric-label">Total de Pares Vendidos</div>
+                </div>
+                <div class="card">
+                    <div id="total_valor_metric_dashboard" class="metric-value">$0</div>
+                    <div class="metric-label">Valor Total de Ventas</div>
+                </div>
+                <div class="card">
+                    <div id="total_pedidos_metric_dashboard" class="metric-value">0</div>
+                    <div class="metric-label">Total de Pedidos</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2-md gap-4">
+                <div class="chart-container">
+                    <canvas id="salesByDateChart_dashboard"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="salesByAsesorChart_dashboard"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="pairsByProductChart_dashboard"></canvas>
+            </div>
+        </div>
+
+        <div id="comision_general" class="tab-content">
+            <h2 class="text-3xl">Comisión General (Mensual)</h2>
+            <span class="gear-icon" title="Configuración de Comisión General" onclick="mostrarModal('commission_general_settings_modal')">&#9881;</span>
+            <div class="bg-white p-6 rounded-xl shadow-md flex flex-col gap-4 mt-4">
+                <div class="flex flex-col md:flex-row items-center gap-4 w-full">
+                    <label class="text-lg font-semibold text-gray-700">Filtro por Mes:</label>
+                    <select id="month_selector_general" class="flex-grow">
+                        </select>
+                    <button id="filter_data_btn_general" class="btn btn-primary w-full md:w-auto">
+                        Aplicar Filtro General
+                    </button>
+                    <button id="reset_filter_btn_general" class="btn btn-danger w-full md:w-auto">
+                        Reiniciar Filtro General
+                    </button>
+                </div>
+            </div>
+            <div class="commission-table-container mt-4">
+                <div id="general_commission_summary">
+                    <p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="comision_semanal" class="tab-content">
+            <h2 class="text-3xl">Comisión Semanal</h2>
+            <span class="gear-icon" title="Configuración de Comisión Semanal" onclick="mostrarModal('commission_weekly_settings_modal')">&#9881;</span>
+
+            <div class="bg-white p-6 rounded-xl shadow-md flex flex-col gap-4">
+                <div class="flex flex-col md:flex-row items-center gap-4 w-full">
+                    <label class="text-lg font-semibold text-gray-700">Filtro de Fechas:</label>
+                    <label for="start_date_weekly" class="text-gray-600">Desde:</label>
+                    <input type="date" id="start_date_weekly" class="flex-grow">
+                    <label for="end_date_weekly" class="text-gray-600">Hasta:</label>
+                    <input type="date" id="end_date_weekly" class="flex-grow">
+                    <button id="filter_data_btn_weekly" class="btn btn-primary w-full md:w-auto">
+                        Aplicar Filtro Semanal
+                    </button>
+                </div>
+                <div class="flex flex-col md:flex-row items-center gap-4 w-full">
+                    <label class="text-lg font-semibold text-gray-700">Filtros Rápidos:</label>
+                    <button id="filter_current_week_btn_weekly" class="btn btn-secondary w-full md:w-auto">
+                        Esta Semana
+                    </button>
+                    <button id="filter_last_week_btn_weekly" class="btn btn-secondary w-full md:w-auto">
+                        Semana Pasada
+                    </button>
+                </div>
+                <button id="reset_filter_btn_weekly" class="btn btn-danger w-full">
+                    Reiniciar Filtro Semanal
+                </button>
+            </div>
+            <div class="commission-table-container mt-4">
+                <div id="weekly_commission_summary">
+                    <p class="text-center text-gray-500">Selecciona un rango de fechas para calcular la comisión semanal.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="historial_ventas" class="tab-content">
+            <h2 class="text-3xl">Historial de Ventas</h2>
+            <div class="bg-white p-6 rounded-xl shadow-md flex flex-col gap-4">
+                <div class="flex flex-col md:flex-row items-center gap-4 w-full">
+                    <label class="text-lg font-semibold text-gray-700">Filtrar Historial:</label>
+                    <label for="filter_asesor_history" class="text-gray-600">Asesor:</label>
+                    <select id="filter_asesor_history" class="flex-grow">
+                        <option value="">Todos</option>
+                    </select>
+                    <label for="filter_month_history" class="text-gray-600">Mes:</label>
+                    <select id="filter_month_history" class="flex-grow">
+                        <option value="">Todos</option>
+                    </select>
+                    <button id="apply_filter_history_btn" class="btn btn-primary w-full md:w-auto">Aplicar Filtros</button>
+                    <button id="reset_filter_history_btn" class="btn btn-danger w-full md:w-auto">Reiniciar Filtros</button>
+                </div>
+            </div>
+            <div class="history-table-container mt-4">
+                <div id="sales_history_list">
+                    <p class="text-center text-gray-500">Aplica filtros para ver el historial de ventas.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="excel_actions_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('excel_actions_modal')">&times;</span>
+            <h2>Acciones de Archivo Excel</h2>
+            <div class="form-field">
+                <label for="excel_file_input_modal" class="text-lg font-semibold text-gray-700">Seleccionar archivo:</label>
+                <input type="file" id="excel_file_input_modal" accept=".xlsx, .xls">
+            </div>
+            <button id="upload_excel_btn_modal" class="btn btn-primary">Subir Excel</button>
+            <button id="delete_excel_data_btn_modal" class="btn btn-danger">Eliminar Datos Excel Cargados</button>
+        </div>
+    </div>
+
+    <div id="delete_confirmation_modal" class="modal">
+        <div class="confirmation-modal-content">
+            <h2>Confirmar Eliminación</h2>
+            <p>¿Estás seguro de que quieres eliminar TODOS los datos cargados desde archivos Excel? Esta acción es irreversible.</p>
+            <div class="confirmation-buttons">
+                <button class="btn btn-danger" onclick="confirmDeleteExcelData()">Eliminar Definitivamente</button>
+                <button class="btn btn-secondary" onclick="cerrarModal('delete_confirmation_modal')">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="commission_general_settings_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('commission_general_settings_modal')">&times;</span>
+            <h2>Configuración de Comisión General</h2>
+            <h3>Comisión Mensual (para el período filtrado)</h3>
+            <div class="form-field">
+                <label for="monthly_company_pairs_threshold_input">Tope de Pares (Empresa, ej: 17500):</label>
+                <input type="number" id="monthly_company_pairs_threshold_input" value="17500" min="0" step="1">
+            </div>
+            <div class="form-field">
+                <label for="monthly_company_commission_amount_input">Monto Comisión (Empresa, COP, ej: 200000):</label>
+                <input type="number" id="monthly_company_commission_amount_input" value="200000" min="0" step="1000">
+            </div>
+            <div class="form-field">
+                <label for="monthly_individual_pairs_threshold_input">Tope Pares (Asesor Individual, ej: 1200):</label>
+                <input type="number" id="monthly_individual_pairs_threshold_input" value="1200" min="0" step="1">
+            </div>
+            <button class="btn btn-primary" onclick="saveCommissionGeneralSettings()">Guardar Configuración</button>
+        </div>
+    </div>
+
+    <div id="commission_weekly_settings_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('commission_weekly_settings_modal')">&times;</span>
+            <h2>Configuración de Comisión Semanal</h2>
+            <div class="form-field">
+                <label for="weekly_value_base_threshold_input">Tope Valor Base (Semanal, COP, ej: 17500000):</label>
+                <input type="number" id="weekly_value_base_threshold_input" value="17500000" min="0" step="1000">
+            </div>
+            <div class="form-field">
+                <label for="weekly_base_commission_amount_input">Monto Comisión Base (Semanal, COP, ej: 80000):</label>
+                <input type="number" id="weekly_base_commission_amount_input" value="80000" min="0" step="1000">
+            </div>
+            <div class="form-field">
+                <label for="weekly_incremental_value_threshold_input">Valor para Bono Incremental (Semanal, COP, ej: 2000000):</label>
+                <input type="number" id="weekly_incremental_value_threshold_input" value="2000000" min="0" step="1000">
+            </div>
+            <div class="form-field">
+                <label for="weekly_incremental_bonus_amount_input">Monto Bono Incremental (Semanal, COP, ej: 10000):</label>
+                <input type="number" id="weekly_incremental_bonus_amount_input" value="10000" min="0" step="1000">
+            </div>
+            <button class="btn btn-primary" onclick="saveCommissionWeeklySettings()">Guardar Configuración</button>
+        </div>
+    </div>
+
+    <div id="message_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('message_modal')">&times;</span>
+            <h2 id="message_modal_title" class="text-2xl font-bold mb-4"></h2>
+            <p id="message_modal_content" class="text-gray-700 mb-6"></p>
+            <button class="btn btn-primary" onclick="cerrarModal('message_modal')">Aceptar</button>
+        </div>
+    </div>
+
+    <div id="loading_overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p class="text-xl font-semibold text-gray-700">Cargando datos...</p>
+    </div>
+
+    <script>
+        // --- Global Variables ---
+        // allOrdersData will now be our local "database" in memory
+        let allOrdersData = []; 
+        let salesByDateChart_dashboard, salesByAsesorChart_dashboard, pairsByProductChart_dashboard;
+
+        // Commission settings (default values, will be loaded from localStorage)
+        let monthlyCompanyPairsThreshold = 17500;
+        let monthlyCompanyCommissionAmount = 200000;
+        let monthlyIndividualPairsThreshold = 1200;
+        let weeklyValueBaseThreshold = 17500000;
+        let weeklyBaseCommissionAmount = 80000;
+        let weeklyIncrementalValueThreshold = 2000000;
+        let weeklyIncrementalBonusAmount = 10000;
+
+        // Flags
+        let currentDashboardFilterMode = 'custom_date_range'; // For Dashboard tab
+        let currentGeneralMonthFilter = ''; // For General Commission tab
+        let currentWeeklyFilterMode = 'custom_date_range'; // For Weekly Commission tab
+        let currentHistoryAsesorFilter = ''; // For History tab
+        let currentHistoryMonthFilter = ''; // For History tab
+
+        // --- DOM Elements (for Dashboard tab) ---
+        const excelFileInputDashboard = document.getElementById('excel_file_input_dashboard');
+        const uploadExcelBtnDashboard = document.getElementById('upload_excel_btn_dashboard');
+        const deleteExcelDataBtnDashboard = document.getElementById('delete_excel_data_btn_dashboard');
+        const startDateInputDashboard = document.getElementById('start_date_dashboard');
+        const endDateInputDashboard = document.getElementById('end_date_dashboard');
+        const filterDataBtnDashboard = document.getElementById('filter_data_btn_dashboard');
+        const monthSelectorDashboard = document.getElementById('month_selector_dashboard');
+        const filterCurrentWeekBtnDashboard = document.getElementById('filter_current_week_btn_dashboard');
+        const filterCurrentMonthBtnDashboard = document.getElementById('filter_current_month_btn_dashboard');
+        const resetDashboardBtnDashboard = document.getElementById('reset_dashboard_btn_dashboard');
+        const totalParesMetricDashboard = document.getElementById('total_pares_metric_dashboard');
+        const totalValorMetricDashboard = document.getElementById('total_valor_metric_dashboard');
+        const totalPedidosMetricDashboard = document.getElementById('total_pedidos_metric_dashboard');
+
+        // --- DOM Elements (for General Commission tab) ---
+        const monthSelectorGeneral = document.getElementById('month_selector_general');
+        const filterDataBtnGeneral = document.getElementById('filter_data_btn_general');
+        const resetFilterBtnGeneral = document.getElementById('reset_filter_btn_general');
+        const generalCommissionSummaryDiv = document.getElementById('general_commission_summary');
+
+
+        // --- DOM Elements (for Weekly Commission tab) ---
+        const startDateInputWeekly = document.getElementById('start_date_weekly');
+        const endDateInputWeekly = document.getElementById('end_date_weekly');
+        const filterDataBtnWeekly = document.getElementById('filter_data_btn_weekly');
+        const resetFilterBtnWeekly = document.getElementById('reset_filter_btn_weekly');
+        const weeklyCommissionSummaryDiv = document.getElementById('weekly_commission_summary');
+        const filterCurrentWeekBtnWeekly = document.getElementById('filter_current_week_btn_weekly');
+        const filterLastWeekBtnWeekly = document.getElementById('filter_last_week_btn_weekly');
+
+        // --- DOM Elements (for History tab) ---
+        const filterAsesorHistory = document.getElementById('filter_asesor_history');
+        const filterMonthHistory = document.getElementById('filter_month_history');
+        const applyFilterHistoryBtn = document.getElementById('apply_filter_history_btn');
+        const resetFilterHistoryBtn = document.getElementById('reset_filter_history_btn');
+        const salesHistoryList = document.getElementById('sales_history_list');
+
+        // --- Commission Settings Modals Elements ---
+        const monthlyCompanyPairsThresholdInput = document.getElementById('monthly_company_pairs_threshold_input');
+        const monthlyCompanyCommissionAmountInput = document.getElementById('monthly_company_commission_amount_input');
+        const monthlyIndividualPairsThresholdInput = document.getElementById('monthly_individual_pairs_threshold_input');
+        const weeklyValueBaseThresholdInput = document.getElementById('weekly_value_base_threshold_input');
+        const weeklyBaseCommissionAmountInput = document.getElementById('weekly_base_commission_amount_input');
+        const weeklyIncrementalValueThresholdInput = document.getElementById('weekly_incremental_value_threshold_input');
+        const weeklyIncrementalBonusAmountInput = document.getElementById('weekly_incremental_bonus_amount_input');
+
+        const loadingOverlay = document.getElementById('loading_overlay');
+
+        // --- Utility Functions ---
+
+        /**
+         * Shows the loading overlay.
+         */
+        function showLoading() {
+            loadingOverlay.style.display = 'flex';
+        }
+
+        /**
+         * Hides the loading overlay.
+         */
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+        }
+
+        /**
+         * Shows a general message modal.
+         * @param {string} title - The title of the message.
+         * @param {string} message - The content of the message.
+         */
+        function showMessageModal(title, message) {
+            document.getElementById('message_modal_title').textContent = title;
+            document.getElementById('message_modal_content').textContent = message;
+            mostrarModal('message_modal');
+        }
+
+        /**
+         * Shows a modal by setting its display style to 'flex'.
+         * @param {string} id - The ID of the modal element to show.
+         */
+        function mostrarModal(id) {
+            document.getElementById(id).style.display = 'flex';
+            // Load values into commission settings modals when opened
+            if (id === 'commission_general_settings_modal') {
+                monthlyCompanyPairsThresholdInput.value = monthlyCompanyPairsThreshold;
+                monthlyCompanyCommissionAmountInput.value = monthlyCompanyCommissionAmount;
+                monthlyIndividualPairsThresholdInput.value = monthlyIndividualPairsThreshold;
+            } else if (id === 'commission_weekly_settings_modal') {
+                weeklyValueBaseThresholdInput.value = weeklyValueBaseThreshold;
+                weeklyBaseCommissionAmountInput.value = weeklyBaseCommissionAmount;
+                weeklyIncrementalValueThresholdInput.value = weeklyIncrementalValueThreshold;
+                weeklyIncrementalBonusAmountInput.value = weeklyIncrementalBonusAmount;
+            }
+        }
+
+        /**
+         * Hides a modal by setting its display style to 'none'.
+         * @param {string} id - The ID of the modal element to hide.
+         */
+        function cerrarModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        /**
+         * Switches between tabs.
+         * @param {Event} evt - The click event.
+         * @param {string} tabName - The ID of the tab content to display.
+         */
+        function openTab(evt, tabName) {
+            let i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+                tabcontent[i].classList.remove("active");
+            }
+            tablinks = document.getElementsByClassName("tab-button");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.className += " active";
+
+            // Specific actions when opening a tab
+            if (tabName === 'dashboard') {
+                initializeChartsDashboard();
+                // Initially clear metrics and charts, data loads only on filter
+                totalParesMetricDashboard.textContent = '0';
+                totalValorMetricDashboard.textContent = '$0';
+                totalPedidosMetricDashboard.textContent = '0';
+                salesByDateChart_dashboard.data.labels = [];
+                salesByDateChart_dashboard.data.datasets[0].data = [];
+                salesByDateChart_dashboard.update();
+                salesByAsesorChart_dashboard.data.labels = [];
+                salesByAsesorChart_dashboard.data.datasets[0].data = [];
+                salesByAsesorChart_dashboard.update();
+                pairsByProductChart_dashboard.data.labels = [];
+                pairsByProductChart_dashboard.data.datasets[0].data = [];
+                pairsByProductChart_dashboard.update();
+            } else if (tabName === 'comision_general') {
+                populateMonthSelector(monthSelectorGeneral); // Populate for general commission tab
+                generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>';
+            } else if (tabName === 'comision_semanal') {
+                // Initial load for weekly commission will happen when filter is applied
+                weeklyCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un rango de fechas para calcular la comisión semanal.</p>';
+            } else if (tabName === 'historial_ventas') {
+                populateHistoryFilters();
+                salesHistoryList.innerHTML = '<p class="text-center text-gray-500">Aplica filtros para ver el historial de ventas.</p>';
+            }
+        }
+
+        /**
+         * Populates the month selector dropdown with the last 12 months.
+         * @param {HTMLElement} selectorElement - The select element to populate.
+         */
+        function populateMonthSelector(selectorElement) {
+            const today = new Date();
+            selectorElement.innerHTML = '<option value="">Todos los Meses</option>'; // Default option
+            for (let i = 0; i < 12; i++) {
+                const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                const monthName = date.toLocaleString('es-CO', { month: 'long', year: 'numeric' });
+                const monthValue = date.toISOString().slice(0, 7); //YYYY-MM format
+                const option = document.createElement('option');
+                option.value = monthValue;
+                option.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1); // Capitalize first letter
+                selectorElement.appendChild(option);
+            }
+        }
+
+        /**
+         * Returns a consistent week identifier for a given date, defining a week from Monday to Saturday.
+         * The ID is based on the Monday's date of that week (e.g., "YYYY-MM-DD").
+         * @param {Date} d - The date object.
+         * @returns {string} A string in 'YYYY-MM-DD' format representing the Monday of the week.
+         */
+        function getWeekIdentifier(d) {
+            const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+            // Calculate the Monday of the current week
+            // If it's Sunday (0), go back 6 days to get to the previous Monday.
+            // Otherwise, go back (dayOfWeek - 1) days to get to the current Monday.
+            const daysToMonday = (dayOfWeek === 0) ? 6 : (dayOfWeek - 1);
+            const mondayOfWeek = new Date(date);
+            mondayOfWeek.setDate(date.getDate() - daysToMonday);
+            
+            // Format the Monday's date as the week identifier (e.g., "2024-03-04")
+            return mondayOfWeek.toISOString().split('T')[0];
+        }
+
+        // --- Local Data Management ---
+
+        /**
+         * Loads orders data from localStorage.
+         * @returns {Array} An array of order objects.
+         */
+        function loadOrdersDataFromLocalStorage() {
+            try {
+                const data = localStorage.getItem('allOrdersDataLocal');
+                if (data) {
+                    const parsedData = JSON.parse(data);
+                    // Convert date strings back to Date objects
+                    return parsedData.map(order => ({
+                        ...order,
+                        fecha_hora: new Date(order.fecha_hora)
+                    }));
+                }
+            } catch (e) {
+                console.error("Error loading data from localStorage:", e);
+            }
+            return [];
+        }
+
+        /**
+         * Saves orders data to localStorage.
+         * @param {Array} data - The array of order objects to save.
+         */
+        function saveOrdersDataToLocalStorage(data) {
+            try {
+                // Convert Date objects to ISO strings for storage
+                const serializableData = data.map(order => ({
+                    ...order,
+                    fecha_hora: order.fecha_hora.toISOString()
+                }));
+                localStorage.setItem('allOrdersDataLocal', JSON.stringify(serializableData));
+            } catch (e) {
+                console.error("Error saving data to localStorage:", e);
+            }
+        }
+
+        /**
+         * Loads commission settings from localStorage.
+         */
+        function loadCommissionSettings() {
+            try {
+                const settings = localStorage.getItem('commissionSettingsLocal');
+                if (settings) {
+                    const parsedSettings = JSON.parse(settings);
+                    monthlyCompanyPairsThreshold = parsedSettings.monthlyCompanyPairsThreshold || monthlyCompanyPairsThreshold;
+                    monthlyCompanyCommissionAmount = parsedSettings.monthlyCompanyCommissionAmount || monthlyCompanyCommissionAmount;
+                    monthlyIndividualPairsThreshold = parsedSettings.monthlyIndividualPairsThreshold || monthlyIndividualPairsThreshold;
+                    weeklyValueBaseThreshold = parsedSettings.weeklyValueBaseThreshold || weeklyValueBaseThreshold;
+                    weeklyBaseCommissionAmount = parsedSettings.weeklyBaseCommissionAmount || weeklyBaseCommissionAmount;
+                    weeklyIncrementalValueThreshold = parsedSettings.weeklyIncrementalValueThreshold || weeklyIncrementalValueThreshold;
+                    weeklyIncrementalBonusAmount = parsedSettings.weeklyIncrementalBonusAmount || weeklyIncrementalBonusAmount;
+                }
+            } catch (e) {
+                console.error("Error loading commission settings from localStorage:", e);
+            }
+        }
+
+        /**
+         * Saves commission settings to localStorage.
+         */
+        function saveCommissionSettings() {
+            try {
+                const settings = {
+                    monthlyCompanyPairsThreshold,
+                    monthlyCompanyCommissionAmount,
+                    monthlyIndividualPairsThreshold,
+                    weeklyValueBaseThreshold,
+                    weeklyBaseCommissionAmount,
+                    weeklyIncrementalValueThreshold,
+                    weeklyIncrementalBonusAmount
+                };
+                localStorage.setItem('commissionSettingsLocal', JSON.stringify(settings));
+            } catch (e) {
+                console.error("Error saving commission settings to localStorage:", e);
+            }
+        }
+
+        // --- DASHBOARD Tab Functions ---
+
+        /**
+         * Initializes the charts with empty or default data.
+         */
+        function initializeChartsDashboard() {
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    if (context.dataset.label.includes('Valor')) { // Format as currency for sales charts
+                                        label += new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(context.parsed.y);
+                                    } else { // Format as number for pair counts
+                                        label += context.parsed.y.toLocaleString('es-CO');
+                                    }
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            };
+
+            // Destroy existing charts if they exist
+            if (salesByDateChart_dashboard) salesByDateChart_dashboard.destroy();
+            if (salesByAsesorChart_dashboard) salesByAsesorChart_dashboard.destroy();
+            if (pairsByProductChart_dashboard) pairsByProductChart_dashboard.destroy();
+
+            // Sales by Date Chart (Line)
+            salesByDateChart_dashboard = new Chart(document.getElementById('salesByDateChart_dashboard'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Valor de Ventas',
+                        data: [],
+                        borderColor: '#3B82F6', // Blue
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: chartOptions
+            });
+
+            // Sales by Asesor Chart (Bar)
+            salesByAsesorChart_dashboard = new Chart(document.getElementById('salesByAsesorChart_dashboard'), {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Valor Vendido',
+                        data: [],
+                        backgroundColor: '#10B981', // Emerald Green
+                        borderColor: '#059669',
+                        borderWidth: 1
+                    }]
+                },
+                options: chartOptions
+            });
+
+            // Pairs by Product Chart (Bar)
+            pairsByProductChart_dashboard = new Chart(document.getElementById('pairsByProductChart_dashboard'), {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Número de Pares',
+                        data: [],
+                        backgroundColor: '#F59E0B', // Orange
+                        borderColor: '#D97706',
+                        borderWidth: 1
+                    }]
+                },
+                options: chartOptions
+            });
+        }
+
+        /**
+         * Updates the dashboard with filtered data, including metrics and charts.
+         * @param {Array} data - The order data to visualize.
+         */
+        function updateDashboardMetricsAndCharts(data) {
+            let totalPares = 0;
+            let totalValor = 0;
+            let totalPedidos = data.length;
+
+            const salesByDate = {}; // { 'YYYY-MM-DD': totalSales }
+            const asesorPerformance = {}; // { 'AsesorName': { totalSales: 0, totalPairs: 0 } }
+            const pairsByProduct = {}; // { 'ProductName': totalPairs }
+
+            data.forEach(order => {
+                totalPares += order.num_pares || 0;
+                totalValor += order.valor_total || 0;
+
+                if (order.fecha_hora instanceof Date) {
+                    const date = order.fecha_hora.toISOString().split('T')[0];
+                    salesByDate[date] = (salesByDate[date] || 0) + (order.valor_total || 0);
+                }
+
+                if (order.asesor) {
+                    if (!asesorPerformance[order.asesor]) {
+                        asesorPerformance[order.asesor] = { totalSales: 0, totalPairs: 0 };
+                    }
+                    asesorPerformance[order.asesor].totalSales += (order.valor_total || 0);
+                    asesorPerformance[order.asesor].totalPairs += (order.num_pares || 0);
+                }
+
+                if (Array.isArray(order.productos)) {
+                    order.productos.forEach(product => {
+                        if (product.referencia) {
+                            pairsByProduct[product.referencia] = (pairsByProduct[product.referencia] || 0) + 1;
+                        }
+                    });
+                }
+            });
+
+            totalParesMetricDashboard.textContent = totalPares.toLocaleString('es-CO');
+            totalValorMetricDashboard.textContent = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(totalValor);
+            totalPedidosMetricDashboard.textContent = totalPedidos.toLocaleString('es-CO');
+
+            const sortedDates = Object.keys(salesByDate).sort();
+            salesByDateChart_dashboard.data.labels = sortedDates;
+            salesByDateChart_dashboard.data.datasets[0].data = sortedDates.map(date => salesByDate[date]);
+            salesByDateChart_dashboard.update();
+
+            salesByAsesorChart_dashboard.data.labels = Object.keys(asesorPerformance);
+            salesByAsesorChart_dashboard.data.datasets[0].data = Object.values(asesorPerformance).map(a => a.totalSales);
+            salesByAsesorChart_dashboard.update();
+
+            pairsByProductChart_dashboard.data.labels = Object.keys(pairsByProduct);
+            pairsByProductChart_dashboard.data.datasets[0].data = Object.values(pairsByProduct);
+            pairsByProductChart_dashboard.update();
+        }
+
+        /**
+         * Applies date filters to allOrdersData and updates the dashboard.
+         */
+        async function loadAndFilterDashboardData() {
+            // allOrdersData is already updated by data loading/Excel upload
+            let filteredData = [...allOrdersData]; // Work with a copy
+
+            // Parse dates to ensure they are interpreted in local time at the start of the day
+            const startDateValue = startDateInputDashboard.value;
+            const endDateValue = endDateInputDashboard.value;
+
+            let startDate = null;
+            if (startDateValue) {
+                const parts = startDateValue.split('-').map(Number);
+                startDate = new Date(parts[0], parts[1] - 1, parts[2]); // Month is 0-indexed
+            }
+
+            let endDate = null;
+            if (endDateValue) {
+                const parts = endDateValue.split('-').map(Number);
+                endDate = new Date(parts[0], parts[1] - 1, parts[2]); // Month is 0-indexed
+            }
+
+            filteredData = filteredData.filter(order => {
+                const orderDate = order.fecha_hora;
+                if (!orderDate) return false;
+
+                let matchesFilter = true;
+                if (startDate) {
+                    matchesFilter = matchesFilter && orderDate >= startDate;
+                }
+                if (endDate) {
+                    const nextDayAfterEndDate = new Date(endDate);
+                    nextDayAfterEndDate.setDate(nextDayAfterEndDate.getDate() + 1);
+                    matchesFilter = matchesFilter && orderDate < nextDayAfterEndDate;
+                }
+                return matchesFilter;
+            });
+
+            updateDashboardMetricsAndCharts(filteredData);
+        }
+
+        /**
+         * Handles the upload of an Excel file and saves it to the local data.
+         */
+        async function handleExcelUploadDashboard() {
+            const file = excelFileInputDashboard.files[0];
+            if (!file) {
+                showMessageModal("Error de Archivo", "Por favor, selecciona un archivo Excel para subir.");
+                return;
+            }
+
+            showLoading();
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet);
+
+                    const dailySummariesToAdd = [];
+
+                    json.forEach(row => {
+                        let fechaHora;
+                        // Attempt to parse 'fecha_hora' or 'Fecha' or 'Fecha y Hora'
+                        if (row['fecha_hora']) {
+                            if (typeof row['fecha_hora'] === 'number') {
+                                // XLSX date number to Date object (adjusting for Excel's epoch)
+                                fechaHora = new Date(Date.UTC(1899, 11, 30) + (row['fecha_hora'] * 24 * 60 * 60 * 1000));
+                            } else if (typeof row['fecha_hora'] === 'string') {
+                                fechaHora = new Date(row['fecha_hora']);
+                            }
+                        } else if (row['Fecha']) {
+                             if (typeof row['Fecha'] === 'number') {
+                                fechaHora = new Date(Date.UTC(1899, 11, 30) + (row['Fecha'] * 24 * 60 * 60 * 1000));
+                            } else if (typeof row['Fecha'] === 'string') {
+                                fechaHora = new Date(row['Fecha']);
+                            }
+                        } else if (row['Fecha y Hora']) {
+                             if (typeof row['Fecha y Hora'] === 'number') {
+                                fechaHora = new Date(Date.UTC(1899, 11, 30) + (row['Fecha y Hora'] * 24 * 60 * 60 * 1000));
+                            } else if (typeof row['Fecha y Hora'] === 'string') {
+                                fechaHora = new Date(row['Fecha y Hora']);
+                            }
+                        }
+
+
+                        if (!fechaHora || isNaN(fechaHora.getTime())) {
+                            console.warn("Fila ignorada debido a fecha inválida:", row);
+                            return;
+                        }
+
+                        // Generate a unique ID for each entry (could be a combination of date and asesor, or a UUID)
+                        const id = `${fechaHora.toISOString().split('T')[0]}_${row['asesor'] || 'Desconocido'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+                        dailySummariesToAdd.push({
+                            id: id,
+                            source: 'excel_upload', // Indicate source for consistency
+                            fecha_hora: fechaHora,
+                            asesor: row['asesor'] || 'Desconocido',
+                            num_pares: parseInt(row['num_pares']) || 0,
+                            valor_total: parseFloat(row['valor_total']) || 0,
+                            productos: [] // Local data might not have detailed products, keep consistent structure
+                        });
+                    });
+
+                    if (dailySummariesToAdd.length > 0) {
+                        allOrdersData = allOrdersData.concat(dailySummariesToAdd);
+                        saveOrdersDataToLocalStorage(allOrdersData);
+                        showMessageModal("Carga Exitosa", `Archivo Excel procesado y ${dailySummariesToAdd.length} resúmenes diarios subidos/actualizados localmente.`);
+                        // Re-apply current filters to update the dashboard
+                        loadAndFilterDashboardData();
+                    } else {
+                        showMessageModal("Carga Completada", "Archivo Excel procesado, pero no se encontraron datos válidos para subir.");
+                    }
+                    
+                    excelFileInputDashboard.value = '';
+                } catch (error) {
+                    console.error("Error al procesar o subir el archivo Excel:", error);
+                    showMessageModal("Error", "Error al procesar o subir el archivo Excel. Revisa la consola para más detalles.");
+                } finally {
+                    hideLoading();
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        /**
+         * Shows a confirmation modal before deleting all Excel data.
+         */
+        function showDeleteConfirmationExcel() {
+            mostrarModal('delete_confirmation_modal');
+        }
+
+        /**
+         * Deletes all documents from the local data that originated from Excel.
+         */
+        async function confirmDeleteExcelData() {
+            cerrarModal('delete_confirmation_modal');
+            showLoading();
+            try {
+                const initialCount = allOrdersData.length;
+                allOrdersData = allOrdersData.filter(order => order.source !== 'excel_upload');
+                saveOrdersDataToLocalStorage(allOrdersData);
+                const deletedCount = initialCount - allOrdersData.length;
+
+                if (deletedCount > 0) {
+                    showMessageModal("Eliminación Exitosa", `Se eliminaron ${deletedCount} documentos de datos de Excel cargados localmente.`);
+                } else {
+                    showMessageModal("Información", "No hay datos de Excel cargados para eliminar.");
+                }
+                
+                // Re-apply current filters to update the dashboard
+                loadAndFilterDashboardData();
+            } catch (error) {
+                console.error("Error al eliminar datos de Excel locales:", error);
+                showMessageModal("Error", "Error al eliminar datos de Excel. Revisa la consola para más detalles.");
+            } finally {
+                hideLoading();
+            }
+        }
+
+        /**
+         * Sets the date range for the current week (Monday to Saturday) and applies filter for dashboard.
+         */
+        function filterCurrentWeekDashboard() {
+            currentDashboardFilterMode = 'quick_week';
+            const today = new Date();
+            const dayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+            
+            const daysToMonday = (dayOfWeek === 0) ? 6 : (dayOfWeek - 1);
+            const monday = new Date(today);
+            monday.setDate(today.getDate() - daysToMonday);
+            
+            const saturday = new Date(monday);
+            saturday.setDate(monday.getDate() + 5); 
+
+            startDateInputDashboard.value = monday.toISOString().split('T')[0];
+            endDateInputDashboard.value = saturday.toISOString().split('T')[0];
+            loadAndFilterDashboardData();
+        }
+
+        /**
+         * Sets the date range for the current month and applies filter for dashboard.
+         */
+        function filterCurrentMonthDashboard() {
+            currentDashboardFilterMode = 'quick_month';
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+            startDateInputDashboard.value = firstDay.toISOString().split('T')[0];
+            endDateInputDashboard.value = lastDay.toISOString().split('T')[0];
+            loadAndFilterDashboardData();
+        }
+
+        /**
+         * Handles month selection from the dropdown for dashboard.
+         */
+        function handleMonthSelectionDashboard() {
+            currentDashboardFilterMode = 'quick_month';
+            const selectedMonth = monthSelectorDashboard.value;
+            if (selectedMonth) {
+                const year = parseInt(selectedMonth.split('-')[0]);
+                const month = parseInt(selectedMonth.split('-')[1]) - 1;
+
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+
+                startDateInputDashboard.value = firstDay.toISOString().split('T')[0];
+                endDateInputDashboard.value = lastDay.toISOString().split('T')[0];
+                loadAndFilterDashboardData();
+            } else {
+                startDateInputDashboard.value = '';
+                endDateInputDashboard.value = '';
+                loadAndFilterDashboardData(); // Load all data if no month selected
+            }
+        }
+
+        /**
+         * Resets the dashboard filters.
+         */
+        function resetDashboardFilters() {
+            startDateInputDashboard.value = '';
+            endDateInputDashboard.value = '';
+            monthSelectorDashboard.value = '';
+            currentDashboardFilterMode = 'custom_date_range'; // Reset mode
+
+            // Clear metrics and charts
+            totalParesMetricDashboard.textContent = '0';
+            totalValorMetricDashboard.textContent = '$0';
+            totalPedidosMetricDashboard.textContent = '0';
+            salesByDateChart_dashboard.data.labels = [];
+            salesByDateChart_dashboard.data.datasets[0].data = [];
+            salesByDateChart_dashboard.update();
+            salesByAsesorChart_dashboard.data.labels = [];
+            salesByAsesorChart_dashboard.data.datasets[0].data = [];
+            salesByAsesorChart_dashboard.update();
+            pairsByProductChart_dashboard.data.labels = [];
+            pairsByProductChart_dashboard.data.datasets[0].data = [];
+            pairsByProductChart_dashboard.update();
+            showMessageModal("Dashboard Reiniciado", "Los filtros del Dashboard han sido reiniciados. Aplica un nuevo filtro para ver los datos.");
+        }
+
+
+        // --- COMISION GENERAL Tab Functions ---
+
+        /**
+         * Calculates and displays general (monthly) commissions based on the selected month.
+         */
+        function calculateAndDisplayGeneralCommissions() {
+            currentGeneralMonthFilter = monthSelectorGeneral.value;
+
+            let filteredData = [...allOrdersData]; // Start with all data
+
+            // Apply month filter if a month is selected
+            if (currentGeneralMonthFilter) {
+                const [year, month] = currentGeneralMonthFilter.split('-').map(Number);
+                const firstDayOfMonth = new Date(year, month - 1, 1); // Month is 0-indexed
+                const lastDayOfMonth = new Date(year, month, 0); // Last day of the selected month
+
+                filteredData = filteredData.filter(order => {
+                    const orderDate = order.fecha_hora;
+                    return orderDate >= firstDayOfMonth && orderDate <= lastDayOfMonth;
+                });
+            } else {
+                // If no month is selected, clear the display or show a message
+                generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>';
+                return;
+            }
+
+
+            let totalCompanyPairsFilteredPeriod = 0;
+            const asesorMonthlyPerformance = {}; // { 'AsesorName': { totalSales: 0, totalPairs: 0 } }
+
+            filteredData.forEach(order => {
+                totalCompanyPairsFilteredPeriod += order.num_pares || 0;
+                if (order.asesor) {
+                    if (!asesorMonthlyPerformance[order.asesor]) {
+                        asesorMonthlyPerformance[order.asesor] = { totalSales: 0, totalPairs: 0 };
+                    }
+                    asesorMonthlyPerformance[order.asesor].totalSales += (order.valor_total || 0);
+                    asesorMonthlyPerformance[order.asesor].totalPairs += (order.num_pares || 0);
+                }
+            });
+
+            let commissionHtml = `
+                <h3 class="text-xl font-semibold mb-4">Resumen de Comisión General ${currentGeneralMonthFilter ? `(Mes: ${new Date(currentGeneralMonthFilter + '-01').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })})` : '(Todos los períodos)'}</h3>
+                <p class="mb-2"><strong>Tope de Pares (Empresa):</strong> ${monthlyCompanyPairsThreshold.toLocaleString('es-CO')} pares</p>
+                <p class="mb-2"><strong>Total Pares Vendidos (Empresa en período filtrado):</strong> ${totalCompanyPairsFilteredPeriod.toLocaleString('es-CO')} pares</p>
+                <p class="mb-4"><strong>Empresa cumple el tope:</strong> ${totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold ? '<span class="text-green-600 font-bold">SÍ</span>' : '<span class="text-red-600 font-bold">NO</span>'}</p>
+                <table class="commission-table">
+                    <thead>
+                        <tr>
+                            <th>Asesor</th>
+                            <th>Pares Vendidos</th>
+                            <th>Valor Vendido</th>
+                            <th>Comisión Mensual</th>
+                            <th>Estado Individual</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            const companyMeetsMonthlyPairsTarget = (monthlyCompanyPairsThreshold > 0 && totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold);
+
+            for (const asesor in asesorMonthlyPerformance) {
+                const { totalSales, totalPairs } = asesorMonthlyPerformance[asesor];
+                let monthlyCommission = 0;
+                let individualStatus = '';
+                let statusColorClass = 'text-red-600';
+
+                if (companyMeetsMonthlyPairsTarget) {
+                    if (monthlyIndividualPairsThreshold > 0) {
+                        if (totalPairs >= monthlyIndividualPairsThreshold) {
+                            monthlyCommission = monthlyCompanyCommissionAmount;
+                            individualStatus = `Cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                            statusColorClass = 'text-green-600';
+                        } else if (totalPairs >= (monthlyIndividualPairsThreshold / 2)) {
+                            monthlyCommission = monthlyCompanyCommissionAmount / 2;
+                            individualStatus = `Cumple (50% de tope: ${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                            statusColorClass = 'text-orange-500'; // A different color for partial fulfillment
+                        } else {
+                            individualStatus = `No cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                        }
+                    } else { // No individual threshold set
+                        monthlyCommission = monthlyCompanyCommissionAmount;
+                        individualStatus = `Cumple (no requiere tope individual)`;
+                        statusColorClass = 'text-green-600';
+                    }
+                } else {
+                    individualStatus = `Empresa no cumple el tope general`;
+                }
+
+                commissionHtml += `
+                    <tr>
+                        <td>${asesor}</td>
+                        <td>${totalPairs.toLocaleString('es-CO')}</td>
+                        <td>${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(totalSales)}</td>
+                        <td class="${statusColorClass}">${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(monthlyCommission)}</td>
+                        <td>${individualStatus}</td>
+                    </tr>
+                `;
+            }
+            commissionHtml += '</tbody></table>';
+            generalCommissionSummaryDiv.innerHTML = commissionHtml;
+
+            if (Object.keys(asesorMonthlyPerformance).length === 0) {
+                generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">No hay datos de asesores para calcular comisiones generales en el período seleccionado.</p>';
+            }
+        }
+
+        /**
+         * Saves general commission settings to localStorage.
+         */
+        async function saveCommissionGeneralSettings() {
+            const newMonthlyCompanyPairsThreshold = parseFloat(monthlyCompanyPairsThresholdInput.value);
+            const newMonthlyCompanyCommissionAmount = parseFloat(monthlyCompanyCommissionAmountInput.value);
+            const newMonthlyIndividualPairsThreshold = parseFloat(monthlyIndividualPairsThresholdInput.value);
+
+            if (isNaN(newMonthlyCompanyPairsThreshold) || newMonthlyCompanyPairsThreshold < 0 ||
+                isNaN(newMonthlyCompanyCommissionAmount) || newMonthlyCompanyCommissionAmount < 0 ||
+                isNaN(newMonthlyIndividualPairsThreshold) || newMonthlyIndividualPairsThreshold < 0) {
+                showMessageModal("Error de Configuración", "Por favor, ingrese valores válidos y no negativos para todas las configuraciones.");
+                return;
+            }
+
+            monthlyCompanyPairsThreshold = newMonthlyCompanyPairsThreshold;
+            monthlyCompanyCommissionAmount = newMonthlyCompanyCommissionAmount;
+            monthlyIndividualPairsThreshold = newMonthlyIndividualPairsThreshold;
+            saveCommissionSettings(); // Save to localStorage
+
+            showMessageModal("Configuración Guardada", "Configuración de comisión general guardada correctamente.");
+            cerrarModal('commission_general_settings_modal');
+            // Re-calculate commissions if a month is already selected
+            if (currentGeneralMonthFilter) {
+                calculateAndDisplayGeneralCommissions();
+            }
+        }
+
+        /**
+         * Resets the general commission filter.
+         */
+        function resetGeneralFilter() {
+            monthSelectorGeneral.value = ''; // Reset month selector
+            currentGeneralMonthFilter = ''; // Reset filter variable
+            generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>';
+            showMessageModal("Filtro Reiniciado", "El filtro de Comisión General ha sido reiniciado. Selecciona un mes para ver los datos.");
+        }
+
+
+        // --- COMISION SEMANAL Tab Functions ---
+
+        /**
+         * Calculates and displays weekly commissions based on the selected date range.
+         */
+        function calculateAndDisplayWeeklyCommissions() {
+            const startDateValue = startDateInputWeekly.value;
+            const endDateValue = endDateInputWeekly.value;
+
+            if (!startDateValue || !endDateValue) {
+                weeklyCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Por favor, selecciona un rango de fechas para calcular la comisión semanal.</p>';
+                return;
+            }
+
+            // Parse dates to ensure they are interpreted in local time at the start of the day
+            const startDateParts = startDateValue.split('-').map(Number); // [year, month, day]
+            const startDate = new Date(startDateParts[0], startDateParts[1] - 1, startDateParts[2]); // Month is 0-indexed
+
+            const endDateParts = endDateValue.split('-').map(Number);
+            let endDate = new Date(endDateParts[0], endDateParts[1] - 1, endDateParts[2]); // Month is 0-indexed
+
+
+            // Adjust endDate to include the entire day for filtering
+            const adjustedEndDate = new Date(endDate);
+            adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+
+            const filteredData = allOrdersData.filter(order => {
+                const orderDate = order.fecha_hora;
+                return orderDate >= startDate && orderDate < adjustedEndDate;
+            });
+
+            // Aggregate sales for each asesor within the selected custom period
+            const asesorCustomPeriodPerformance = {}; // { 'AsesorName': { totalSales: 0, totalPairs: 0 } }
+
+            filteredData.forEach(order => {
+                if (order.asesor) {
+                    if (!asesorCustomPeriodPerformance[order.asesor]) {
+                        asesorCustomPeriodPerformance[order.asesor] = { totalSales: 0, totalPairs: 0 };
+                    }
+                    asesorCustomPeriodPerformance[order.asesor].totalSales += (order.valor_total || 0);
+                    asesorCustomPeriodPerformance[order.asesor].totalPairs += (order.num_pares || 0);
+                }
+            });
+
+            // For display purposes, use the values from the input fields directly
+            const displayStartDate = new Date(startDateInputWeekly.value + 'T00:00:00'); 
+            const displayEndDate = new Date(endDateInputWeekly.value + 'T00:00:00'); 
+
+            let commissionHtml = `
+                <h3 class="text-xl font-semibold mb-4">Resumen de Comisión Semanal (${displayStartDate.toLocaleDateString('es-CO')} - ${displayEndDate.toLocaleDateString('es-CO')})</h3>
+                <table class="commission-table">
+                    <thead>
+                        <tr>
+                            <th>Asesor</th>
+                            <th>Valor Vendido (Período)</th>
+                            <th>Comisión Semanal</th>
+                            <th>Detalles</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            const sortedAsesores = Object.keys(asesorCustomPeriodPerformance).sort();
+
+            sortedAsesores.forEach(asesor => {
+                const { totalSales: customPeriodTotalSales } = asesorCustomPeriodPerformance[asesor];
+                let currentCommission = 0;
+                let details = [];
+                let meetsCriteria = false;
+
+                if (weeklyValueBaseThreshold > 0 && customPeriodTotalSales >= weeklyValueBaseThreshold) {
+                    currentCommission += weeklyBaseCommissionAmount;
+                    details.push(`Base: Cumple ($${customPeriodTotalSales.toLocaleString('es-CO')}/$${weeklyValueBaseThreshold.toLocaleString('es-CO')})`);
+                    meetsCriteria = true;
+                } else if (weeklyValueBaseThreshold > 0) {
+                    details.push(`Base: No cumple ($${customPeriodTotalSales.toLocaleString('es-CO')}/$${weeklyValueBaseThreshold.toLocaleString('es-CO')})`);
+                }
+
+                if (weeklyIncrementalValueThreshold > 0 && customPeriodTotalSales > weeklyValueBaseThreshold) {
+                    const excessValue = customPeriodTotalSales - weeklyValueBaseThreshold;
+                    const increments = Math.floor(excessValue / weeklyIncrementalValueThreshold);
+                    if (increments > 0) {
+                        const incrementalBonus = increments * weeklyIncrementalBonusAmount;
+                        currentCommission += incrementalBonus;
+                        details.push(`Inc: $${incrementalBonus.toLocaleString('es-CO')} (${increments}x$${weeklyIncrementalValueThreshold.toLocaleString('es-CO')})`);
+                        meetsCriteria = true;
+                    }
+                }
+
+                const commissionColorClass = meetsCriteria ? 'text-green-600' : 'text-red-600';
+                const formattedCurrentCommission = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(currentCommission);
+
+                commissionHtml += `
+                    <tr>
+                        <td>${asesor}</td>
+                        <td>${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(customPeriodTotalSales)}</td>
+                        <td class="${commissionColorClass}">${formattedCurrentCommission}</td>
+                        <td>${details.join(', ') || (weeklyValueBaseThreshold === 0 && weeklyIncrementalValueThreshold === 0 ? 'Topes no configurados' : 'No cumple criterios')}</td>
+                    </tr>
+                `;
+            });
+
+            commissionHtml += '</tbody></table>';
+            weeklyCommissionSummaryDiv.innerHTML = commissionHtml;
+
+            if (Object.keys(asesorCustomPeriodPerformance).length === 0) {
+                weeklyCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">No hay datos de ventas para el período seleccionado.</p>';
+            }
+        }
+
+        /**
+         * Saves weekly commission settings to localStorage.
+         */
+        async function saveCommissionWeeklySettings() {
+            const newWeeklyValueBaseThreshold = parseFloat(weeklyValueBaseThresholdInput.value);
+            const newWeeklyBaseCommissionAmount = parseFloat(weeklyBaseCommissionAmountInput.value);
+            const newWeeklyIncrementalValueThreshold = parseFloat(weeklyIncrementalValueThresholdInput.value);
+            const newWeeklyIncrementalBonusAmount = parseFloat(weeklyIncrementalBonusAmountInput.value);
+
+            if (isNaN(newWeeklyValueBaseThreshold) || newWeeklyValueBaseThreshold < 0 ||
+                isNaN(newWeeklyBaseCommissionAmount) || newWeeklyBaseCommissionAmount < 0 ||
+                isNaN(newWeeklyIncrementalValueThreshold) || newWeeklyIncrementalValueThreshold < 0 ||
+                isNaN(newWeeklyIncrementalBonusAmount) || newWeeklyIncrementalBonusAmount < 0) {
+                showMessageModal("Error de Configuración", "Por favor, ingrese valores válidos y no negativos para todas las configuraciones.");
+                return;
+            }
+
+            weeklyValueBaseThreshold = newWeeklyValueBaseThreshold;
+            weeklyBaseCommissionAmount = newWeeklyBaseCommissionAmount;
+            weeklyIncrementalValueThreshold = newWeeklyIncrementalValueThreshold;
+            weeklyIncrementalBonusAmount = newWeeklyIncrementalBonusAmount;
+            saveCommissionSettings(); // Save to localStorage
+
+            showMessageModal("Configuración Guardada", "Configuración de comisión semanal guardada correctamente.");
+            cerrarModal('commission_weekly_settings_modal');
+            // Re-calculate commissions if dates are already selected
+            if (startDateInputWeekly.value && endDateInputWeekly.value) {
+                calculateAndDisplayWeeklyCommissions();
+            }
+        }
+
+        /**
+         * Sets the date range for the current week (Monday to Saturday) and applies filter for weekly commission.
+         */
+        function filterCurrentWeekWeekly() {
+            const today = new Date();
+            const dayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+            
+            const monday = new Date(today);
+            monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); // Adjust to Monday
+            monday.setHours(0, 0, 0, 0); // Set to start of day
+
+            const saturday = new Date(monday);
+            saturday.setDate(monday.getDate() + 5); 
+            // Keep the time as 00:00:00 for the input value, the filtering logic handles the end of day
+            saturday.setHours(0, 0, 0, 0); 
+
+            startDateInputWeekly.value = monday.toISOString().split('T')[0];
+            endDateInputWeekly.value = saturday.toISOString().split('T')[0];
+            calculateAndDisplayWeeklyCommissions();
+        }
+
+        /**
+         * Sets the date range for the last week (Monday to Saturday) and applies filter for weekly commission.
+         */
+        function filterLastWeekWeekly() {
+            const today = new Date();
+            const dayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+            
+            const currentMonday = new Date(today);
+            currentMonday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1)); // Adjust to current Monday
+            currentMonday.setHours(0, 0, 0, 0); // Set to start of day
+
+            const lastMonday = new Date(currentMonday);
+            lastMonday.setDate(currentMonday.getDate() - 7); // Subtract 7 days to get last Monday
+            lastMonday.setHours(0, 0, 0, 0); // Set to start of day
+
+            const lastSaturday = new Date(lastMonday);
+            lastSaturday.setDate(lastMonday.getDate() + 5); 
+            // Keep the time as 00:00:00 for the input value, the filtering logic handles the end of day
+            saturday.setHours(0, 0, 0, 0); 
+
+            startDateInputWeekly.value = lastMonday.toISOString().split('T')[0];
+            endDateInputWeekly.value = lastSaturday.toISOString().split('T')[0];
+            calculateAndDisplayWeeklyCommissions();
+        }
+
+        /**
+         * Resets the weekly commission filter.
+         */
+        function resetWeeklyFilter() {
+            startDateInputWeekly.value = '';
+            endDateInputWeekly.value = '';
+            weeklyCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un rango de fechas para calcular la comisión semanal.</p>';
+            currentWeeklyFilterMode = 'custom_date_range'; // Reset mode
+        }
+
+
+        // --- VER HISTORIAL Tab Functions ---
+
+        /**
+         * Populates the asesor and month filters for the history tab.
+         */
+        function populateHistoryFilters() {
+            const asesores = new Set();
+            const months = new Set();
+
+            allOrdersData.forEach(order => {
+                if (order.asesor) {
+                    asesores.add(order.asesor);
+                }
+                if (order.fecha_hora instanceof Date) {
+                    months.add(order.fecha_hora.toISOString().slice(0, 7)); //YYYY-MM
+                }
+            });
+
+            // Populate Asesor filter
+            filterAsesorHistory.innerHTML = '<option value="">Todos</option>';
+            Array.from(asesores).sort().forEach(asesor => {
+                const option = document.createElement('option');
+                option.value = asesor;
+                option.textContent = asesor;
+                filterAsesorHistory.appendChild(option);
+            });
+            filterAsesorHistory.value = currentHistoryAsesorFilter; // Restore selection
+
+            // Populate Month filter
+            filterMonthHistory.innerHTML = '<option value="">Todos los Meses</option>';
+            Array.from(months).sort().reverse().forEach(monthValue => { // Sort descending for most recent first
+                const [year, month] = monthValue.split('-').map(Number);
+                const date = new Date(year, month - 1, 1); // month - 1 because Date months are 0-indexed
+                const monthName = date.toLocaleString('es-CO', { month: 'long', year: 'numeric' });
+                const option = document.createElement('option');
+                option.value = monthValue;
+                option.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+                filterMonthHistory.appendChild(option);
+            });
+            filterMonthHistory.value = currentHistoryMonthFilter; // Restore selection
+        }
+
+        /**
+         * Loads and filters sales history data.
+         */
+        function loadAndFilterHistoryData() {
+            currentHistoryAsesorFilter = filterAsesorHistory.value;
+            currentHistoryMonthFilter = filterMonthHistory.value;
+
+            let filteredHistoryData = [...allOrdersData];
+
+            if (currentHistoryAsesorFilter) {
+                filteredHistoryData = filteredHistoryData.filter(order => order.asesor === currentHistoryAsesorFilter);
+            }
+            if (currentHistoryMonthFilter) {
+                filteredHistoryData = filteredHistoryData.filter(order => {
+                    if (order.fecha_hora instanceof Date) {
+                        // Ensure comparison is done correctly with ISO string
+                        return order.fecha_hora.toISOString().startsWith(currentHistoryMonthFilter);
+                    }
+                    return false;
+                });
+            }
+
+            displaySalesHistory(filteredHistoryData);
+        }
+
+        /**
+         * Displays the filtered sales history in a table.
+         * @param {Array} data - The filtered sales data.
+         */
+        function displaySalesHistory(data) {
+            if (data.length === 0) {
+                salesHistoryList.innerHTML = '<p class="text-center text-gray-500">No hay historial de ventas para los filtros seleccionados.</p>';
+                return;
+            }
+
+            let totalParesHistory = 0;
+            let totalValorHistory = 0;
+
+            data.forEach(order => {
+                totalParesHistory += order.num_pares || 0;
+                totalValorHistory += order.valor_total || 0;
+            });
+
+            let historyHtml = `
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Asesor</th>
+                            <th>Pares</th>
+                            <th>Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            data.forEach(order => {
+                const dateFormatted = order.fecha_hora instanceof Date ? order.fecha_hora.toLocaleDateString('es-CO') : 'N/A';
+                historyHtml += `
+                    <tr>
+                        <td>${dateFormatted}</td>
+                        <td>${order.asesor || 'N/A'}</td>
+                        <td>${order.num_pares || 0}</td>
+                        <td>${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(order.valor_total || 0)}</td>
+                    </tr>
+                `;
+            });
+
+            historyHtml += `
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="2" class="text-right font-bold">Total General:</td>
+                            <td class="font-bold">${totalParesHistory.toLocaleString('es-CO')}</td>
+                            <td class="font-bold">${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(totalValorHistory)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+            salesHistoryList.innerHTML = historyHtml;
+        }
+
+        /**
+         * Resets the history filters.
+         */
+        function resetHistoryFilters() {
+            filterAsesorHistory.value = '';
+            filterMonthHistory.value = '';
+            currentHistoryAsesorFilter = '';
+            currentHistoryMonthFilter = '';
+            salesHistoryList.innerHTML = '<p class="text-center text-gray-500">Aplica filtros para ver el historial de ventas.</p>';
+            showMessageModal("Filtros Reiniciados", "Los filtros del historial de ventas han sido reiniciados. Aplica un nuevo filtro para ver los datos.");
+        }
+
+
+        // --- Event Listeners and Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load data and settings from localStorage on startup
+            allOrdersData = loadOrdersDataFromLocalStorage();
+            loadCommissionSettings();
+
+            // Initialize charts for the dashboard tab
+            initializeChartsDashboard();
+            populateMonthSelector(monthSelectorDashboard); // For dashboard month filter
+
+            // Activate the first tab (DASHBOARD) on load, but don't load data immediately
+            document.querySelector('.tab-button').click(); 
+
+            // Dashboard Tab Event Listeners
+            uploadExcelBtnDashboard.addEventListener('click', handleExcelUploadDashboard);
+            deleteExcelDataBtnDashboard.addEventListener('click', showDeleteConfirmationExcel);
+            filterDataBtnDashboard.addEventListener('click', () => {
+                currentDashboardFilterMode = 'custom_date_range';
+                loadAndFilterDashboardData();
+            });
+            monthSelectorDashboard.addEventListener('change', handleMonthSelectionDashboard);
+            filterCurrentWeekBtnDashboard.addEventListener('click', filterCurrentWeekDashboard);
+            filterCurrentMonthBtnDashboard.addEventListener('click', filterCurrentMonthDashboard);
+            resetDashboardBtnDashboard.addEventListener('click', resetDashboardFilters);
+
+            // General Commission Tab Event Listeners
+            filterDataBtnGeneral.addEventListener('click', calculateAndDisplayGeneralCommissions);
+            resetFilterBtnGeneral.addEventListener('click', resetGeneralFilter);
+
+
+            // Weekly Commission Tab Event Listeners
+            filterDataBtnWeekly.addEventListener('click', () => {
+                currentWeeklyFilterMode = 'custom_date_range';
+                calculateAndDisplayWeeklyCommissions();
+            });
+            resetFilterBtnWeekly.addEventListener('click', resetWeeklyFilter);
+            filterCurrentWeekBtnWeekly.addEventListener('click', filterCurrentWeekWeekly); // New button
+            filterLastWeekBtnWeekly.addEventListener('click', filterLastWeekWeekly); // New button
+
+            // History Tab Event Listeners
+            applyFilterHistoryBtn.addEventListener('click', loadAndFilterHistoryData);
+            resetFilterHistoryBtn.addEventListener('click', resetHistoryFilters);
+        });
+    </script>
+</body>
+</html>
