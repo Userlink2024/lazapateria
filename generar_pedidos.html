@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -180,6 +179,7 @@
         .search-bar-container input {
             width: calc(100% - 20px); /* Ajustar para padding */
         }
+        /* Adjusted styles for status messages to display name */
         .status-despachado {
             color: green;
             font-weight: bold;
@@ -203,31 +203,6 @@
             pointer-events: none; /* Para que no interfiera con clics */
             box-shadow: 0 2px 5px rgba(0,0,0,0.3); /* Sombra más pronunciada */
             z-index: 10; /* Asegurar que esté por encima de otros elementos */
-        }
-        /* Estilos para los botones de filtro de despacho */
-        .dispatch-filter-button {
-            background-color: #f0f0f0;
-            color: #333;
-            border: 1px solid #ccc;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-right: 5px; /* Espacio entre botones */
-        }
-        .dispatch-filter-button:hover {
-            background-color: #e0e0e0;
-        }
-        .dispatch-filter-button.active {
-            background-color: #4CAF50; /* Default active green */
-            color: white;
-            border-color: #4CAF50;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
-        }
-        /* Estilo específico para el botón "No Despachados" cuando está activo */
-        .dispatch-filter-button.active.no-despachados-active {
-            background-color: #dc3545; /* Rojo */
-            border-color: #dc3545;
         }
         /* Styles for product/abono items in modification modal */
         .product-item, .abono-item {
@@ -391,6 +366,31 @@
             font-weight: normal;
             cursor: pointer;
         }
+        /* Estilos para los botones de filtro de despacho */
+        .dispatch-filter-button {
+            background-color: #f0f0f0;
+            color: #333;
+            border: 1px solid #ccc;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-right: 5px; /* Espacio entre botones */
+        }
+        .dispatch-filter-button:hover {
+            background-color: #e0e0e0;
+        }
+        .dispatch-filter-button.active {
+            background-color: #4CAF50; /* Default active green */
+            color: white;
+            border-color: #4CAF50;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+        }
+        /* Estilo específico para el botón "No Despachados" cuando está activo */
+        .dispatch-filter-button.active.no-despachados-active {
+            background-color: #dc3545; /* Rojo */
+            border-color: #dc3545;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -433,15 +433,16 @@
         const BLOCK_PASSWORD = "upm1022";
         const BLOCK_HOUR = 17; // 5 PM
         const BLOCK_MINUTE = 40; // 40 minutes
-        let isTimeBlocked = false; // Bloqueo automático por hora
+        // isTimeBlocked is no longer a persistent state; it's a trigger for isAutoBlockedPermanently
         let isGlobalManualBlock = false; // Bloqueo manual/inmediato global, controlado por Firestore
+        let isAutoBlockedPermanently = false; // Nuevo: Bloqueo automático persistente, controlado por Firestore
         let currentPasswordModalTargetCheckbox = null; // Para saber qué checkbox se intentó desmarcar
 
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
             // Si el modal de opciones de bloqueo se abre, actualiza el estado de los checkboxes
             if (id === 'block_options_modal') {
-                document.getElementById('auto_block_checkbox').checked = isTimeBlocked;
+                document.getElementById('auto_block_checkbox').checked = isAutoBlockedPermanently; // Reflect persistent auto block
                 document.getElementById('global_manual_block_checkbox').checked = isGlobalManualBlock;
             }
             if (id === 'modal_producto') {
@@ -545,7 +546,9 @@
                     usuario: datosUsuario.usuario,
                     bodegueros_encargados: selectedBodegueros, // Add bodegueros
                     bloqueado: false,
-                    despachado: false
+                    despachado: false,
+                    despachadoPor: '', // Initialize new field
+                    bloqueadoPor: '' // Initialize new field
                 };
                 console.log("Datos a guardar:", datos);
 
@@ -664,30 +667,28 @@
             const recordElement = document.querySelector(`.record[data-id="${docId}"]`);
             if (!recordElement) return;
 
-            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
             const estaBloqueado = updatedRegistro.bloqueado === true;
             const estaDespachado = updatedRegistro.despachado === true;
+            const despachadoPor = updatedRegistro.despachadoPor || '';
+            const bloqueadoPor = updatedRegistro.bloqueadoPor || '';
 
             recordElement.dataset.bloqueado = estaBloqueado;
             recordElement.dataset.despachado = estaDespachado;
+            recordElement.dataset.despachadoPor = despachadoPor; // Update dataset
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Update dataset
 
             const statusMessagesContainer = recordElement.querySelector(`#status-messages-${docId}`);
             if (statusMessagesContainer) {
                 let newStatusHtml = '';
-                if (!isAdministrator) {
-                    if (currentDispatchFilter === 'all' || currentDispatchFilter === 'despachados') {
-                        if (estaBloqueado) {
-                            newStatusHtml += `<p class="status-bloqueado">Pedido Revisado</p>`;
-                        }
-                        if (estaDespachado) {
-                            newStatusHtml += `<p class="status-despachado">Pedido Despachado</p>`;
-                        }
-                    }
+                // Display BLOQUEADO status only if current filter is 'all'
+                if (estaBloqueado && currentDispatchFilter === 'all') {
+                    const blockedText = bloqueadoPor ? `BLOQUEADO POR: ${bloqueadoPor.toUpperCase()}` : 'BLOQUEADO';
+                    newStatusHtml += `<p class="status-bloqueado">${blockedText}</p>`;
                 }
                 statusMessagesContainer.innerHTML = newStatusHtml;
             }
 
-            const puedeModificarEliminar = isAdministrator || (!estaBloqueado && !estaDespachado);
+            const puedeModificarEliminar = datosUsuario.permisos.toLowerCase() === 'administrador' || (!estaBloqueado && !estaDespachado);
             const modificarButton = recordElement.querySelector('button[onclick*="modificarPedido"]');
             const eliminarButton = recordElement.querySelector('button[onclick*="eliminarPedido"]');
 
@@ -702,8 +703,10 @@
 
             const despachadoSelloContainer = recordElement.querySelector(`#despachado-sello-container-${docId}`);
             if (despachadoSelloContainer) {
+                // Display DESPACHADO stamp only if current filter is 'despachados'
                 if (estaDespachado && currentDispatchFilter === 'despachados') {
-                    despachadoSelloContainer.innerHTML = '<div class="despachado-sello">DESPACHADO</div>';
+                    const despachadoText = despachadoPor ? `DESPACHADO POR: ${despachadoPor.toUpperCase()}` : 'DESPACHADO';
+                    despachadoSelloContainer.innerHTML = `<div class="despachado-sello">${despachadoText}</div>`;
                 } else {
                     despachadoSelloContainer.innerHTML = '';
                 }
@@ -719,6 +722,8 @@
             const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
             const estaBloqueado = registro.bloqueado === true;
             const estaDespachado = registro.despachado === true;
+            const despachadoPor = registro.despachadoPor || ''; // Get despachadoPor
+            const bloqueadoPor = registro.bloqueadoPor || '';   // Get bloqueadoPor
 
             // Set initial data attributes
             recordElement.dataset.asesor = registro.asesor || 'N/A';
@@ -726,6 +731,8 @@
             recordElement.dataset.codigo = registro.codigo_unico || 'N/A';
             recordElement.dataset.despachado = estaDespachado;
             recordElement.dataset.bloqueado = estaBloqueado;
+            recordElement.dataset.despachadoPor = despachadoPor; // Add despachadoPor to dataset
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Add bloqueadoPor to dataset
             recordElement.dataset.usuario = registro.usuario || 'N/A';
 
             let productosTextoParaBusqueda = "";
@@ -752,14 +759,14 @@
 
             let controlesHTML = '';
             if (esAdministrador) {
-                if (currentDispatchFilter !== 'all') {
+                if (currentDispatchFilter !== 'all') { // This condition was for the despachado checkbox
                     controlesHTML += `
                         <div class="control-container control-container-despachado">
                             <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)">
                             <label for="despachar_${docId}">Marcar como Despachado</label>
                         </div>`;
                 }
-                if (currentDispatchFilter === 'all') {
+                if (currentDispatchFilter === 'all') { // This condition was for the bloqueado checkbox
                     controlesHTML += `
                         <div class="control-container">
                             <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)">
@@ -776,6 +783,7 @@
                 : 'N/A';
 
             let recordContentHtml = '';
+            // Display logic for main content of the record
             if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
                 recordContentHtml = `
                     <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
@@ -823,8 +831,8 @@
         function updateExistingRecordElement(existingElement, updatedRegistro, index) {
             const newRecordElement = createRecordElement(existingElement.dataset.id, updatedRegistro, index);
             existingElement.parentNode.replaceChild(newRecordElement, existingElement);
-            // No need to call updateRecordStatusAndButtons here, createRecordElement already sets initial status
-            // and the overall onSnapshot loop will call filtrarYBuscarPedidos which handles visibility.
+            // After replacing, make sure the status is correctly displayed for the new element
+            updateRecordStatusAndButtons(existingElement.dataset.id, updatedRegistro);
         }
 
 
@@ -993,9 +1001,26 @@
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
                 return;
             }
+
+            if (!nuevoEstadoBloqueo) { // Si se está intentando desmarcar (quitar el chulo)
+                if (!window.confirm("¿Estás seguro de que quieres desbloquear este pedido?")) {
+                    const checkbox = document.getElementById(`bloquear_${id}`);
+                    if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
+                    return;
+                }
+            }
+
             try {
-                await db.collection('registros').doc(id).update({ bloqueado: nuevoEstadoBloqueo });
-                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo}`);
+                const updateData = {};
+                if (nuevoEstadoBloqueo) {
+                    updateData.bloqueado = true;
+                    updateData.bloqueadoPor = datosUsuario.nombreCompleto;
+                } else {
+                    updateData.bloqueado = false;
+                    updateData.bloqueadoPor = ''; // Clear the field when unblocked
+                }
+                await db.collection('registros').doc(id).update(updateData);
+                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo} por ${datosUsuario.nombreCompleto}`);
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
@@ -1012,9 +1037,26 @@
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
                 return;
             }
+
+            if (!nuevoEstadoDespachado) { // Si se está intentando desmarcar (quitar el chulo)
+                if (!window.confirm("¿Estás seguro de que quieres desverificar este pedido?")) {
+                    const checkbox = document.getElementById(`despachar_${id}`);
+                    if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
+                    return;
+                }
+            }
+
             try {
-                await db.collection('registros').doc(id).update({ despachado: nuevoEstadoDespachado });
-                console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado}`);
+                const updateData = {};
+                if (nuevoEstadoDespachado) {
+                    updateData.despachado = true;
+                    updateData.despachadoPor = datosUsuario.nombreCompleto;
+                } else {
+                    updateData.despachado = false;
+                    updateData.despachadoPor = ''; // Clear the field when undispatched
+                }
+                await db.collection('registros').doc(id).update(updateData);
+                console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado} por ${datosUsuario.nombreCompleto}`);
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
@@ -1068,8 +1110,8 @@
                     "Saldo a Favor": registro.saldo_a_favor,
                     "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
                     "Bodeguero(s)": (registro.bodegueros_encargados || []).join(', '), // Add bodegueros to export
-                    "Bloqueado": registro.bloqueado ? 'Sí' : 'No',
-                    "Despachado": registro.despachado ? 'Sí' : 'No'
+                    "Bloqueado": registro.bloqueadoPor || 'No bloqueado', // Changed to show name or "No bloqueado"
+                    "Despachado": registro.despachadoPor || 'No verificado' // Changed to show name or "No verificado"
                 });
             });
             const worksheet = XLSX.utils.json_to_sheet(registros);
@@ -1369,16 +1411,22 @@
 
             const timeLeftMs = targetTime.getTime() - now.getTime();
 
-            const hours = Math.floor(timeLeftMs / (1000 * 60 * 60));
-            const minutes = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((timeLeftMs % (1000 * 60)) / 1000);
-
             const countdownElement = document.getElementById('countdown_timer');
             if (countdownElement) {
-                if (timeLeftMs <= 0) {
+                // If auto block is permanently enabled (meaning it was triggered), the countdown should not show remaining time.
+                // It should just show "Bloqueo automático activado!" or similar.
+                if (isAutoBlockedPermanently) {
+                    countdownElement.textContent = "¡Bloqueo automático activado! (Indefinido)";
+                    countdownElement.style.backgroundColor = '#ffc107'; // Yellow background for active auto block
+                    countdownElement.style.borderColor = '#ffc107';
+                } else if (timeLeftMs <= 0) {
                     countdownElement.textContent = "¡Bloqueo automático activado!";
+                    countdownElement.style.backgroundColor = '#ffc107';
+                    countdownElement.style.borderColor = '#ffc107';
                 } else {
-                    countdownElement.textContent = `Bloqueo automático en: ${hours}h ${minutes}m ${seconds}s`;
+                    countdownElement.textContent = `Bloqueo automático en: ${Math.floor(timeLeftMs / (1000 * 60 * 60))}h ${Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}m ${Math.floor((timeLeftMs % (1000 * 60)) / 1000)}s`;
+                    countdownElement.style.backgroundColor = '#e7f3ff'; // Default blue background
+                    countdownElement.style.borderColor = '#007bff';
                 }
             }
         }
@@ -1467,23 +1515,26 @@
             globalSettingsRef.onSnapshot(doc => {
                 if (doc.exists) {
                     isGlobalManualBlock = doc.data().isBlocked || false;
-                    console.log("Estado de bloqueo global desde Firestore:", isGlobalManualBlock);
+                    isAutoBlockedPermanently = doc.data().isAutoBlockedPermanently || false; // Fetch new persistent auto block state
+                    console.log("Estado de bloqueo global (manual):", isGlobalManualBlock);
+                    console.log("Estado de bloqueo global (automático persistente):", isAutoBlockedPermanently);
                 } else {
                     // Si el documento no existe, crearlo con un estado inicial
-                    globalSettingsRef.set({ isBlocked: false }).then(() => {
+                    globalSettingsRef.set({ isBlocked: false, isAutoBlockedPermanently: false }).then(() => {
                         isGlobalManualBlock = false;
-                        console.log("Documento de configuración global creado.");
+                        isAutoBlockedPermanently = false;
+                        console.log("Documento de configuración global creado con estado inicial.");
                     }).catch(error => {
                         console.error("Error al crear documento de configuración global:", error);
                     });
                 }
                 applyBlockStatus(); // Aplicar el estado de bloqueo después de obtenerlo de Firestore
+                updateCountdown(); // Update countdown display immediately after fetching states
             });
 
-            checkTimeBlock();
-            setInterval(checkTimeBlock, 60 * 1000); // Check for block status every minute
+            checkTimeBlock(); // Initial check and setup for auto block triggering
+            setInterval(checkTimeBlock, 60 * 1000); // Check for time block status every minute
 
-            updateCountdown(); // Initial call to display countdown
             setInterval(updateCountdown, 1000); // Update countdown every second
 
             populateBodegueroCheckboxes(); // Populate bodeguero checkboxes on initial load
@@ -1625,14 +1676,17 @@
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
-            if (currentHour > BLOCK_HOUR || (currentHour === BLOCK_HOUR && currentMinute >= BLOCK_MINUTE)) {
-                isTimeBlocked = true;
-                console.log("Bloqueo por tiempo activado: Es después de las 5:40 PM.");
-            } else {
-                isTimeBlocked = false;
-                console.log("Bloqueo por tiempo desactivado: Es antes de las 5:40 PM.");
+            const timeConditionMet = (currentHour > BLOCK_HOUR || (currentHour === BLOCK_HOUR && currentMinute >= BLOCK_MINUTE));
+
+            if (timeConditionMet && !isAutoBlockedPermanently) { // If time condition is met AND it's not already permanently blocked by auto-rule
+                globalSettingsRef.set({ isAutoBlockedPermanently: true }, { merge: true }).then(() => {
+                    isAutoBlockedPermanently = true; // Update local state immediately for responsiveness
+                    console.log("Bloqueo automático activado (permanente).");
+                    applyBlockStatus();
+                    updateCountdown(); // Update countdown display
+                }).catch(error => console.error("Error al activar bloqueo automático permanente:", error));
             }
-            applyBlockStatus();
+            // Removed the 'else' to clear it by time. It should only be cleared by password now.
         }
 
         function applyBlockStatus() {
@@ -1643,7 +1697,7 @@
             const autoBlockCheckbox = document.getElementById('auto_block_checkbox');
             const globalManualBlockCheckbox = document.getElementById('global_manual_block_checkbox');
 
-            const shouldBeBlocked = isTimeBlocked || isGlobalManualBlock;
+            const shouldBeBlocked = isGlobalManualBlock || isAutoBlockedPermanently; // Use the persistent auto block flag
             const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
 
             if (agregarPedidoBtn) {
@@ -1668,7 +1722,7 @@
 
             // Actualizar el estado de los checkboxes de bloqueo en el modal de opciones para el administrador
             if (isAdministrator) {
-                if (autoBlockCheckbox) autoBlockCheckbox.checked = isTimeBlocked;
+                if (autoBlockCheckbox) autoBlockCheckbox.checked = isAutoBlockedPermanently; // Reflect persistent state
                 if (globalManualBlockCheckbox) globalManualBlockCheckbox.checked = isGlobalManualBlock;
             }
         }
@@ -1692,6 +1746,32 @@
                     console.error("Error al activar bloqueo inmediato:", error);
                     alert("Error al activar el bloqueo inmediato.");
                     checkbox.checked = false; // Revertir el estado del checkbox en caso de error
+                }
+            }
+        }
+        
+        // New function to handle the auto_block_checkbox change
+        async function toggleAutoBlockCheckbox(checkbox) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                checkbox.checked = isAutoBlockedPermanently; // Revert if not admin
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+
+            if (checkbox.checked) {
+                // If it's already checked (meaning isAutoBlockedPermanently is true), and they try to check it again (no change), do nothing.
+                // If it was unchecked and they tried to check it manually, revert it as it's time activated.
+                // The main purpose is to unblock, so if they try to check, revert.
+                if (!isAutoBlockedPermanently) { // If it's not permanently blocked, but they tried to check it
+                    checkbox.checked = false; // Revert state, as only time can set it
+                }
+            } else { // If trying to uncheck the auto-block (it was checked and they clicked it)
+                if (isAutoBlockedPermanently) { // Only if it's currently permanently blocked
+                    currentPasswordModalTargetCheckbox = checkbox;
+                    showPasswordModal('auto_permanent'); // Trigger password modal for auto_permanent type
+                } else {
+                    // It was already unchecked (not permanently blocked), so doing nothing here
+                    checkbox.checked = false; // Ensure it stays unchecked
                 }
             }
         }
@@ -1723,9 +1803,23 @@
                         }
                         return;
                     }
+                } else if (blockType === 'auto_permanent') { // Handle auto_permanent block type
+                    try {
+                        await globalSettingsRef.set({ isAutoBlockedPermanently: false }, { merge: true });
+                        isAutoBlockedPermanently = false;
+                        console.log("Bloqueo automático permanente deshabilitado globalmente.");
+                    } catch (error) {
+                        console.error("Error al deshabilitar bloqueo automático permanente:", error);
+                        errorMessage.textContent = "Error al deshabilitar el bloqueo automático. Inténtelo de nuevo.";
+                        if (currentPasswordModalTargetCheckbox) {
+                            currentPasswordModalTargetCheckbox.checked = true;
+                        }
+                        return;
+                    }
                 }
                 cerrarModal('password_modal');
                 applyBlockStatus();
+                updateCountdown(); // Update countdown after unblocking
             } else {
                 errorMessage.textContent = "Contraseña incorrecta. Inténtelo de nuevo.";
                 if (currentPasswordModalTargetCheckbox) {
@@ -1932,8 +2026,8 @@
             <span class="close" onclick="cerrarModal('block_options_modal')">&times;</span>
             <h2>Opciones de Bloqueo</h2>
             <div class="form-field">
-                <input type="checkbox" id="auto_block_checkbox" disabled>
-                <label for="auto_block_checkbox">Bloqueo Automático (5:40 p.m. hora Colombia)</label>
+                <input type="checkbox" id="auto_block_checkbox" onchange="toggleAutoBlockCheckbox(this)">
+                <label for="auto_block_checkbox">Bloqueo Automático (5:40 p.m. hora Colombia) - Permanente</label>
             </div>
             <div class="form-field">
                 <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)">
