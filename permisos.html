@@ -319,13 +319,12 @@
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
         console.log("Datos del usuario al inicio:", datosUsuario);
 
-        // Fallback if user data is missing - For testing, you can uncomment one of these:
+        // Fallback if user data is missing - CRITICAL FOR PRODUCTION: This should be handled by a proper login system.
         if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto || !datosUsuario.usuario) {
-            // datosUsuario = { permisos: 'operador', nombreCompleto: 'Operador Test', usuario: 'operador_test_id' };
-            // datosUsuario = { permisos: 'bodeguero', nombreCompleto: 'Bodeguero Test', usuario: 'bodeguero_test_id' };
-            datosUsuario = { permisos: 'administrador', nombreCompleto: 'Admin Test', usuario: 'admin_test_id' };
-            console.warn("Faltan datos de usuario. Usando valores predeterminados para pruebas:", datosUsuario);
-            // It's recommended to have a proper login system for production.
+            alert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, asegúrese de que el usuario esté autenticado correctamente.");
+            // Display a critical error message or redirect to login page
+            document.body.innerHTML = "<h1 style='text-align:center; color:red; margin-top:50px;'>Error Crítico: Datos de usuario no cargados.</h1><p style='text-align:center;'>Por favor, asegúrese de que ha iniciado sesión y que sus permisos están configurados.</p>";
+            throw new Error("Datos de usuario no disponibles."); // Stop script execution
         }
 
         // Global state for permits and filters
@@ -338,7 +337,6 @@
             startDate: '',
             endDate: ''
         };
-        const ADMIN_PASSWORD = "adminpass"; // Password for admin actions (e.g., delete, unsign)
 
         document.addEventListener('DOMContentLoaded', async () => {
             // Simulate user authentication based on __initial_auth_token or anonymous
@@ -379,8 +377,6 @@
             }
 
             // Start real-time listener for permits when the page loads
-            // This will ensure the data is loaded and filtered once the "Ver Solicitudes" modal is opened.
-            // The listener will re-run `applyFilters` when data changes in Firestore.
             startPermitsRealtimeListener();
         });
 
@@ -417,11 +413,6 @@
 
         function closeModal(id) {
             document.getElementById(id).style.display = 'none';
-            // Clear password modal fields on close
-            if (id === 'password_modal') {
-                document.getElementById('password_input').value = '';
-                document.getElementById('password_error').textContent = '';
-            }
             // If the permits modal is closed, clear filters to reset for next open
             if (id === 'view_permits_modal') {
                 document.getElementById('filter_search_term').value = '';
@@ -683,8 +674,13 @@
                     alert("Solo un administrador puede desmarcar la firma del trabajador.");
                     return;
                 }
-                // If admin is unchecking, confirm with password
-                openPasswordModal('unsignWorker', permitId, isChecked);
+                if (!confirm("¿Está seguro de que un administrador quiere desmarcar la firma del trabajador?")) {
+                    document.getElementById(`worker_sign_${permitId}`).checked = true;
+                    return;
+                }
+                const updates = { signedByWorker: false, workerSignatureDate: null, status: 'Pendiente' };
+                await updatePermitInFirestore(permitId, updates);
+
             } else { // Worker or admin is checking
                 if (!window.confirm("¿Está seguro de firmar? Una vez firmado por el trabajador, los Operadores y Bodegueros no podrán modificar el permiso.")) {
                     document.getElementById(`worker_sign_${permitId}`).checked = false;
@@ -706,7 +702,12 @@
                 return;
             }
             if (!isChecked) { // Admin is unchecking
-                openPasswordModal('unsignJefe', permitId, isChecked);
+                if (!confirm("¿Está seguro de que un administrador quiere desmarcar la firma del Jefe Inmediato?")) {
+                    document.getElementById(`jefe_sign_${permitId}`).checked = true;
+                    return;
+                }
+                const updates = { signedByJefe: false, jefeSignatureName: '', jefeSignatureDate: null, status: 'Pendiente' };
+                await updatePermitInFirestore(permitId, updates);
             } else { // Admin is checking
                 const updates = {
                     signedByJefe: true,
@@ -725,7 +726,12 @@
                 return;
             }
             if (!isChecked) { // Admin is unchecking
-                openPasswordModal('unsignRRHH', permitId, isChecked);
+                if (!confirm("¿Está seguro de que un administrador quiere desmarcar la firma de RR. HH?")) {
+                    document.getElementById(`rrhh_sign_${permit.id}`).checked = true;
+                    return;
+                }
+                const updates = { signedByRRHH: false, rrhhSignatureName: '', rrhhSignatureDate: null, status: 'Pendiente' };
+                await updatePermitInFirestore(permitId, updates);
             } else { // Admin is checking
                 const updates = {
                     signedByRRHH: true,
@@ -769,70 +775,6 @@
                 hideLoadingBar();
             }
         }
-
-        // --- Password Modal for Admin Actions ---
-        let passwordModalCallback = null;
-        let passwordModalPermitId = null;
-        let passwordModalIsChecked = null; // Used for checkbox state reversion
-        let passwordModalDenialReason = null; // Used for denial reason
-
-        function openPasswordModal(type, permitId = null, isChecked = null, denialReason = null) {
-            passwordModalCallback = type;
-            passwordModalPermitId = permitId;
-            passwordModalIsChecked = isChecked;
-            passwordModalDenialReason = denialReason;
-            document.getElementById('password_input').value = '';
-            document.getElementById('password_error').textContent = '';
-            showModal('password_modal');
-        }
-
-        async function verifyPassword() {
-            const passwordInput = document.getElementById('password_input');
-            const errorMessage = document.getElementById('password_error');
-            const enteredPassword = passwordInput.value;
-
-            if (enteredPassword === ADMIN_PASSWORD) {
-                closeModal('password_modal');
-                if (passwordModalCallback === 'unsignWorker') {
-                    const updates = { signedByWorker: false, workerSignatureDate: null, status: 'Pendiente' };
-                    await updatePermitInFirestore(passwordModalPermitId, updates);
-                    // No need to manually update checkbox, onSnapshot will handle it
-                } else if (passwordModalCallback === 'unsignJefe') {
-                    const updates = { signedByJefe: false, jefeSignatureName: '', jefeSignatureDate: null, status: 'Pendiente' };
-                    await updatePermitInFirestore(passwordModalPermitId, updates);
-                } else if (passwordModalCallback === 'unsignRRHH') {
-                    const updates = { signedByRRHH: false, rrhhSignatureName: '', rrhhSignatureDate: null, status: 'Pendiente' };
-                    await updatePermitInFirestore(passwordModalPermitId, updates);
-                } else if (passwordModalCallback === 'deletePermit') {
-                    showLoadingBar();
-                    try {
-                        await db.collection('permisos').doc(passwordModalPermitId).delete();
-                        alert("Permiso eliminado correctamente.");
-                    } catch (error) {
-                        console.error("Error al eliminar permiso:", error);
-                        alert("Error al eliminar el permiso.");
-                    } finally {
-                        hideLoadingBar();
-                    }
-                } else if (passwordModalCallback === 'denyPermit') {
-                    const updates = { status: 'Rechazado', denialReason: passwordModalDenialReason };
-                    await updatePermitInFirestore(passwordModalPermitId, updates);
-                }
-            } else {
-                errorMessage.textContent = "Contraseña incorrecta.";
-                // Revert checkbox state if password is wrong for unsign actions
-                if (passwordModalPermitId && passwordModalIsChecked !== null) {
-                    if (passwordModalCallback === 'unsignWorker') {
-                        document.getElementById(`worker_sign_${passwordModalPermitId}`).checked = true;
-                    } else if (passwordModalCallback === 'unsignJefe') {
-                        document.getElementById(`jefe_sign_${passwordModalPermitId}`).checked = true;
-                    } else if (passwordModalCallback === 'unsignRRHH') {
-                        document.getElementById(`rrhh_sign_${passwordModalPermitId}`).checked = true;
-                    }
-                }
-            }
-        }
-
 
         // --- Edit Permit ---
         let currentEditPermitId = null;
@@ -945,8 +887,12 @@
                 return;
             }
 
-            // Confirm with admin password
-            openPasswordModal('denyPermit', permitId, null, reason);
+            if (!confirm("¿Está seguro de que desea negar este permiso?")) {
+                return;
+            }
+
+            const updates = { status: 'Rechazado', denialReason: reason };
+            await updatePermitInFirestore(permitId, updates);
         }
 
         // --- Delete Permit ---
@@ -957,8 +903,16 @@
             }
 
             if (confirm("¿Está seguro de que desea eliminar este permiso? Esta acción no se puede deshacer.")) {
-                // Pass to password modal for confirmation
-                openPasswordModal('deletePermit', permitId);
+                showLoadingBar();
+                try {
+                    await db.collection('permisos').doc(permitId).delete();
+                    alert("Permiso eliminado correctamente.");
+                } catch (error) {
+                    console.error("Error al eliminar permiso:", error);
+                    alert("Error al eliminar el permiso.");
+                } finally {
+                    hideLoadingBar();
+                }
             }
         }
 
@@ -1023,94 +977,115 @@
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF('p', 'mm', 'a4'); // Portrait, millimeters, A4 size
 
-                // Define content for PDF
-                const content = `
-                    <div style="font-family: Arial, sans-serif; font-size: 10pt; padding: 20px;">
-                        <h1 style="text-align: center; font-size: 14pt; margin-bottom: 5px;">SISTEMA DE GESTIÓN DE LA SEGURIDAD Y SALUD EN EL TRABAJO</h1>
-                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 8pt;">
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Código SST - FR 04</strong></td>
-                                <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Fecha Actualización:</strong> 8/02/2021</td>
-                                <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Versión:</strong> 01</td>
-                                <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Pág:</strong> 1 de 1</td>
-                            </tr>
-                        </table>
-                        <h2 style="text-align: center; font-size: 12pt; margin-top: 15px; margin-bottom: 20px;">FORMATO DE SOLICITUD DE PERMISO (ESPECIAL, REMUNERADO, NO REMUNERADO)</h2>
+                // Create a temporary div to render the content for html2canvas
+                const tempDiv = document.createElement('div');
+                tempDiv.style.fontFamily = 'Arial, sans-serif';
+                tempDiv.style.fontSize = '10pt';
+                tempDiv.style.padding = '20px';
+                tempDiv.style.position = 'absolute'; // Position off-screen
+                tempDiv.style.left = '-9999px';
+                tempDiv.style.width = '190mm'; // A4 width minus margins (210mm - 2*10mm)
+                document.body.appendChild(tempDiv);
 
-                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px;"><strong>Nombre del Trabajador:</strong> ${permit.workerName || 'N/A'}</td>
-                                <td style="border: 1px solid #000; padding: 8px;"><strong>Documento:</strong> ${permit.documentId || 'N/A'}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px;"><strong>Celular:</strong> ${permit.cellphone || 'N/A'}</td>
-                                <td style="border: 1px solid #000; padding: 8px;"><strong>Cargo:</strong> ${permit.cargo || 'N/A'}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Jefe Inmediato:</strong> ${permit.immediateBoss || 'N/A'}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Tipo de Permiso:</strong> ${permit.permitType || 'N/A'}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>MOTIVO DEL PERMISO:</strong> ${permit.reason || 'N/A'}</td>
-                            </tr>
-                        </table>
 
-                        <h3 style="font-size: 11pt; margin-top: 20px; margin-bottom: 10px;">Información del Permiso:</h3>
-                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px;"><strong>INICIO:</strong> ${formatDate(permit.startDate)}</td>
-                                <td style="border: 1px solid #000; padding: 8px;"><strong>Finalización:</strong> ${formatDate(permit.endDate)}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px;"><strong>Hora Inicio:</strong> ${formatTime(permit.startTime)}</td>
-                                <td style="border: 1px solid #000; padding: 8px;"><strong>Hora Finalización:</strong> ${formatTime(permit.endTime)}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Tiempo autorizado:</strong> ${permit.timeAuthorized || 'N/A'}</td>
-                            </tr>
-                        </table>
+                tempDiv.innerHTML = `
+                    <h1 style="text-align: center; font-size: 14pt; margin-bottom: 5px;">SISTEMA DE GESTIÓN DE LA SEGURIDAD Y SALUD EN EL TRABAJO</h1>
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 8pt;">
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Código SST - FR 04</strong></td>
+                            <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Fecha Actualización:</strong> 8/02/2021</td>
+                            <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Versión:</strong> 01</td>
+                            <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Pág:</strong> 1 de 1</td>
+                        </tr>
+                    </table>
+                    <h2 style="text-align: center; font-size: 12pt; margin-top: 15px; margin-bottom: 20px;">FORMATO DE SOLICITUD DE PERMISO (ESPECIAL, REMUNERADO, NO REMUNERADO)</h2>
 
-                        <h3 style="font-size: 11pt; margin-top: 20px; margin-bottom: 10px;">Firmas:</h3>
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <tr>
-                                <td style="border: 1px solid #000; padding: 8px; width: 33%;">
-                                    <strong>Firma digital del trabajador:</strong> ${permit.signedByWorker ? 'Firmado' : 'Pendiente'}
-                                    <br><em>${permit.workerSignatureDate ? formatDate(permit.workerSignatureDate) : ''}</em>
-                                </td>
-                                <td style="border: 1px solid #000; padding: 8px; width: 33%;">
-                                    <strong>Firma digital del Jefe Inmediato:</strong> ${permit.signedByJefe ? 'Firmado' : 'Pendiente'}
-                                    <br><em>${permit.jefeSignatureName || ''} ${permit.jefeSignatureDate ? formatDate(permit.jefeSignatureDate) : ''}</em>
-                                </td>
-                                <td style="border: 1px solid #000; padding: 8px; width: 34%;">
-                                    <strong>Firma digital de RR. HH:</strong> ${permit.signedByRRHH ? 'Firmado' : 'Pendiente'}
-                                    <br><em>${permit.rrhhSignatureName || ''} ${permit.rrhhSignatureDate ? formatDate(permit.rrhhSignatureDate) : ''}</em>
-                                </td>
-                            </tr>
-                        </table>
-                        <p style="text-align: right; margin-top: 30px; font-size: 9pt;">Estado del Permiso: <strong>${permit.status || 'N/A'}</strong></p>
-                        ${permit.status === 'Rechazado' && permit.denialReason ? `<p style="text-align: right; margin-top: 5px; font-size: 9pt; color:red;">Motivo de Negación: ${permit.denialReason}</p>` : ''}
-                        <p style="text-align: right; margin-top: 5px; font-size: 8pt;">Fecha de Solicitud: ${formatDate(permit.submissionDate)}</p>
-                    </div>
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px;"><strong>Nombre del Trabajador:</strong> ${permit.workerName || 'N/A'}</td>
+                            <td style="border: 1px solid #000; padding: 8px;"><strong>Documento:</strong> ${permit.documentId || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px;"><strong>Celular:</strong> ${permit.cellphone || 'N/A'}</td>
+                            <td style="border: 1px solid #000; padding: 8px;"><strong>Cargo:</strong> ${permit.cargo || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Jefe Inmediato:</strong> ${permit.immediateBoss || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Tipo de Permiso:</strong> ${permit.permitType || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>MOTIVO DEL PERMISO:</strong> ${permit.reason || 'N/A'}</td>
+                        </tr>
+                    </table>
+
+                    <h3 style="font-size: 11pt; margin-top: 20px; margin-bottom: 10px;">Información del Permiso:</h3>
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px;"><strong>INICIO:</strong> ${formatDate(permit.startDate)}</td>
+                            <td style="border: 1px solid #000; padding: 8px;"><strong>Finalización:</strong> ${formatDate(permit.endDate)}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px;"><strong>Hora Inicio:</strong> ${formatTime(permit.startTime)}</td>
+                            <td style="border: 1px solid #000; padding: 8px;"><strong>Hora Finalización:</strong> ${formatTime(permit.endTime)}</td>
+                        </tr>
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Tiempo autorizado:</strong> ${permit.timeAuthorized || 'N/A'}</td>
+                        </tr>
+                    </table>
+
+                    <h3 style="font-size: 11pt; margin-top: 20px; margin-bottom: 10px;">Firmas:</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="border: 1px solid #000; padding: 8px; width: 33%;">
+                                <strong>Firma digital del trabajador:</strong> ${permit.signedByWorker ? 'Firmado' : 'Pendiente'}
+                                <br><em>${permit.workerSignatureDate ? formatDate(permit.workerSignatureDate) : ''}</em>
+                            </td>
+                            <td style="border: 1px solid #000; padding: 8px; width: 33%;">
+                                <strong>Firma digital del Jefe Inmediato:</strong> ${permit.signedByJefe ? 'Firmado' : 'Pendiente'}
+                                <br><em>${permit.jefeSignatureName || ''} ${permit.jefeSignatureDate ? formatDate(permit.jefeSignatureDate) : ''}</em>
+                            </td>
+                            <td style="border: 1px solid #000; padding: 8px; width: 34%;">
+                                <strong>Firma digital de RR. HH:</strong> ${permit.signedByRRHH ? 'Firmado' : 'Pendiente'}
+                                <br><em>${permit.rrhhSignatureName || ''} ${permit.rrhhSignatureDate ? formatDate(permit.rrhhSignatureDate) : ''}</em>
+                            </td>
+                        </tr>
+                    </table>
+                    <p style="text-align: right; margin-top: 30px; font-size: 9pt;">Estado del Permiso: <strong>${permit.status || 'N/A'}</strong></p>
+                    ${permit.status === 'Rechazado' && permit.denialReason ? `<p style="text-align: right; margin-top: 5px; font-size: 9pt; color:red;">Motivo de Negación: ${permit.denialReason}</p>` : ''}
+                    <p style="text-align: right; margin-top: 5px; font-size: 8pt;">Fecha de Solicitud: ${formatDate(permit.submissionDate)}</p>
                 `;
 
-                // Add HTML content to PDF using html2canvas and addImage
-                doc.html(content, {
-                    callback: function (doc) {
-                        doc.save(`Permiso_${permit.workerName.replace(/\s/g, '_')}_${permit.id}.pdf`);
-                        alert("Permiso generado en PDF con éxito.");
-                    },
-                    x: 10,
-                    y: 10,
-                    html2canvas: {
-                        scale: 0.7 // Adjust scale for better fit on A4
-                    },
-                    autoPaging: 'text'
-                });
+                // Use html2canvas to convert the temporary div to a canvas
+                const canvas = await html2canvas(tempDiv, { scale: 2 }); // Higher scale for better resolution
+
+                // Remove the temporary div
+                document.body.removeChild(tempDiv);
+
+                const imgData = canvas.toDataURL('image/png');
+                const imgWidth = 190; // Image width in mm (A4 width - 2*10mm margin)
+                const pageHeight = doc.internal.pageSize.height;
+                const imgHeight = canvas.height * imgWidth / canvas.width;
+                let heightLeft = imgHeight;
+
+                let position = 0;
+
+                doc.addImage(imgData, 'PNG', 10, position + 10, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    doc.addPage();
+                    doc.addImage(imgData, 'PNG', 10, position + 10, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+
+                doc.save(`Permiso_${permit.workerName.replace(/\s/g, '_')}_${permit.id}.pdf`);
+                alert("Permiso generado en PDF con éxito.");
             } catch (error) {
                 console.error("Error al imprimir PDF:", error);
-                alert("Error al generar el PDF del permiso.");
+                alert("Error al generar el PDF del permiso. Asegúrese de que el permiso contenga todos los datos necesarios.");
             } finally {
                 hideLoadingBar();
             }
@@ -1308,21 +1283,6 @@
 
                 <button type="submit">Guardar Cambios</button>
             </form>
-        </div>
-    </div>
-
-    <!-- Password Confirmation Modal -->
-    <div id="password_modal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal('password_modal')">&times;</span>
-            <h2>Confirmar Contraseña de Administrador</h2>
-            <p>Por favor, ingrese la contraseña de administrador para proceder.</p>
-            <div class="form-field">
-                <label for="password_input">Contraseña:</label>
-                <input type="password" id="password_input" placeholder="Contraseña de Admin">
-                <p id="password_error" style="color: red; font-size: 0.8em; margin-top: 5px;"></p>
-            </div>
-            <button type="button" onclick="verifyPassword()">Confirmar</button>
         </div>
     </div>
 </body>
