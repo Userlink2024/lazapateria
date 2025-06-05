@@ -26,7 +26,7 @@
             box-sizing: border-box; /* Include padding in width */
         }
         h1, h2 {
-            color: #4CAF50;
+            color: #00BFFF; /* Changed from green to light blue */
             text-align: center;
         }
         h1 {
@@ -55,11 +55,11 @@
             box-sizing: border-box; /* Include padding and border in element's total width and height */
         }
         input:focus, textarea:focus, select:focus, button:focus {
-            border-color: #4CAF50;
+            border-color: #00BFFF; /* Changed from green to light blue */
             outline: none;
         }
         button {
-            background-color: #4CAF50;
+            background-color: #00BFFF; /* Changed from green to light blue */
             color: white;
             cursor: pointer;
             margin-top: 10px;
@@ -70,13 +70,20 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
         button:hover {
-            background-color: #45a049;
+            background-color: #009ACD; /* Darker shade of light blue for hover */
             box-shadow: 0 3px 6px rgba(0,0,0,0.3);
         }
         button:disabled {
             background-color: #ccc;
             cursor: not-allowed;
             box-shadow: none;
+        }
+        /* Specific button for Deny */
+        button.deny-button {
+            background-color: #dc3545; /* Red for deny button */
+        }
+        button.deny-button:hover {
+            background-color: #c82333; /* Darker red on hover */
         }
 
         /* Modals */
@@ -97,11 +104,17 @@
             padding: 25px;
             border-radius: 8px;
             width: 90%;
-            max-width: 500px;
+            max-width: 500px; /* Default for small modals */
             box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
             position: relative;
             max-height: 90vh;
             overflow-y: auto;
+        }
+        /* Specific styling for the large permits modal */
+        #view_permits_modal .modal-content {
+            max-width: 95%; /* Wider for permit list */
+            width: 95%; /* Use 95% of viewport width */
+            padding: 15px; /* Slightly less padding for more content space */
         }
         .close {
             color: #aaa;
@@ -133,7 +146,7 @@
             margin: 5px 0;
         }
         .permit-record strong {
-            color: #4CAF50;
+            color: #00BFFF; /* Changed from green to light blue */
         }
         .permit-record .buttons {
             display: flex;
@@ -160,7 +173,7 @@
             color: #333;
         }
         .status-autorizado {
-            background-color: #28a745; /* Verde */
+            background-color: #66CDAA; /* Changed from green to light blue-green */
             color: white;
         }
         .status-rechazado {
@@ -193,7 +206,7 @@
             font-weight: bold;
         }
         .signature-details.signed {
-            color: #28a745; /* Green for signed */
+            color: #00BFFF; /* Changed from green to light blue */
         }
         .signature-details.pending {
             color: #ffc107; /* Yellow for pending */
@@ -228,7 +241,7 @@
         #loading-bar-fill {
             height: 25px;
             width: 0%;
-            background-color: #4CAF50;
+            background-color: #00BFFF; /* Changed from green to light blue */
             text-align: center;
             line-height: 25px;
             color: white;
@@ -253,6 +266,11 @@
             }
             .modal-content {
                 padding: 15px;
+            }
+            #view_permits_modal .modal-content {
+                max-width: 98%; /* Even wider for mobile */
+                width: 98%;
+                padding: 10px;
             }
             .filters-container {
                 flex-direction: column;
@@ -298,10 +316,13 @@
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
         console.log("Datos del usuario al inicio:", datosUsuario);
 
-        // Fallback if user data is missing
+        // Fallback if user data is missing - For testing, you can uncomment one of these:
         if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto || !datosUsuario.usuario) {
-            datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
-            console.error("Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
+            // datosUsuario = { permisos: 'operador', nombreCompleto: 'Operador Test', usuario: 'operador_test_id' };
+            // datosUsuario = { permisos: 'bodeguero', nombreCompleto: 'Bodeguero Test', usuario: 'bodeguero_test_id' };
+            datosUsuario = { permisos: 'administrador', nombreCompleto: 'Admin Test', usuario: 'admin_test_id' };
+            console.warn("Faltan datos de usuario. Usando valores predeterminados para pruebas:", datosUsuario);
+            // It's recommended to have a proper login system for production.
         }
 
         // Global state for permits and filters
@@ -314,7 +335,7 @@
             startDate: '',
             endDate: ''
         };
-        const ADMIN_PASSWORD = "adminpass"; // Password for admin actions
+        const ADMIN_PASSWORD = "adminpass"; // Password for admin actions (e.g., delete, unsign)
 
         document.addEventListener('DOMContentLoaded', async () => {
             // Simulate user authentication based on __initial_auth_token or anonymous
@@ -341,16 +362,23 @@
             document.getElementById('filter_start_date').addEventListener('change', applyFilters);
             document.getElementById('filter_end_date').addEventListener('change', applyFilters);
 
-            // Set today's date as default for start and end date inputs
+            // Set today's date as default for start and end date inputs in the creation form
             const today = new Date().toISOString().slice(0, 10);
             document.getElementById('start_date').value = today;
             document.getElementById('end_date').value = today;
+            updateTimeAuthorized(); // Calculate initial time authorized
 
-            // Populate initial permit list
+            // Adjust visibility of Export to Excel button based on user role
+            if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+                document.getElementById('export_excel_btn').style.display = 'block';
+            } else {
+                document.getElementById('export_excel_btn').style.display = 'none';
+            }
+
+            // Start real-time listener for permits when the page loads
+            // This will ensure the data is loaded and filtered once the "Ver Solicitudes" modal is opened.
+            // The listener will re-run `applyFilters` when data changes in Firestore.
             startPermitsRealtimeListener();
-
-            // Setup real-time listeners for user data (if roles were stored in Firestore)
-            // For now, we're relying on localStorage datosUsuario.
         });
 
         // --- Utility Functions ---
@@ -390,6 +418,15 @@
             if (id === 'password_modal') {
                 document.getElementById('password_input').value = '';
                 document.getElementById('password_error').textContent = '';
+            }
+            // If the permits modal is closed, clear filters to reset for next open
+            if (id === 'view_permits_modal') {
+                document.getElementById('filter_search_term').value = '';
+                document.getElementById('filter_permit_type').value = 'all';
+                document.getElementById('filter_status').value = 'all';
+                document.getElementById('filter_start_date').value = '';
+                document.getElementById('filter_end_date').value = '';
+                applyFilters(); // Re-apply filters to reset display
             }
         }
 
@@ -497,7 +534,8 @@
                 signedByRRHH: false,
                 rrhhSignatureName: '',
                 rrhhSignatureDate: null,
-                status: 'Pendiente' // Initial status
+                status: 'Pendiente', // Initial status
+                denialReason: '' // New field for denial reason
             };
 
             try {
@@ -587,10 +625,12 @@
                 const isJefeSigned = permit.signedByJefe;
                 const isRrhhSigned = permit.signedByRRHH;
 
-                // Determine edit/delete button state
+                // Determine edit/deny/delete button state
                 const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
                 const hasAnySignature = isWorkerSigned || isJefeSigned || isRrhhSigned;
-                const canEdit = isAdministrator || !hasAnySignature; // Admins can always edit
+                const canEdit = isAdministrator || (!hasAnySignature && permit.status !== 'Autorizado' && permit.status !== 'Rechazado'); // Admins can always edit
+
+                const canDeny = isAdministrator && permit.status !== 'Autorizado' && permit.status !== 'Rechazado';
 
                 permitDiv.innerHTML = `
                     <p><strong>Trabajador:</strong> ${permit.workerName}</p>
@@ -598,6 +638,7 @@
                     <p><strong>Motivo:</strong> ${permit.reason}</p>
                     <p><strong>Periodo:</strong> ${formatDate(permit.startDate)} ${formatTime(permit.startTime)} - ${formatDate(permit.endDate)} ${formatTime(permit.endTime)}</p>
                     <p><strong>Tiempo Autorizado:</strong> ${permit.timeAuthorized}</p>
+                    ${permit.status === 'Rechazado' && permit.denialReason ? `<p style="color:red; font-weight:bold;">Motivo de Negación: ${permit.denialReason}</p>` : ''}
                     <div class="signature-section">
                         <h4>Firmas:</h4>
                         <div class="signature-item">
@@ -621,6 +662,7 @@
                     </div>
                     <div class="buttons">
                         <button onclick="openEditPermitModal('${permit.id}')" ${!canEdit ? 'disabled' : ''}>Editar</button>
+                        ${isAdministrator ? `<button class="deny-button" onclick="denyPermit('${permit.id}')" ${!canDeny ? 'disabled' : ''}>Negar</button>` : ''}
                         <button onclick="deletePermit('${permit.id}')" ${!isAdministrator ? 'disabled' : ''}>Eliminar</button>
                         <button onclick="printPermitToPDF('${permit.id}')">Imprimir PDF</button>
                     </div>
@@ -705,6 +747,13 @@
                     if (updatedPermit.signedByWorker && updatedPermit.signedByJefe && updatedPermit.signedByRRHH) {
                         newStatus = 'Autorizado';
                     }
+                    // If denied, it overrides other statuses
+                    if (updatedPermit.status === 'Rechazado' && !updates.status) { // Check if it was already denied and not explicitly being changed
+                        newStatus = 'Rechazado';
+                    } else if (updates.status) { // If status is explicitly being set
+                        newStatus = updates.status;
+                    }
+
                     if (updatedPermit.status !== newStatus) {
                         await permitRef.update({ status: newStatus });
                     }
@@ -721,12 +770,14 @@
         // --- Password Modal for Admin Actions ---
         let passwordModalCallback = null;
         let passwordModalPermitId = null;
-        let passwordModalIsChecked = null;
+        let passwordModalIsChecked = null; // Used for checkbox state reversion
+        let passwordModalDenialReason = null; // Used for denial reason
 
-        function openPasswordModal(type, permitId = null, isChecked = null) {
+        function openPasswordModal(type, permitId = null, isChecked = null, denialReason = null) {
             passwordModalCallback = type;
             passwordModalPermitId = permitId;
             passwordModalIsChecked = isChecked;
+            passwordModalDenialReason = denialReason;
             document.getElementById('password_input').value = '';
             document.getElementById('password_error').textContent = '';
             showModal('password_modal');
@@ -742,19 +793,27 @@
                 if (passwordModalCallback === 'unsignWorker') {
                     const updates = { signedByWorker: false, workerSignatureDate: null, status: 'Pendiente' };
                     await updatePermitInFirestore(passwordModalPermitId, updates);
-                    document.getElementById(`worker_sign_${passwordModalPermitId}`).checked = false; // Ensure checkbox is unchecked
+                    // No need to manually update checkbox, onSnapshot will handle it
                 } else if (passwordModalCallback === 'unsignJefe') {
                     const updates = { signedByJefe: false, jefeSignatureName: '', jefeSignatureDate: null, status: 'Pendiente' };
                     await updatePermitInFirestore(passwordModalPermitId, updates);
-                    document.getElementById(`jefe_sign_${passwordModalPermitId}`).checked = false; // Ensure checkbox is unchecked
                 } else if (passwordModalCallback === 'unsignRRHH') {
                     const updates = { signedByRRHH: false, rrhhSignatureName: '', rrhhSignatureDate: null, status: 'Pendiente' };
                     await updatePermitInFirestore(passwordModalPermitId, updates);
-                    document.getElementById(`rrhh_sign_${passwordModalPermitId}`).checked = false; // Ensure checkbox is unchecked
                 } else if (passwordModalCallback === 'deletePermit') {
-                    // Actual delete logic after password verification
-                    await db.collection('permisos').doc(passwordModalPermitId).delete();
-                    alert("Permiso eliminado correctamente.");
+                    showLoadingBar();
+                    try {
+                        await db.collection('permisos').doc(passwordModalPermitId).delete();
+                        alert("Permiso eliminado correctamente.");
+                    } catch (error) {
+                        console.error("Error al eliminar permiso:", error);
+                        alert("Error al eliminar el permiso.");
+                    } finally {
+                        hideLoadingBar();
+                    }
+                } else if (passwordModalCallback === 'denyPermit') {
+                    const updates = { status: 'Rechazado', denialReason: passwordModalDenialReason };
+                    await updatePermitInFirestore(passwordModalPermitId, updates);
                 }
             } else {
                 errorMessage.textContent = "Contraseña incorrecta.";
@@ -788,10 +847,11 @@
                 const permit = docSnap.data();
 
                 const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
-                const hasAnySignature = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH;
+                // A permit can't be edited by operator/bodeguero if any signature exists OR if it's already authorized/denied
+                const hasAnySignatureOrFinalStatus = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH || permit.status === 'Autorizado' || permit.status === 'Rechazado';
 
-                if (!isAdministrator && hasAnySignature) {
-                    alert("Este permiso ya ha sido firmado y no puede ser modificado por un Operador o Bodeguero.");
+                if (!isAdministrator && hasAnySignatureOrFinalStatus) {
+                    alert("Este permiso ya ha sido firmado o su estado es final y no puede ser modificado por un Operador o Bodeguero.");
                     return;
                 }
 
@@ -809,11 +869,11 @@
                 document.getElementById('edit_end_time').value = permit.endTime;
                 document.getElementById('edit_time_authorized').value = permit.timeAuthorized;
 
-                // Disable fields if not admin and already signed
+                // Disable fields if not admin and already signed/final status
                 const editFields = ['edit_worker_name', 'edit_document_id', 'edit_cellphone', 'edit_cargo', 'edit_immediate_boss', 'edit_permit_type', 'edit_reason', 'edit_start_date', 'edit_end_date', 'edit_start_time', 'edit_end_time'];
                 editFields.forEach(fieldId => {
                     const field = document.getElementById(fieldId);
-                    if (field) field.disabled = !isAdministrator && hasAnySignature;
+                    if (field) field.disabled = !isAdministrator && hasAnySignatureOrFinalStatus;
                 });
                 
                 showModal('edit_permit_modal');
@@ -833,10 +893,10 @@
             const permitRef = db.collection('permisos').doc(currentEditPermitId);
             const docSnap = await permitRef.get();
             const permit = docSnap.data();
-            const hasAnySignature = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH;
+            const hasAnySignatureOrFinalStatus = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH || permit.status === 'Autorizado' || permit.status === 'Rechazado';
 
-            if (!isAdministrator && hasAnySignature) {
-                alert("Este permiso ya ha sido firmado y no puede ser modificado por un Operador o Bodeguero.");
+            if (!isAdministrator && hasAnySignatureOrFinalStatus) {
+                alert("Este permiso ya ha sido firmado o su estado es final y no puede ser modificado por un Operador o Bodeguero.");
                 hideLoadingBar();
                 closeModal('edit_permit_modal');
                 return;
@@ -867,6 +927,23 @@
             } finally {
                 hideLoadingBar();
             }
+        }
+
+        // --- Deny Permit ---
+        async function denyPermit(permitId) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Solo un administrador puede negar permisos.");
+                return;
+            }
+
+            const reason = prompt("Ingrese el motivo de la negación del permiso:");
+            if (reason === null || reason.trim() === '') {
+                alert("Debe ingresar un motivo para negar el permiso.");
+                return;
+            }
+
+            // Confirm with admin password
+            openPasswordModal('denyPermit', permitId, null, reason);
         }
 
         // --- Delete Permit ---
@@ -912,7 +989,8 @@
                         "Firma Trabajador": permit.signedByWorker ? `Sí (${permit.workerSignatureDate ? formatDate(permit.workerSignatureDate) : 'N/A'})` : 'No',
                         "Firma Jefe": permit.signedByJefe ? `Sí (${permit.jefeSignatureName} - ${permit.jefeSignatureDate ? formatDate(permit.jefeSignatureDate) : 'N/A'})` : 'No',
                         "Firma RR.HH": permit.signedByRRHH ? `Sí (${permit.rrhhSignatureName} - ${permit.rrhhSignatureDate ? formatDate(permit.rrhhSignatureDate) : 'N/A'})` : 'No',
-                        "Estado": permit.status
+                        "Estado": permit.status,
+                        "Motivo Negación": permit.denialReason || 'N/A' // Include denial reason
                     };
                 });
 
@@ -1009,6 +1087,7 @@
                             </tr>
                         </table>
                         <p style="text-align: right; margin-top: 30px; font-size: 9pt;">Estado del Permiso: <strong>${permit.status || 'N/A'}</strong></p>
+                        ${permit.status === 'Rechazado' && permit.denialReason ? `<p style="text-align: right; margin-top: 5px; font-size: 9pt; color:red;">Motivo de Negación: ${permit.denialReason}</p>` : ''}
                         <p style="text-align: right; margin-top: 5px; font-size: 8pt;">Fecha de Solicitud: ${formatDate(permit.submissionDate)}</p>
                     </div>
                 `;
@@ -1105,8 +1184,20 @@
 
         <hr style="margin: 40px 0; border: none; border-top: 1px dashed #ccc;">
 
-        <!-- Listado y Gestión de Permisos -->
-        <section>
+        <!-- Button to open Permits Management Modal -->
+        <button onclick="showModal('view_permits_modal')" style="display: block; margin: 20px auto;">Ver Solicitudes</button>
+
+    </div>
+
+    <!-- Loading Bar -->
+    <div id="loading-bar">
+        <div id="loading-bar-fill">0%</div>
+    </div>
+
+    <!-- Permits Management Modal (now a large modal) -->
+    <div id="view_permits_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('view_permits_modal')">&times;</span>
             <h2>Gestión de Permisos</h2>
             <div class="filters-container">
                 <div class="form-field">
@@ -1143,17 +1234,12 @@
                 <button onclick="document.getElementById('filter_search_term').value = ''; document.getElementById('filter_permit_type').value = 'all'; document.getElementById('filter_status').value = 'all'; document.getElementById('filter_start_date').value = ''; document.getElementById('filter_end_date').value = ''; applyFilters();">Limpiar Filtros</button>
             </div>
             
-            <button onclick="exportPermitsToExcel()" id="export_excel_btn" style="margin-bottom: 20px; display: none;">Exportar a Excel</button>
+            <button onclick="exportPermitsToExcel()" id="export_excel_btn" style="margin-bottom: 20px;">Exportar a Excel</button>
 
             <div id="permit_list">
                 <p>Cargando permisos...</p>
             </div>
-        </section>
-    </div>
-
-    <!-- Loading Bar -->
-    <div id="loading-bar">
-        <div id="loading-bar-fill">0%</div>
+        </div>
     </div>
 
     <!-- Edit Permit Modal -->
@@ -1236,14 +1322,5 @@
             <button type="button" onclick="verifyPassword()">Confirmar</button>
         </div>
     </div>
-
-    <script>
-        // Adjust visibility of Export to Excel button based on user role
-        if (datosUsuario.permisos.toLowerCase() === 'administrador') {
-            document.getElementById('export_excel_btn').style.display = 'block';
-        } else {
-            document.getElementById('export_excel_btn').style.display = 'none';
-        }
-    </script>
 </body>
 </html>
