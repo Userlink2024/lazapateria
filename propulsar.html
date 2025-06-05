@@ -316,7 +316,7 @@
             margin-bottom: 30px;
             color: #00BFFF;
         }
-        #login-form-box input[type="text"], /* Cambiado de email a text */
+        #login-form-box input[type="text"],
         #login-form-box input[type="password"],
         #change-password-box input[type="password"],
         #change-password-box input[type="text"] {
@@ -620,8 +620,8 @@
             <h2>Cambiar Contraseña</h2>
             <form id="change-password-form" onsubmit="handleChangePassword(event)">
                 <div class="form-field">
-                    <label for="cp_username">Nombre de Usuario (Correo Electrónico de la cuenta):</label>
-                    <input type="text" id="cp_username" readonly> <!-- Se rellena automáticamente con el correo del usuario loggeado -->
+                    <label for="cp_username_display">Nombre de Usuario de la cuenta:</label>
+                    <input type="text" id="cp_username_display" readonly> <!-- Se rellena automáticamente con el nombre de usuario -->
                 </div>
                 <div class="form-field">
                     <label for="cp_current_password">Contraseña Actual:</label>
@@ -645,13 +645,23 @@
     <!-- Firebase SDKs y otras bibliotecas -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <!-- NOTA: firebase-auth-compat.js NO ES USADO para el login/logout/cambio de contraseña directo con Firestore -->
+    <!-- <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script> -->
     <!-- XLSX para exportar a Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <!-- jsPDF y html2canvas para generar PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script>
+        // ADVERTENCIA DE SEGURIDAD EXTREMADAMENTE IMPORTANTE:
+        // ALMACENAR CONTRASEÑAS EN TEXTO PLANO EN FIRESTORE ES UNA VULNERABILIDAD CRÍTICA.
+        // Este código se ha modificado bajo tu instrucción explícita de ignorar las mejores prácticas de seguridad
+        // para la gestión de contraseñas, debido a que tu base de datos ya almacena contraseñas en texto plano.
+        // PARA CUALQUIER SISTEMA EN PRODUCCIÓN O CON DATOS SENSIBLES, DEBERÍAS UTILIZAR
+        // FIREBASE AUTHENTICATION CORRECTAMENTE (que maneja las contraseñas de forma segura)
+        // Y NO ALMACENARLAS EN TU BASE DE DATOS DE FIRESTORE.
+        // EL DESARROLLADOR ES RESPONSABLE DE LA SEGURIDAD DE SUS APLICACIONES.
+
         // Inicialización de Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
@@ -665,7 +675,8 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const auth = firebase.auth();
+        // Ya no usamos firebase.auth() para el login, logout o cambio de contraseña directos.
+        // const auth = firebase.auth();
         console.log("Firebase configurado correctamente.");
 
         let datosUsuario = null; // Se poblará después del inicio de sesión exitoso con datos de Firestore
@@ -682,112 +693,103 @@
         };
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // Escucha cambios en el estado de autenticación de Firebase
-            auth.onAuthStateChanged(async (user) => {
-                const loginContainer = document.getElementById('login-container');
-                const appContainer = document.getElementById('app-container');
-                const currentUserInfoSpan = document.getElementById('current-user-info');
+            // Ya no dependemos de auth.onAuthStateChanged para el login.
+            // La visibilidad de la UI se controlará manualmente.
+            const loginContainer = document.getElementById('login-container');
+            const appContainer = document.getElementById('app-container');
 
-                if (user) {
-                    console.log("Usuario autenticado:", user.uid);
-                    loginContainer.style.display = 'none'; // Oculta el formulario de login
-                    appContainer.style.display = 'block'; // Muestra el contenido de la aplicación
+            // Al cargar, siempre mostramos el login y ocultamos la app.
+            loginContainer.style.display = 'flex';
+            appContainer.style.display = 'none';
 
-                    // Carga los detalles del usuario desde Firestore (ej. rol, nombre completo)
-                    try {
-                        const userDoc = await db.collection('users').doc(user.uid).get();
-                        if (userDoc.exists) {
-                            datosUsuario = userDoc.data();
-                            datosUsuario.usuario = user.uid; // Añade el UID de Firebase al objeto datosUsuario
-                            console.log("Datos de usuario cargados de Firestore:", datosUsuario);
+            // Configuramos los listeners de filtro una vez.
+            document.getElementById('filter_worker_name').addEventListener('change', applyFilters);
+            document.getElementById('filter_permit_type').addEventListener('change', applyFilters);
+            document.getElementById('filter_status').addEventListener('change', applyFilters);
+            document.getElementById('filter_start_date').addEventListener('change', applyFilters);
+            document.getElementById('filter_end_date').addEventListener('change', applyFilters);
 
-                            currentUserInfoSpan.textContent = `Bienvenido, ${datosUsuario.nombreCompleto || user.email}`;
-                            document.getElementById('worker_name').value = datosUsuario.nombreCompleto;
-                            // Configura el campo del jefe inmediato como "Juan Carlos Barrios" y lo hace de solo lectura
-                            document.getElementById('immediate_boss').value = "Juan Carlos Barrios";
-                            document.getElementById('immediate_boss').readOnly = true;
-
-                            // Ajusta la visibilidad del botón "Exportar a Excel" según el rol del usuario
-                            if (datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
-                                document.getElementById('export_excel_btn').style.display = 'block';
-                            } else {
-                                document.getElementById('export_excel_btn').style.display = 'none';
-                            }
-
-                            // Inicializa filtros y el listener de permisos en tiempo real
-                            document.getElementById('filter_worker_name').addEventListener('change', applyFilters);
-                            document.getElementById('filter_permit_type').addEventListener('change', applyFilters);
-                            document.getElementById('filter_status').addEventListener('change', applyFilters);
-                            document.getElementById('filter_start_date').addEventListener('change', applyFilters);
-                            document.getElementById('filter_end_date').addEventListener('change', applyFilters);
-
-                            // Establece la fecha actual como valor por defecto para las fechas en el formulario de creación
-                            const today = new Date().toISOString().slice(0, 10);
-                            document.getElementById('start_date').value = today;
-                            document.getElementById('end_date').value = today;
-                            updateTimeAuthorized();
-
-                            startPermitsRealtimeListener();
-
-                        } else {
-                            console.warn("Documento de usuario no encontrado en Firestore para UID:", user.uid);
-                            currentUserInfoSpan.textContent = `Bienvenido, ${user.email} (Rol no definido)`;
-                            // Si no se encuentra el documento del usuario, cierra la sesión para evitar acceso no autorizado a las funciones de la aplicación
-                            handleLogout();
-                        }
-                    } catch (error) {
-                        console.error("Error al cargar datos del usuario desde Firestore:", error);
-                        // No usar alert(), usar modal personalizado
-                        document.getElementById('login-error-message').textContent = 'Error al cargar los datos del usuario. Por favor, intente de nuevo.';
-                        handleLogout(); // Forzar cierre de sesión en caso de error
-                    }
-
-                } else {
-                    console.log("Ningún usuario autenticado.");
-                    loginContainer.style.display = 'flex'; // Muestra el formulario de login
-                    appContainer.style.display = 'none'; // Oculta el contenido de la aplicación
-                    datosUsuario = null; // Limpia los datos del usuario
-                    if (permitsListenerUnsubscribe) {
-                        permitsListenerUnsubscribe(); // Desvincula el listener si el usuario cierra sesión
-                    }
-                }
-            });
+            // Establece la fecha actual como valor por defecto para las fechas en el formulario de creación
+            const today = new Date().toISOString().slice(0, 10);
+            document.getElementById('start_date').value = today;
+            document.getElementById('end_date').value = today;
+            updateTimeAuthorized();
         });
 
-        // --- Funciones de Autenticación ---
+        // Función para mostrar mensajes al usuario
+        function showUserMessage(elementId, message, color = 'red') {
+            const messageElement = document.getElementById(elementId);
+            if (messageElement) {
+                messageElement.textContent = message;
+                messageElement.style.color = color;
+                // Reinicia el temporizador si el mensaje ya está visible
+                clearTimeout(messageElement.dataset.timerId);
+                const timerId = setTimeout(() => {
+                    messageElement.textContent = '';
+                }, 5000); // El mensaje desaparece después de 5 segundos
+                messageElement.dataset.timerId = timerId;
+            }
+        }
+
+        // --- Funciones de Autenticación Personalizadas (con Firestore) ---
         async function handleLogin(event) {
             event.preventDefault();
-            const username = document.getElementById('login_username').value;
+            const username = document.getElementById('login_username').value.trim();
             const password = document.getElementById('login_password').value;
             const errorMessageDiv = document.getElementById('login-error-message');
             errorMessageDiv.textContent = ''; // Limpia el error anterior
 
-            // Construir el "email" para Firebase usando el nombre de usuario
-            // Asegúrate de que este dominio coincida con cómo configuras los usuarios en Firebase Auth
-            const emailForFirebase = `${username}@lazapateria.com`;
+            if (username === '' || password === '') {
+                showUserMessage('login-error-message', 'Por favor, ingrese su nombre de usuario y contraseña.');
+                return;
+            }
 
+            showLoadingBar();
             try {
-                showLoadingBar();
-                await auth.signInWithEmailAndPassword(emailForFirebase, password);
-                // El listener onAuthStateChanged se encargará de actualizar la UI
-                // No usar alert() aquí, el listener ya manejará el éxito
-            } catch (error) {
-                console.error("Error de inicio de sesión:", error);
-                let message = "Error al iniciar sesión.";
-                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-email') {
-                    // Combinar user-not-found y wrong-password e invalid-email para dar un mensaje genérico por seguridad
-                    message = "Nombre de usuario o contraseña incorrectos. Por favor, verifique sus credenciales.";
-                } else if (error.code === 'auth/too-many-requests') {
-                    message = "Demasiados intentos fallidos. Intente de nuevo más tarde.";
+                // Buscamos el usuario en la colección 'users' por el campo 'usuario' y 'contraseña'
+                const usersRef = db.collection('users');
+                const querySnapshot = await usersRef
+                    .where('usuario', '==', username)
+                    .where('contraseña', '==', password) // ADVERTENCIA: Contraseña en texto plano
+                    .limit(1)
+                    .get();
+
+                if (!querySnapshot.empty) {
+                    const userDoc = querySnapshot.docs[0];
+                    datosUsuario = userDoc.data();
+                    datosUsuario.uid = userDoc.id; // Asignamos el ID del documento de Firestore como UID para la aplicación
+
+                    console.log("Usuario autenticado con Firestore:", datosUsuario);
+
+                    const currentUserInfoSpan = document.getElementById('current-user-info');
+                    currentUserInfoSpan.textContent = `Bienvenido, ${datosUsuario.nombreCompleto || datosUsuario.usuario}`;
+                    document.getElementById('worker_name').value = datosUsuario.nombreCompleto || '';
+                    document.getElementById('immediate_boss').value = "Juan Carlos Barrios";
+                    document.getElementById('immediate_boss').readOnly = true;
+
+                    if (datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
+                        document.getElementById('export_excel_btn').style.display = 'block';
+                    } else {
+                        document.getElementById('export_excel_btn').style.display = 'none';
+                    }
+
+                    document.getElementById('login-container').style.display = 'none';
+                    document.getElementById('app-container').style.display = 'block';
+
+                    startPermitsRealtimeListener(); // Inicia el listener de permisos
+
+                } else {
+                    showUserMessage('login-error-message', 'Nombre de usuario o contraseña incorrectos. Por favor, verifique sus credenciales.');
                 }
-                errorMessageDiv.textContent = message;
+            } catch (error) {
+                console.error("Error de inicio de sesión personalizado:", error);
+                showUserMessage('login-error-message', 'Ocurrió un error al intentar iniciar sesión. Intente de nuevo más tarde o contacte al administrador.', 'red');
             } finally {
                 hideLoadingBar();
             }
         }
 
         async function handleLogout() {
-            // Utiliza un modal personalizado o un mensaje en la UI para la confirmación
             const confirmed = await new Promise(resolve => {
                 const logoutConfirmDiv = document.createElement('div');
                 logoutConfirmDiv.style.position = 'fixed';
@@ -823,17 +825,20 @@
                 return;
             }
 
+            showLoadingBar();
             try {
-                showLoadingBar();
-                await auth.signOut();
-                // El listener onAuthStateChanged se encargará de actualizar la UI
-                // No usar alert() aquí, el listener ya manejará el éxito
-                // Limpiar el mensaje de error/éxito del login después de cerrar sesión
-                document.getElementById('login-error-message').textContent = '';
+                datosUsuario = null; // Limpiamos los datos del usuario
+                if (permitsListenerUnsubscribe) {
+                    permitsListenerUnsubscribe(); // Detenemos el listener de permisos
+                }
+                document.getElementById('app-container').style.display = 'none';
+                document.getElementById('login-container').style.display = 'flex';
+                document.getElementById('login_username').value = '';
+                document.getElementById('login_password').value = '';
+                showUserMessage('login-error-message', 'Sesión cerrada correctamente.', 'green');
             } catch (error) {
                 console.error("Error al cerrar sesión:", error);
-                document.getElementById('login-error-message').textContent = "Error al cerrar sesión. Por favor, intente de nuevo.";
-                document.getElementById('login-error-message').style.color = 'red';
+                showUserMessage('login-error-message', 'Error al cerrar sesión. Por favor, intente de nuevo.', 'red');
             } finally {
                 hideLoadingBar();
             }
@@ -841,7 +846,6 @@
 
         async function handleChangePassword(event) {
             event.preventDefault();
-            const currentUser = auth.currentUser;
             const currentPassword = document.getElementById('cp_current_password').value;
             const newPassword = document.getElementById('cp_new_password').value;
             const confirmNewPassword = document.getElementById('cp_confirm_new_password').value;
@@ -855,48 +859,52 @@
                 errorMessageDiv.textContent = 'La nueva contraseña y su confirmación no coinciden.';
                 return;
             }
-            if (newPassword.length < 6) {
-                errorMessageDiv.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.';
+            if (newPassword.length < 4) { // Asumiendo que la contraseña original "1705" tiene 4 dígitos, ajustamos el mínimo.
+                errorMessageDiv.textContent = 'La nueva contraseña debe tener al menos 4 caracteres.';
                 return;
             }
 
-            if (!currentUser) {
+            if (!datosUsuario || !datosUsuario.uid) {
                 errorMessageDiv.textContent = 'No hay usuario autenticado.';
                 return;
             }
 
+            showLoadingBar();
             try {
-                showLoadingBar();
-                // Reautenticar al usuario para operaciones sensibles como el cambio de contraseña
-                const credential = firebase.auth.EmailAuthProvider.credential(currentUser.email, currentPassword);
-                await currentUser.reauthenticateWithCredential(credential);
-                await currentUser.updatePassword(newPassword);
+                const userDocRef = db.collection('users').doc(datosUsuario.uid);
+                const docSnap = await userDocRef.get();
+
+                if (!docSnap.exists) {
+                    errorMessageDiv.textContent = 'Perfil de usuario no encontrado.';
+                    return;
+                }
+
+                const userData = docSnap.data();
+                // Verificamos la contraseña actual directamente desde Firestore
+                if (userData.contraseña !== currentPassword) {
+                    errorMessageDiv.textContent = 'La contraseña actual es incorrecta.';
+                    return;
+                }
+
+                // Actualizamos la contraseña en Firestore
+                await userDocRef.update({ contraseña: newPassword }); // ADVERTENCIA: Contraseña en texto plano
 
                 successMessageDiv.textContent = 'Contraseña cambiada con éxito. Por favor, inicie sesión de nuevo con su nueva contraseña.';
-                // Opcional: Forzar cierre de sesión para que el usuario inicie con la nueva contraseña
                 setTimeout(() => {
                     closeModal('change_password_modal');
-                    handleLogout();
+                    handleLogout(); // Forzamos el cierre de sesión
                 }, 2000);
 
             } catch (error) {
-                console.error("Error al cambiar contraseña:", error);
-                let message = "Error al cambiar la contraseña.";
-                if (error.code === 'auth/requires-recent-login') {
-                    message = "Por favor, inicie sesión de nuevo para cambiar su contraseña. (Necesita reautenticarse).";
-                } else if (error.code === 'auth/wrong-password') {
-                    message = "La contraseña actual es incorrecta.";
-                } else if (error.code === 'auth/weak-password') {
-                    message = "La nueva contraseña es demasiado débil. Necesita ser más compleja.";
-                }
-                errorMessageDiv.textContent = message;
+                console.error("Error al cambiar contraseña personalizada:", error);
+                errorMessageDiv.textContent = 'Error al cambiar la contraseña. Intente de nuevo.';
             } finally {
                 hideLoadingBar();
             }
         }
 
 
-        // --- Funciones de Utilidad (Copiadas de permisos.html, con ajustes menores) ---
+        // --- Funciones de Utilidad ---
         function showLoadingBar() {
             const loadingBar = document.getElementById("loading-bar");
             const loadingBarFill = document.getElementById("loading-bar-fill");
@@ -925,9 +933,9 @@
 
         function showModal(id) {
             document.getElementById(id).style.display = 'flex';
-            // Si se abre el modal de cambio de contraseña, precarga el correo del usuario
-            if (id === 'change_password_modal' && auth.currentUser) {
-                document.getElementById('cp_username').value = auth.currentUser.email;
+            // Si se abre el modal de cambio de contraseña, precarga el nombre de usuario
+            if (id === 'change_password_modal' && datosUsuario) {
+                document.getElementById('cp_username_display').value = datosUsuario.usuario || '';
                 document.getElementById('cp_current_password').value = '';
                 document.getElementById('cp_new_password').value = '';
                 document.getElementById('cp_confirm_new_password').value = '';
@@ -1010,12 +1018,11 @@
             document.getElementById('edit_time_authorized').value = timeAuthorized;
         }
 
-        // --- Envío de Formulario de Permisos (Adaptado para usar datosUsuario global) ---
+        // --- Envío de Formulario de Permisos ---
         async function submitPermit(event) {
             event.preventDefault();
-            if (!datosUsuario || !datosUsuario.usuario || !datosUsuario.nombreCompleto) {
-                document.getElementById('login-error-message').textContent = "Error: Datos de usuario no disponibles. Por favor, inicie sesión correctamente.";
-                document.getElementById('login-error-message').style.color = 'red';
+            if (!datosUsuario || !datosUsuario.uid || !datosUsuario.nombreCompleto) {
+                showUserMessage('login-error-message', "Error: Datos de usuario no disponibles. Por favor, inicie sesión correctamente.", 'red');
                 return;
             }
             showLoadingBar();
@@ -1048,7 +1055,7 @@
                 timeAuthorized,
                 submissionDate: firebase.firestore.Timestamp.fromDate(new Date()),
                 submittedBy: datosUsuario.nombreCompleto,
-                userId: datosUsuario.usuario, // Usa el campo 'usuario' del Firestore
+                userId: datosUsuario.uid, // Usa el UID del documento de Firestore
                 signedByWorker: false,
                 workerSignatureName: null,
                 workerSignatureDate: null,
@@ -1064,26 +1071,20 @@
 
             try {
                 await db.collection('permisos').add(permitData);
-                document.getElementById('login-error-message').textContent = 'Solicitud de permiso enviada con éxito!';
-                document.getElementById('login-error-message').style.color = 'green';
+                showUserMessage('login-error-message', 'Solicitud de permiso enviada con éxito!', 'green');
                 document.getElementById('permit_form').reset();
                 document.getElementById('immediate_boss').value = "Juan Carlos Barrios";
                 document.getElementById('worker_name').value = datosUsuario.nombreCompleto;
                 updateTimeAuthorized();
             } catch (error) {
                 console.error("Error al enviar el permiso:", error);
-                document.getElementById('login-error-message').textContent = 'Error al enviar la solicitud de permiso.';
-                document.getElementById('login-error-message').style.color = 'red';
+                showUserMessage('login-error-message', 'Error al enviar la solicitud de permiso.', 'red');
             } finally {
                 hideLoadingBar();
-                setTimeout(() => {
-                    document.getElementById('login-error-message').textContent = '';
-                    document.getElementById('login-error-message').style.color = 'red'; // Reset color
-                }, 3000);
             }
         }
 
-        // --- Visualización y Filtrado de Permisos (Adaptado para usar datosUsuario global) ---
+        // --- Visualización y Filtrado de Permisos ---
         function startPermitsRealtimeListener() {
             if (permitsListenerUnsubscribe) {
                 permitsListenerUnsubscribe();
@@ -1094,8 +1095,9 @@
             // Operadores y Bodegueros solo ven sus propios permisos
             if (datosUsuario && datosUsuario.permisos) {
                 if (datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero') {
-                    console.log(`[Firestore Query] Filtrando permisos para el usuario: ${datosUsuario.usuario}`);
-                    query = query.where('userId', '==', datosUsuario.usuario);
+                    console.log(`[Firestore Query] Filtrando permisos para el usuario: ${datosUsuario.uid}`);
+                    // Filtra por el 'uid' que ahora es el campo 'usuario' del documento en Firestore
+                    query = query.where('userId', '==', datosUsuario.uid);
                 } else {
                     console.log(`[Firestore Query] Obteniendo todos los permisos para Administrador/otros roles.`);
                 }
@@ -1188,7 +1190,8 @@
 
             permitsToRender.forEach(permit => {
                 const isAdministrator = datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador';
-                const currentUserUID = auth.currentUser ? auth.currentUser.uid : null;
+                // El userId en Firestore ahora es el campo 'usuario' del documento, no el UID de Firebase Auth
+                const currentUserFirestoreId = datosUsuario ? datosUsuario.uid : null;
 
                 const permitDiv = document.createElement('div');
                 permitDiv.className = 'permit-record';
@@ -1205,7 +1208,8 @@
 
                 const hasAnySignature = isWorkerSigned || isJefeSigned || isRrhhSigned;
                 // Un usuario solo puede editar su propio permiso si no está firmado y no tiene estado final
-                const canEdit = isAdministrator || (permit.userId === datosUsuario.usuario && !hasAnySignature && permit.status !== 'Autorizado' && permit.status !== 'Rechazado');
+                // Comparamos el userId del permiso con el uid (que ahora es el campo 'usuario') del usuario logeado
+                const canEdit = isAdministrator || (permit.userId === currentUserFirestoreId && !hasAnySignature && permit.status !== 'Autorizado' && permit.status !== 'Rechazado');
                 const canDeny = isAdministrator && permit.status !== 'Autorizado' && permit.status !== 'Rechazado';
                 const canDelete = isAdministrator;
 
@@ -1219,7 +1223,7 @@
                     <div class="signature-section">
                         <h4>Firmas:</h4>
                         <div class="signature-item">
-                            <input type="checkbox" id="worker_sign_${permit.id}" ${isWorkerSigned ? 'checked' : ''} ${!(permit.userId === datosUsuario.usuario || isAdministrator) || isWorkerSigned ? 'disabled' : ''} onchange="handleWorkerSignature('${permit.id}', this.checked)">
+                            <input type="checkbox" id="worker_sign_${permit.id}" ${isWorkerSigned ? 'checked' : ''} ${!(permit.userId === currentUserFirestoreId || isAdministrator) || isWorkerSigned ? 'disabled' : ''} onchange="handleWorkerSignature('${permit.id}', this.checked)">
                             <label for="worker_sign_${permit.id}">Firma Trabajador</label>
                             <span class="signature-details ${isWorkerSigned ? 'signed' : 'pending'}">${isWorkerSigned ? `Firmado por ${permit.workerSignatureName || 'N/A'} (${permit.workerSignatureDate ? formatDate(permit.workerSignatureDate) : 'N/A'})` : 'Pendiente'}</span>
                         </div>
@@ -1249,34 +1253,28 @@
         }
 
 
-        // --- Manejo de Firmas (Adaptado para usar datosUsuario global y UID de Firebase) ---
+        // --- Manejo de Firmas ---
         async function handleWorkerSignature(permitId, isChecked) {
-            const currentUserUID = auth.currentUser ? auth.currentUser.uid : null;
             const isAdministrator = datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador';
 
             if (!isChecked) { // Intentando desmarcar
                 if (!isAdministrator) {
                     document.getElementById(`worker_sign_${permitId}`).checked = true;
-                    document.getElementById('login-error-message').textContent = "Solo un administrador puede desmarcar la firma del trabajador.";
-                    document.getElementById('login-error-message').style.color = 'red';
-                    setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                    showUserMessage('login-error-message', "Solo un administrador puede desmarcar la firma del trabajador.", 'red');
                     return;
                 }
                 const confirmed = await new Promise(resolve => {
                     const confirmDiv = document.createElement('div');
-                    confirmDiv.style.position = 'fixed'; confirmDiv.style.top = '0'; confirmDiv.style.left = '0';
-                    confirmDiv.style.width = '100%'; confirmDiv.style.height = '100%';
-                    confirmDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                    confirmDiv.style.display = 'flex'; confirmDiv.style.justifyContent = 'center'; confirmDiv.style.alignItems = 'center';
-                    confirmDiv.style.zIndex = '1001';
+                    confirmDiv.className = 'modal'; // Usa la clase modal para centrar y fondo
                     confirmDiv.innerHTML = `
-                        <div style="background-color: white; padding: 20px; border-radius: 8px; text-align: center; max-width: 300px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                            <p>¿Está seguro de que un administrador quiere desmarcar la firma del trabajador?</p>
+                        <div class="modal-content" style="max-width: 300px; padding: 20px;">
+                            <p style="margin-bottom: 20px;">¿Está seguro de que un administrador quiere desmarcar la firma del trabajador?</p>
                             <button id="confirmBtn" style="margin-right: 10px; background-color: #00BFFF;">Sí</button>
                             <button id="cancelBtn" style="background-color: #dc3545;">No</button>
                         </div>
                     `;
                     document.body.appendChild(confirmDiv);
+                    confirmDiv.style.display = 'flex'; // Muestra el modal
                     document.getElementById('confirmBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(true); };
                     document.getElementById('cancelBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(false); };
                 });
@@ -1292,30 +1290,25 @@
                 const docSnap = await permitRef.get();
                 const permit = docSnap.data();
 
-                // Solo el trabajador que solicitó el permiso o un admin puede firmar como trabajador
-                if (permit.userId !== datosUsuario.usuario && !isAdministrator) {
+                // Solo el trabajador que solicitó el permiso (usando uid del Firestore) o un admin puede firmar como trabajador
+                if (permit.userId !== datosUsuario.uid && !isAdministrator) {
                     document.getElementById(`worker_sign_${permitId}`).checked = false;
-                    document.getElementById('login-error-message').textContent = "Solo el trabajador que solicitó el permiso o un administrador puede firmar esto.";
-                    document.getElementById('login-error-message').style.color = 'red';
-                    setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                    showUserMessage('login-error-message', "Solo el trabajador que solicitó el permiso o un administrador puede firmar esto.", 'red');
                     return;
                 }
 
                 const confirmed = await new Promise(resolve => {
                     const confirmDiv = document.createElement('div');
-                    confirmDiv.style.position = 'fixed'; confirmDiv.style.top = '0'; confirmDiv.style.left = '0';
-                    confirmDiv.style.width = '100%'; confirmDiv.style.height = '100%';
-                    confirmDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                    confirmDiv.style.display = 'flex'; confirmDiv.style.justifyContent = 'center'; confirmDiv.style.alignItems = 'center';
-                    confirmDiv.style.zIndex = '1001';
+                    confirmDiv.className = 'modal'; // Usa la clase modal para centrar y fondo
                     confirmDiv.innerHTML = `
-                        <div style="background-color: white; padding: 20px; border-radius: 8px; text-align: center; max-width: 300px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                            <p>¿Está seguro de firmar? Una vez firmado por el trabajador, los Operadores y Bodegueros no podrán modificar el permiso.</p>
+                        <div class="modal-content" style="max-width: 350px; padding: 20px;">
+                            <p style="margin-bottom: 20px;">¿Está seguro de firmar? Una vez firmado por el trabajador, los Operadores y Bodegueros no podrán modificar el permiso.</p>
                             <button id="confirmBtn" style="margin-right: 10px; background-color: #00BFFF;">Sí</button>
                             <button id="cancelBtn" style="background-color: #dc3545;">No</button>
                         </div>
                     `;
                     document.body.appendChild(confirmDiv);
+                    confirmDiv.style.display = 'flex'; // Muestra el modal
                     document.getElementById('confirmBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(true); };
                     document.getElementById('cancelBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(false); };
                 });
@@ -1326,7 +1319,7 @@
                 }
                 const updates = {
                     signedByWorker: true,
-                    workerSignatureName: datosUsuario ? datosUsuario.nombreCompleto : (auth.currentUser ? auth.currentUser.email : 'Usuario Desconocido'),
+                    workerSignatureName: datosUsuario ? datosUsuario.nombreCompleto : 'Usuario Desconocido',
                     workerSignatureDate: firebase.firestore.Timestamp.fromDate(new Date())
                 };
                 await updatePermitInFirestore(permitId, updates);
@@ -1337,27 +1330,22 @@
             const isAdministrator = datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador';
             if (!isAdministrator) {
                 document.getElementById(`jefe_sign_${permitId}`).checked = !isChecked;
-                document.getElementById('login-error-message').textContent = "Solo un administrador puede firmar o desmarcar la firma del Jefe Inmediato.";
-                document.getElementById('login-error-message').style.color = 'red';
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                showUserMessage('login-error-message', "Solo un administrador puede firmar o desmarcar la firma del Jefe Inmediato.", 'red');
                 return;
             }
             if (!isChecked) {
                 const confirmed = await new Promise(resolve => {
                     const confirmDiv = document.createElement('div');
-                    confirmDiv.style.position = 'fixed'; confirmDiv.style.top = '0'; confirmDiv.style.left = '0';
-                    confirmDiv.style.width = '100%'; confirmDiv.style.height = '100%';
-                    confirmDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                    confirmDiv.style.display = 'flex'; confirmDiv.style.justifyContent = 'center'; confirmDiv.style.alignItems = 'center';
-                    confirmDiv.style.zIndex = '1001';
+                    confirmDiv.className = 'modal';
                     confirmDiv.innerHTML = `
-                        <div style="background-color: white; padding: 20px; border-radius: 8px; text-align: center; max-width: 300px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                            <p>¿Está seguro de que un administrador quiere desmarcar la firma del Jefe Inmediato?</p>
+                        <div class="modal-content" style="max-width: 300px; padding: 20px;">
+                            <p style="margin-bottom: 20px;">¿Está seguro de que un administrador quiere desmarcar la firma del Jefe Inmediato?</p>
                             <button id="confirmBtn" style="margin-right: 10px; background-color: #00BFFF;">Sí</button>
                             <button id="cancelBtn" style="background-color: #dc3545;">No</button>
                         </div>
                     `;
                     document.body.appendChild(confirmDiv);
+                    confirmDiv.style.display = 'flex';
                     document.getElementById('confirmBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(true); };
                     document.getElementById('cancelBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(false); };
                 });
@@ -1370,7 +1358,7 @@
             } else {
                 const updates = {
                     signedByJefe: true,
-                    jefeSignatureName: datosUsuario ? datosUsuario.nombreCompleto : (auth.currentUser ? auth.currentUser.email : 'Usuario Desconocido'),
+                    jefeSignatureName: datosUsuario ? datosUsuario.nombreCompleto : 'Usuario Desconocido',
                     jefeSignatureDate: firebase.firestore.Timestamp.fromDate(new Date())
                 };
                 await updatePermitInFirestore(permitId, updates);
@@ -1381,27 +1369,22 @@
             const isAdministrator = datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador';
             if (!isAdministrator) {
                 document.getElementById(`rrhh_sign_${permitId}`).checked = !isChecked;
-                document.getElementById('login-error-message').textContent = "Solo un administrador puede firmar o desmarcar la firma de RR. HH.";
-                document.getElementById('login-error-message').style.color = 'red';
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                showUserMessage('login-error-message', "Solo un administrador puede firmar o desmarcar la firma de RR. HH.", 'red');
                 return;
             }
             if (!isChecked) {
                 const confirmed = await new Promise(resolve => {
                     const confirmDiv = document.createElement('div');
-                    confirmDiv.style.position = 'fixed'; confirmDiv.style.top = '0'; confirmDiv.style.left = '0';
-                    confirmDiv.style.width = '100%'; confirmDiv.style.height = '100%';
-                    confirmDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                    confirmDiv.style.display = 'flex'; confirmDiv.style.justifyContent = 'center'; confirmDiv.style.alignItems = 'center';
-                    confirmDiv.style.zIndex = '1001';
+                    confirmDiv.className = 'modal';
                     confirmDiv.innerHTML = `
-                        <div style="background-color: white; padding: 20px; border-radius: 8px; text-align: center; max-width: 300px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                            <p>¿Está seguro de que un administrador quiere desmarcar la firma de RR. HH?</p>
+                        <div class="modal-content" style="max-width: 300px; padding: 20px;">
+                            <p style="margin-bottom: 20px;">¿Está seguro de que un administrador quiere desmarcar la firma de RR. HH?</p>
                             <button id="confirmBtn" style="margin-right: 10px; background-color: #00BFFF;">Sí</button>
                             <button id="cancelBtn" style="background-color: #dc3545;">No</button>
                         </div>
                     `;
                     document.body.appendChild(confirmDiv);
+                    confirmDiv.style.display = 'flex';
                     document.getElementById('confirmBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(true); };
                     document.getElementById('cancelBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(false); };
                 });
@@ -1414,7 +1397,7 @@
             } else {
                 const updates = {
                     signedByRRHH: true,
-                    rrhhSignatureName: datosUsuario ? datosUsuario.nombreCompleto : (auth.currentUser ? auth.currentUser.email : 'Usuario Desconocido'),
+                    rrhhSignatureName: datosUsuario ? datosUsuario.nombreCompleto : 'Usuario Desconocido',
                     rrhhSignatureDate: firebase.firestore.Timestamp.fromDate(new Date())
                 };
                 await updatePermitInFirestore(permitId, updates);
@@ -1448,19 +1431,14 @@
             }
             catch (error) {
                 console.error("Error al actualizar el permiso en Firestore:", error);
-                document.getElementById('login-error-message').textContent = "Error al actualizar el permiso.";
-                document.getElementById('login-error-message').style.color = 'red';
+                showUserMessage('login-error-message', "Error al actualizar el permiso.", 'red');
             }
             finally {
                 hideLoadingBar();
-                setTimeout(() => {
-                    document.getElementById('login-error-message').textContent = '';
-                    document.getElementById('login-error-message').style.color = 'red';
-                }, 3000);
             }
         }
 
-        // --- Editar Permiso (Adaptado para usar datosUsuario global y UID de Firebase) ---
+        // --- Editar Permiso ---
         let currentEditPermitId = null;
 
         async function openEditPermitModal(permitId) {
@@ -1470,9 +1448,8 @@
                 const docSnap = await docRef.get();
 
                 if (!docSnap.exists) {
-                    document.getElementById('login-error-message').textContent = "El permiso no existe.";
-                    document.getElementById('login-error-message').style.color = 'red';
-                    setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                    showUserMessage('login-error-message', "El permiso no existe.", 'red');
+                    hideLoadingBar();
                     return;
                 }
                 const permit = docSnap.data();
@@ -1481,20 +1458,16 @@
                 const hasAnySignatureOrFinalStatus = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH || permit.status === 'Autorizado' || permit.status === 'Rechazado';
 
                 // Si no es administrador y el permiso no pertenece al usuario actual
-                if (!isAdministrator && permit.userId !== datosUsuario.usuario) {
-                    document.getElementById('login-error-message').textContent = "No tiene permisos para editar este permiso.";
-                    document.getElementById('login-error-message').style.color = 'red';
+                if (!isAdministrator && permit.userId !== datosUsuario.uid) {
+                    showUserMessage('login-error-message', "No tiene permisos para editar este permiso.", 'red');
                     hideLoadingBar();
-                    setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
                     return;
                 }
 
                 // Si no es administrador y el permiso ya tiene alguna firma o estado final
                 if (!isAdministrator && hasAnySignatureOrFinalStatus) {
-                    document.getElementById('login-error-message').textContent = "Este permiso ya ha sido firmado o su estado es final y no puede ser modificado.";
-                    document.getElementById('login-error-message').style.color = 'red';
+                    showUserMessage('login-error-message', "Este permiso ya ha sido firmado o su estado es final y no puede ser modificado.", 'red');
                     hideLoadingBar();
-                    setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
                     return;
                 }
 
@@ -1523,9 +1496,7 @@
                 showModal('edit_permit_modal');
             } catch (error) {
                 console.error("Error al cargar permiso para editar:", error);
-                document.getElementById('login-error-message').textContent = "Error al cargar permiso.";
-                document.getElementById('login-error-message').style.color = 'red';
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                showUserMessage('login-error-message', "Error al cargar permiso.", 'red');
             } finally {
                 hideLoadingBar();
             }
@@ -1541,21 +1512,17 @@
             const permit = docSnap.data();
             const hasAnySignatureOrFinalStatus = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH || permit.status === 'Autorizado' || permit.status === 'Rechazado';
 
-            if (!isAdministrator && permit.userId !== datosUsuario.usuario) {
-                document.getElementById('login-error-message').textContent = "No tiene permisos para editar este permiso.";
-                document.getElementById('login-error-message').style.color = 'red';
+            if (!isAdministrator && permit.userId !== datosUsuario.uid) {
+                showUserMessage('login-error-message', "No tiene permisos para editar este permiso.", 'red');
                 hideLoadingBar();
                 closeModal('edit_permit_modal');
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
                 return;
             }
 
             if (!isAdministrator && hasAnySignatureOrFinalStatus) {
-                document.getElementById('login-error-message').textContent = "Este permiso ya ha sido firmado o su estado es final y no puede ser modificado.";
-                document.getElementById('login-error-message').style.color = 'red';
+                showUserMessage('login-error-message', "Este permiso ya ha sido firmado o su estado es final y no puede ser modificado.", 'red');
                 hideLoadingBar();
                 closeModal('edit_permit_modal');
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
                 return;
             }
 
@@ -1576,54 +1543,65 @@
 
             try {
                 await permitRef.update(updatedData);
-                document.getElementById('login-error-message').textContent = 'Permiso actualizado con éxito!';
-                document.getElementById('login-error-message').style.color = 'green';
+                showUserMessage('login-error-message', 'Permiso actualizado con éxito!', 'green');
                 closeModal('edit_permit_modal');
             } catch (error) {
                 console.error("Error al guardar permiso editado:", error);
-                document.getElementById('login-error-message').textContent = 'Error al guardar el permiso.';
-                document.getElementById('login-error-message').style.color = 'red';
+                showUserMessage('login-error-message', 'Error al guardar el permiso.', 'red');
             } finally {
                 hideLoadingBar();
-                setTimeout(() => {
-                    document.getElementById('login-error-message').textContent = '';
-                    document.getElementById('login-error-message').style.color = 'red';
-                }, 3000);
             }
         }
 
-        // --- Negar Permiso (Adaptado para usar datosUsuario global) ---
+        // --- Negar Permiso ---
         async function denyPermit(permitId) {
             if (!datosUsuario || datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                document.getElementById('login-error-message').textContent = "Solo un administrador puede negar permisos.";
-                document.getElementById('login-error-message').style.color = 'red';
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                showUserMessage('login-error-message', "Solo un administrador puede negar permisos.", 'red');
                 return;
             }
 
-            const reason = prompt("Ingrese el motivo de la negación del permiso:");
-            if (reason === null || reason.trim() === '') {
-                document.getElementById('login-error-message').textContent = "Debe ingresar un motivo para negar el permiso.";
-                document.getElementById('login-error-message').style.color = 'red';
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+            const reasonInput = await new Promise(resolve => {
+                const promptDiv = document.createElement('div');
+                promptDiv.className = 'modal';
+                promptDiv.innerHTML = `
+                    <div class="modal-content" style="max-width: 400px; padding: 20px;">
+                        <p style="margin-bottom: 15px;">Ingrese el motivo de la negación del permiso:</p>
+                        <textarea id="promptReason" rows="3" style="width: calc(100% - 16px); margin-bottom: 15px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+                        <button id="promptConfirmBtn" style="margin-right: 10px; background-color: #00BFFF;">Aceptar</button>
+                        <button id="promptCancelBtn" style="background-color: #dc3545;">Cancelar</button>
+                    </div>
+                `;
+                document.body.appendChild(promptDiv);
+                promptDiv.style.display = 'flex';
+
+                document.getElementById('promptConfirmBtn').onclick = () => {
+                    const reason = document.getElementById('promptReason').value;
+                    document.body.removeChild(promptDiv);
+                    resolve(reason);
+                };
+                document.getElementById('promptCancelBtn').onclick = () => {
+                    document.body.removeChild(promptDiv);
+                    resolve(null);
+                };
+            });
+
+            if (reasonInput === null || reasonInput.trim() === '') {
+                showUserMessage('login-error-message', "Debe ingresar un motivo para negar el permiso.", 'red');
                 return;
             }
 
             const confirmed = await new Promise(resolve => {
                 const confirmDiv = document.createElement('div');
-                confirmDiv.style.position = 'fixed'; confirmDiv.style.top = '0'; confirmDiv.style.left = '0';
-                confirmDiv.style.width = '100%'; confirmDiv.style.height = '100%';
-                confirmDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                confirmDiv.style.display = 'flex'; confirmDiv.style.justifyContent = 'center'; confirmDiv.style.alignItems = 'center';
-                confirmDiv.style.zIndex = '1001';
+                confirmDiv.className = 'modal';
                 confirmDiv.innerHTML = `
-                    <div style="background-color: white; padding: 20px; border-radius: 8px; text-align: center; max-width: 300px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                        <p>¿Está seguro de que desea negar este permiso?</p>
+                    <div class="modal-content" style="max-width: 300px; padding: 20px;">
+                        <p style="margin-bottom: 20px;">¿Está seguro de que desea negar este permiso?</p>
                         <button id="confirmBtn" style="margin-right: 10px; background-color: #00BFFF;">Sí</button>
                         <button id="cancelBtn" style="background-color: #dc3545;">No</button>
                     </div>
                 `;
                 document.body.appendChild(confirmDiv);
+                confirmDiv.style.display = 'flex';
                 document.getElementById('confirmBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(true); };
                 document.getElementById('cancelBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(false); };
             });
@@ -1632,34 +1610,29 @@
                 return;
             }
 
-            const updates = { status: 'Rechazado', denialReason: reason };
+            const updates = { status: 'Rechazado', denialReason: reasonInput };
             await updatePermitInFirestore(permitId, updates);
         }
 
-        // --- Eliminar Permiso (Adaptado para usar datosUsuario global) ---
+        // --- Eliminar Permiso ---
         async function deletePermit(permitId) {
             if (!datosUsuario || datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                document.getElementById('login-error-message').textContent = "Solo un administrador puede eliminar permisos.";
-                document.getElementById('login-error-message').style.color = 'red';
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                showUserMessage('login-error-message', "Solo un administrador puede eliminar permisos.", 'red');
                 return;
             }
 
             const confirmed = await new Promise(resolve => {
                 const confirmDiv = document.createElement('div');
-                confirmDiv.style.position = 'fixed'; confirmDiv.style.top = '0'; confirmDiv.style.left = '0';
-                confirmDiv.style.width = '100%'; confirmDiv.style.height = '100%';
-                confirmDiv.style.backgroundColor = 'rgba(0,0,0,0.5)';
-                confirmDiv.style.display = 'flex'; confirmDiv.style.justifyContent = 'center'; confirmDiv.style.alignItems = 'center';
-                confirmDiv.style.zIndex = '1001';
+                confirmDiv.className = 'modal';
                 confirmDiv.innerHTML = `
-                    <div style="background-color: white; padding: 20px; border-radius: 8px; text-align: center; max-width: 300px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                        <p>¿Está seguro de que desea eliminar este permiso? Esta acción no se puede deshacer.</p>
+                    <div class="modal-content" style="max-width: 300px; padding: 20px;">
+                        <p style="margin-bottom: 20px;">¿Está seguro de que desea eliminar este permiso? Esta acción no se puede deshacer.</p>
                         <button id="confirmBtn" style="margin-right: 10px; background-color: #00BFFF;">Sí</button>
                         <button id="cancelBtn" style="background-color: #dc3545;">No</button>
                     </div>
                 `;
                 document.body.appendChild(confirmDiv);
+                confirmDiv.style.display = 'flex';
                 document.getElementById('confirmBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(true); };
                 document.getElementById('cancelBtn').onclick = () => { document.body.removeChild(confirmDiv); resolve(false); };
             });
@@ -1671,27 +1644,19 @@
             showLoadingBar();
             try {
                 await db.collection('permisos').doc(permitId).delete();
-                document.getElementById('login-error-message').textContent = "Permiso eliminado correctamente.";
-                document.getElementById('login-error-message').style.color = 'green';
+                showUserMessage('login-error-message', "Permiso eliminado correctamente.", 'green');
             } catch (error) {
                 console.error("Error al eliminar permiso:", error);
-                document.getElementById('login-error-message').textContent = "Error al eliminar el permiso.";
-                document.getElementById('login-error-message').style.color = 'red';
+                showUserMessage('login-error-message', "Error al eliminar el permiso.", 'red');
             } finally {
                 hideLoadingBar();
-                setTimeout(() => {
-                    document.getElementById('login-error-message').textContent = '';
-                    document.getElementById('login-error-message').style.color = 'red';
-                }, 3000);
             }
         }
 
-        // --- Exportar a Excel (Adaptado para usar datosUsuario global) ---
+        // --- Exportar a Excel ---
         async function exportPermitsToExcel() {
             if (!datosUsuario || datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                document.getElementById('login-error-message').textContent = "Solo un administrador puede exportar a Excel.";
-                document.getElementById('login-error-message').style.color = 'red';
-                setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                showUserMessage('login-error-message', "Solo un administrador puede exportar a Excel.", 'red');
                 return;
             }
             showLoadingBar();
@@ -1702,7 +1667,7 @@
                     return {
                         "ID Permiso": doc.id,
                         "Fecha Solicitud": permit.submissionDate ? formatDate(permit.submissionDate) : 'N/A',
-                        "Solicitado Por (ID)": permit.userId || 'N/A',
+                        "Solicitado Por (Usuario)": permit.userId || 'N/A', // Ahora userId es el campo 'usuario'
                         "Nombre Trabajador": permit.workerName,
                         "Documento": permit.documentId,
                         "Celular": permit.cellphone,
@@ -1727,30 +1692,23 @@
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Permisos");
                 XLSX.writeFile(wb, "solicitudes_permisos.xlsx");
-                document.getElementById('login-error-message').textContent = "Datos exportados a Excel con éxito.";
-                document.getElementById('login-error-message').style.color = 'green';
+                showUserMessage('login-error-message', "Datos exportados a Excel con éxito.", 'green');
             } catch (error) {
                 console.error("Error al exportar a Excel:", error);
-                document.getElementById('login-error-message').textContent = "Error al exportar los permisos a Excel.";
-                document.getElementById('login-error-message').style.color = 'red';
+                showUserMessage('login-error-message', "Error al exportar los permisos a Excel.", 'red');
             } finally {
                 hideLoadingBar();
-                setTimeout(() => {
-                    document.getElementById('login-error-message').textContent = '';
-                    document.getElementById('login-error-message').style.color = 'red';
-                }, 3000);
             }
         }
 
-        // --- Imprimir a PDF (Copiado de permisos.html) ---
+        // --- Imprimir a PDF ---
         async function printPermitToPDF(permitId) {
             showLoadingBar();
             try {
                 const docSnap = await db.collection('permisos').doc(permitId).get();
                 if (!docSnap.exists) {
-                    document.getElementById('login-error-message').textContent = "El permiso no existe.";
-                    document.getElementById('login-error-message').style.color = 'red';
-                    setTimeout(() => document.getElementById('login-error-message').textContent = '', 3000);
+                    showUserMessage('login-error-message', "El permiso no existe.", 'red');
+                    hideLoadingBar();
                     return;
                 }
                 const permit = docSnap.data();
@@ -1859,18 +1817,12 @@
                 }
 
                 doc.save(`Permiso_${permit.workerName.replace(/\s/g, '_')}_${permit.id}.pdf`);
-                document.getElementById('login-error-message').textContent = "Permiso generado en PDF con éxito.";
-                document.getElementById('login-error-message').style.color = 'green';
+                showUserMessage('login-error-message', "Permiso generado en PDF con éxito.", 'green');
             } catch (error) {
                 console.error("Error al imprimir PDF:", error);
-                document.getElementById('login-error-message').textContent = "Error al generar el PDF del permiso. Asegúrese de que el permiso contenga todos los datos necesarios.";
-                document.getElementById('login-error-message').style.color = 'red';
+                showUserMessage('login-error-message', "Error al generar el PDF del permiso. Asegúrese de que el permiso contenga todos los datos necesarios.", 'red');
             } finally {
                 hideLoadingBar();
-                setTimeout(() => {
-                    document.getElementById('login-error-message').textContent = '';
-                    document.getElementById('login-error-message').style.color = 'red';
-                }, 3000);
             }
         }
     </script>
