@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Sistema de Solicitud de Permisos</title>
+    <title>Sistema de Solicitud de Permisos La Zapateria ,UPM (Un paso más Colombia) y Milan</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -354,7 +354,12 @@
 
             // Populate form fields for the current user
             document.getElementById('worker_name').value = datosUsuario.nombreCompleto;
-            document.getElementById('cargo').value = datosUsuario.permisos; // Assuming cargo is related to permissions
+            // No longer setting 'cargo' automatically from datosUsuario.permisos
+            // document.getElementById('cargo').value = datosUsuario.permisos; // Cargo is now manual
+
+            // Set the immediate boss field to "Juan Carlos Barrios" and make it readonly
+            document.getElementById('immediate_boss').value = "Juan Carlos Barrios";
+            document.getElementById('immediate_boss').readOnly = true;
 
             // Initialize filters
             document.getElementById('filter_worker_name').addEventListener('change', applyFilters); // Changed listener
@@ -494,8 +499,8 @@
             const workerName = document.getElementById('worker_name').value;
             const documentId = document.getElementById('document_id').value;
             const cellphone = document.getElementById('cellphone').value;
-            const cargo = document.getElementById('cargo').value;
-            const immediateBoss = document.getElementById('immediate_boss').value;
+            const cargo = document.getElementById('cargo').value; // Now manual input
+            const immediateBoss = document.getElementById('immediate_boss').value; // Now readonly "Juan Carlos Barrios"
             const permitType = document.getElementById('permit_type').value;
             const reason = document.getElementById('reason').value;
             const startDate = document.getElementById('start_date').value;
@@ -508,7 +513,7 @@
                 workerName,
                 documentId,
                 cellphone,
-                cargo,
+                cargo, // Use manual input
                 immediateBoss,
                 permitType,
                 reason,
@@ -536,6 +541,7 @@
                 await db.collection('permisos').add(permitData);
                 alert('Solicitud de permiso enviada con éxito!');
                 document.getElementById('permit_form').reset();
+                document.getElementById('immediate_boss').value = "Juan Carlos Barrios"; // Re-set after reset
                 updateTimeAuthorized(); // Recalculate for empty form
             } catch (error) {
                 console.error("Error al enviar el permiso:", error);
@@ -562,7 +568,7 @@
             }
 
             permitsListenerUnsubscribe = query.onSnapshot(snapshot => {
-                console.log(`Documents returned by Firestore: ${snapshot.size}`);
+                console.log(`Documents returned by Firestore for initial load: ${snapshot.size}`);
                 currentPermitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 populateWorkerNameFilter(currentPermitsData); // Populate filter dropdown
                 applyFilters(); // Re-apply filters whenever data changes
@@ -574,6 +580,7 @@
 
         function populateWorkerNameFilter(permits) {
             const filterDropdown = document.getElementById('filter_worker_name');
+            const originalValue = filterDropdown.value; // Store current selected value
             filterDropdown.innerHTML = '<option value="all">Todos</option>'; // Reset dropdown
 
             const uniqueWorkerNames = new Set();
@@ -590,9 +597,11 @@
                 filterDropdown.appendChild(option);
             });
 
-            // Restore selected value if it was set before update
-            if (currentFilters.workerName && uniqueWorkerNames.has(currentFilters.workerName)) {
-                filterDropdown.value = currentFilters.workerName;
+            // Restore selected value if it was set before update and still exists
+            if (originalValue && uniqueWorkerNames.has(originalValue)) {
+                filterDropdown.value = originalValue;
+            } else {
+                filterDropdown.value = 'all'; // Default to 'Todos' if previous selection no longer exists
             }
         }
 
@@ -604,9 +613,7 @@
             currentFilters.endDate = document.getElementById('filter_end_date').value;
 
             let filteredPermits = currentPermitsData.filter(permit => {
-                // Changed matchesSearch logic to use selected worker name
                 const matchesWorkerName = currentFilters.workerName === 'all' || permit.workerName === currentFilters.workerName;
-                
                 const matchesType = currentFilters.permitType === 'all' || permit.permitType === currentFilters.permitType;
                 const matchesStatus = currentFilters.status === 'all' || permit.status === currentFilters.status;
 
@@ -833,8 +840,9 @@
                 document.getElementById('edit_worker_name').value = permit.workerName;
                 document.getElementById('edit_document_id').value = permit.documentId;
                 document.getElementById('edit_cellphone').value = permit.cellphone;
-                document.getElementById('edit_cargo').value = permit.cargo;
-                document.getElementById('edit_immediate_boss').value = permit.immediateBoss;
+                document.getElementById('edit_cargo').value = permit.cargo; // Now manual input
+                document.getElementById('edit_immediate_boss').value = permit.immediateBoss; // Should be "Juan Carlos Barrios"
+                document.getElementById('edit_immediate_boss').readOnly = true; // Ensure it's readonly
                 document.getElementById('edit_permit_type').value = permit.permitType;
                 document.getElementById('edit_reason').value = permit.reason;
                 document.getElementById('edit_start_date').value = permit.startDate;
@@ -844,7 +852,7 @@
                 document.getElementById('edit_time_authorized').value = permit.timeAuthorized;
 
                 // Disable fields if not admin and already signed/final status
-                const editFields = ['edit_worker_name', 'edit_document_id', 'edit_cellphone', 'edit_cargo', 'edit_immediate_boss', 'edit_permit_type', 'edit_reason', 'edit_start_date', 'edit_end_date', 'edit_start_time', 'edit_end_time'];
+                const editFields = ['edit_worker_name', 'edit_document_id', 'edit_cellphone', 'edit_cargo', 'edit_permit_type', 'edit_reason', 'edit_start_date', 'edit_end_date', 'edit_start_time', 'edit_end_time'];
                 editFields.forEach(fieldId => {
                     const field = document.getElementById(fieldId);
                     if (field) field.disabled = !isAdministrator && hasAnySignatureOrFinalStatus;
@@ -880,7 +888,7 @@
                 workerName: document.getElementById('edit_worker_name').value,
                 documentId: document.getElementById('edit_document_id').value,
                 cellphone: document.getElementById('edit_cellphone').value,
-                cargo: document.getElementById('edit_cargo').value,
+                cargo: document.getElementById('edit_cargo').value, // Use manual input
                 immediateBoss: document.getElementById('edit_immediate_boss').value,
                 permitType: document.getElementById('edit_permit_type').value,
                 reason: document.getElementById('edit_reason').value,
@@ -1016,8 +1024,10 @@
                 tempDiv.style.width = '190mm'; // A4 width minus margins (210mm - 2*10mm)
                 document.body.appendChild(tempDiv);
 
-
                 tempDiv.innerHTML = `
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <img src="https://placehold.co/150x50/00BFFF/FFFFFF?text=Tu+Logo+Aqui" alt="Logo de la empresa" style="max-width: 150px; height: auto;">
+                    </div>
                     <h1 style="text-align: center; font-size: 14pt; margin-bottom: 5px;">SISTEMA DE GESTIÓN DE LA SEGURIDAD Y SALUD EN EL TRABAJO</h1>
                     <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 8pt;">
                         <tr>
@@ -1123,7 +1133,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Sistema de Solicitud de Permisos</h1>
+        <h1>Sistema de Solicitud de Permisos La Zapateria ,UPM (Un paso más Colombia) y Milan</h1>
 
         <!-- Formulario de Solicitud de Permiso -->
         <section>
@@ -1143,11 +1153,11 @@
                 </div>
                 <div class="form-field">
                     <label for="cargo">Cargo:</label>
-                    <input type="text" id="cargo" required readonly>
+                    <input type="text" id="cargo" required> <!-- Editable -->
                 </div>
                 <div class="form-field">
                     <label for="immediate_boss">Jefe Inmediato:</label>
-                    <input type="text" id="immediate_boss" required>
+                    <input type="text" id="immediate_boss" value="Juan Carlos Barrios" required readonly>
                 </div>
                 <div class="form-field">
                     <label for="permit_type">Tipo de Permiso:</label>
@@ -1272,11 +1282,11 @@
                 </div>
                 <div class="form-field">
                     <label for="edit_cargo">Cargo:</label>
-                    <input type="text" id="edit_cargo" required>
+                    <input type="text" id="edit_cargo" required> <!-- Editable -->
                 </div>
                 <div class="form-field">
                     <label for="edit_immediate_boss">Jefe Inmediato:</label>
-                    <input type="text" id="edit_immediate_boss" required>
+                    <input type="text" id="edit_immediate_boss" value="Juan Carlos Barrios" required readonly>
                 </div>
                 <div class="form-field">
                     <label for="edit_permit_type">Tipo de Permiso:</label>
