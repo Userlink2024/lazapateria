@@ -561,20 +561,31 @@
 
             // Operators and Bodegueros only see their own permits
             if (datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero') {
-                console.log(`Filtering permits for user: ${datosUsuario.usuario}`);
+                console.log(`[Firestore Query] Filtering permits for user: ${datosUsuario.usuario}`);
                 query = query.where('userId', '==', datosUsuario.usuario);
             } else {
-                console.log(`Fetching all permits for Administrator/other role.`);
+                console.log(`[Firestore Query] Fetching all permits for Administrator/other role.`);
             }
 
             permitsListenerUnsubscribe = query.onSnapshot(snapshot => {
-                console.log(`Documents returned by Firestore for initial load: ${snapshot.size}`);
+                console.log(`[Firestore Listener] Documents returned by Firestore: ${snapshot.size}`);
                 currentPermitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 populateWorkerNameFilter(currentPermitsData); // Populate filter dropdown
                 applyFilters(); // Re-apply filters whenever data changes
             }, error => {
                 console.error("Error al escuchar permisos:", error);
-                document.getElementById('permit_list').innerHTML = '<p>Error al cargar los permisos.</p>';
+                // Log the exact error to the console for debugging
+                console.error("Detalle del error:", error);
+                if (error.code === 'failed-precondition' && error.message.includes('The query requires an index')) {
+                    document.getElementById('permit_list').innerHTML = `
+                        <p style="color: red; font-weight: bold;">Error: Se requiere un índice de Firestore.</p>
+                        <p>Por favor, visita la consola de Firebase para crear el índice necesario para esta consulta:</p>
+                        <p><a href="${error.message.split('You can create it here: ')[1]}" target="_blank" style="color: #00BFFF;">Crear Índice de Firestore</a></p>
+                        <p>Una vez creado, la visibilidad de los permisos debería funcionar correctamente.</p>
+                    `;
+                } else {
+                    document.getElementById('permit_list').innerHTML = '<p>Error al cargar los permisos. Revisa la consola para más detalles.</p>';
+                }
             });
         }
 
@@ -641,7 +652,7 @@
             }
 
             permitsToRender.forEach(permit => {
-                console.log(`Rendering permit ${permit.id} for userId: ${permit.userId}`);
+                console.log(`[Render] Rendering permit ${permit.id} for userId: ${permit.userId}`);
                 const permitDiv = document.createElement('div');
                 permitDiv.className = 'permit-record';
                 permitDiv.dataset.id = permit.id;
@@ -804,10 +815,12 @@
                     }
                 }
                 console.log(`Permiso ${permitId} actualizado con éxito.`);
-            } catch (error) {
+            }
+            catch (error) {
                 console.error("Error al actualizar el permiso en Firestore:", error);
                 alert("Error al actualizar el permiso.");
-            } finally {
+            }
+            finally {
                 hideLoadingBar();
             }
         }
@@ -1026,7 +1039,7 @@
 
                 tempDiv.innerHTML = `
                     <div style="text-align: center; margin-bottom: 20px;">
-                        <img src="https://placehold.co/150x50/00BFFF/FFFFFF?text=Tu+Logo+Aqui" alt="Logo de la empresa" style="max-width: 150px; height: auto;">
+                        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTwkzZwySGIPHpl3qbpFSSo9x4xg-J3-h2X4QVMw7ZBdHyM2dfJBLdncuKGVuENCfpUJuM&usqp=CAU" alt="Logo de la empresa" style="max-width: 150px; height: auto;" onerror="this.onerror=null;this.src='https://placehold.co/150x50/cccccc/333333?text=Logo+No+Disponible';">
                     </div>
                     <h1 style="text-align: center; font-size: 14pt; margin-bottom: 5px;">SISTEMA DE GESTIÓN DE LA SEGURIDAD Y SALUD EN EL TRABAJO</h1>
                     <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 8pt;">
