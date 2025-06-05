@@ -739,15 +739,15 @@
             const errorMessageDiv = document.getElementById('login-error-message');
             errorMessageDiv.textContent = ''; // Limpia el error anterior
 
-            if (username === '' || password === '') {
+            if (!username || !password) { // Simplificado para check de vacío
                 showUserMessage('login-error-message', 'Por favor, ingrese su nombre de usuario y contraseña.');
                 return;
             }
 
             showLoadingBar();
             try {
-                // Buscamos el usuario en la colección 'users' por el campo 'usuario' y 'contraseña'
-                const usersRef = db.collection('users');
+                // Buscamos el usuario en la colección 'usuarios' (ajustado de 'users')
+                const usersRef = db.collection('usuarios');
                 const querySnapshot = await usersRef
                     .where('usuario', '==', username)
                     .where('contraseña', '==', password) // ADVERTENCIA: Contraseña en texto plano
@@ -871,7 +871,7 @@
 
             showLoadingBar();
             try {
-                const userDocRef = db.collection('users').doc(datosUsuario.uid);
+                const userDocRef = db.collection('usuarios').doc(datosUsuario.uid); // Ajustado de 'users'
                 const docSnap = await userDocRef.get();
 
                 if (!docSnap.exists) {
@@ -919,6 +919,9 @@
                         width++;
                         loadingBarFill.style.width = width + "%";
                         loadingBarFill.innerText = width + "%";
+                    }
+                    if (loadingBar.style.display === "none") { // Stop animation if bar is hidden externally
+                        clearInterval(interval);
                     }
                 }, 10);
             }
@@ -1096,7 +1099,7 @@
             if (datosUsuario && datosUsuario.permisos) {
                 if (datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero') {
                     console.log(`[Firestore Query] Filtrando permisos para el usuario: ${datosUsuario.uid}`);
-                    // Filtra por el 'uid' que ahora es el campo 'usuario' del documento en Firestore
+                    // Filtra por el 'uid' que ahora es el ID del documento del usuario en la colección 'usuarios'
                     query = query.where('userId', '==', datosUsuario.uid);
                 } else {
                     console.log(`[Firestore Query] Obteniendo todos los permisos para Administrador/otros roles.`);
@@ -1190,7 +1193,7 @@
 
             permitsToRender.forEach(permit => {
                 const isAdministrator = datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador';
-                // El userId en Firestore ahora es el campo 'usuario' del documento, no el UID de Firebase Auth
+                // El userId en Firestore ahora es el ID del documento del usuario en la colección 'usuarios'
                 const currentUserFirestoreId = datosUsuario ? datosUsuario.uid : null;
 
                 const permitDiv = document.createElement('div');
@@ -1208,7 +1211,7 @@
 
                 const hasAnySignature = isWorkerSigned || isJefeSigned || isRrhhSigned;
                 // Un usuario solo puede editar su propio permiso si no está firmado y no tiene estado final
-                // Comparamos el userId del permiso con el uid (que ahora es el campo 'usuario') del usuario logeado
+                // Comparamos el userId del permiso con el uid (que ahora es el ID del documento) del usuario logeado
                 const canEdit = isAdministrator || (permit.userId === currentUserFirestoreId && !hasAnySignature && permit.status !== 'Autorizado' && permit.status !== 'Rechazado');
                 const canDeny = isAdministrator && permit.status !== 'Autorizado' && permit.status !== 'Rechazado';
                 const canDelete = isAdministrator;
