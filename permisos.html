@@ -331,7 +331,7 @@
         let permitsListenerUnsubscribe = null;
         let currentPermitsData = []; // To store all permits fetched from Firestore
         let currentFilters = {
-            searchTerm: '',
+            workerName: 'all', // Changed from searchTerm to workerName
             permitType: 'all',
             status: 'all',
             startDate: '',
@@ -357,7 +357,7 @@
             document.getElementById('cargo').value = datosUsuario.permisos; // Assuming cargo is related to permissions
 
             // Initialize filters
-            document.getElementById('filter_search_term').addEventListener('input', applyFilters);
+            document.getElementById('filter_worker_name').addEventListener('change', applyFilters); // Changed listener
             document.getElementById('filter_permit_type').addEventListener('change', applyFilters);
             document.getElementById('filter_status').addEventListener('change', applyFilters);
             document.getElementById('filter_start_date').addEventListener('change', applyFilters);
@@ -415,7 +415,7 @@
             document.getElementById(id).style.display = 'none';
             // If the permits modal is closed, clear filters to reset for next open
             if (id === 'view_permits_modal') {
-                document.getElementById('filter_search_term').value = '';
+                document.getElementById('filter_worker_name').value = 'all'; // Reset worker filter
                 document.getElementById('filter_permit_type').value = 'all';
                 document.getElementById('filter_status').value = 'all';
                 document.getElementById('filter_start_date').value = '';
@@ -560,6 +560,7 @@
 
             permitsListenerUnsubscribe = query.onSnapshot(snapshot => {
                 currentPermitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                populateWorkerNameFilter(currentPermitsData); // Populate filter dropdown
                 applyFilters(); // Re-apply filters whenever data changes
             }, error => {
                 console.error("Error al escuchar permisos:", error);
@@ -567,17 +568,40 @@
             });
         }
 
+        function populateWorkerNameFilter(permits) {
+            const filterDropdown = document.getElementById('filter_worker_name');
+            filterDropdown.innerHTML = '<option value="all">Todos</option>'; // Reset dropdown
+
+            const uniqueWorkerNames = new Set();
+            permits.forEach(permit => {
+                if (permit.workerName) {
+                    uniqueWorkerNames.add(permit.workerName);
+                }
+            });
+
+            Array.from(uniqueWorkerNames).sort().forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                filterDropdown.appendChild(option);
+            });
+
+            // Restore selected value if it was set before update
+            if (currentFilters.workerName && uniqueWorkerNames.has(currentFilters.workerName)) {
+                filterDropdown.value = currentFilters.workerName;
+            }
+        }
+
         function applyFilters() {
-            currentFilters.searchTerm = document.getElementById('filter_search_term').value.toLowerCase();
+            currentFilters.workerName = document.getElementById('filter_worker_name').value; // Now it's the selected worker name
             currentFilters.permitType = document.getElementById('filter_permit_type').value;
             currentFilters.status = document.getElementById('filter_status').value;
             currentFilters.startDate = document.getElementById('filter_start_date').value;
             currentFilters.endDate = document.getElementById('filter_end_date').value;
 
             let filteredPermits = currentPermitsData.filter(permit => {
-                const matchesSearch = permit.workerName.toLowerCase().includes(currentFilters.searchTerm) ||
-                                      (permit.permitType && permit.permitType.toLowerCase().includes(currentFilters.searchTerm)) ||
-                                      (permit.reason && permit.reason.toLowerCase().includes(currentFilters.searchTerm));
+                // Changed matchesSearch logic to use selected worker name
+                const matchesWorkerName = currentFilters.workerName === 'all' || permit.workerName === currentFilters.workerName;
                 
                 const matchesType = currentFilters.permitType === 'all' || permit.permitType === currentFilters.permitType;
                 const matchesStatus = currentFilters.status === 'all' || permit.status === currentFilters.status;
@@ -590,7 +614,7 @@
                     matchesDate = matchesDate && (permit.endDate <= currentFilters.endDate);
                 }
 
-                return matchesSearch && matchesType && matchesStatus && matchesDate;
+                return matchesWorkerName && matchesType && matchesStatus && matchesDate;
             });
 
             renderPermits(filteredPermits);
@@ -1179,8 +1203,11 @@
             <h2>Gestión de Permisos</h2>
             <div class="filters-container">
                 <div class="form-field">
-                    <label for="filter_search_term">Buscar (Trabajador/Motivo):</label>
-                    <input type="text" id="filter_search_term" placeholder="Buscar...">
+                    <label for="filter_worker_name">Filtrar por Trabajador:</label>
+                    <select id="filter_worker_name">
+                        <option value="all">Todos</option>
+                        <!-- Options populated by JS -->
+                    </select>
                 </div>
                 <div class="form-field">
                     <label for="filter_permit_type">Tipo de Permiso:</label>
@@ -1209,7 +1236,7 @@
                     <input type="date" id="filter_end_date">
                 </div>
                 <button onclick="applyFilters()">Aplicar Filtros</button>
-                <button onclick="document.getElementById('filter_search_term').value = ''; document.getElementById('filter_permit_type').value = 'all'; document.getElementById('filter_status').value = 'all'; document.getElementById('filter_start_date').value = ''; document.getElementById('filter_end_date').value = ''; applyFilters();">Limpiar Filtros</button>
+                <button onclick="document.getElementById('filter_worker_name').value = 'all'; document.getElementById('filter_permit_type').value = 'all'; document.getElementById('filter_status').value = 'all'; document.getElementById('filter_start_date').value = ''; document.getElementById('filter_end_date').value = ''; applyFilters();">Limpiar Filtros</button>
             </div>
             
             <button onclick="exportPermitsToExcel()" id="export_excel_btn" style="margin-bottom: 20px;">Exportar a Excel</button>
