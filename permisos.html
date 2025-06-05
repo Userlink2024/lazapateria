@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sistema de Solicitud de Permisos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .container {
+            width: 95%;
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            box-sizing: border-box; /* Include padding in width */
+        }
+        h1, h2 {
+            color: #4CAF50;
+            text-align: center;
+        }
+        h1 {
+            font-size: 1.6em;
+            margin-bottom: 20px;
+        }
+        h2 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+        }
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea, select, button {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+            box-sizing: border-box; /* Include padding and border in element's total width and height */
+        }
+        input:focus, textarea:focus, select:focus, button:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            margin-top: 10px;
+            padding: 10px 15px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        button:hover {
+            background-color: #45a049;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+            position: relative;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            position: absolute;
+            top: 10px;
+            right: 15px;
+        }
+        .close:hover, .close:focus {
+            color: black;
+            text-decoration: none;
+        }
+
+        /* Permit Record Styling */
+        .permit-record {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            font-size: 0.9em;
+            position: relative;
+            overflow: hidden; /* For absolute positioned elements */
+        }
+        .permit-record p {
+            margin: 5px 0;
+        }
+        .permit-record strong {
+            color: #4CAF50;
+        }
+        .permit-record .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
+        }
+        .permit-record .buttons button {
+            flex: 1; /* Distribute space evenly */
+            min-width: 120px; /* Minimum width for buttons */
+        }
+
+        /* Status Indicators */
+        .status-container {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            font-weight: bold;
+            text-align: center;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .status-pendiente {
+            background-color: #ffc107; /* Amarillo */
+            color: #333;
+        }
+        .status-autorizado {
+            background-color: #28a745; /* Verde */
+            color: white;
+        }
+        .status-rechazado {
+            background-color: #dc3545; /* Rojo */
+            color: white;
+        }
+        .signature-section {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px dashed #eee;
+        }
+        .signature-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .signature-item input[type="checkbox"] {
+            margin-right: 10px;
+            width: auto; /* Resetting potential 100% width from general input style */
+            height: auto;
+        }
+        .signature-item label {
+            margin-bottom: 0;
+            font-weight: normal;
+        }
+        .signature-details {
+            margin-left: auto; /* Push details to the right */
+            font-size: 0.85em;
+            color: #555;
+            font-weight: bold;
+        }
+        .signature-details.signed {
+            color: #28a745; /* Green for signed */
+        }
+        .signature-details.pending {
+            color: #ffc107; /* Yellow for pending */
+        }
+
+        /* Filters and Search */
+        .filters-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap; /* Allow filters to wrap */
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+        .filters-container .form-field {
+            flex: 1;
+            min-width: 180px; /* Minimum width for filter fields */
+        }
+        .filters-container button {
+            margin-top: 0; /* Reset margin for inline buttons */
+        }
+
+        /* Loading Bar */
+        #loading-bar {
+            width: 100%;
+            background-color: #e0e0e0;
+            margin-top: 20px;
+            border-radius: 5px;
+            overflow: hidden;
+            display: none;
+        }
+        #loading-bar-fill {
+            height: 25px;
+            width: 0%;
+            background-color: #4CAF50;
+            text-align: center;
+            line-height: 25px;
+            color: white;
+            border-radius: 5px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px auto;
+                padding: 15px;
+            }
+            h1 {
+                font-size: 1.3em;
+            }
+            h2 {
+                font-size: 1.1em;
+            }
+            button {
+                padding: 8px 12px;
+                font-size: 0.9em;
+            }
+            .modal-content {
+                padding: 15px;
+            }
+            .filters-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .filters-container .form-field {
+                min-width: unset;
+                width: 100%;
+            }
+            .permit-record .buttons {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .permit-record .buttons button {
+                min-width: unset;
+                width: 100%;
+            }
+        }
+    </style>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <!-- XLSX for Excel export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <!-- jsPDF for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU", // Asegúrate que esta API Key esté bien protegida y restringida
+            authDomain: "lazapateria-c4157.firebaseapp.com",
+            projectId: "lazapateria-c4157",
+            storageBucket: "lazapateria-c4157.firebasestorage.app",
+            measurementId: "G-HVG7615JEE"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        console.log("Firebase configurado correctamente.");
+
+        let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
+        console.log("Datos del usuario al inicio:", datosUsuario);
+
+        // Fallback if user data is missing
+        if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto || !datosUsuario.usuario) {
+            datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
+            console.error("Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
+        }
+
+        // Global state for permits and filters
+        let permitsListenerUnsubscribe = null;
+        let currentPermitsData = []; // To store all permits fetched from Firestore
+        let currentFilters = {
+            searchTerm: '',
+            permitType: 'all',
+            status: 'all',
+            startDate: '',
+            endDate: ''
+        };
+        const ADMIN_PASSWORD = "adminpass"; // Password for admin actions
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Simulate user authentication based on __initial_auth_token or anonymous
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await auth.signInWithCustomToken(__initial_auth_token);
+                    console.log("Signed in with custom token.");
+                } else {
+                    await auth.signInAnonymously();
+                    console.log("Signed in anonymously.");
+                }
+            } catch (error) {
+                console.error("Error during Firebase authentication:", error);
+            }
+
+            // Populate form fields for the current user
+            document.getElementById('worker_name').value = datosUsuario.nombreCompleto;
+            document.getElementById('cargo').value = datosUsuario.permisos; // Assuming cargo is related to permissions
+
+            // Initialize filters
+            document.getElementById('filter_search_term').addEventListener('input', applyFilters);
+            document.getElementById('filter_permit_type').addEventListener('change', applyFilters);
+            document.getElementById('filter_status').addEventListener('change', applyFilters);
+            document.getElementById('filter_start_date').addEventListener('change', applyFilters);
+            document.getElementById('filter_end_date').addEventListener('change', applyFilters);
+
+            // Set today's date as default for start and end date inputs
+            const today = new Date().toISOString().slice(0, 10);
+            document.getElementById('start_date').value = today;
+            document.getElementById('end_date').value = today;
+
+            // Populate initial permit list
+            startPermitsRealtimeListener();
+
+            // Setup real-time listeners for user data (if roles were stored in Firestore)
+            // For now, we're relying on localStorage datosUsuario.
+        });
+
+        // --- Utility Functions ---
+        function showLoadingBar() {
+            const loadingBar = document.getElementById("loading-bar");
+            const loadingBarFill = document.getElementById("loading-bar-fill");
+            if (loadingBar && loadingBarFill) {
+                loadingBar.style.display = "block";
+                loadingBarFill.style.width = "0%";
+                let width = 0;
+                const interval = setInterval(() => {
+                    if (width >= 100) {
+                        clearInterval(interval);
+                    } else {
+                        width++;
+                        loadingBarFill.style.width = width + "%";
+                        loadingBarFill.innerText = width + "%";
+                    }
+                }, 10);
+            }
+        }
+
+        function hideLoadingBar() {
+            const loadingBar = document.getElementById("loading-bar");
+            if (loadingBar) {
+                loadingBar.style.display = "none";
+            }
+        }
+
+        function showModal(id) {
+            document.getElementById(id).style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+            // Clear password modal fields on close
+            if (id === 'password_modal') {
+                document.getElementById('password_input').value = '';
+                document.getElementById('password_error').textContent = '';
+            }
+        }
+
+        function formatDate(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return date.toLocaleDateString('es-CO');
+        }
+
+        function formatTime(timeString) {
+            if (!timeString) return 'N/A';
+            // Assuming timeString is in "HH:MM" format
+            const [hours, minutes] = timeString.split(':');
+            const date = new Date();
+            date.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            return date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+
+        function calculateTimeAuthorized(start_date, end_date, start_time, end_time) {
+            const startDateTime = new Date(`${start_date}T${start_time}`);
+            const endDateTime = new Date(`${end_date}T${end_time}`);
+
+            if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+                return "Fechas/Horas inválidas";
+            }
+
+            const diffMs = endDateTime - startDateTime;
+            if (diffMs < 0) {
+                return "Fecha/hora final debe ser posterior a la inicial";
+            }
+
+            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+            const diffHours = Math.floor(diffMinutes / 60);
+            const remainingMinutes = diffMinutes % 60;
+            const diffDays = Math.floor(diffHours / 24);
+            const remainingHours = diffHours % 24;
+
+            let result = [];
+            if (diffDays > 0) result.push(`${diffDays} día(s)`);
+            if (remainingHours > 0) result.push(`${remainingHours} hora(s)`);
+            if (remainingMinutes > 0) result.push(`${remainingMinutes} minuto(s)`);
+
+            return result.length > 0 ? result.join(', ') : '0 minutos';
+        }
+
+        function updateTimeAuthorized() {
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const startTime = document.getElementById('start_time').value;
+            const endTime = document.getElementById('end_time').value;
+
+            const timeAuthorized = calculateTimeAuthorized(startDate, endDate, startTime, endTime);
+            document.getElementById('time_authorized').value = timeAuthorized;
+        }
+
+        function updateEditTimeAuthorized() {
+            const startDate = document.getElementById('edit_start_date').value;
+            const endDate = document.getElementById('edit_end_date').value;
+            const startTime = document.getElementById('edit_start_time').value;
+            const endTime = document.getElementById('edit_end_time').value;
+
+            const timeAuthorized = calculateTimeAuthorized(startDate, endDate, startTime, endTime);
+            document.getElementById('edit_time_authorized').value = timeAuthorized;
+        }
+
+        // --- Permit Form Submission ---
+        async function submitPermit(event) {
+            event.preventDefault();
+            showLoadingBar();
+
+            const workerName = document.getElementById('worker_name').value;
+            const documentId = document.getElementById('document_id').value;
+            const cellphone = document.getElementById('cellphone').value;
+            const cargo = document.getElementById('cargo').value;
+            const immediateBoss = document.getElementById('immediate_boss').value;
+            const permitType = document.getElementById('permit_type').value;
+            const reason = document.getElementById('reason').value;
+            const startDate = document.getElementById('start_date').value;
+            const endDate = document.getElementById('end_date').value;
+            const startTime = document.getElementById('start_time').value;
+            const endTime = document.getElementById('end_time').value;
+            const timeAuthorized = document.getElementById('time_authorized').value;
+
+            const permitData = {
+                workerName,
+                documentId,
+                cellphone,
+                cargo,
+                immediateBoss,
+                permitType,
+                reason,
+                startDate,
+                endDate,
+                startTime,
+                endTime,
+                timeAuthorized,
+                submissionDate: firebase.firestore.Timestamp.fromDate(new Date()),
+                submittedBy: datosUsuario.nombreCompleto,
+                userId: datosUsuario.usuario, // Store user ID for filtering
+                signedByWorker: false,
+                workerSignatureDate: null,
+                signedByJefe: false,
+                jefeSignatureName: '',
+                jefeSignatureDate: null,
+                signedByRRHH: false,
+                rrhhSignatureName: '',
+                rrhhSignatureDate: null,
+                status: 'Pendiente' // Initial status
+            };
+
+            try {
+                await db.collection('permisos').add(permitData);
+                alert('Solicitud de permiso enviada con éxito!');
+                document.getElementById('permit_form').reset();
+                updateTimeAuthorized(); // Recalculate for empty form
+            } catch (error) {
+                console.error("Error al enviar el permiso:", error);
+                alert('Error al enviar la solicitud de permiso.');
+            } finally {
+                hideLoadingBar();
+            }
+        }
+
+        // --- Permit Display and Filtering ---
+        function startPermitsRealtimeListener() {
+            if (permitsListenerUnsubscribe) {
+                permitsListenerUnsubscribe(); // Detach previous listener
+            }
+
+            let query = db.collection('permisos').orderBy('submissionDate', 'desc');
+
+            // Operators and Bodegueros only see their own permits
+            if (datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero') {
+                query = query.where('userId', '==', datosUsuario.usuario);
+            }
+
+            permitsListenerUnsubscribe = query.onSnapshot(snapshot => {
+                currentPermitsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                applyFilters(); // Re-apply filters whenever data changes
+            }, error => {
+                console.error("Error al escuchar permisos:", error);
+                document.getElementById('permit_list').innerHTML = '<p>Error al cargar los permisos.</p>';
+            });
+        }
+
+        function applyFilters() {
+            currentFilters.searchTerm = document.getElementById('filter_search_term').value.toLowerCase();
+            currentFilters.permitType = document.getElementById('filter_permit_type').value;
+            currentFilters.status = document.getElementById('filter_status').value;
+            currentFilters.startDate = document.getElementById('filter_start_date').value;
+            currentFilters.endDate = document.getElementById('filter_end_date').value;
+
+            let filteredPermits = currentPermitsData.filter(permit => {
+                const matchesSearch = permit.workerName.toLowerCase().includes(currentFilters.searchTerm) ||
+                                      (permit.permitType && permit.permitType.toLowerCase().includes(currentFilters.searchTerm)) ||
+                                      (permit.reason && permit.reason.toLowerCase().includes(currentFilters.searchTerm));
+                
+                const matchesType = currentFilters.permitType === 'all' || permit.permitType === currentFilters.permitType;
+                const matchesStatus = currentFilters.status === 'all' || permit.status === currentFilters.status;
+
+                let matchesDate = true;
+                if (currentFilters.startDate && permit.startDate) {
+                    matchesDate = matchesDate && (permit.startDate >= currentFilters.startDate);
+                }
+                if (currentFilters.endDate && permit.endDate) {
+                    matchesDate = matchesDate && (permit.endDate <= currentFilters.endDate);
+                }
+
+                return matchesSearch && matchesType && matchesStatus && matchesDate;
+            });
+
+            renderPermits(filteredPermits);
+        }
+
+        function renderPermits(permitsToRender) {
+            const permitListDiv = document.getElementById('permit_list');
+            permitListDiv.innerHTML = ''; // Clear current list
+
+            if (permitsToRender.length === 0) {
+                permitListDiv.innerHTML = '<p>No hay permisos para mostrar con los filtros aplicados.</p>';
+                return;
+            }
+
+            permitsToRender.forEach(permit => {
+                const permitDiv = document.createElement('div');
+                permitDiv.className = 'permit-record';
+                permitDiv.dataset.id = permit.id;
+
+                let statusClass = '';
+                if (permit.status === 'Pendiente') statusClass = 'status-pendiente';
+                else if (permit.status === 'Autorizado') statusClass = 'status-autorizado';
+                else if (permit.status === 'Rechazado') statusClass = 'status-rechazado';
+
+                const isWorkerSigned = permit.signedByWorker;
+                const isJefeSigned = permit.signedByJefe;
+                const isRrhhSigned = permit.signedByRRHH;
+
+                // Determine edit/delete button state
+                const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+                const hasAnySignature = isWorkerSigned || isJefeSigned || isRrhhSigned;
+                const canEdit = isAdministrator || !hasAnySignature; // Admins can always edit
+
+                permitDiv.innerHTML = `
+                    <p><strong>Trabajador:</strong> ${permit.workerName}</p>
+                    <p><strong>Tipo de Permiso:</strong> ${permit.permitType}</p>
+                    <p><strong>Motivo:</strong> ${permit.reason}</p>
+                    <p><strong>Periodo:</strong> ${formatDate(permit.startDate)} ${formatTime(permit.startTime)} - ${formatDate(permit.endDate)} ${formatTime(permit.endTime)}</p>
+                    <p><strong>Tiempo Autorizado:</strong> ${permit.timeAuthorized}</p>
+                    <div class="signature-section">
+                        <h4>Firmas:</h4>
+                        <div class="signature-item">
+                            <input type="checkbox" id="worker_sign_${permit.id}" ${isWorkerSigned ? 'checked' : ''} ${!isAdministrator && isWorkerSigned ? 'disabled' : ''} onchange="handleWorkerSignature('${permit.id}', this.checked)">
+                            <label for="worker_sign_${permit.id}">Firma Trabajador</label>
+                            <span class="signature-details ${isWorkerSigned ? 'signed' : 'pending'}">${isWorkerSigned ? `${permit.workerSignatureDate ? formatDate(permit.workerSignatureDate) : 'Firmado'}` : 'Pendiente'}</span>
+                        </div>
+                        <div class="signature-item">
+                            <input type="checkbox" id="jefe_sign_${permit.id}" ${isJefeSigned ? 'checked' : ''} ${!isAdministrator ? 'disabled' : ''} onchange="handleJefeSignature('${permit.id}', this.checked)">
+                            <label for="jefe_sign_${permit.id}">Firma Jefe Inmediato</label>
+                            <span class="signature-details ${isJefeSigned ? 'signed' : 'pending'}">${isJefeSigned ? `Firmado por ${permit.jefeSignatureName} (${permit.jefeSignatureDate ? formatDate(permit.jefeSignatureDate) : 'N/A'})` : 'Pendiente'}</span>
+                        </div>
+                        <div class="signature-item">
+                            <input type="checkbox" id="rrhh_sign_${permit.id}" ${isRrhhSigned ? 'checked' : ''} ${!isAdministrator ? 'disabled' : ''} onchange="handleRRHHSignature('${permit.id}', this.checked)">
+                            <label for="rrhh_sign_${permit.id}">Firma RR. HH</label>
+                            <span class="signature-details ${isRrhhSigned ? 'signed' : 'pending'}">${isRrhhSigned ? `Firmado por ${permit.rrhhSignatureName} (${permit.rrhhSignatureDate ? formatDate(permit.rrhhSignatureDate) : 'N/A'})` : 'Pendiente'}</span>
+                        </div>
+                    </div>
+                    <div class="status-container ${statusClass}">
+                        Estado: ${permit.status}
+                    </div>
+                    <div class="buttons">
+                        <button onclick="openEditPermitModal('${permit.id}')" ${!canEdit ? 'disabled' : ''}>Editar</button>
+                        <button onclick="deletePermit('${permit.id}')" ${!isAdministrator ? 'disabled' : ''}>Eliminar</button>
+                        <button onclick="printPermitToPDF('${permit.id}')">Imprimir PDF</button>
+                    </div>
+                `;
+                permitListDiv.appendChild(permitDiv);
+            });
+        }
+
+        // --- Signature Handling ---
+        async function handleWorkerSignature(permitId, isChecked) {
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            if (!isChecked) { // Worker is trying to uncheck
+                if (!isAdministrator) { // Only admin can uncheck
+                    document.getElementById(`worker_sign_${permitId}`).checked = true; // Revert checkbox
+                    alert("Solo un administrador puede desmarcar la firma del trabajador.");
+                    return;
+                }
+                // If admin is unchecking, confirm with password
+                openPasswordModal('unsignWorker', permitId, isChecked);
+            } else { // Worker or admin is checking
+                if (!window.confirm("¿Está seguro de firmar? Una vez firmado por el trabajador, los Operadores y Bodegueros no podrán modificar el permiso.")) {
+                    document.getElementById(`worker_sign_${permitId}`).checked = false;
+                    return;
+                }
+                const updates = {
+                    signedByWorker: true,
+                    workerSignatureDate: firebase.firestore.Timestamp.fromDate(new Date())
+                };
+                await updatePermitInFirestore(permitId, updates);
+            }
+        }
+
+        async function handleJefeSignature(permitId, isChecked) {
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            if (!isAdministrator) { // Only admin can modify this
+                document.getElementById(`jefe_sign_${permitId}`).checked = !isChecked; // Revert checkbox
+                alert("Solo un administrador puede firmar o desmarcar la firma del Jefe Inmediato.");
+                return;
+            }
+            if (!isChecked) { // Admin is unchecking
+                openPasswordModal('unsignJefe', permitId, isChecked);
+            } else { // Admin is checking
+                const updates = {
+                    signedByJefe: true,
+                    jefeSignatureName: datosUsuario.nombreCompleto,
+                    jefeSignatureDate: firebase.firestore.Timestamp.fromDate(new Date())
+                };
+                await updatePermitInFirestore(permitId, updates);
+            }
+        }
+
+        async function handleRRHHSignature(permitId, isChecked) {
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            if (!isAdministrator) { // Only admin can modify this
+                document.getElementById(`rrhh_sign_${permitId}`).checked = !isChecked; // Revert checkbox
+                alert("Solo un administrador puede firmar o desmarcar la firma de RR. HH.");
+                return;
+            }
+            if (!isChecked) { // Admin is unchecking
+                openPasswordModal('unsignRRHH', permitId, isChecked);
+            } else { // Admin is checking
+                const updates = {
+                    signedByRRHH: true,
+                    rrhhSignatureName: datosUsuario.nombreCompleto,
+                    rrhhSignatureDate: firebase.firestore.Timestamp.fromDate(new Date())
+                };
+                await updatePermitInFirestore(permitId, updates);
+            }
+        }
+
+        async function updatePermitInFirestore(permitId, updates) {
+            showLoadingBar();
+            try {
+                const permitRef = db.collection('permisos').doc(permitId);
+                await permitRef.update(updates);
+
+                // Re-fetch permit to check all signatures for status update
+                const docSnap = await permitRef.get();
+                if (docSnap.exists) {
+                    const updatedPermit = docSnap.data();
+                    let newStatus = 'Pendiente';
+                    if (updatedPermit.signedByWorker && updatedPermit.signedByJefe && updatedPermit.signedByRRHH) {
+                        newStatus = 'Autorizado';
+                    }
+                    if (updatedPermit.status !== newStatus) {
+                        await permitRef.update({ status: newStatus });
+                    }
+                }
+                console.log(`Permiso ${permitId} actualizado con éxito.`);
+            } catch (error) {
+                console.error("Error al actualizar el permiso en Firestore:", error);
+                alert("Error al actualizar el permiso.");
+            } finally {
+                hideLoadingBar();
+            }
+        }
+
+        // --- Password Modal for Admin Actions ---
+        let passwordModalCallback = null;
+        let passwordModalPermitId = null;
+        let passwordModalIsChecked = null;
+
+        function openPasswordModal(type, permitId = null, isChecked = null) {
+            passwordModalCallback = type;
+            passwordModalPermitId = permitId;
+            passwordModalIsChecked = isChecked;
+            document.getElementById('password_input').value = '';
+            document.getElementById('password_error').textContent = '';
+            showModal('password_modal');
+        }
+
+        async function verifyPassword() {
+            const passwordInput = document.getElementById('password_input');
+            const errorMessage = document.getElementById('password_error');
+            const enteredPassword = passwordInput.value;
+
+            if (enteredPassword === ADMIN_PASSWORD) {
+                closeModal('password_modal');
+                if (passwordModalCallback === 'unsignWorker') {
+                    const updates = { signedByWorker: false, workerSignatureDate: null, status: 'Pendiente' };
+                    await updatePermitInFirestore(passwordModalPermitId, updates);
+                    document.getElementById(`worker_sign_${passwordModalPermitId}`).checked = false; // Ensure checkbox is unchecked
+                } else if (passwordModalCallback === 'unsignJefe') {
+                    const updates = { signedByJefe: false, jefeSignatureName: '', jefeSignatureDate: null, status: 'Pendiente' };
+                    await updatePermitInFirestore(passwordModalPermitId, updates);
+                    document.getElementById(`jefe_sign_${passwordModalPermitId}`).checked = false; // Ensure checkbox is unchecked
+                } else if (passwordModalCallback === 'unsignRRHH') {
+                    const updates = { signedByRRHH: false, rrhhSignatureName: '', rrhhSignatureDate: null, status: 'Pendiente' };
+                    await updatePermitInFirestore(passwordModalPermitId, updates);
+                    document.getElementById(`rrhh_sign_${passwordModalPermitId}`).checked = false; // Ensure checkbox is unchecked
+                } else if (passwordModalCallback === 'deletePermit') {
+                    // Actual delete logic after password verification
+                    await db.collection('permisos').doc(passwordModalPermitId).delete();
+                    alert("Permiso eliminado correctamente.");
+                }
+            } else {
+                errorMessage.textContent = "Contraseña incorrecta.";
+                // Revert checkbox state if password is wrong for unsign actions
+                if (passwordModalPermitId && passwordModalIsChecked !== null) {
+                    if (passwordModalCallback === 'unsignWorker') {
+                        document.getElementById(`worker_sign_${passwordModalPermitId}`).checked = true;
+                    } else if (passwordModalCallback === 'unsignJefe') {
+                        document.getElementById(`jefe_sign_${passwordModalPermitId}`).checked = true;
+                    } else if (passwordModalCallback === 'unsignRRHH') {
+                        document.getElementById(`rrhh_sign_${passwordModalPermitId}`).checked = true;
+                    }
+                }
+            }
+        }
+
+
+        // --- Edit Permit ---
+        let currentEditPermitId = null;
+
+        async function openEditPermitModal(permitId) {
+            showLoadingBar();
+            try {
+                const docRef = db.collection('permisos').doc(permitId);
+                const docSnap = await docRef.get();
+
+                if (!docSnap.exists) {
+                    alert("El permiso no existe.");
+                    return;
+                }
+                const permit = docSnap.data();
+
+                const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+                const hasAnySignature = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH;
+
+                if (!isAdministrator && hasAnySignature) {
+                    alert("Este permiso ya ha sido firmado y no puede ser modificado por un Operador o Bodeguero.");
+                    return;
+                }
+
+                currentEditPermitId = permitId;
+                document.getElementById('edit_worker_name').value = permit.workerName;
+                document.getElementById('edit_document_id').value = permit.documentId;
+                document.getElementById('edit_cellphone').value = permit.cellphone;
+                document.getElementById('edit_cargo').value = permit.cargo;
+                document.getElementById('edit_immediate_boss').value = permit.immediateBoss;
+                document.getElementById('edit_permit_type').value = permit.permitType;
+                document.getElementById('edit_reason').value = permit.reason;
+                document.getElementById('edit_start_date').value = permit.startDate;
+                document.getElementById('edit_end_date').value = permit.endDate;
+                document.getElementById('edit_start_time').value = permit.startTime;
+                document.getElementById('edit_end_time').value = permit.endTime;
+                document.getElementById('edit_time_authorized').value = permit.timeAuthorized;
+
+                // Disable fields if not admin and already signed
+                const editFields = ['edit_worker_name', 'edit_document_id', 'edit_cellphone', 'edit_cargo', 'edit_immediate_boss', 'edit_permit_type', 'edit_reason', 'edit_start_date', 'edit_end_date', 'edit_start_time', 'edit_end_time'];
+                editFields.forEach(fieldId => {
+                    const field = document.getElementById(fieldId);
+                    if (field) field.disabled = !isAdministrator && hasAnySignature;
+                });
+                
+                showModal('edit_permit_modal');
+            } catch (error) {
+                console.error("Error al cargar permiso para editar:", error);
+                alert("Error al cargar permiso.");
+            } finally {
+                hideLoadingBar();
+            }
+        }
+
+        async function saveEditedPermit(event) {
+            event.preventDefault();
+            showLoadingBar();
+
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const permitRef = db.collection('permisos').doc(currentEditPermitId);
+            const docSnap = await permitRef.get();
+            const permit = docSnap.data();
+            const hasAnySignature = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH;
+
+            if (!isAdministrator && hasAnySignature) {
+                alert("Este permiso ya ha sido firmado y no puede ser modificado por un Operador o Bodeguero.");
+                hideLoadingBar();
+                closeModal('edit_permit_modal');
+                return;
+            }
+
+            const updatedData = {
+                workerName: document.getElementById('edit_worker_name').value,
+                documentId: document.getElementById('edit_document_id').value,
+                cellphone: document.getElementById('edit_cellphone').value,
+                cargo: document.getElementById('edit_cargo').value,
+                immediateBoss: document.getElementById('edit_immediate_boss').value,
+                permitType: document.getElementById('edit_permit_type').value,
+                reason: document.getElementById('edit_reason').value,
+                startDate: document.getElementById('edit_start_date').value,
+                endDate: document.getElementById('edit_end_date').value,
+                startTime: document.getElementById('edit_start_time').value,
+                endTime: document.getElementById('edit_end_time').value,
+                timeAuthorized: document.getElementById('edit_time_authorized').value,
+            };
+
+            try {
+                await permitRef.update(updatedData);
+                alert('Permiso actualizado con éxito!');
+                closeModal('edit_permit_modal');
+            } catch (error) {
+                console.error("Error al guardar permiso editado:", error);
+                alert('Error al guardar el permiso.');
+            } finally {
+                hideLoadingBar();
+            }
+        }
+
+        // --- Delete Permit ---
+        async function deletePermit(permitId) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Solo un administrador puede eliminar permisos.");
+                return;
+            }
+
+            if (confirm("¿Está seguro de que desea eliminar este permiso? Esta acción no se puede deshacer.")) {
+                // Pass to password modal for confirmation
+                openPasswordModal('deletePermit', permitId);
+            }
+        }
+
+        // --- Export to Excel ---
+        async function exportPermitsToExcel() {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Solo un administrador puede exportar a Excel.");
+                return;
+            }
+            showLoadingBar();
+            try {
+                const snapshot = await db.collection('permisos').orderBy('submissionDate', 'asc').get();
+                const data = snapshot.docs.map(doc => {
+                    const permit = doc.data();
+                    return {
+                        "ID Permiso": doc.id,
+                        "Fecha Solicitud": permit.submissionDate ? formatDate(permit.submissionDate) : 'N/A',
+                        "Solicitado Por (ID)": permit.userId || 'N/A',
+                        "Nombre Trabajador": permit.workerName,
+                        "Documento": permit.documentId,
+                        "Celular": permit.cellphone,
+                        "Cargo": permit.cargo,
+                        "Jefe Inmediato": permit.immediateBoss,
+                        "Tipo de Permiso": permit.permitType,
+                        "Motivo": permit.reason,
+                        "Fecha Inicio": permit.startDate,
+                        "Hora Inicio": permit.startTime,
+                        "Fecha Fin": permit.endDate,
+                        "Hora Fin": permit.endTime,
+                        "Tiempo Autorizado": permit.timeAuthorized,
+                        "Firma Trabajador": permit.signedByWorker ? `Sí (${permit.workerSignatureDate ? formatDate(permit.workerSignatureDate) : 'N/A'})` : 'No',
+                        "Firma Jefe": permit.signedByJefe ? `Sí (${permit.jefeSignatureName} - ${permit.jefeSignatureDate ? formatDate(permit.jefeSignatureDate) : 'N/A'})` : 'No',
+                        "Firma RR.HH": permit.signedByRRHH ? `Sí (${permit.rrhhSignatureName} - ${permit.rrhhSignatureDate ? formatDate(permit.rrhhSignatureDate) : 'N/A'})` : 'No',
+                        "Estado": permit.status
+                    };
+                });
+
+                const ws = XLSX.utils.json_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Permisos");
+                XLSX.writeFile(wb, "solicitudes_permisos.xlsx");
+                alert("Datos exportados a Excel con éxito.");
+            } catch (error) {
+                console.error("Error al exportar a Excel:", error);
+                alert("Error al exportar los permisos a Excel.");
+            } finally {
+                hideLoadingBar();
+            }
+        }
+
+        // --- Print to PDF ---
+        async function printPermitToPDF(permitId) {
+            showLoadingBar();
+            try {
+                const docSnap = await db.collection('permisos').doc(permitId).get();
+                if (!docSnap.exists) {
+                    alert("El permiso no existe.");
+                    return;
+                }
+                const permit = docSnap.data();
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('p', 'mm', 'a4'); // Portrait, millimeters, A4 size
+
+                // Define content for PDF
+                const content = `
+                    <div style="font-family: Arial, sans-serif; font-size: 10pt; padding: 20px;">
+                        <h1 style="text-align: center; font-size: 14pt; margin-bottom: 5px;">SISTEMA DE GESTIÓN DE LA SEGURIDAD Y SALUD EN EL TRABAJO</h1>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 8pt;">
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Código SST - FR 04</strong></td>
+                                <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Fecha Actualización:</strong> 8/02/2021</td>
+                                <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Versión:</strong> 01</td>
+                                <td style="border: 1px solid #000; padding: 5px; width: 25%;"><strong>Pág:</strong> 1 de 1</td>
+                            </tr>
+                        </table>
+                        <h2 style="text-align: center; font-size: 12pt; margin-top: 15px; margin-bottom: 20px;">FORMATO DE SOLICITUD DE PERMISO (ESPECIAL, REMUNERADO, NO REMUNERADO)</h2>
+
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px;"><strong>Nombre del Trabajador:</strong> ${permit.workerName || 'N/A'}</td>
+                                <td style="border: 1px solid #000; padding: 8px;"><strong>Documento:</strong> ${permit.documentId || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px;"><strong>Celular:</strong> ${permit.cellphone || 'N/A'}</td>
+                                <td style="border: 1px solid #000; padding: 8px;"><strong>Cargo:</strong> ${permit.cargo || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Jefe Inmediato:</strong> ${permit.immediateBoss || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Tipo de Permiso:</strong> ${permit.permitType || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>MOTIVO DEL PERMISO:</strong> ${permit.reason || 'N/A'}</td>
+                            </tr>
+                        </table>
+
+                        <h3 style="font-size: 11pt; margin-top: 20px; margin-bottom: 10px;">Información del Permiso:</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px;"><strong>INICIO:</strong> ${formatDate(permit.startDate)}</td>
+                                <td style="border: 1px solid #000; padding: 8px;"><strong>Finalización:</strong> ${formatDate(permit.endDate)}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px;"><strong>Hora Inicio:</strong> ${formatTime(permit.startTime)}</td>
+                                <td style="border: 1px solid #000; padding: 8px;"><strong>Hora Finalización:</strong> ${formatTime(permit.endTime)}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px;" colspan="2"><strong>Tiempo autorizado:</strong> ${permit.timeAuthorized || 'N/A'}</td>
+                            </tr>
+                        </table>
+
+                        <h3 style="font-size: 11pt; margin-top: 20px; margin-bottom: 10px;">Firmas:</h3>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="border: 1px solid #000; padding: 8px; width: 33%;">
+                                    <strong>Firma digital del trabajador:</strong> ${permit.signedByWorker ? 'Firmado' : 'Pendiente'}
+                                    <br><em>${permit.workerSignatureDate ? formatDate(permit.workerSignatureDate) : ''}</em>
+                                </td>
+                                <td style="border: 1px solid #000; padding: 8px; width: 33%;">
+                                    <strong>Firma digital del Jefe Inmediato:</strong> ${permit.signedByJefe ? 'Firmado' : 'Pendiente'}
+                                    <br><em>${permit.jefeSignatureName || ''} ${permit.jefeSignatureDate ? formatDate(permit.jefeSignatureDate) : ''}</em>
+                                </td>
+                                <td style="border: 1px solid #000; padding: 8px; width: 34%;">
+                                    <strong>Firma digital de RR. HH:</strong> ${permit.signedByRRHH ? 'Firmado' : 'Pendiente'}
+                                    <br><em>${permit.rrhhSignatureName || ''} ${permit.rrhhSignatureDate ? formatDate(permit.rrhhSignatureDate) : ''}</em>
+                                </td>
+                            </tr>
+                        </table>
+                        <p style="text-align: right; margin-top: 30px; font-size: 9pt;">Estado del Permiso: <strong>${permit.status || 'N/A'}</strong></p>
+                        <p style="text-align: right; margin-top: 5px; font-size: 8pt;">Fecha de Solicitud: ${formatDate(permit.submissionDate)}</p>
+                    </div>
+                `;
+
+                // Add HTML content to PDF using html2canvas and addImage
+                doc.html(content, {
+                    callback: function (doc) {
+                        doc.save(`Permiso_${permit.workerName.replace(/\s/g, '_')}_${permit.id}.pdf`);
+                        alert("Permiso generado en PDF con éxito.");
+                    },
+                    x: 10,
+                    y: 10,
+                    html2canvas: {
+                        scale: 0.7 // Adjust scale for better fit on A4
+                    },
+                    autoPaging: 'text'
+                });
+            } catch (error) {
+                console.error("Error al imprimir PDF:", error);
+                alert("Error al generar el PDF del permiso.");
+            } finally {
+                hideLoadingBar();
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Sistema de Solicitud de Permisos</h1>
+
+        <!-- Formulario de Solicitud de Permiso -->
+        <section>
+            <h2>Solicitar Nuevo Permiso</h2>
+            <form id="permit_form" onsubmit="submitPermit(event)">
+                <div class="form-field">
+                    <label for="worker_name">Nombre del Trabajador:</label>
+                    <input type="text" id="worker_name" required readonly>
+                </div>
+                <div class="form-field">
+                    <label for="document_id">Documento:</label>
+                    <input type="text" id="document_id" required>
+                </div>
+                <div class="form-field">
+                    <label for="cellphone">Celular:</label>
+                    <input type="tel" id="cellphone" required>
+                </div>
+                <div class="form-field">
+                    <label for="cargo">Cargo:</label>
+                    <input type="text" id="cargo" required readonly>
+                </div>
+                <div class="form-field">
+                    <label for="immediate_boss">Jefe Inmediato:</label>
+                    <input type="text" id="immediate_boss" required>
+                </div>
+                <div class="form-field">
+                    <label for="permit_type">Tipo de Permiso:</label>
+                    <select id="permit_type" required>
+                        <option value="">Seleccione uno</option>
+                        <option value="Personal">Personal</option>
+                        <option value="Remunerado">Remunerado</option>
+                        <option value="No Remunerado">No Remunerado</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="reason">Motivo del Permiso:</label>
+                    <textarea id="reason" rows="3" required></textarea>
+                </div>
+                
+                <h3>Información del Permiso:</h3>
+                <div class="form-field">
+                    <label for="start_date">INICIO:</label>
+                    <input type="date" id="start_date" onchange="updateTimeAuthorized()" required>
+                </div>
+                <div class="form-field">
+                    <label for="end_date">Finalización:</label>
+                    <input type="date" id="end_date" onchange="updateTimeAuthorized()" required>
+                </div>
+                <div class="form-field">
+                    <label for="start_time">Hora Inicio:</label>
+                    <input type="time" id="start_time" onchange="updateTimeAuthorized()" required>
+                </div>
+                <div class="form-field">
+                    <label for="end_time">Hora Finalización:</label>
+                    <input type="time" id="end_time" onchange="updateTimeAuthorized()" required>
+                </div>
+                <div class="form-field">
+                    <label for="time_authorized">Tiempo autorizado:</label>
+                    <input type="text" id="time_authorized" readonly>
+                </div>
+
+                <button type="submit">Enviar Solicitud</button>
+            </form>
+        </section>
+
+        <hr style="margin: 40px 0; border: none; border-top: 1px dashed #ccc;">
+
+        <!-- Listado y Gestión de Permisos -->
+        <section>
+            <h2>Gestión de Permisos</h2>
+            <div class="filters-container">
+                <div class="form-field">
+                    <label for="filter_search_term">Buscar (Trabajador/Motivo):</label>
+                    <input type="text" id="filter_search_term" placeholder="Buscar...">
+                </div>
+                <div class="form-field">
+                    <label for="filter_permit_type">Tipo de Permiso:</label>
+                    <select id="filter_permit_type">
+                        <option value="all">Todos</option>
+                        <option value="Personal">Personal</option>
+                        <option value="Remunerado">Remunerado</option>
+                        <option value="No Remunerado">No Remunerado</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="filter_status">Estado:</label>
+                    <select id="filter_status">
+                        <option value="all">Todos</option>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="Autorizado">Autorizado</option>
+                        <option value="Rechazado">Rechazado</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="filter_start_date">Fecha Inicio:</label>
+                    <input type="date" id="filter_start_date">
+                </div>
+                <div class="form-field">
+                    <label for="filter_end_date">Fecha Fin:</label>
+                    <input type="date" id="filter_end_date">
+                </div>
+                <button onclick="applyFilters()">Aplicar Filtros</button>
+                <button onclick="document.getElementById('filter_search_term').value = ''; document.getElementById('filter_permit_type').value = 'all'; document.getElementById('filter_status').value = 'all'; document.getElementById('filter_start_date').value = ''; document.getElementById('filter_end_date').value = ''; applyFilters();">Limpiar Filtros</button>
+            </div>
+            
+            <button onclick="exportPermitsToExcel()" id="export_excel_btn" style="margin-bottom: 20px; display: none;">Exportar a Excel</button>
+
+            <div id="permit_list">
+                <p>Cargando permisos...</p>
+            </div>
+        </section>
+    </div>
+
+    <!-- Loading Bar -->
+    <div id="loading-bar">
+        <div id="loading-bar-fill">0%</div>
+    </div>
+
+    <!-- Edit Permit Modal -->
+    <div id="edit_permit_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('edit_permit_modal')">&times;</span>
+            <h2>Editar Permiso</h2>
+            <form id="edit_permit_form" onsubmit="saveEditedPermit(event)">
+                <div class="form-field">
+                    <label for="edit_worker_name">Nombre del Trabajador:</label>
+                    <input type="text" id="edit_worker_name" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_document_id">Documento:</label>
+                    <input type="text" id="edit_document_id" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_cellphone">Celular:</label>
+                    <input type="tel" id="edit_cellphone" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_cargo">Cargo:</label>
+                    <input type="text" id="edit_cargo" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_immediate_boss">Jefe Inmediato:</label>
+                    <input type="text" id="edit_immediate_boss" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_permit_type">Tipo de Permiso:</label>
+                    <select id="edit_permit_type" required>
+                        <option value="Personal">Personal</option>
+                        <option value="Remunerado">Remunerado</option>
+                        <option value="No Remunerado">No Remunerado</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="edit_reason">Motivo del Permiso:</label>
+                    <textarea id="edit_reason" rows="3" required></textarea>
+                </div>
+                
+                <h3>Información del Permiso:</h3>
+                <div class="form-field">
+                    <label for="edit_start_date">INICIO:</label>
+                    <input type="date" id="edit_start_date" onchange="updateEditTimeAuthorized()" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_end_date">Finalización:</label>
+                    <input type="date" id="edit_end_date" onchange="updateEditTimeAuthorized()" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_start_time">Hora Inicio:</label>
+                    <input type="time" id="edit_start_time" onchange="updateEditTimeAuthorized()" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_end_time">Hora Finalización:</label>
+                    <input type="time" id="edit_end_time" onchange="updateEditTimeAuthorized()" required>
+                </div>
+                <div class="form-field">
+                    <label for="edit_time_authorized">Tiempo autorizado:</label>
+                    <input type="text" id="edit_time_authorized" readonly>
+                </div>
+
+                <button type="submit">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Password Confirmation Modal -->
+    <div id="password_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('password_modal')">&times;</span>
+            <h2>Confirmar Contraseña de Administrador</h2>
+            <p>Por favor, ingrese la contraseña de administrador para proceder.</p>
+            <div class="form-field">
+                <label for="password_input">Contraseña:</label>
+                <input type="password" id="password_input" placeholder="Contraseña de Admin">
+                <p id="password_error" style="color: red; font-size: 0.8em; margin-top: 5px;"></p>
+            </div>
+            <button type="button" onclick="verifyPassword()">Confirmar</button>
+        </div>
+    </div>
+
+    <script>
+        // Adjust visibility of Export to Excel button based on user role
+        if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+            document.getElementById('export_excel_btn').style.display = 'block';
+        } else {
+            document.getElementById('export_excel_btn').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
