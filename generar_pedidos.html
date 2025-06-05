@@ -179,6 +179,7 @@
         .search-bar-container input {
             width: calc(100% - 20px); /* Ajustar para padding */
         }
+        /* Adjusted styles for status messages to display name */
         .status-despachado {
             color: green;
             font-weight: bold;
@@ -202,31 +203,6 @@
             pointer-events: none; /* Para que no interfiera con clics */
             box-shadow: 0 2px 5px rgba(0,0,0,0.3); /* Sombra más pronunciada */
             z-index: 10; /* Asegurar que esté por encima de otros elementos */
-        }
-        /* Estilos para los botones de filtro de despacho */
-        .dispatch-filter-button {
-            background-color: #f0f0f0;
-            color: #333;
-            border: 1px solid #ccc;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-right: 5px; /* Espacio entre botones */
-        }
-        .dispatch-filter-button:hover {
-            background-color: #e0e0e0;
-        }
-        .dispatch-filter-button.active {
-            background-color: #4CAF50; /* Default active green */
-            color: white;
-            border-color: #4CAF50;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
-        }
-        /* Estilo específico para el botón "No Despachados" cuando está activo */
-        .dispatch-filter-button.active.no-despachados-active {
-            background-color: #dc3545; /* Rojo */
-            border-color: #dc3545;
         }
         /* Styles for product/abono items in modification modal */
         .product-item, .abono-item {
@@ -544,7 +520,9 @@
                     usuario: datosUsuario.usuario,
                     bodegueros_encargados: selectedBodegueros, // Add bodegueros
                     bloqueado: false,
-                    despachado: false
+                    despachado: false,
+                    despachadoPor: '', // Initialize new field
+                    bloqueadoPor: '' // Initialize new field
                 };
                 console.log("Datos a guardar:", datos);
 
@@ -666,22 +644,22 @@
             const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
             const estaBloqueado = updatedRegistro.bloqueado === true;
             const estaDespachado = updatedRegistro.despachado === true;
+            const despachadoPor = updatedRegistro.despachadoPor || '';
+            const bloqueadoPor = updatedRegistro.bloqueadoPor || '';
 
             recordElement.dataset.bloqueado = estaBloqueado;
             recordElement.dataset.despachado = estaDespachado;
+            recordElement.dataset.despachadoPor = despachadoPor; // Update dataset
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Update dataset
 
             const statusMessagesContainer = recordElement.querySelector(`#status-messages-${docId}`);
             if (statusMessagesContainer) {
                 let newStatusHtml = '';
-                if (!isAdministrator) {
-                    if (currentDispatchFilter === 'all' || currentDispatchFilter === 'despachados') {
-                        if (estaBloqueado) {
-                            newStatusHtml += `<p class="status-bloqueado">Pedido Revisado</p>`;
-                        }
-                        if (estaDespachado) {
-                            newStatusHtml += `<p class="status-despachado">Pedido Despachado</p>`;
-                        }
-                    }
+                // Check if it's not administrator, or if it is and we are on 'all' (default view for blocked status)
+                // or if we are on 'despachados' filter (where blocked status doesn't show usually)
+                if (estaBloqueado) {
+                    const blockedText = bloqueadoPor ? `BLOQUEADO POR: ${bloqueadoPor.toUpperCase()}` : 'PEDIDO REVISADO';
+                    newStatusHtml += `<p class="status-bloqueado">${blockedText}</p>`;
                 }
                 statusMessagesContainer.innerHTML = newStatusHtml;
             }
@@ -701,8 +679,9 @@
 
             const despachadoSelloContainer = recordElement.querySelector(`#despachado-sello-container-${docId}`);
             if (despachadoSelloContainer) {
-                if (estaDespachado && currentDispatchFilter === 'despachados') {
-                    despachadoSelloContainer.innerHTML = '<div class="despachado-sello">DESPACHADO</div>';
+                if (estaDespachado) {
+                    const despachadoText = despachadoPor ? `DESPACHADO POR: ${despachadoPor.toUpperCase()}` : 'DESPACHADO';
+                    despachadoSelloContainer.innerHTML = `<div class="despachado-sello">${despachadoText}</div>`;
                 } else {
                     despachadoSelloContainer.innerHTML = '';
                 }
@@ -718,6 +697,8 @@
             const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
             const estaBloqueado = registro.bloqueado === true;
             const estaDespachado = registro.despachado === true;
+            const despachadoPor = registro.despachadoPor || ''; // Get despachadoPor
+            const bloqueadoPor = registro.bloqueadoPor || '';   // Get bloqueadoPor
 
             // Set initial data attributes
             recordElement.dataset.asesor = registro.asesor || 'N/A';
@@ -725,6 +706,8 @@
             recordElement.dataset.codigo = registro.codigo_unico || 'N/A';
             recordElement.dataset.despachado = estaDespachado;
             recordElement.dataset.bloqueado = estaBloqueado;
+            recordElement.dataset.despachadoPor = despachadoPor; // Add despachadoPor to dataset
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Add bloqueadoPor to dataset
             recordElement.dataset.usuario = registro.usuario || 'N/A';
 
             let productosTextoParaBusqueda = "";
@@ -751,14 +734,20 @@
 
             let controlesHTML = '';
             if (esAdministrador) {
-                if (currentDispatchFilter !== 'all') {
+                // If currentDispatchFilter is not 'all', it implies we are in 'despachados' or 'noDespachados'
+                // where the checkbox for despachado is relevant.
+                // The original code shows despachado checkbox only if currentDispatchFilter is NOT 'all'.
+                // I will keep this logic.
+                if (currentDispatchFilter !== 'all') { // This condition was for the despachado checkbox
                     controlesHTML += `
                         <div class="control-container control-container-despachado">
                             <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)">
                             <label for="despachar_${docId}">Marcar como Despachado</label>
                         </div>`;
                 }
-                if (currentDispatchFilter === 'all') {
+                // The original code shows blocked checkbox only if currentDispatchFilter IS 'all'.
+                // I will keep this logic.
+                if (currentDispatchFilter === 'all') { // This condition was for the bloqueado checkbox
                     controlesHTML += `
                         <div class="control-container">
                             <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)">
@@ -775,6 +764,8 @@
                 : 'N/A';
 
             let recordContentHtml = '';
+            // Display logic for main content of the record
+            // The original logic shows different content based on filter. I will maintain this structure.
             if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
                 recordContentHtml = `
                     <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
@@ -822,8 +813,8 @@
         function updateExistingRecordElement(existingElement, updatedRegistro, index) {
             const newRecordElement = createRecordElement(existingElement.dataset.id, updatedRegistro, index);
             existingElement.parentNode.replaceChild(newRecordElement, existingElement);
-            // No need to call updateRecordStatusAndButtons here, createRecordElement already sets initial status
-            // and the overall onSnapshot loop will call filtrarYBuscarPedidos which handles visibility.
+            // After replacing, make sure the status is correctly displayed for the new element
+            updateRecordStatusAndButtons(existingElement.dataset.id, updatedRegistro);
         }
 
 
@@ -993,8 +984,16 @@
                 return;
             }
             try {
-                await db.collection('registros').doc(id).update({ bloqueado: nuevoEstadoBloqueo });
-                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo}`);
+                const updateData = {};
+                if (nuevoEstadoBloqueo) {
+                    updateData.bloqueado = true;
+                    updateData.bloqueadoPor = datosUsuario.nombreCompleto;
+                } else {
+                    updateData.bloqueado = false;
+                    updateData.bloqueadoPor = ''; // Clear the field when unblocked
+                }
+                await db.collection('registros').doc(id).update(updateData);
+                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo} por ${datosUsuario.nombreCompleto}`);
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
@@ -1012,8 +1011,16 @@
                 return;
             }
             try {
-                await db.collection('registros').doc(id).update({ despachado: nuevoEstadoDespachado });
-                console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado}`);
+                const updateData = {};
+                if (nuevoEstadoDespachado) {
+                    updateData.despachado = true;
+                    updateData.despachadoPor = datosUsuario.nombreCompleto;
+                } else {
+                    updateData.despachado = false;
+                    updateData.despachadoPor = ''; // Clear the field when undispatched
+                }
+                await db.collection('registros').doc(id).update(updateData);
+                console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado} por ${datosUsuario.nombreCompleto}`);
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
@@ -1067,8 +1074,8 @@
                     "Saldo a Favor": registro.saldo_a_favor,
                     "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
                     "Bodeguero(s)": (registro.bodegueros_encargados || []).join(', '), // Add bodegueros to export
-                    "Bloqueado": registro.bloqueado ? 'Sí' : 'No',
-                    "Despachado": registro.despachado ? 'Sí' : 'No'
+                    "Bloqueado": registro.bloqueadoPor || 'No bloqueado', // Changed to show name or "No bloqueado"
+                    "Despachado": registro.despachadoPor || 'No verificado' // Changed to show name or "No verificado"
                 });
             });
             const worksheet = XLSX.utils.json_to_sheet(registros);
