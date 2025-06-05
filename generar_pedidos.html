@@ -280,6 +280,9 @@
         }
 
         /* Estilos para el modal de contraseña */
+        #password_modal.modal { /* Specificity for modal parent */
+            z-index: 1002; /* Increased z-index */
+        }
         #password_modal .modal-content {
             max-width: 350px;
             padding: 25px;
@@ -433,9 +436,9 @@
         const BLOCK_PASSWORD = "upm1022";
         const BLOCK_HOUR = 17; // 5 PM
         const BLOCK_MINUTE = 40; // 40 minutes
-        // isTimeBlocked is no longer a persistent state; it's a trigger for isAutoBlockedPermanently
         let isGlobalManualBlock = false; // Bloqueo manual/inmediato global, controlado por Firestore
         let isAutoBlockedPermanently = false; // Nuevo: Bloqueo automático persistente, controlado por Firestore
+        let lastAutoBlockTriggerDate = null; // Nuevo: Para controlar que el auto-bloqueo se active solo una vez por día
         let currentPasswordModalTargetCheckbox = null; // Para saber qué checkbox se intentó desmarcar
 
         const mostrarModal = id => {
@@ -1419,11 +1422,7 @@
                     countdownElement.textContent = "¡Bloqueo automático activado! (Indefinido)";
                     countdownElement.style.backgroundColor = '#ffc107'; // Yellow background for active auto block
                     countdownElement.style.borderColor = '#ffc107';
-                } else if (timeLeftMs <= 0) {
-                    countdownElement.textContent = "¡Bloqueo automático activado!";
-                    countdownElement.style.backgroundColor = '#ffc107';
-                    countdownElement.style.borderColor = '#ffc107';
-                } else {
+                } else { // Removed the 'else if (timeLeftMs <= 0)' condition here. The activation is handled by checkTimeBlock now.
                     countdownElement.textContent = `Bloqueo automático en: ${Math.floor(timeLeftMs / (1000 * 60 * 60))}h ${Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}m ${Math.floor((timeLeftMs % (1000 * 60)) / 1000)}s`;
                     countdownElement.style.backgroundColor = '#e7f3ff'; // Default blue background
                     countdownElement.style.borderColor = '#007bff';
@@ -1515,14 +1514,17 @@
             globalSettingsRef.onSnapshot(doc => {
                 if (doc.exists) {
                     isGlobalManualBlock = doc.data().isBlocked || false;
-                    isAutoBlockedPermanently = doc.data().isAutoBlockedPermanently || false; // Fetch new persistent auto block state
+                    isAutoBlockedPermanently = doc.data().isAutoBlockedPermanently || false; 
+                    lastAutoBlockTriggerDate = doc.data().lastAutoBlockTriggerDate || null; // Read new field
                     console.log("Estado de bloqueo global (manual):", isGlobalManualBlock);
                     console.log("Estado de bloqueo global (automático persistente):", isAutoBlockedPermanently);
+                    console.log("Última fecha de activación auto-bloqueo:", lastAutoBlockTriggerDate);
                 } else {
                     // Si el documento no existe, crearlo con un estado inicial
-                    globalSettingsRef.set({ isBlocked: false, isAutoBlockedPermanently: false }).then(() => {
+                    globalSettingsRef.set({ isBlocked: false, isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: null }).then(() => {
                         isGlobalManualBlock = false;
                         isAutoBlockedPermanently = false;
+                        lastAutoBlockTriggerDate = null;
                         console.log("Documento de configuración global creado con estado inicial.");
                     }).catch(error => {
                         console.error("Error al crear documento de configuración global:", error);
@@ -1673,18 +1675,25 @@
 
         function checkTimeBlock() {
             const now = new Date();
+            const todayDate = now.toISOString().slice(0, 10); // Format YYYY-MM-DD
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
             const timeConditionMet = (currentHour > BLOCK_HOUR || (currentHour === BLOCK_HOUR && currentMinute >= BLOCK_MINUTE));
 
-            if (timeConditionMet && !isAutoBlockedPermanently) { // If time condition is met AND it's not already permanently blocked by auto-rule
-                globalSettingsRef.set({ isAutoBlockedPermanently: true }, { merge: true }).then(() => {
-                    isAutoBlockedPermanently = true; // Update local state immediately for responsiveness
-                    console.log("Bloqueo automático activado (permanente).");
-                    applyBlockStatus();
-                    updateCountdown(); // Update countdown display
-                }).catch(error => console.error("Error al activar bloqueo automático permanente:", error));
+            if (timeConditionMet && !isAutoBlockedPermanently) {
+                // Only activate if the auto-block hasn't been triggered for today yet
+                if (lastAutoBlockTriggerDate !== todayDate) {
+                    globalSettingsRef.set({ isAutoBlockedPermanently: true, lastAutoBlockTriggerDate: todayDate }, { merge: true }).then(() => {
+                        isAutoBlockedPermanently = true; // Update local state
+                        lastAutoBlockTriggerDate = todayDate; // Update local state
+                        console.log("Bloqueo automático activado (permanente) y fecha de activación registrada.");
+                        applyBlockStatus();
+                        updateCountdown();
+                    }).catch(error => console.error("Error al activar bloqueo automático permanente:", error));
+                } else {
+                    // console.log("Bloqueo automático ya activado hoy. No se re-activará.");
+                }
             }
             // Removed the 'else' to clear it by time. It should only be cleared by password now.
         }
@@ -1758,15 +1767,15 @@
                 return;
             }
 
-            if (checkbox.checked) {
-                // If it's already checked (meaning isAutoBlockedPermanently is true), and they try to check it again (no change), do nothing.
-                // If it was unchecked and they tried to check it manually, revert it as it's time activated.
-                // The main purpose is to unblock, so if they try to check, revert.
-                if (!isAutoBlockedPermanently) { // If it's not permanently blocked, but they tried to check it
-                    checkbox.checked = false; // Revert state, as only time can set it
-                }
-            } else { // If trying to uncheck the auto-block (it was checked and they clicked it)
-                if (isAutoBlockedPermanently) { // Only if it's currently permanently blocked
+            // This checkbox is for unblocking the permanent auto-block. It cannot be manually checked to activate the block.
+            if (checkbox.checked && !isAutoBlockedPermanently) {
+                // If they try to manually check it when it's not permanently blocked, revert.
+                checkbox.checked = false;
+                return;
+            }
+
+            if (!checkbox.checked) { // If trying to uncheck the auto-block (it was checked and they clicked it)
+                if (isAutoBlockedPermanently) { // Only if it's currently permanently blocked, ask for password
                     currentPasswordModalTargetCheckbox = checkbox;
                     showPasswordModal('auto_permanent'); // Trigger password modal for auto_permanent type
                 } else {
@@ -1805,8 +1814,13 @@
                     }
                 } else if (blockType === 'auto_permanent') { // Handle auto_permanent block type
                     try {
-                        await globalSettingsRef.set({ isAutoBlockedPermanently: false }, { merge: true });
+                        // When auto-block is unblocked by password, we also clear the lastAutoBlockTriggerDate
+                        // to allow it to be re-triggered on the same day if the time condition is still met.
+                        // If the user wants to unblock for the rest of the day, they will have to be past the time.
+                        // This aligns with "desbloqueo en cualquier momento con la misma clave" while keeping "indefinido" aspect.
+                        await globalSettingsRef.set({ isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: null }, { merge: true });
                         isAutoBlockedPermanently = false;
+                        lastAutoBlockTriggerDate = null; // Update local state
                         console.log("Bloqueo automático permanente deshabilitado globalmente.");
                     } catch (error) {
                         console.error("Error al deshabilitar bloqueo automático permanente:", error);
