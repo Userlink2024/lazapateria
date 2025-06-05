@@ -1337,8 +1337,14 @@
         }
 
         function actualizarValorTotalModificar() {
-            const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos_list .mod_product_precio')).map((el) => parseFloat(el.value) || 0);
+            // console.log("actualizarValorTotalModificar called.");
+            const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos_list .mod_product_precio')).map((el) => {
+                const val = parseFloat(el.value) || 0;
+                // console.log(`Product price input value: ${el.value}, parsed: ${val}`);
+                return val;
+            });
             const valorTotalCalculado = preciosProductos.reduce((total, precio) => total + precio, 0);
+            // console.log("Calculated total:", valorTotalCalculado);
             document.getElementById('modificar_valor_total').value = valorTotalCalculado.toFixed(2);
         }
 
@@ -1797,6 +1803,8 @@
             const errorMessage = document.getElementById('password_error');
             const enteredPassword = passwordInput.value;
             const blockType = document.getElementById('password_modal_type').value;
+            const now = new Date();
+            const todayDate = now.toISOString().slice(0, 10);
 
             if (enteredPassword === BLOCK_PASSWORD) {
                 if (blockType === 'global_manual') {
@@ -1814,14 +1822,12 @@
                     }
                 } else if (blockType === 'auto_permanent') { // Handle auto_permanent block type
                     try {
-                        // When auto-block is unblocked by password, we also clear the lastAutoBlockTriggerDate
-                        // to allow it to be re-triggered on the same day if the time condition is still met.
-                        // If the user wants to unblock for the rest of the day, they will have to be past the time.
-                        // This aligns with "desbloqueo en cualquier momento con la misma clave" while keeping "indefinido" aspect.
-                        await globalSettingsRef.set({ isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: null }, { merge: true });
+                        // When auto-block is unblocked by password, we also set lastAutoBlockTriggerDate to today's date
+                        // to prevent it from re-triggering for the rest of the current day.
+                        await globalSettingsRef.set({ isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: todayDate }, { merge: true });
                         isAutoBlockedPermanently = false;
-                        lastAutoBlockTriggerDate = null; // Update local state
-                        console.log("Bloqueo automático permanente deshabilitado globalmente.");
+                        lastAutoBlockTriggerDate = todayDate; // Update local state
+                        console.log("Bloqueo automático permanente deshabilitado globalmente para hoy.");
                     } catch (error) {
                         console.error("Error al deshabilitar bloqueo automático permanente:", error);
                         errorMessage.textContent = "Error al deshabilitar el bloqueo automático. Inténtelo de nuevo.";
