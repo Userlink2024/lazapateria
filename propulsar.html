@@ -233,14 +233,14 @@
             margin-top: 0;
         }
 
-        /* Barra de Carga */
+        /* Barra de Carga (Original - ahora reemplazada por loading-overlay en el botón de envío) */
         #loading-bar {
             width: 100%;
             background-color: #e0e0e0;
             margin-top: 20px;
             border-radius: 5px;
             overflow: hidden;
-            display: none;
+            display: none; /* Mantener esto oculto, se usa el nuevo spinner en su lugar */
         }
         #loading-bar-fill {
             height: 25px;
@@ -251,6 +251,43 @@
             color: white;
             border-radius: 5px;
         }
+
+        /* Nuevos Estilos del Spinner de Carga */
+        .loading-overlay {
+            display: none; /* Oculto por defecto */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); /* Fondo oscuro semitransparente */
+            z-index: 10000; /* Asegura que esté encima de todo */
+            justify-content: center; /* Estos se aplicarán cuando se establezca display: flex mediante JS */
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .loading-spinner {
+            border: 8px solid #f3f3f3; /* Gris claro */
+            border-top: 8px solid #00BFFF; /* Azul */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            color: white;
+            margin-top: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
 
         /* Ajustes Responsivos */
         @media (max-width: 600px) {
@@ -394,7 +431,7 @@
     <!-- Contenedor de Inicio de Sesión -->
     <div id="login-container">
         <div id="login-form-box">
-            <h2>Iniciar Sesión</h2>
+            <h2>La Zapatería - Propulsar BPO</h2>
             <form id="login-form" onsubmit="handleLogin(event)">
                 <input type="text" id="login_username" placeholder="Nombre de Usuario" required>
                 <input type="password" id="login_password" placeholder="Contraseña" required>
@@ -590,7 +627,7 @@
                             <input type="date" id="edit_start_date" onchange="updateEditTimeAuthorized()" required>
                         </div>
                         <div class="form-field">
-                            <label for="edit_end_date">FINALIZACIÓN:</label>
+                            <label for="edit_end_date">Finalización:</label>
                             <input type="date" id="edit_end_date" onchange="updateEditTimeAuthorized()" required>
                         </div>
                         <div class="form-field">
@@ -640,6 +677,12 @@
                 <p id="password-change-success-message" class="success-message"></p>
             </form>
         </div>
+    </div>
+
+    <!-- Nuevo Overlay del Spinner de Carga -->
+    <div id="loading_overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Cargando...</p>
     </div>
 
     <!-- Firebase SDKs y otras bibliotecas -->
@@ -906,31 +949,18 @@
 
         // --- Funciones de Utilidad ---
         function showLoadingBar() {
-            const loadingBar = document.getElementById("loading-bar");
-            const loadingBarFill = document.getElementById("loading-bar-fill");
-            if (loadingBar && loadingBarFill) {
-                loadingBar.style.display = "block";
-                loadingBarFill.style.width = "0%";
-                let width = 0;
-                const interval = setInterval(() => {
-                    if (width >= 100) {
-                        clearInterval(interval);
-                    } else {
-                        width++;
-                        loadingBarFill.style.width = width + "%";
-                        loadingBarFill.innerText = width + "%";
-                    }
-                    if (loadingBar.style.display === "none") { // Stop animation if bar is hidden externally
-                        clearInterval(interval);
-                    }
-                }, 10);
+            // Re-purposing showLoadingBar for the new spinner
+            const loadingOverlay = document.getElementById("loading_overlay");
+            if (loadingOverlay) {
+                loadingOverlay.style.display = "flex"; // Show the overlay
             }
         }
 
         function hideLoadingBar() {
-            const loadingBar = document.getElementById("loading-bar");
-            if (loadingBar) {
-                loadingBar.style.display = "none";
+            // Re-purposing hideLoadingBar for the new spinner
+            const loadingOverlay = document.getElementById("loading_overlay");
+            if (loadingOverlay) {
+                loadingOverlay.style.display = "none"; // Hide the overlay
             }
         }
 
@@ -960,9 +990,22 @@
             }
         }
 
-        function formatDate(timestamp) {
-            if (!timestamp) return 'N/A';
-            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        // Modified formatDate to correctly handle "YYYY-MM-DD" strings as local dates
+        function formatDate(value) {
+            if (!value) return 'N/A';
+
+            let date;
+            if (value.toDate) { // It's a Firestore Timestamp
+                date = value.toDate();
+            } else if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) { // It's a "YYYY-MM-DD" string
+                const parts = value.split('-');
+                // Construct Date object using year, month (0-indexed), day to force local time interpretation
+                date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            } else { // Handle other potential date formats or plain JS Date objects
+                date = new Date(value);
+            }
+            
+            // Format to 'dd/mm/yyyy' in local Spanish (Colombia)
             return date.toLocaleDateString('es-CO');
         }
 
@@ -974,22 +1017,59 @@
             return date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
         }
 
-        function calculateTimeAuthorized(start_date, end_date, start_time, end_time) {
-            const startDateTime = new Date(`${start_date}T${start_time}`);
-            const endDateTime = new Date(`${end_date}T${end_time}`);
+        function calculateTimeAuthorized(start_date_str, end_date_str, start_time_str, end_time_str) {
+            const startDateTime = new Date(`${start_date_str}T${start_time_str}`);
+            const endDateTime = new Date(`${end_date_str}T${end_time_str}`);
 
             if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
                 return "Fechas/Horas inválidas";
             }
 
-            const diffMs = endDateTime - startDateTime;
-            if (diffMs < 0) {
+            let totalDiffMs = endDateTime - startDateTime;
+            if (totalDiffMs < 0) {
                 return "Fecha/hora final debe ser posterior a la inicial";
             }
 
-            const diffMinutes = Math.floor(diffMs / (1000 * 60));
-            const diffHours = Math.floor(diffMinutes / 60);
-            const remainingMinutes = diffMinutes % 60;
+            const MS_PER_MINUTE = 60 * 1000;
+            const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+            // No need for EXCLUSION_DURATION_MS if we calculate dynamically
+
+            let excludedMinutes = 0;
+
+            // Define the exclusion period for any given day
+            const exclusionStartHour = 12; // 12:00 PM
+            const exclusionEndHour = 14;   // 2:00 PM
+
+            // Loop through each day covered by the permit
+            let currentDayIterator = new Date(startDateTime);
+            // Normalize currentDayIterator to start of day to avoid issues with time components
+            currentDayIterator.setHours(0, 0, 0, 0);
+
+            const endDay = new Date(endDateTime);
+            endDay.setHours(0, 0, 0, 0); // Normalize end date to start of its day for comparison
+
+            while (currentDayIterator.getTime() <= endDay.getTime()) {
+                const dayExclusionStart = new Date(currentDayIterator.getFullYear(), currentDayIterator.getMonth(), currentDayIterator.getDate(), exclusionStartHour, 0, 0);
+                const dayExclusionEnd = new Date(currentDayIterator.getFullYear(), currentDayIterator.getMonth(), currentDayIterator.getDate(), exclusionEndHour, 0, 0);
+
+                // Calculate the intersection of the permit's time range and the exclusion range for the current day
+                const intersectionStart = Math.max(startDateTime.getTime(), dayExclusionStart.getTime());
+                const intersectionEnd = Math.min(endDateTime.getTime(), dayExclusionEnd.getTime());
+
+                if (intersectionEnd > intersectionStart) {
+                    excludedMinutes += Math.floor((intersectionEnd - intersectionStart) / MS_PER_MINUTE);
+                }
+
+                currentDayIterator.setDate(currentDayIterator.getDate() + 1); // Move to the next day
+            }
+
+            let totalMinutes = Math.floor(totalDiffMs / MS_PER_MINUTE);
+            totalMinutes -= excludedMinutes; // Subtract excluded minutes
+
+            if (totalMinutes < 0) totalMinutes = 0; // Ensure time doesn't go negative
+
+            const diffHours = Math.floor(totalMinutes / 60);
+            const remainingMinutes = totalMinutes % 60;
             const diffDays = Math.floor(diffHours / 24);
             const remainingHours = diffHours % 24;
 
