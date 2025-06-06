@@ -494,14 +494,52 @@
                 return "Fechas/Horas inválidas";
             }
 
-            const diffMs = endDateTime - startDateTime;
+            let diffMs = endDateTime - startDateTime;
             if (diffMs < 0) {
                 return "Fecha/hora final debe ser posterior a la inicial";
             }
 
-            const diffMinutes = Math.floor(diffMs / (1000 * 60));
-            const diffHours = Math.floor(diffMinutes / 60);
-            const remainingMinutes = diffMinutes % 60;
+            // Define the exclusion period (12 PM to 2 PM)
+            const exclusionStartHour = 12; // 12:00 PM
+            const exclusionEndHour = 14;   // 2:00 PM
+
+            // Iterate day by day for multi-day permits
+            let currentTime = new Date(startDateTime);
+            let excludedMinutes = 0;
+
+            while (currentTime.getTime() < endDateTime.getTime()) {
+                const dayStart = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate(), 0, 0, 0);
+                const dayEnd = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate(), 23, 59, 59);
+
+                // Calculate the start and end of the exclusion window for the current day
+                const currentDayExclusionStart = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate(), exclusionStartHour, 0, 0);
+                const currentDayExclusionEnd = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate(), exclusionEndHour, 0, 0);
+
+                // Determine overlap with the exclusion period for the current day
+                const overlapStart = Math.max(startDateTime.getTime(), currentDayExclusionStart.getTime());
+                const overlapEnd = Math.min(endDateTime.getTime(), currentDayExclusionEnd.getTime());
+
+                if (overlapEnd > overlapStart) {
+                    excludedMinutes += Math.floor((overlapEnd - overlapStart) / (1000 * 60));
+                }
+                
+                // Move to the next day, setting time to start of day to avoid partial day issues
+                currentTime.setDate(currentTime.getDate() + 1);
+                currentTime.setHours(0, 0, 0, 0);
+
+                // If the start date and end date are the same, we only check the exclusion for that day
+                if (currentTime.toDateString() === endDateTime.toDateString() && startDateTime.toDateString() === endDateTime.toDateString()) {
+                    break; 
+                }
+            }
+
+            let totalMinutes = Math.floor(diffMs / (1000 * 60));
+            totalMinutes -= excludedMinutes; // Subtract excluded minutes
+
+            if (totalMinutes < 0) totalMinutes = 0; // Ensure time doesn't go negative
+
+            const diffHours = Math.floor(totalMinutes / 60);
+            const remainingMinutes = totalMinutes % 60;
             const diffDays = Math.floor(diffHours / 24);
             const remainingHours = diffHours % 24;
 
