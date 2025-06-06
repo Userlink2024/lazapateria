@@ -638,7 +638,7 @@
     <script>
         // --- Global Variables ---
         // allOrdersData will now be our local "database" in memory
-        let allOrdersData = []; 
+        let allOrdersData = [];
         let salesByDateChart_dashboard, salesByAsesorChart_dashboard, pairsByProductChart_dashboard;
 
         // Commission settings (default values, will be loaded from localStorage)
@@ -818,7 +818,7 @@
             for (let i = 0; i < 12; i++) {
                 const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
                 const monthName = date.toLocaleString('es-CO', { month: 'long', year: 'numeric' });
-                const monthValue = date.toISOString().slice(0, 7); //YYYY-MM format
+                const monthValue = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`; //YYYY-MM format
                 const option = document.createElement('option');
                 option.value = monthValue;
                 option.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1); // Capitalize first letter
@@ -1086,20 +1086,19 @@
             // allOrdersData is already updated by data loading/Excel upload
             let filteredData = [...allOrdersData]; // Work with a copy
 
-            // Parse dates to ensure they are interpreted in local time at the start of the day
             const startDateValue = startDateInputDashboard.value;
             const endDateValue = endDateInputDashboard.value;
 
             let startDate = null;
             if (startDateValue) {
-                const parts = startDateValue.split('-').map(Number);
-                startDate = new Date(parts[0], parts[1] - 1, parts[2]); // Month is 0-indexed
+                // Adjust for local time, without shifting date
+                startDate = new Date(startDateValue + 'T00:00:00'); 
             }
 
             let endDate = null;
             if (endDateValue) {
-                const parts = endDateValue.split('-').map(Number);
-                endDate = new Date(parts[0], parts[1] - 1, parts[2]); // Month is 0-indexed
+                // Adjust for local time, without shifting date
+                endDate = new Date(endDateValue + 'T23:59:59'); 
             }
 
             filteredData = filteredData.filter(order => {
@@ -1111,9 +1110,7 @@
                     matchesFilter = matchesFilter && orderDate >= startDate;
                 }
                 if (endDate) {
-                    const nextDayAfterEndDate = new Date(endDate);
-                    nextDayAfterEndDate.setDate(nextDayAfterEndDate.getDate() + 1);
-                    matchesFilter = matchesFilter && orderDate < nextDayAfterEndDate;
+                    matchesFilter = matchesFilter && orderDate <= endDate;
                 }
                 return matchesFilter;
             });
@@ -1150,19 +1147,20 @@
                         if (row['fecha_hora']) {
                             if (typeof row['fecha_hora'] === 'number') {
                                 // XLSX date number to Date object (adjusting for Excel's epoch)
-                                fechaHora = new Date(Date.UTC(1899, 11, 30) + (row['fecha_hora'] * 24 * 60 * 60 * 1000));
+                                fechaHora = new Date(Date.UTC(0, 0, row['fecha_hora'] - 1)); // Corrected epoch for Excel dates
                             } else if (typeof row['fecha_hora'] === 'string') {
+                                // Direct parse for string dates, assuming YYYY-MM-DD or similar
                                 fechaHora = new Date(row['fecha_hora']);
                             }
                         } else if (row['Fecha']) {
                              if (typeof row['Fecha'] === 'number') {
-                                fechaHora = new Date(Date.UTC(1899, 11, 30) + (row['Fecha'] * 24 * 60 * 60 * 1000));
+                                fechaHora = new Date(Date.UTC(0, 0, row['Fecha'] - 1)); // Corrected epoch for Excel dates
                             } else if (typeof row['Fecha'] === 'string') {
                                 fechaHora = new Date(row['Fecha']);
                             }
                         } else if (row['Fecha y Hora']) {
                              if (typeof row['Fecha y Hora'] === 'number') {
-                                fechaHora = new Date(Date.UTC(1899, 11, 30) + (row['Fecha y Hora'] * 24 * 60 * 60 * 1000));
+                                fechaHora = new Date(Date.UTC(0, 0, row['Fecha y Hora'] - 1)); // Corrected epoch for Excel dates
                             } else if (typeof row['Fecha y Hora'] === 'string') {
                                 fechaHora = new Date(row['Fecha y Hora']);
                             }
@@ -1286,7 +1284,7 @@
             const selectedMonth = monthSelectorDashboard.value;
             if (selectedMonth) {
                 const year = parseInt(selectedMonth.split('-')[0]);
-                const month = parseInt(selectedMonth.split('-')[1]) - 1;
+                const month = parseInt(selectedMonth.split('-')[1]) - 1; // Month is 0-indexed
 
                 const firstDay = new Date(year, month, 1);
                 const lastDay = new Date(year, month + 1, 0);
@@ -1340,12 +1338,14 @@
             // Apply month filter if a month is selected
             if (currentGeneralMonthFilter) {
                 const [year, month] = currentGeneralMonthFilter.split('-').map(Number);
-                const firstDayOfMonth = new Date(year, month - 1, 1); // Month is 0-indexed
-                const lastDayOfMonth = new Date(year, month, 0); // Last day of the selected month
+                // Create start and end dates for the selected month (local time)
+                const firstDayOfMonth = new Date(year, month - 1, 1, 0, 0, 0); // Month is 0-indexed
+                const lastDayOfMonth = new Date(year, month, 0, 23, 59, 59, 999); // Last day of the selected month, end of day
 
                 filteredData = filteredData.filter(order => {
                     const orderDate = order.fecha_hora;
-                    return orderDate >= firstDayOfMonth && orderDate <= lastDayOfMonth;
+                    // Ensure orderDate is a valid Date object for comparison
+                    return orderDate instanceof Date && orderDate >= firstDayOfMonth && orderDate <= lastDayOfMonth;
                 });
             } else {
                 // If no month is selected, clear the display or show a message
@@ -1429,7 +1429,7 @@
             commissionHtml += '</tbody></table>';
             generalCommissionSummaryDiv.innerHTML = commissionHtml;
 
-            if (Object.keys(asesorMonthlyPerformance).length === 0) {
+            if (Object.keys(asesorMonthlyPerformance).length === 0 && currentGeneralMonthFilter) {
                 generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">No hay datos de asesores para calcular comisiones generales en el período seleccionado.</p>';
             }
         }
@@ -1488,20 +1488,12 @@
             }
 
             // Parse dates to ensure they are interpreted in local time at the start of the day
-            const startDateParts = startDateValue.split('-').map(Number); // [year, month, day]
-            const startDate = new Date(startDateParts[0], startDateParts[1] - 1, startDateParts[2]); // Month is 0-indexed
-
-            const endDateParts = endDateValue.split('-').map(Number);
-            let endDate = new Date(endDateParts[0], endDateParts[1] - 1, endDateParts[2]); // Month is 0-indexed
-
-
-            // Adjust endDate to include the entire day for filtering
-            const adjustedEndDate = new Date(endDate);
-            adjustedEndDate.setDate(adjustedEndDate.getDate() + 1);
+            const startDate = new Date(startDateValue + 'T00:00:00');
+            const endDate = new Date(endDateValue + 'T23:59:59'); // End of the selected day
 
             const filteredData = allOrdersData.filter(order => {
                 const orderDate = order.fecha_hora;
-                return orderDate >= startDate && orderDate < adjustedEndDate;
+                return orderDate instanceof Date && orderDate >= startDate && orderDate <= endDate;
             });
 
             // Aggregate sales for each asesor within the selected custom period
@@ -1627,8 +1619,7 @@
 
             const saturday = new Date(monday);
             saturday.setDate(monday.getDate() + 5); 
-            // Keep the time as 00:00:00 for the input value, the filtering logic handles the end of day
-            saturday.setHours(0, 0, 0, 0); 
+            saturday.setHours(23, 59, 59, 999); // Set to end of Saturday
 
             startDateInputWeekly.value = monday.toISOString().split('T')[0];
             endDateInputWeekly.value = saturday.toISOString().split('T')[0];
@@ -1652,8 +1643,7 @@
 
             const lastSaturday = new Date(lastMonday);
             lastSaturday.setDate(lastMonday.getDate() + 5); 
-            // Keep the time as 00:00:00 for the input value, the filtering logic handles the end of day
-            saturday.setHours(0, 0, 0, 0); 
+            lastSaturday.setHours(23, 59, 59, 999); // Set to end of last Saturday
 
             startDateInputWeekly.value = lastMonday.toISOString().split('T')[0];
             endDateInputWeekly.value = lastSaturday.toISOString().split('T')[0];
@@ -1685,7 +1675,7 @@
                     asesores.add(order.asesor);
                 }
                 if (order.fecha_hora instanceof Date) {
-                    months.add(order.fecha_hora.toISOString().slice(0, 7)); //YYYY-MM
+                    months.add(order.fecha_hora.getFullYear() + '-' + (order.fecha_hora.getMonth() + 1).toString().padStart(2, '0')); // YYYY-MM format
                 }
             });
 
@@ -1728,8 +1718,7 @@
             if (currentHistoryMonthFilter) {
                 filteredHistoryData = filteredHistoryData.filter(order => {
                     if (order.fecha_hora instanceof Date) {
-                        // Ensure comparison is done correctly with ISO string
-                        return order.fecha_hora.toISOString().startsWith(currentHistoryMonthFilter);
+                        return order.fecha_hora.getFullYear() + '-' + (order.fecha_hora.getMonth() + 1).toString().padStart(2, '0') === currentHistoryMonthFilter;
                     }
                     return false;
                 });
@@ -1750,6 +1739,9 @@
 
             let totalParesHistory = 0;
             let totalValorHistory = 0;
+
+            // Sort data by date before displaying
+            data.sort((a, b) => a.fecha_hora - b.fecha_hora);
 
             data.forEach(order => {
                 totalParesHistory += order.num_pares || 0;
