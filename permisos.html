@@ -429,9 +429,22 @@
             }
         }
 
-        function formatDate(timestamp) {
-            if (!timestamp) return 'N/A';
-            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        // Modified formatDate to correctly handle "YYYY-MM-DD" strings as local dates
+        function formatDate(value) {
+            if (!value) return 'N/A';
+
+            let date;
+            if (value.toDate) { // It's a Firestore Timestamp
+                date = value.toDate();
+            } else if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) { // It's a "YYYY-MM-DD" string
+                const parts = value.split('-');
+                // Construct Date object using year, month (0-indexed), day to force local time interpretation
+                date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            } else { // Handle other potential date formats or plain JS Date objects
+                date = new Date(value);
+            }
+            
+            // Format to 'dd/mm/yyyy' in local Spanish (Colombia)
             return date.toLocaleDateString('es-CO');
         }
 
