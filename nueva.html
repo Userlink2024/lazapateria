@@ -170,6 +170,14 @@
             border-radius: 4px;
             margin-top: 5px;
         }
+        /* Nuevo estilo para "Enviado a Despacho" */
+        .control-container-enviado-despacho {
+            background-color: #fffbe6; /* Fondo amarillo claro */
+            border: 1px solid #ffc107; /* Borde amarillo */
+            padding: 5px;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
         button:disabled {
             background-color: #ccc;
             cursor: not-allowed;
@@ -428,8 +436,8 @@
             border-color: #dc3545;
         }
 
-        /* --- NUEVOS ESTILOS PARA LA ALERTA DE EMPACADO --- */
-        .unpacked-alert-container {
+        /* --- ESTILOS PARA LA ALERTA DE ADMIRACIÓN --- */
+        .alert-icon-container {
             position: absolute;
             top: 50%;
             left: 50%;
@@ -440,7 +448,7 @@
             z-index: 20; /* Asegurar que esté por encima de sellos */
             pointer-events: none; /* No debe interferir con clics */
         }
-        .unpacked-alert-icon {
+        .alert-icon {
             font-size: 4em; /* Gran signo de admiración */
             color: #dc3545; /* Rojo */
             text-shadow: 0 0 15px rgba(220, 53, 69, 0.7); /* Efecto aura rojo inicial */
@@ -534,7 +542,11 @@
         const viewOrdersAlertSoundSynth = new Tone.Synth().toDestination();
 
         // Constants for alert timing
-        const UNPACKED_ALERT_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes in milliseconds
+        // Threshold for "Enviado a despacho" (from order creation)
+        const ENVIADO_DESPACHO_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes in milliseconds
+        // Threshold for "Empacado" (from dispatched time) - this was UNPACKED_ALERT_THRESHOLD_MS previously
+        const EMPACADO_ALERT_THRESHOLD_MS = 20 * 60 * 1000; // 20 minutes in milliseconds
+
 
         // Function to play a simple sound when a checkbox is interacted with
         async function playSoundOnCheckbox() {
@@ -549,9 +561,10 @@
 
         /**
          * Checks Firestore for orders that are dispatched but not packed.
-         * @returns {Promise<number>} The count of pending orders.
+         * This is used for conditional sounds on "Ver Pedidos" and "Agregar Pedido".
+         * @returns {Promise<number>} The count of pending orders (despachado:true, empacado:false).
          */
-        async function checkPendingOrdersCount() {
+        async function checkPendingOrdersForPackingCount() {
             try {
                 const querySnapshot = await db.collection('registros')
                     .where('despachado', '==', true)
@@ -559,40 +572,40 @@
                     .get();
                 return querySnapshot.size;
             } catch (error) {
-                console.error("Error al verificar pedidos pendientes:", error);
+                console.error("Error al verificar pedidos pendientes de empaque:", error);
                 return 0;
             }
         }
 
-        // Function to play sound for new order alert, only if pending orders exist
+        // Function to play sound for new order alert, only if pending orders for packing exist
         async function playNewOrderSound() {
-            const pendingCount = await checkPendingOrdersCount();
+            const pendingCount = await checkPendingOrdersForPackingCount();
             if (pendingCount > 0) {
                 try {
                     await Tone.start();
                     newOrderAlertSoundSynth.triggerAttackRelease('G3', '8n'); // Lower pitch for new order
-                    console.log('Sonido de nueva orden reproducido (con pendientes): G3');
+                    console.log('Sonido de nueva orden reproducido (con pendientes de empaque): G3');
                 } catch (error) {
                     console.error('Error al reproducir sonido de nueva orden:', error);
                 }
             } else {
-                console.log('No hay pedidos pendientes, no se reproduce sonido de nueva orden.');
+                console.log('No hay pedidos pendientes de empaque, no se reproduce sonido de nueva orden.');
             }
         }
 
-        // Function to play sound for view orders alert (pending), only if pending orders exist
+        // Function to play sound for view orders alert, only if pending orders for packing exist
         async function playViewOrdersSound() {
-            const pendingCount = await checkPendingOrdersCount();
+            const pendingCount = await checkPendingOrdersForPackingCount();
             if (pendingCount > 0) {
                 try {
                     await Tone.start();
                     viewOrdersAlertSoundSynth.triggerAttackRelease('D4', '8n'); // Different pitch for view orders
-                    console.log('Sonido de ver pedidos reproducido (con pendientes): D4');
+                    console.log('Sonido de ver pedidos reproducido (con pendientes de empaque): D4');
                 } catch (error) {
                     console.error('Error al reproducir sonido de ver pedidos:', error);
                 }
             } else {
-                console.log('No hay pedidos pendientes, no se reproduce sonido de ver pedidos.');
+                console.log('No hay pedidos pendientes de empaque, no se reproduce sonido de ver pedidos.');
             }
         }
 
@@ -715,12 +728,13 @@
                     usuario: datosUsuario.usuario,
                     bodegueros_encargados: selectedBodegueros, // Add bodegueros
                     bloqueado: false,
+                    bloqueadoPor: '',
                     despachado: false,
-                    despachadoPor: '', // Initialize new field
-                    despachadoAt: null, // New: Timestamp for when it was dispatched
-                    empacado: false, // New: Status for packing
-                    empacadoPor: '', // New: Who packed it
-                    bloqueadoPor: '' // Initialize new field
+                    despachadoPor: '', 
+                    despachadoAt: null, 
+                    empacado: false, 
+                    empacadoPor: '', 
+                    enviadoADespacho: false // NUEVO: campo para el check "Enviado a despacho"
                 };
                 console.log("Datos a guardar:", datos);
 
@@ -846,19 +860,21 @@
 
             const estaBloqueado = updatedRegistro.bloqueado === true;
             const estaDespachado = updatedRegistro.despachado === true;
-            const estaEmpacado = updatedRegistro.empacado === true; // New empacado status
+            const estaEmpacado = updatedRegistro.empacado === true; 
+            const enviadoADespacho = updatedRegistro.enviadoADespacho === true; // Nuevo: estado de enviado a despacho
             const despachadoPor = updatedRegistro.despachadoPor || '';
             const bloqueadoPor = updatedRegistro.bloqueadoPor || '';
             const empacadoPor = updatedRegistro.empacadoPor || '';
 
             recordElement.dataset.bloqueado = estaBloqueado;
             recordElement.dataset.despachado = estaDespachado;
-            recordElement.dataset.empacado = estaEmpacado; // Update dataset
-            recordElement.dataset.despachadoPor = despachadoPor; // Update dataset
-            recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Update dataset
-            recordElement.dataset.empacadoPor = empacadoPor;     // Update dataset
-            // Update despachadoAt dataset to a string to store milliseconds
+            recordElement.dataset.empacado = estaEmpacado; 
+            recordElement.dataset.enviadoADespacho = enviadoADespacho; // Update dataset
+            recordElement.dataset.despachadoPor = despachadoPor; 
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;   
+            recordElement.dataset.empacadoPor = empacadoPor;     
             recordElement.dataset.despachadoAt = updatedRegistro.despachadoAt ? updatedRegistro.despachadoAt.toDate().getTime().toString() : '0';
+            recordElement.dataset.createdAt = updatedRegistro.fecha_hora ? updatedRegistro.fecha_hora.toDate().getTime().toString() : '0'; // Nuevo: timestamp de creación
 
 
             const statusMessagesContainer = recordElement.querySelector(`#status-messages-${docId}`);
@@ -905,20 +921,8 @@
                 }
             }
 
-            // Update visual alert for unpacked status
-            const unpackedAlertIconContainer = recordElement.querySelector(`#unpacked-alert-icon-container-${docId}`);
-            if (unpackedAlertIconContainer) {
-                // Check if despachado and NOT empacado and more than 20 minutes passed
-                const despachadoAt = updatedRegistro.despachadoAt ? updatedRegistro.despachadoAt.toDate().getTime() : 0;
-                const currentTime = new Date().getTime();
-                const isOverdue = estaDespachado && !estaEmpacado && (currentTime - despachadoAt > UNPACKED_ALERT_THRESHOLD_MS);
-
-                if (isOverdue) {
-                    unpackedAlertIconContainer.innerHTML = `<span class="unpacked-alert-icon">&#9888;</span>`; // Exclamation mark
-                } else {
-                    unpackedAlertIconContainer.innerHTML = '';
-                }
-            }
+            // Update both visual alerts
+            updateOrderVisualAlerts(recordElement, updatedRegistro);
         }
 
         // Helper function to create a new record element
@@ -928,13 +932,14 @@
             recordElement.dataset.id = docId;
 
             const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
-            const esBodeguero = datosUsuario.permisos.toLowerCase() === 'bodeguero'; // New: check for bodeguero
+            const esBodeguero = datosUsuario.permisos.toLowerCase() === 'bodeguero'; 
             const estaBloqueado = registro.bloqueado === true;
             const estaDespachado = registro.despachado === true;
-            const estaEmpacado = registro.empacado === true; // New: Empacado status
-            const despachadoPor = registro.despachadoPor || ''; // Get despachadoPor
-            const bloqueadoPor = registro.bloqueadoPor || '';   // Get bloqueadoPor
-            const empacadoPor = registro.empacadoPor || '';    // Get empacadoPor
+            const estaEmpacado = registro.empacado === true; 
+            const enviadoADespacho = registro.enviadoADespacho === true; // Nuevo: estado de enviado a despacho
+            const despachadoPor = registro.despachadoPor || ''; 
+            const bloqueadoPor = registro.bloqueadoPor || '';   
+            const empacadoPor = registro.empacadoPor || '';    
 
             // Set initial data attributes
             recordElement.dataset.asesor = registro.asesor || 'N/A';
@@ -942,12 +947,13 @@
             recordElement.dataset.codigo = registro.codigo_unico || 'N/A';
             recordElement.dataset.despachado = estaDespachado;
             recordElement.dataset.bloqueado = estaBloqueado;
-            recordElement.dataset.empacado = estaEmpacado; // Add empacado to dataset
-            recordElement.dataset.despachadoPor = despachadoPor; // Add despachadoPor to dataset
-            recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Add bloqueadoPor to dataset
-            recordElement.dataset.empacadoPor = empacadoPor;     // Add empacadoPor to dataset
-            recordElement.dataset.usuario = registro.usuario || 'N/A';
-            recordElement.dataset.despachadoAt = registro.despachadoAt ? registro.despachadoAt.toDate().getTime().toString() : '0'; // Add despachadoAt as milliseconds
+            recordElement.dataset.empacado = estaEmpacado; 
+            recordElement.dataset.enviadoADespacho = enviadoADespacho; // Add enviadoADespacho to dataset
+            recordElement.dataset.despachadoPor = despachadoPor; 
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;   
+            recordElement.dataset.empacadoPor = empacadoPor;     
+            recordElement.dataset.despachadoAt = registro.despachadoAt ? registro.despachadoAt.toDate().getTime().toString() : '0'; 
+            recordElement.dataset.createdAt = registro.fecha_hora ? registro.fecha_hora.toDate().getTime().toString() : '0'; // Add creation timestamp
 
             let productosTextoParaBusqueda = "";
             let productosHTMLList = 'Sin productos';
@@ -971,8 +977,22 @@
                 abonosHTMLList += '</ul>';
             }
 
+            // Determine if the current user (datosUsuario.usuario) is the asesor who created this record
+            const isOriginalAsesor = datosUsuario.usuario === registro.usuario;
+
             let controlesHTML = '';
-            if (esAdministrador || esBodeguero) { // Admins and Bodegueros can see dispatch/pack controls
+            // Only show dispatch/packing controls if Admin or Bodeguero
+            if (esAdministrador || esBodeguero) { 
+                // "Enviado a despacho" checkbox (for Asesor or Admin)
+                // Positioned after basic info and before blocking/despachado
+                controlesHTML += `
+                    <div class="control-container control-container-enviado-despacho">
+                        <input type="checkbox" id="enviado_despacho_${docId}" ${enviadoADespacho ? 'checked' : ''} 
+                               onchange="toggleEnviadoADespacho('${docId}', this.checked)"
+                               ${(!isOriginalAsesor && !esAdministrador) ? 'disabled' : ''}>
+                        <label for="enviado_despacho_${docId}">Enviado a Despacho</label>
+                    </div>`;
+
                 // Despachado checkbox (only visible if current filter is not 'all')
                 if (currentDispatchFilter !== 'all') {
                     controlesHTML += `
@@ -991,7 +1011,6 @@
                 }
 
                 // Empacado checkbox (visible if despachado, and current user is Admin or Bodeguero)
-                // If the item is already despachado, only admin/bodeguero can check empacado
                 if (estaDespachado && (esAdministrador || esBodeguero)) {
                     controlesHTML += `
                         <div class="control-container control-container-empacado">
@@ -1043,9 +1062,11 @@
             recordElement.innerHTML = `
                 ${recordContentHtml}
                 <div class="status-messages-container" id="status-messages-${docId}"></div>
+                <!-- Alerts are positioned absolutely, so their containers should be outside the main content for better layering -->
+                <div class="alert-icon-container" id="enviado-despacho-alert-container-${docId}"></div> <!-- New alert for "enviado a despacho" -->
+                <div class="alert-icon-container" id="empacado-alert-container-${docId}"></div> <!-- Existing alert for "empacado" -->
                 <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
-                <div class="empacado-sello-container" id="empacado-sello-container-${docId}"></div> <!-- New Empacado sello container -->
-                <div class="unpacked-alert-container" id="unpacked-alert-icon-container-${docId}"></div> <!-- New alert container -->
+                <div class="empacado-sello-container" id="empacado-sello-container-${docId}"></div> 
                 ${controlesHTML} 
                 <div class="record-buttons">
                     <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
@@ -1305,6 +1326,45 @@
             }
         }
 
+        async function toggleEnviadoADespacho(id, nuevoEstadoEnviado) {
+            const docRef = db.collection('registros').doc(id);
+            const docSnap = await docRef.get();
+            const registro = docSnap.data();
+
+            const isOriginalAsesor = datosUsuario.usuario === registro.usuario;
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+
+            if (!isOriginalAsesor && !isAdministrator) {
+                alert("Esta acción solo puede ser realizada por el asesor que creó el pedido o un administrador.");
+                const checkbox = document.getElementById(`enviado_despacho_${id}`);
+                if (checkbox) checkbox.checked = !nuevoEstadoEnviado; // Revert checkbox state
+                return;
+            }
+
+            if (!nuevoEstadoEnviado) { // Si se está intentando desmarcar (quitar el chulo)
+                if (!window.confirm("¿Estás seguro de que quieres desmarcar este pedido como 'Enviado a Despacho'?")) {
+                    const checkbox = document.getElementById(`enviado_despacho_${id}`);
+                    if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
+                    return;
+                }
+            }
+
+            try {
+                const updateData = {
+                    enviadoADespacho: nuevoEstadoEnviado
+                };
+                await docRef.update(updateData);
+                playSoundOnCheckbox(); // Play sound on status change
+                console.log(`Pedido ${id} actualizado a enviadoADespacho: ${nuevoEstadoEnviado} por ${datosUsuario.nombreCompleto}`);
+                // The onSnapshot listener will handle the UI update automatically
+            } catch (error) {
+                console.error("Error al actualizar el estado de 'Enviado a Despacho':", error);
+                alert("Error al cambiar el estado de 'Enviado a Despacho' del pedido.");
+                const checkbox = document.getElementById(`enviado_despacho_${id}`);
+                if (checkbox) checkbox.checked = !nuevoEstadoEnviado;
+            }
+        }
+
         async function toggleEmpacadoPedido(id, nuevoEstadoEmpacado) {
             // Only admin or bodeguero can change empacado status
             if (datosUsuario.permisos.toLowerCase() !== 'administrador' && datosUsuario.permisos.toLowerCase() !== 'bodeguero') {
@@ -1392,6 +1452,7 @@
                     "Despachado": registro.despachadoPor || 'No verificado', // Changed to show name or "No verificado"
                     "Despachado At": registro.despachadoAt ? registro.despachadoAt.toDate().toLocaleString() : 'N/A', // New: despachadoAt
                     "Empacado": registro.empacadoPor || 'No empacado' // New: empacado
+                    // Do NOT include 'enviadoADespacho' in Excel export
                 });
             });
             const worksheet = XLSX.utils.json_to_sheet(registros);
@@ -1734,8 +1795,8 @@
                 const bodeguerosSnapshot = await db.collection('usuarios').where('permisos', '==', 'Bodeguero').get();
                 const bodegueros = [];
                 bodeguerosSnapshot.forEach(doc => {
-                    const data = doc; // .data() was missing here
-                    if (data.data().nombreCompleto) { // Access data using .data()
+                    const data = doc; 
+                    if (data.data().nombreCompleto) { 
                         bodegueros.push(data.data().nombreCompleto);
                     }
                 });
@@ -1844,8 +1905,8 @@
                 if (doc.exists) {
                     isGlobalManualBlock = doc.data().isBlocked || false;
                     isAutoBlockedPermanently = doc.data().isAutoBlockedPermanently || false; 
-                    isAutoBlockEnabled = doc.data().isAutoBlockEnabled || false; // LEER NUEVO CAMPO
-                    lastAutoBlockTriggerDate = doc.data().lastAutoBlockTriggerDate || null; // Read new field
+                    isAutoBlockEnabled = doc.data().isAutoBlockEnabled || false; 
+                    lastAutoBlockTriggerDate = doc.data().lastAutoBlockTriggerDate || null; 
                     
                     // Leer la hora personalizada, o usar los valores por defecto si no están definidos
                     customBlockHour = doc.data().customBlockHour !== undefined ? doc.data().customBlockHour : DEFAULT_BLOCK_HOUR;
@@ -1853,7 +1914,7 @@
 
                     console.log("Estado de bloqueo global (manual):", isGlobalManualBlock);
                     console.log("Estado de bloqueo global (automático persistente):", isAutoBlockedPermanently);
-                    console.log("Estado de auto-bloqueo habilitado (admin):", isAutoBlockEnabled); // LOG NUEVO CAMPO
+                    console.log("Estado de auto-bloqueo habilitado (admin):", isAutoBlockEnabled); 
                     console.log("Última fecha de activación auto-bloqueo:", lastAutoBlockTriggerDate);
                     console.log(`Hora de bloqueo personalizada: ${customBlockHour}:${customBlockMinute}`);
 
@@ -1890,7 +1951,7 @@
             populateBodegueroCheckboxes(); // Populate bodeguero checkboxes on initial load
             checkAndDisplayPendingAlert(); // Initial check for pending orders
             setInterval(checkAndDisplayPendingAlert, 30 * 1000); // Check for pending orders every 30 seconds
-            setInterval(updateUnpackedAlerts, 5000); // Update visual alerts every 5 seconds
+            setInterval(updateAllOrderVisualAlerts, 5000); // Update all visual alerts every 5 seconds
         }
 
         window.onbeforeunload = function(event) {
@@ -2025,10 +2086,10 @@
         }
 
         /**
-         * Actualiza los iconos de alerta de "sin empacar" para los pedidos visibles.
-         * Se ejecuta periódicamente para reflejar el paso del tiempo.
+         * Actualiza los iconos de alerta para ambos tipos de pendientes (enviadoADespacho y empacado)
+         * para los pedidos visibles. Se ejecuta periódicamente para reflejar el paso del tiempo.
          */
-        function updateUnpackedAlerts() {
+        function updateAllOrderVisualAlerts() {
             const records = document.querySelectorAll('#lista_pedidos_container .record');
             const currentTime = new Date().getTime();
 
@@ -2036,17 +2097,29 @@
                 const docId = recordElement.dataset.id;
                 const estaDespachado = recordElement.dataset.despachado === 'true';
                 const estaEmpacado = recordElement.dataset.empacado === 'true';
-                const despachadoAtMs = recordElement.dataset.despachadoAt ? parseInt(recordElement.dataset.despachadoAt) : 0; // Convert to milliseconds
+                const enviadoADespacho = recordElement.dataset.enviadoADespacho === 'true';
+                const despachadoAtMs = recordElement.dataset.despachadoAt ? parseInt(recordElement.dataset.despachadoAt) : 0;
+                const createdAtMs = recordElement.dataset.createdAt ? parseInt(recordElement.dataset.createdAt) : 0;
 
-                const unpackedAlertIconContainer = recordElement.querySelector(`#unpacked-alert-icon-container-${docId}`);
-
-                if (unpackedAlertIconContainer) {
-                    const isOverdue = estaDespachado && !estaEmpacado && (currentTime - despachadoAtMs > UNPACKED_ALERT_THRESHOLD_MS);
-
-                    if (isOverdue) {
-                        unpackedAlertIconContainer.innerHTML = `<span class="unpacked-alert-icon">&#9888;</span>`; // Exclamation mark
+                // Alerta para "Enviado a Despacho" (para el asesor)
+                const enviadoDespachoAlertContainer = recordElement.querySelector(`#enviado-despacho-alert-container-${docId}`);
+                if (enviadoDespachoAlertContainer) {
+                    const isEnviadoDespachoOverdue = !enviadoADespacho && (currentTime - createdAtMs > ENVIADO_DESPACHO_THRESHOLD_MS);
+                    if (isEnviadoDespachoOverdue) {
+                        enviadoDespachoAlertContainer.innerHTML = `<span class="alert-icon">&#9888;</span>`;
                     } else {
-                        unpackedAlertIconContainer.innerHTML = '';
+                        enviadoDespachoAlertContainer.innerHTML = '';
+                    }
+                }
+
+                // Alerta para "Empacado" (para el bodeguero/administrador)
+                const empacadoAlertContainer = recordElement.querySelector(`#empacado-alert-container-${docId}`);
+                if (empacadoAlertContainer) {
+                    const isEmpacadoOverdue = estaDespachado && !estaEmpacado && (currentTime - despachadoAtMs > EMPACADO_ALERT_THRESHOLD_MS);
+                    if (isEmpacadoOverdue) {
+                        empacadoAlertContainer.innerHTML = `<span class="alert-icon">&#9888;</span>`;
+                    } else {
+                        empacadoAlertContainer.innerHTML = '';
                     }
                 }
             });
