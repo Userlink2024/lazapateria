@@ -1489,9 +1489,9 @@
                 const bodeguerosSnapshot = await db.collection('usuarios').where('permisos', '==', 'Bodeguero').get();
                 const bodegueros = [];
                 bodeguerosSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (data.nombreCompleto) {
-                        bodegueros.push(data.nombreCompleto);
+                    const data = doc; // .data() was missing here
+                    if (data.data().nombreCompleto) { // Access data using .data()
+                        bodegueros.push(data.data().nombreCompleto);
                     }
                 });
                 return bodegueros;
@@ -1872,11 +1872,15 @@
 
             if (checkbox.checked) { // Si el admin lo MARCA (Habilitar auto-bloqueo)
                 try {
-                    // Solo habilitar el mecanismo de auto-bloqueo. isAutoBlockedPermanently
-                    // y lastAutoBlockTriggerDate se gestionan en checkTimeBlock() y verifyPassword()
-                    await globalSettingsRef.set({ isAutoBlockEnabled: true }, { merge: true });
+                    // Al habilitar el auto-bloqueo:
+                    // 1. Habilitar el mecanismo (isAutoBlockEnabled = true)
+                    // 2. Desactivar el estado de bloqueo permanente (isAutoBlockedPermanently = false)
+                    // 3. Establecer lastAutoBlockTriggerDate a null para que se pueda activar al día siguiente
+                    await globalSettingsRef.set({ isAutoBlockEnabled: true, isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: null }, { merge: true });
                     isAutoBlockEnabled = true;
-                    console.log("Mecanismo de Bloqueo Automático habilitado por el administrador.");
+                    isAutoBlockedPermanently = false; // Actualizar estado local
+                    lastAutoBlockTriggerDate = null; // Actualizar estado local
+                    console.log("Mecanismo de Bloqueo Automático habilitado y estado de bloqueo permanente y fecha de activación reiniciados.");
                 } catch (error) {
                     console.error("Error al habilitar el mecanismo de auto-bloqueo:", error);
                     alert("Error al habilitar el bloqueo automático.");
@@ -1891,7 +1895,7 @@
 
         /**
          * Muestra el modal de contraseña para confirmar acciones administrativas.
-         * @param {string} type - El tipo de acción que requiere contraseña ('global_manual', 'auto_permanent', 'set_custom_time').
+         * @param {string} type - El tipo de acción que requiere contraseña ('global_manual', 'auto_permanent', 'set_custom_time', 'reset_block_state').
          */
         function showPasswordModal(type) {
             document.getElementById('password_modal').style.display = 'flex';
@@ -1932,6 +1936,17 @@
             showPasswordModal('set_custom_time'); // Mostrar modal de contraseña con el nuevo tipo
         }
 
+        /**
+         * Función para reiniciar el estado de bloqueo automático y la fecha de activación.
+         * Solo para administradores, requiere contraseña.
+         */
+        function resetAutoBlockState() {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+            showPasswordModal('reset_block_state');
+        }
 
         /**
          * Verifica la contraseña ingresada y ejecuta la acción correspondiente al tipo de bloqueo.
@@ -2000,14 +2015,29 @@
                         errorMessage.textContent = "Error al guardar la hora personalizada. Inténtelo de nuevo.";
                         return;
                     }
+                } else if (blockType === 'reset_block_state') { // Manejar el tipo de reiniciar estado de bloqueo
+                    try {
+                        // Reiniciar isAutoBlockedPermanently a false y lastAutoBlockTriggerDate a null
+                        await globalSettingsRef.set({ isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: null }, { merge: true });
+                        isAutoBlockedPermanently = false; // Actualizar estado local
+                        lastAutoBlockTriggerDate = null; // Actualizar estado local
+                        console.log("Estado de bloqueo automático reiniciado (isAutoBlockedPermanently a false, lastAutoBlockTriggerDate a null).");
+                        const customTimeErrorDisplay = document.getElementById('custom_time_error'); // Reutilizar este elemento
+                        if (customTimeErrorDisplay) customTimeErrorDisplay.textContent = 'Estado de bloqueo reiniciado exitosamente.';
+                        setTimeout(() => { if (customTimeErrorDisplay) customTimeErrorDisplay.textContent = ''; }, 3000);
+                    } catch (error) {
+                        console.error("Error al reiniciar estado de bloqueo:", error);
+                        errorMessage.textContent = "Error al reiniciar el estado de bloqueo. Inténtelo de nuevo.";
+                        return;
+                    }
                 }
                 cerrarModal('password_modal');
                 applyBlockStatus();
                 updateCountdown(); // Actualizar el contador después de cualquier acción de desbloqueo/configuración
             } else {
                 errorMessage.textContent = "Contraseña incorrecta. Inténtelo de nuevo.";
-                // Revertir el estado del checkbox si la contraseña es incorrecta, excepto para 'set_custom_time'
-                if (blockType !== 'set_custom_time' && currentPasswordModalTargetCheckbox) {
+                // Revertir el estado del checkbox si la contraseña es incorrecta, excepto para 'set_custom_time' y 'reset_block_state'
+                if (blockType !== 'set_custom_time' && blockType !== 'reset_block_state' && currentPasswordModalTargetCheckbox) {
                     currentPasswordModalTargetCheckbox.checked = !currentPasswordModalTargetCheckbox.checked; // Vuelve al estado original
                 }
             }
@@ -2232,6 +2262,10 @@
             </div>
             <button type="button" onclick="setCustomBlockTime()">Guardar Hora Personalizada</button>
             <p id="custom_time_error" class="error-message"></p>
+
+            <hr style="margin: 20px 0;">
+            <h3>Estado del Bloqueo Automático</h3>
+            <button type="button" onclick="resetAutoBlockState()" style="background-color: #ffc107; color: #333;">Reiniciar Estado de Bloqueo (Admin)</button>
         </div>
     </div>
 
