@@ -838,21 +838,21 @@
             const enviadoAEmpaqueCheckbox = recordElement.querySelector(`#enviado_empaque_${docId}`);
             const bloquearCheckbox = recordElement.querySelector(`#bloquear_${docId}`);
 
-            if (despachadoCheckbox) {
-                despachadoCheckbox.checked = estaDespachado;
-                // Despachar solo si ya fue enviado a empaque
-                despachadoCheckbox.disabled = !enviadoAEmpaque; // Deshabilita si no ha sido enviado a empaque
-            }
+            // Visibilidad para "Enviado a Empaque" y "Bloquear Pedido" (solo en pestaña "Todos")
             if (enviadoAEmpaqueCheckbox) {
-                enviadoAEmpaqueCheckbox.checked = enviadoAEmpaque;
-                // Siempre visible si es administrador y en la pestaña "Todos"
                 enviadoAEmpaqueCheckbox.closest('.control-container').style.display = (currentDispatchFilter === 'all') ? 'flex' : 'none';
-                // El checkbox de enviadoAEmpaque se deshabilita una vez marcado o si ya está despachado
-                enviadoAEmpaqueCheckbox.disabled = enviadoAEmpaque || estaDespachado;
+                enviadoAEmpaqueCheckbox.checked = enviadoAEmpaque;
+                enviadoAEmpaqueCheckbox.disabled = enviadoAEmpaque || estaDespachado; // Deshabilita si ya fue enviado a empaque o si ya fue despachado
             }
             if (bloquearCheckbox) {
-                bloquearCheckbox.checked = estaBloqueado;
                 bloquearCheckbox.closest('.control-container').style.display = (currentDispatchFilter === 'all') ? 'flex' : 'none';
+                bloquearCheckbox.checked = estaBloqueado;
+            }
+            // Visibilidad para "Marcar como Despachado" (solo en pestañas "Despachados" o "No Despachados")
+            if (despachadoCheckbox) {
+                despachadoCheckbox.closest('.control-container').style.display = (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') ? 'flex' : 'none';
+                despachadoCheckbox.checked = estaDespachado;
+                despachadoCheckbox.disabled = false; // Sin dependencia de "Enviado a Empaque"
             }
 
 
@@ -1000,7 +1000,6 @@
             if (esAdministrador) {
                 if (currentDispatchFilter === 'all') {
                     // Para la pestaña "Todos": "Enviado a Empaque" y "Bloquear Pedido"
-                    // "Enviado a Empaque" es visible y habilitado si no ha sido marcado y no está despachado
                     controlsHtml += `
                         <div class="control-container">
                             <input type="checkbox" id="enviado_empaque_${docId}" ${enviadoAEmpaque ? 'checked' : ''} onchange="toggleEnviadoAEmpaque('${docId}', this.checked)" ${enviadoAEmpaque || estaDespachado ? 'disabled' : ''}>
@@ -1010,16 +1009,12 @@
                             <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)">
                             <label for="bloquear_${docId}">Bloquear Pedido</label>
                         </div>
-                        <div class="control-container control-container-despachado">
-                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)" ${!enviadoAEmpaque ? 'disabled' : ''}>
-                            <label for="despachar_${docId}">Marcar como Despachado</label>
-                        </div>
                     `;
                 } else if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
                     // Para las pestañas "Despachados" y "No Despachados": Solo "Marcar como Despachado"
                     controlsHtml += `
                         <div class="control-container control-container-despachado">
-                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)" ${!enviadoAEmpaque ? 'disabled' : ''}>
+                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)">
                             <label for="despachar_${docId}">Marcar como Despachado</label>
                         </div>
                     `;
@@ -1259,14 +1254,13 @@
                 return;
             }
 
-            // Primero, verifica si el pedido fue "Enviado a Empaque"
-            const docSnap = await db.collection('registros').doc(id).get();
-            if (!docSnap.exists || docSnap.data().enviadoAEmpaque !== true) {
-                alert("Solo se puede marcar como 'Despachado' un pedido que ya ha sido 'Enviado a Empaque'.");
-                const checkbox = document.getElementById(`despachar_${id}`);
-                if (checkbox) checkbox.checked = false; // Revert state
-                return;
-            }
+            // No hay dependencia de "Enviado a Empaque" para despachar según la última instrucción
+            // if (!docSnap.exists || docSnap.data().enviadoAEmpaque !== true) {
+            //     alert("Solo se puede marcar como 'Despachado' un pedido que ya ha sido 'Enviado a Empaque'.");
+            //     const checkbox = document.getElementById(`despachar_${id}`);
+            //     if (checkbox) checkbox.checked = false; // Revert state
+            //     return;
+            // }
 
             if (!nuevoEstadoDespachado) { // Si se está intentando desmarcar (quitar el chulo)
                 if (!window.confirm("¿Estás seguro de que quieres desverificar este pedido?")) {
@@ -1281,9 +1275,17 @@
                 if (nuevoEstadoDespachado) {
                     updateData.despachado = true;
                     updateData.despachadoPor = datosUsuario.nombreCompleto;
-                    // También marcar como enviadoAEmpaque si se despacha (garantizando consistencia)
-                    updateData.enviadoAEmpaque = true;
-                    // El enviadoAEmpaqueTimestamp no se modifica aquí, ya se estableció cuando el asesor lo marcó.
+                    // Si se despacha, también se considera "Enviado a Empaque"
+                    // Solo actualizamos el timestamp si aún no ha sido marcado como enviado a empaque
+                    const docRef = db.collection('registros').doc(id);
+                    const docSnap = await docRef.get();
+                    if (docSnap.exists && docSnap.data().enviadoAEmpaque !== true) {
+                        updateData.enviadoAEmpaque = true;
+                        updateData.enviadoAEmpaqueTimestamp = firebase.firestore.Timestamp.fromDate(new Date());
+                    } else if (docSnap.exists && docSnap.data().enviadoAEmpaque === true && !docSnap.data().enviadoAEmpaqueTimestamp) {
+                         // Si por alguna razón está marcado como enviadoAEmpaque pero sin timestamp, lo establecemos ahora
+                         updateData.enviadoAEmpaqueTimestamp = firebase.firestore.Timestamp.fromDate(new Date());
+                    }
                 } else {
                     updateData.despachado = false;
                     updateData.despachadoPor = ''; // Clear the field when undispatched
@@ -1319,16 +1321,8 @@
             }
 
             try {
-                // Si el pedido ya está despachado, no permitir marcar "Enviado a Empaque"
-                const docSnap = await db.collection('registros').doc(id).get();
-                if (docSnap.exists && docSnap.data().despachado === true) {
-                     alert("El pedido ya está despachado. No es necesario marcar 'Enviado a Empaque'.");
-                     const checkbox = document.getElementById(`enviado_empaque_${id}`);
-                     if (checkbox) checkbox.checked = false; // Revert state
-                     return;
-                }
-
-                // Solo actualizamos a true si se está marcando
+                // No se necesita el check de si ya está despachado aquí, el `disabled` en HTML lo maneja.
+                // Solo actualizamos a true si se está marcando.
                 await db.collection('registros').doc(id).update({
                     enviadoAEmpaque: true,
                     enviadoAEmpaqueTimestamp: firebase.firestore.Timestamp.fromDate(new Date()) // Registrar cuándo se marcó
