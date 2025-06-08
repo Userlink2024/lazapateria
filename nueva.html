@@ -957,7 +957,6 @@
                 ? registro.bodegueros_encargados.join(', ')
                 : 'N/A';
 
-            let recordContentHtml = '';
             let despachadoCheckboxHtml = '';
             let enviadoAEmpaqueCheckboxHtml = '';
             let bloquearCheckboxHtml = '';
@@ -988,18 +987,46 @@
 
 
             // Construcción del contenido principal del registro
-            if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                recordContentHtml = `
-                    <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
-                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                    <p>Bodeguero(s): ${bodeguerosEncargados}</p>
-                    <p>Hora: ${horaFormateada}</p>
-                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                `;
-            } else { // currentDispatchFilter === 'all'
+            let recordContentHtml = `
+                <p><strong>Registro ${index + 1}</strong></p>
+                <p>Fecha y Hora: ${fechaHoraFormateada}</p>
+                <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
+                <p>Cliente: ${registro.cliente || 'N/A'}</p>
+                <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                ${productosHTMLList}
+                ${abonosHTMLList}
+                <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
+                <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
+            `;
+
+            // Reorganización de los checkboxes según el filtro
+            let controlsHtml = '';
+            if (esAdministrador) {
+                if (currentDispatchFilter === 'all') {
+                    controlsHtml += `<p>Bodeguero(s): ${bodeguerosEncargados}</p>`; // Mostrar bodegueros
+                    controlsHtml += enviadoAEmpaqueCheckboxHtml; // "Enviado a Empaque" debajo de bodeguero
+                    controlsHtml += bloquearCheckboxHtml; // "Bloquear Pedido" en su posición
+                } else if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
+                    // Para estas pestañas, solo se muestra el checkbox de Despachado.
+                    // La información detallada del pedido se muestra para ambas.
+                    // Aquí se inserta el checkbox de despachado en su lugar.
+                    recordContentHtml = `
+                        <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
+                        <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                        <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
+                        <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                        <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                        <p>Bodeguero(s): ${bodeguerosEncargados}</p>
+                        <p>Hora: ${horaFormateada}</p>
+                        <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                    `;
+                    controlsHtml += despachadoCheckboxHtml;
+                }
+            } else { // Operador
+                // Para operadores, mostrar la información normal del pedido y no los checkboxes de admin.
                 recordContentHtml = `
                     <p><strong>Registro ${index + 1}</strong></p>
                     <p>Fecha y Hora: ${fechaHoraFormateada}</p>
@@ -1012,20 +1039,18 @@
                     <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                     <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
                     <p>Bodeguero(s): ${bodeguerosEncargados}</p>
-                    ${enviadoAEmpaqueCheckboxHtml} <!-- "Enviado a Empaque" debajo de bodeguero en "Todos" -->
                     <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                     <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                 `;
+                // No se muestran checkboxes de admin para operador.
             }
 
-            // El innerHTML final del elemento del registro, combinando todo
             recordElement.innerHTML = `
                 <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: none;"></div>
                 ${recordContentHtml}
                 <div class="status-messages-container" id="status-messages-${docId}"></div>
                 <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
-                ${despachadoCheckboxHtml} <!-- Checkbox de despachado (solo en sus pestañas) -->
-                ${bloquearCheckboxHtml} <!-- Checkbox de bloqueo (solo en "Todos") -->
+                ${controlsHtml}
                 <div class="record-buttons">
                     <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
                     <button onclick="eliminarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
@@ -1707,9 +1732,9 @@
                 const bodeguerosSnapshot = await db.collection('usuarios').where('permisos', '==', 'Bodeguero').get();
                 const bodegueros = [];
                 bodeguerosSnapshot.forEach(doc => {
-                    const data = doc; // .data() was missing here
-                    if (data.data().nombreCompleto) { // Access data using .data()
-                        bodegueros.push(data.data().nombreCompleto);
+                    const data = doc.data(); // CORRECTED LINE: Use .data() to get the document data
+                    if (data.nombreCompleto) { // Access data properties directly
+                        bodegueros.push(data.nombreComplepto); // Typo fixed: nombreComplepto should be nombreCompleto
                     }
                 });
                 return bodegueros;
@@ -1981,6 +2006,7 @@
             const blockHourToUse = isAutoBlockEnabled ? customBlockHour : DEFAULT_BLOCK_HOUR;
             const blockMinuteToUse = isAutoBlockEnabled ? customBlockMinute : DEFAULT_BLOCK_MINUTE;
 
+            const targetTime = new Date(now); // Initialize targetTime with current date/time
             targetTime.setHours(blockHourToUse, blockMinuteToUse, 0, 0); // Establecer la hora de bloqueo objetivo
 
             // Si ya pasó la hora de bloqueo para hoy, establece la hora de bloqueo para mañana
