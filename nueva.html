@@ -1,0 +1,2170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generar Pedidos</title>
+    <!-- Carga de Tailwind CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Carga de la fuente Inter de Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Estilos personalizados y overrides de Tailwind para elementos específicos */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .modal {
+            display: none; /* Controlado por JavaScript */
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        /* Overlay para el bloqueo visual */
+        .block-overlay {
+            display: none; /* Controlado por JavaScript */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 999; /* Z-index más bajo para permitir que los modales y el icono de tuerca estén por encima */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            font-size: 1.5em;
+            text-align: center;
+        }
+        /* Círculo rojo giratorio */
+        .block-circle {
+            width: 150px;
+            height: 150px;
+            border: 10px solid #f3f3f3; /* Gris claro */
+            border-top: 10px solid #ef4444; /* red-500 de Tailwind */
+            border-radius: 50%;
+            animation: spin 2s linear infinite; /* Animación de giro */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #ef4444; /* red-500 de Tailwind */
+            background-color: rgba(255, 255, 255, 0.9);
+        }
+        /* Animación de giro */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Estilos para la barra de carga */
+        .loading-bar {
+            width: 100%;
+            background-color: #e5e7eb; /* gray-200 de Tailwind */
+            margin-top: 10px;
+            display: none; /* Controlado por JS */
+        }
+        .loading-bar-fill {
+            height: 24px;
+            width: 0%;
+            background-color: #34d399; /* green-400 de Tailwind */
+            text-align: center;
+            line-height: 24px;
+            color: white;
+            transition: width 0.1s linear; /* Transición suave del ancho */
+        }
+        /* Botón fijo "Ver Pedidos" para móvil (se oculta en escritorio con Tailwind) */
+        #ver_pedidos {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 2001;
+            /* Aplicamos clases de Tailwind directamente aquí */
+            @apply bg-blue-600 text-white p-3 rounded-lg shadow-lg hover:bg-blue-700 transition duration-300;
+        }
+        /* Estilos específicos para los checkboxes de bodegueros (en listas dinámicas) */
+        .bodeguero-checkbox-item input[type="checkbox"] {
+            @apply h-4 w-4 text-green-600 rounded focus:ring-green-500 cursor-pointer;
+        }
+    </style>
+    <!-- Carga de Tailwind CSS (redundante si ya está en link rel stylesheet, pero para asegurar en ciertos entornos) -->
+    <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.js"></script>
+    <!-- Firebase SDK (compat mode para compatibilidad con versiones anteriores si es necesario) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <!-- Librería XLSX para exportar a Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 antialiased">
+
+    <!-- Contenedor principal de la aplicación -->
+    <div class="container mx-auto p-4 md:p-8 bg-white shadow-xl rounded-lg my-8 w-11/12 max-w-4xl">
+        <h1 class="text-3xl font-bold text-green-600 text-center mb-6">Generar Pedidos</h1>
+
+        <div id="formulario" class="mb-8">
+            <h2 class="text-2xl font-semibold text-green-600 text-center mb-5">Agregar Registro</h2>
+            
+            <!-- Icono de configuración (engranaje) -->
+            <span id="gear_icon" class="text-3xl cursor-pointer text-green-600 fixed top-4 right-4 z-50 hover:text-green-700 transition duration-200" title="Opciones de Bloqueo" onclick="mostrarModal('block_options_modal')">&#9881;</span>
+
+            <!-- Formulario de agregar pedido -->
+            <form onsubmit="enviarFormulario(event);" class="space-y-4">
+                <!-- Contador regresivo para bloqueo automático -->
+                <div id="countdown_timer" class="text-center font-bold text-blue-600 p-3 rounded-md border border-blue-600 bg-blue-50 mb-4"></div>
+                
+                <div class="form-field">
+                    <label for="cliente_input" class="block text-gray-700 font-medium mb-1">Nombre del Cliente:</label>
+                    <input type="text" id="cliente_input" name="cliente" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                </div>
+                <div class="form-field">
+                    <label for="asesor_input" class="block text-gray-700 font-medium mb-1">Asesor:</label>
+                    <input type="text" id="asesor_input" name="asesor" required readonly class="w-full p-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed">
+                </div>
+                <div class="form-field">
+                    <label class="block text-gray-700 font-medium mb-1">Productos:</label>
+                    <button type="button" onclick="mostrarModal('modal_producto')" class="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600 transition duration-200 shadow-md">Agregar Producto</button>
+                </div>
+                <div id="lista_productos" class="form-field border border-gray-200 rounded-md p-2">
+                    <!-- Los productos agregados se insertarán aquí por JavaScript -->
+                </div>
+                <div class="form-field">
+                    <label class="block text-gray-700 font-medium mb-1">Abonos:</label>
+                    <button type="button" onclick="mostrarModal('modal_abono')" class="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600 transition duration-200 shadow-md">Agregar Abono</button>
+                </div>
+                <div id="lista_abonos" class="form-field border border-gray-200 rounded-md p-2">
+                    <!-- Los abonos agregados se insertarán aquí por JavaScript -->
+                </div>
+                <div class="form-field">
+                    <label for="num_pares_input" class="block text-gray-700 font-medium mb-1">Número de Pares:</label>
+                    <input type="number" id="num_pares_input" name="num_pares" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                </div>
+                <div class="form-field">
+                    <label id="valor_total_pesos" class="block text-gray-700 font-medium mb-1">Valor Total: $0</label>
+                    <input type="number" id="valor_total" name="valor_total" required readonly class="w-full p-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed">
+                </div>
+                <div class="form-field">
+                    <label class="block text-gray-700 font-medium mb-1">Bodeguero(s):</label>
+                    <div id="bodeguero_checkbox_container" class="bodeguero-checkbox-container p-3 border border-gray-300 rounded-md bg-gray-50">
+                        <!-- Checkboxes de bodegueros se cargarán aquí -->
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label for="observaciones_input" class="block text-gray-700 font-medium mb-1">Observaciones:</label>
+                    <textarea id="observaciones_input" name="observaciones" class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"></textarea>
+                </div>
+                <div class="form-field">
+                    <label for="saldo_a_favor_input" class="block text-gray-700 font-medium mb-1">Saldo a Favor:</label>
+                    <input type="number" id="saldo_a_favor_input" name="saldo_a_favor" value="0" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                </div>
+                <button type="submit" id="agregar_pedido_btn" class="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition duration-200 shadow-lg font-semibold text-lg">Agregar Pedido</button>
+            </form>
+
+            <!-- Barra de carga (animación) -->
+            <div id="loading-bar" class="loading-bar rounded-md overflow-hidden">
+                <div id="loading-bar-fill" class="loading-bar-fill">0%</div>
+            </div>
+
+            <h2 class="text-2xl font-semibold text-green-600 text-center my-6">Registros</h2>
+            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 mb-4">
+                <button id="exportar" onclick="exportarAExcel()" class="w-full sm:w-auto bg-gray-200 text-gray-800 p-3 rounded-md hover:bg-gray-300 transition duration-200 shadow-md">Exportar a Excel</button>
+                <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal()" class="w-full sm:w-auto bg-indigo-600 text-white p-3 rounded-md hover:bg-indigo-700 transition duration-200 shadow-md">Ver Pedidos (Inline)</button>
+            </div>
+            
+            <!-- Botón flotante "Ver Pedidos" (visible en móvil, oculto en escritorio) -->
+            <button id="ver_pedidos" onclick="iniciarVistaPedidosEnTiempoReal()" class="hidden sm:block">Ver Pedidos</button>
+
+        </div>
+        <!-- Sección de resumen de asesores (visible solo para administradores) -->
+        <div id="resumen_asesores" class="mt-8 p-4 bg-green-50 border border-green-300 rounded-lg shadow-sm">
+        </div>
+    </div>
+
+    <!-- Modales -->
+    <!-- Modal para agregar producto -->
+    <div id="modal_producto" class="modal">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-md">
+            <span class="close text-gray-500 hover:text-gray-800 text-2xl font-bold absolute top-3 right-5 cursor-pointer" onclick="cerrarModal('modal_producto')">&times;</span>
+            <h2 class="text-2xl font-semibold text-green-600 mb-5 text-center">Agregar Producto</h2>
+            <div class="space-y-4">
+                <div class="form-field">
+                    <label for="producto_referencia" class="block text-gray-700 font-medium mb-1">Referencia:</label>
+                    <input type="text" id="producto_referencia" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <div class="form-field">
+                    <label for="producto_color" class="block text-gray-700 font-medium mb-1">Color:</label>
+                    <input type="text" id="producto_color" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <div class="form-field">
+                    <label for="producto_talla" class="block text-gray-700 font-medium mb-1">Talla:</label>
+                    <input type="text" id="producto_talla" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <div class="form-field">
+                    <label for="producto_precio" class="block text-gray-700 font-medium mb-1">Precio:</label>
+                    <input type="number" id="producto_precio" step="any" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <button type="button" onclick="agregarProducto()" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-lg">Agregar Producto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar abono -->
+    <div id="modal_abono" class="modal">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-md">
+            <span class="close text-gray-500 hover:text-gray-800 text-2xl font-bold absolute top-3 right-5 cursor-pointer" onclick="cerrarModal('modal_abono')">&times;</span>
+            <h2 class="text-2xl font-semibold text-green-600 mb-5 text-center">Agregar Abono</h2>
+            <div class="space-y-4">
+                <div class="form-field">
+                    <label for="abono_fecha" class="block text-gray-700 font-medium mb-1">Fecha:</label>
+                    <input type="date" id="abono_fecha" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <div class="form-field">
+                    <label for="abono_monto" class="block text-gray-700 font-medium mb-1">Monto:</label>
+                    <input type="number" id="abono_monto" step="any" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <button type="button" onclick="agregarAbono()" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-lg">Agregar Abono</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para modificar pedido -->
+    <div id="modal_modificar" class="modal">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-2xl">
+            <span class="close text-gray-500 hover:text-gray-800 text-2xl font-bold absolute top-3 right-5 cursor-pointer" onclick="cerrarModal('modal_modificar')">&times;</span>
+            <h2 class="text-2xl font-semibold text-green-600 mb-5 text-center">Modificar Pedido</h2>
+            <form id="modificar_formulario" class="space-y-4">
+                <div class="form-field">
+                    <label for="modificar_cliente" class="block text-gray-700 font-medium mb-1">Nombre del Cliente:</label>
+                    <input type="text" id="modificar_cliente" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <div class="form-field">
+                    <label class="block text-gray-700 font-medium mb-1">Productos:</label>
+                    <div id="modificar_productos_list" class="space-y-3 p-3 border border-gray-200 rounded-md bg-gray-50">
+                        <!-- Productos existentes para modificar -->
+                    </div>
+                    <button type="button" onclick="addProductModificar()" class="add-item-button bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-200 shadow-md">Agregar Otro Producto</button>
+                </div>
+                <div class="form-field">
+                    <label class="block text-gray-700 font-medium mb-1">Abonos:</label>
+                    <div id="modificar_abonos_list" class="space-y-3 p-3 border border-gray-200 rounded-md bg-gray-50">
+                        <!-- Abonos existentes para modificar -->
+                    </div>
+                    <button type="button" onclick="addAbonoModificar()" class="add-item-button bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-200 shadow-md">Agregar Otro Abono</button>
+                </div>
+                <div class="form-field">
+                    <label for="modificar_num_pares" class="block text-gray-700 font-medium mb-1">Número de Pares:</label>
+                    <input type="number" id="modificar_num_pares" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <div class="form-field">
+                    <label for="modificar_valor_total" class="block text-gray-700 font-medium mb-1">Valor Total:</label>
+                    <input type="number" id="modificar_valor_total" step="any" required readonly class="w-full p-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed">
+                </div>
+                <div class="form-field">
+                    <label class="block text-gray-700 font-medium mb-1">Bodeguero(s):</label>
+                    <div id="modificar_bodeguero_checkbox_container" class="bodeguero-checkbox-container p-3 border border-gray-300 rounded-md bg-gray-50">
+                        <!-- Checkboxes de bodegueros para modificar -->
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label for="modificar_observaciones" class="block text-gray-700 font-medium mb-1">Observaciones:</label>
+                    <textarea id="modificar_observaciones" class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"></textarea>
+                </div>
+                <div class="form-field">
+                    <label for="modificar_saldo_a_favor" class="block text-gray-700 font-medium mb-1">Saldo a Favor:</label>
+                    <input type="number" id="modificar_saldo_a_favor" step="any" required class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500">
+                </div>
+                <button type="submit" id="guardarCambiosBtn" class="w-full bg-green-600 text-white p-3 rounded-md hover:bg-green-700 transition duration-200 shadow-lg font-semibold text-lg">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para ver pedidos registrados -->
+    <div id="modal_pedidos" class="modal">
+        <div class="modal-content modal-pedidos-content bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-4xl">
+            <span class="close text-gray-500 hover:text-gray-800 text-2xl font-bold absolute top-3 right-5 cursor-pointer" onclick="cerrarModal('modal_pedidos');">&times;</span>
+            <h2 class="text-2xl font-semibold text-green-600 mb-5 text-center">Pedidos Registrados</h2>
+            
+            <!-- Barra de búsqueda por cliente/código/producto -->
+            <div class="form-field mb-4">
+                <label for="search_cliente_input" class="block text-gray-700 font-medium mb-1">Barra de Búsqueda:</label>
+                <input type="search" id="search_cliente_input" name="client_search_query" 
+                       placeholder="Buscar por cliente, código o producto..." 
+                       autocorrect="off" 
+                       spellcheck="false" 
+                       role="searchbox"
+                       aria-label="Barra de Búsqueda de Clientes"
+                       inputmode="text"
+                       class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <!-- Filtro por asesor -->
+            <div class="form-field mb-4">
+                <label for="filtro_asesor" class="block text-gray-700 font-medium mb-1">Filtrar por Asesor:</label>
+                <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()" class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            
+            <!-- Botones de filtro de despacho -->
+            <div class="flex flex-wrap gap-2 mb-4">
+                <button id="filterAllButton" class="dispatch-filter-button bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition duration-200 active:bg-blue-600 active:text-white">Todos</button>
+                <button id="filterDespachadosButton" class="dispatch-filter-button bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition duration-200 active:bg-green-600 active:text-white">Despachados</button>
+                <button id="filterNoDespachadosButton" class="dispatch-filter-button bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition duration-200 active:bg-red-600 active:text-white">No Despachados</button>
+            </div>
+
+            <!-- Totales de pares y valor vendido -->
+            <div class="flex justify-between items-center bg-green-50 border border-green-300 rounded-md p-3 mb-4 text-gray-800 font-semibold">
+                <label id="total_pares">Total Pares: 0</label>
+                <label id="valor_vendido">Valor Vendido: $0</label>
+            </div>
+            <div id="lista_pedidos_container" class="form-field space-y-4 max-h-96 overflow-y-auto border border-gray-200 rounded-md p-3 bg-gray-50">
+                <!-- Lista de pedidos se cargará aquí -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de advertencia de pares -->
+    <div id="modal_pares_warning" class="modal">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-md text-center">
+            <span class="close text-gray-500 hover:text-gray-800 text-2xl font-bold absolute top-3 right-5 cursor-pointer" onclick="cerrarModal('modal_pares_warning')">&times;</span>
+            <h2 class="text-2xl font-semibold text-red-600 mb-4">Advertencia de Pares</h2>
+            <p class="text-gray-700 mb-6">Se han realizado cambios en los productos del pedido. Por favor, <strong class="text-red-500">verifique y ajuste el "Número de Pares"</strong> para asegurar que sea correcto antes de continuar.</p>
+            <button type="button" onclick="cerrarModal('modal_pares_warning')" class="bg-red-500 text-white p-3 rounded-md hover:bg-red-600 transition duration-200 shadow-lg">Entendido</button>
+        </div>
+    </div>
+
+    <!-- Modal de contraseña para acciones administrativas -->
+    <div id="password_modal" class="modal">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-sm text-center">
+            <span class="close text-gray-500 hover:text-gray-800 text-2xl font-bold absolute top-3 right-5 cursor-pointer" onclick="cerrarModal('password_modal')">&times;</span>
+            <h2 class="text-2xl font-semibold text-blue-600 mb-4">Desbloquear Funcionalidad</h2>
+            <p class="text-gray-700 mb-4">Por favor, ingrese la contraseña para deshabilitar el bloqueo.</p>
+            <div class="form-field mb-4">
+                <label for="password_input" class="block text-gray-700 font-medium mb-1 text-left">Contraseña:</label>
+                <input type="password" id="password_input" placeholder="Ingrese la contraseña" autocomplete="new-password" class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                <input type="hidden" id="password_modal_type" value=""> 
+                <p id="password_error" class="error-message text-red-500 text-sm mt-2 text-left"></p>
+            </div>
+            <button type="button" onclick="verifyPassword()" class="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition duration-200 shadow-lg">Confirmar</button>
+        </div>
+    </div>
+
+    <!-- Modal de opciones de bloqueo (accesible desde el icono de engranaje) -->
+    <div id="block_options_modal" class="modal">
+        <div class="modal-content bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-lg">
+            <span class="close text-gray-500 hover:text-gray-800 text-2xl font-bold absolute top-3 right-5 cursor-pointer" onclick="cerrarModal('block_options_modal')">&times;</span>
+            <h2 class="text-2xl font-semibold text-green-600 mb-5 text-center">Opciones de Bloqueo</h2>
+            
+            <div class="form-field flex items-center mb-4">
+                <input type="checkbox" id="auto_block_checkbox" onchange="toggleAutoBlockCheckbox(this)" class="h-5 w-5 text-green-600 rounded focus:ring-green-500">
+                <label for="auto_block_checkbox" class="ml-3 text-lg font-medium text-gray-700 cursor-pointer">Bloqueo por hora</label>
+            </div>
+            <div class="form-field flex items-center mb-4">
+                <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)" class="h-5 w-5 text-green-600 rounded focus:ring-green-500">
+                <label for="global_manual_block_checkbox" class="ml-3 text-lg font-medium text-gray-700 cursor-pointer">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
+            </div>
+
+            <hr class="my-6 border-gray-300">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Configurar Hora de Bloqueo Automático</h3>
+            <p id="current_custom_block_time" class="text-gray-600 text-center mb-4">Hora actual configurada: --:--</p>
+            
+            <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 mb-4 justify-center">
+                <div class="form-field custom-time-input flex-1 min-w-0">
+                    <label for="custom_block_hour_input" class="block text-gray-700 font-medium mb-1">Hora (0-23):</label>
+                    <input type="number" id="custom_block_hour_input" min="0" max="23" placeholder="Ej: 17" class="w-full p-2 border border-gray-300 rounded-md text-center focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="form-field custom-time-input flex-1 min-w-0">
+                    <label for="custom_block_minute_input" class="block text-gray-700 font-medium mb-1">Minuto (0-59):</label>
+                    <input type="number" id="custom_block_minute_input" min="0" max="59" placeholder="Ej: 40" class="w-full p-2 border border-gray-300 rounded-md text-center focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <button type="button" onclick="setCustomBlockTime()" class="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition duration-200 shadow-lg font-semibold text-lg">Guardar Hora Personalizada</button>
+            <p id="custom_time_error" class="error-message text-red-500 text-sm mt-2 text-center"></p>
+
+            <hr class="my-6 border-gray-300">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Estado del Bloqueo Automático</h3>
+            <button type="button" onclick="resetAutoBlockState()" class="w-full bg-yellow-500 text-gray-900 p-3 rounded-md hover:bg-yellow-600 transition duration-200 shadow-lg font-semibold text-lg">Reiniciar Estado de Bloqueo (Admin)</button>
+        </div>
+    </div>
+
+    <!-- Overlay de bloqueo -->
+    <div id="block_overlay" class="block-overlay">
+        <div class="block-circle">
+            <p>BLOQUEADO</p>
+        </div>
+        <p class="text-xl font-medium mt-4">Temporalmente bloqueado y a la espera de desbloqueo.</p>
+    </div>
+
+    <script>
+        // Todas las variables y lógica JavaScript de la versión anterior se encuentran aquí.
+        // Se han actualizado los selectores de elementos del DOM (ej. input[name="cliente"] a document.getElementById('cliente_input'))
+        // donde se han añadido IDs a los elementos HTML para una mejor integración con Tailwind.
+
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU", // Asegúrate que esta API Key esté bien protegida y restringida
+            authDomain: "lazapateria-c4157.firebaseapp.com",
+            projectId: "lazapateria-c4157",
+            storageBucket: "lazapateria-c4157.firebasestorage.app",
+            measurementId: "G-HVG7615JEE"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        console.log("Firebase configurado correctamente.");
+
+        // Referencia al documento de configuración global en Firestore
+        const globalSettingsRef = db.collection('settings').doc('global_block');
+
+        let productos = [], abonos = [], valorTotal = 0;
+        // Carga de datos de usuario desde localStorage
+        let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
+        console.log("Datos del usuario al inicio:", datosUsuario);
+
+        if (!datosUsuario || !datosUsuario.permisos) {
+            alert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, inicie sesión de nuevo.");
+            datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
+            console.error("Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
+        }
+
+        let pedidosListenerUnsubscribe = null;
+        let scrollPosPedidos = 0;
+        let isInitialLoadPedidos = true;
+        let currentDispatchFilter = 'all'; // 'all', 'despachados', 'noDespachados'
+
+        // Variables globales para almacenar productos y abonos originales para comparación en la modificación
+        let originalProductsForModification = [];
+        let originalAbonosForModification = [];
+
+        // --- Variables para el Bloqueo de Pedidos ---
+        const BLOCK_PASSWORD = "upm1022"; // Contraseña para acciones administrativas de bloqueo
+        // Valores por defecto para la hora de bloqueo (usados si no hay configuración personalizada en Firebase)
+        const DEFAULT_BLOCK_HOUR = 17; // 5 PM
+        const DEFAULT_BLOCK_MINUTE = 40; // 40 minutos
+
+        let isGlobalManualBlock = false; // Estado del bloqueo manual/inmediato global (controlado por Firestore)
+        let isAutoBlockedPermanently = false; // Estado del bloqueo automático persistente (controlado por Firestore)
+        let isAutoBlockEnabled = false; // Controla si el mecanismo de auto-bloqueo está habilitado por el administrador
+        let lastAutoBlockTriggerDate = null; // Para controlar que el auto-bloqueo se active solo una vez por día
+        let currentPasswordModalTargetCheckbox = null; // Para saber qué checkbox activó el modal de contraseña
+
+        // Variables para almacenar la hora de bloqueo personalizada desde Firebase
+        let customBlockHour = DEFAULT_BLOCK_HOUR;
+        let customBlockMinute = DEFAULT_BLOCK_MINUTE;
+
+        /**
+         * Muestra un modal específico.
+         * @param {string} id - El ID del modal a mostrar.
+         */
+        const mostrarModal = id => {
+            document.getElementById(id).style.display = 'flex';
+            // Si es el modal de opciones de bloqueo, actualiza los estados de los checkboxes y la hora configurada
+            if (id === 'block_options_modal') {
+                document.getElementById('auto_block_checkbox').checked = isAutoBlockEnabled; 
+                document.getElementById('global_manual_block_checkbox').checked = isGlobalManualBlock;
+
+                document.getElementById('custom_block_hour_input').value = customBlockHour;
+                document.getElementById('custom_block_minute_input').value = customBlockMinute;
+                
+                // Formatea la hora a 12 horas para la visualización
+                const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+                const formattedTime = new Date(1, 1, 1, customBlockHour, customBlockMinute).toLocaleTimeString('es-CO', formattedTimeOptions);
+                document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
+                document.getElementById('custom_time_error').textContent = ''; // Limpiar mensaje de error previo
+            }
+            // Si es el modal de agregar producto, limpia los campos
+            if (id === 'modal_producto') {
+                document.getElementById('producto_referencia').value = '';
+                document.getElementById('producto_color').value = '';
+                document.getElementById('producto_talla').value = '';
+                document.getElementById('producto_precio').value = '';
+            }
+        };
+
+        /**
+         * Cierra un modal específico.
+         * @param {string} id - El ID del modal a cerrar.
+         */
+        const cerrarModal = id => {
+            document.getElementById(id).style.display = 'none';
+            // Si es el modal de pedidos y hay un listener activo, lo detiene
+            if (id === 'modal_pedidos' && pedidosListenerUnsubscribe) {
+                pedidosListenerUnsubscribe();
+                pedidosListenerUnsubscribe = null;
+                console.log("Listener de pedidos detenido.");
+            }
+            // Si es el modal de contraseña, limpia el campo y el mensaje de error
+            if (id === 'password_modal') {
+                document.getElementById('password_input').value = '';
+                document.getElementById('password_error').textContent = '';
+            }
+        };
+
+        /**
+         * Agrega un nuevo producto a la lista temporal del formulario.
+         */
+        function agregarProducto() {
+            const ref = id => document.getElementById(id).value;
+            const producto = { referencia: ref('producto_referencia'), color: ref('producto_color'), talla: ref('producto_talla'), precio: parseFloat(ref('producto_precio')) };
+            if (Object.values(producto).every(val => val || val === 0)) { // Verifica que todos los campos estén llenos (0 es precio válido)
+                productos.push(producto);
+                valorTotal += producto.precio;
+                actualizarLista('productos', productos);
+                actualizarValorTotal();
+                cerrarModal('modal_producto');
+            } else alert('Por favor, complete todos los campos del producto.');
+        }
+
+        /**
+         * Agrega un nuevo abono a la lista temporal del formulario.
+         */
+        function agregarAbono() {
+            const abono = { fecha: document.getElementById('abono_fecha').value, monto: parseFloat(document.getElementById('abono_monto').value) };
+            if (abono.fecha && abono.monto) { // Verifica que la fecha y el monto estén proporcionados
+                abonos.push(abono);
+                actualizarLista('abonos', abonos);
+                cerrarModal('modal_abono');
+            } else alert('Por favor, complete todos los campos del abono.');
+        }
+
+        /**
+         * Actualiza la visualización de la lista de productos o abonos.
+         * @param {string} tipo - 'productos' o 'abonos'.
+         * @param {Array} lista - La lista de elementos a mostrar.
+         */
+        function actualizarLista(tipo, lista) {
+            let html = '';
+            lista.forEach((item, index) => {
+                if (tipo === 'productos') {
+                    html += `<div class="record p-3 bg-gray-100 rounded-md shadow-sm mb-2">
+                        <p class="font-semibold text-gray-800">Producto ${index + 1}</p>
+                        <p class="text-sm text-gray-600">Referencia: ${item.referencia}</p>
+                        <p class="text-sm text-gray-600">Color: ${item.color}</p>
+                        <p class="text-sm text-gray-600">Talla: ${item.talla}</p>
+                        <p class="text-sm text-gray-600">Precio: $${item.precio.toLocaleString('es-CO')}</p>
+                    </div>`;
+                } else if (tipo === 'abonos') {
+                    html += `<div class="record p-3 bg-gray-100 rounded-md shadow-sm mb-2">
+                        <p class="font-semibold text-gray-800">Abono ${index + 1}</p>
+                        <p class="text-sm text-gray-600">Fecha: ${item.fecha}</p>
+                        <p class="text-sm text-gray-600">Monto: $${item.monto.toLocaleString('es-CO')}</p>
+                    </div>`;
+                }
+            });
+            document.getElementById(`lista_${tipo}`).innerHTML = html;
+        }
+
+        /**
+         * Actualiza el valor total del pedido.
+         */
+        function actualizarValorTotal() {
+            document.getElementById('valor_total').value = Math.round(valorTotal);
+            document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + Math.round(valorTotal).toLocaleString('es-CO');
+        }
+
+        /**
+         * Envía el formulario del pedido a Firebase.
+         * @param {Event} event - El evento de envío del formulario.
+         */
+        async function enviarFormulario(event) {
+            event.preventDefault();
+
+            // Evita el envío si el botón está deshabilitado por bloqueo
+            if (document.getElementById('agregar_pedido_btn').disabled) {
+                console.warn("Intento de enviar formulario bloqueado.");
+                return;
+            }
+
+            const confirmacion = window.confirm("¿Desea enviar el formulario?");
+            if (confirmacion) {
+                mostrarBarraCargando();
+                console.log("Enviando formulario...");
+
+                // Obtiene los bodegueros seleccionados de los checkboxes
+                const selectedBodegueros = Array.from(document.querySelectorAll('#bodeguero_checkbox_container input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
+
+                const datos = {
+                    fecha_hora: firebase.firestore.Timestamp.fromDate(new Date()),
+                    codigo_unico: 'COD-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
+                    cliente: document.getElementById('cliente_input').value,
+                    productos,
+                    num_pares: parseInt(document.getElementById('num_pares_input').value) || 0,
+                    valor_total: Math.round(valorTotal),
+                    observaciones: document.getElementById('observaciones_input').value,
+                    saldo_a_favor: document.getElementById('saldo_a_favor_input').value,
+                    abonos,
+                    asesor: datosUsuario.nombreCompleto,
+                    usuario: datosUsuario.usuario,
+                    bodegueros_encargados: selectedBodegueros,
+                    bloqueado: false,
+                    despachado: false,
+                    despachadoPor: '',
+                    bloqueadoPor: ''
+                };
+                console.log("Datos a guardar:", datos);
+
+                try {
+                    await db.collection('registros').add(datos);
+                    console.log("Datos guardados en Firebase:", datos);
+                    alert("Pedido agregado exitosamente!");
+                } catch (error) {
+                    console.error("Error guardando en Firebase:", error);
+                    alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
+                }
+
+                // Resetea el formulario y las listas temporales
+                document.querySelector('form').reset();
+                productos = [];
+                abonos = [];
+                valorTotal = 0;
+                actualizarLista('productos', productos);
+                actualizarLista('abonos', abonos);
+                actualizarValorTotal();
+                if (datosUsuario && datosUsuario.nombreCompleto) {
+                    document.getElementById('asesor_input').value = datosUsuario.nombreCompleto;
+                }
+                populateBodegueroCheckboxes(); // Resetea los checkboxes de bodegueros
+                ocultarBarraCargando();
+            }
+        }
+
+        /**
+         * Resetea el combobox de filtro por asesor.
+         */
+        function resetearComboBoxAsesor() {
+            const filtroAsesor = document.getElementById('filtro_asesor');
+            const todosOptionHTML = filtroAsesor.options[0] && filtroAsesor.options[0].value === "" ? filtroAsesor.options[0].outerHTML : '<option value="">Todos</option>';
+            filtroAsesor.innerHTML = todosOptionHTML;
+        }
+
+        /**
+         * Filtra y busca pedidos en la lista de pedidos en tiempo real.
+         */
+        function filtrarYBuscarPedidos() {
+            console.log("--- Inicia filtrarYBuscarPedidos ---");
+            const filtroAsesorValue = document.getElementById('filtro_asesor').value;
+            const searchTerm = document.getElementById('search_cliente_input').value.toLowerCase(); 
+            const listaPedidosContainer = document.getElementById('lista_pedidos_container');
+            const records = listaPedidosContainer.querySelectorAll('.record'); 
+            
+            console.log("SearchTerm:", searchTerm, "Filtro Asesor:", filtroAsesorValue, "Filtro Despacho:", currentDispatchFilter);
+            console.log("Número de records encontrados por querySelectorAll:", records.length);
+            
+            let totalPares = 0;
+            let valorTotalFiltrado = 0;
+            let visibleTotalCount = 0;
+            let totalDespachadosFiltered = 0;
+            let totalNoDespachadosFiltered = 0;
+
+            const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
+            const currentUserId = datosUsuario.usuario;
+            console.log("Rol del usuario para la consulta:", datosUsuario.permisos);
+            console.log("ID de usuario para la consulta (si es operador):", currentUserId);
+
+            records.forEach(recordElement => {
+                const asesorDelRegistro = recordElement.dataset.asesor;
+                const clienteDelRegistro = recordElement.dataset.cliente ? recordElement.dataset.cliente.toLowerCase() : '';
+                const codigoDelRegistro = recordElement.dataset.codigo ? recordElement.dataset.codigo.toLowerCase() : '';
+                const productosDelRegistro = recordElement.dataset.productos ? recordElement.dataset.productos.toLowerCase() : '';
+                const despachadoDelRegistro = recordElement.dataset.despachado === 'true';
+                const usuarioDelRegistro = recordElement.dataset.usuario;
+
+                const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
+                
+                // La búsqueda ahora también incluye el código único y los productos
+                let coincideBusqueda = true;
+                if (searchTerm) {
+                    coincideBusqueda = clienteDelRegistro.includes(searchTerm) || codigoDelRegistro.includes(searchTerm) || productosDelRegistro.includes(searchTerm);
+                }
+
+                if (coincideAsesor && coincideBusqueda && (isOperator ? usuarioDelRegistro === currentUserId : true)) {
+                    if (despachadoDelRegistro) {
+                        totalDespachadosFiltered++;
+                    } else {
+                        totalNoDespachadosFiltered++;
+                    }
+                }
+
+                let recordShouldBeDisplayed = true;
+                if (currentDispatchFilter === 'despachados') {
+                    recordShouldBeDisplayed = despachadoDelRegistro;
+                } else if (currentDispatchFilter === 'noDespachados') {
+                    recordShouldBeDisplayed = !despachadoDelRegistro;
+                }
+
+                const userMatches = (isOperator ? usuarioDelRegistro === currentUserId : true);
+                console.log(`Record ${recordElement.dataset.id}: Despachado=${despachadoDelRegistro}, UserMatches=${userMatches}, ShouldBeDisplayed=${recordShouldBeDisplayed}, CoincideAsesor=${coincideAsesor}, CoincideBusqueda=${coincideBusqueda}`);
+
+
+                if (coincideAsesor && coincideBusqueda && userMatches && recordShouldBeDisplayed) {
+                    recordElement.style.display = 'block';
+                    visibleTotalCount++;
+                    const numParesElement = recordElement.querySelector('.num_pares');
+                    if (numParesElement) {
+                        totalPares += parseInt(numParesElement.innerText.split(': ')[1] || 0);
+                    }
+                    const valorTotalRawElement = recordElement.querySelector('.valor_total_raw');
+                    if (valorTotalRawElement) {
+                        valorTotalFiltrado += parseFloat(valorTotalRawElement.innerText || 0);
+                    }
+                } else {
+                    recordElement.style.display = 'none';
+                }
+            });
+
+            document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
+            document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
+
+            document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`;
+            document.getElementById('filterDespachadosButton').textContent = `Despachados (${totalDespachadosFiltered})`;
+            document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${totalNoDespachadosFiltered})`;
+            console.log("--- Finaliza filtrarYBuscarPedidos ---");
+        }
+        
+        /**
+         * Actualiza el estado visual y los botones de un registro de pedido.
+         * @param {string} docId - El ID del documento del pedido.
+         * @param {object} updatedRegistro - Los datos actualizados del registro.
+         */
+        function updateRecordStatusAndButtons(docId, updatedRegistro) {
+            const recordElement = document.querySelector(`.record[data-id="${docId}"]`);
+            if (!recordElement) return;
+
+            const estaBloqueado = updatedRegistro.bloqueado === true;
+            const estaDespachado = updatedRegistro.despachado === true;
+            const despachadoPor = updatedRegistro.despachadoPor || '';
+            const bloqueadoPor = updatedRegistro.bloqueadoPor || '';
+
+            // Actualiza los datasets del elemento para que los filtros funcionen correctamente
+            recordElement.dataset.bloqueado = estaBloqueado;
+            recordElement.dataset.despachado = estaDespachado;
+            recordElement.dataset.despachadoPor = despachadoPor;
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;
+
+            const statusMessagesContainer = recordElement.querySelector(`#status-messages-${docId}`);
+            if (statusMessagesContainer) {
+                let newStatusHtml = '';
+                // Muestra el estado "BLOQUEADO" solo si el filtro actual es 'all'
+                if (estaBloqueado && currentDispatchFilter === 'all') {
+                    const blockedText = bloqueadoPor ? `BLOQUEADO POR: ${bloqueadoPor.toUpperCase()}` : 'BLOQUEADO';
+                    newStatusHtml += `<p class="status-bloqueado text-red-500 font-bold">${blockedText}</p>`;
+                }
+                statusMessagesContainer.innerHTML = newStatusHtml;
+            }
+
+            const puedeModificarEliminar = datosUsuario.permisos.toLowerCase() === 'administrador' || (!estaBloqueado && !estaDespachado);
+            const modificarButton = recordElement.querySelector('button[onclick*="modificarPedido"]');
+            const eliminarButton = recordElement.querySelector('button[onclick*="eliminarPedido"]');
+
+            if (modificarButton) {
+                modificarButton.disabled = !puedeModificarEliminar;
+                modificarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
+                if(!puedeModificarEliminar) modificarButton.classList.add('opacity-50', 'cursor-not-allowed');
+                else modificarButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+            if (eliminarButton) {
+                eliminarButton.disabled = !puedeModificarEliminar;
+                eliminarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
+                if(!puedeModificarEliminar) eliminarButton.classList.add('opacity-50', 'cursor-not-allowed');
+                else eliminarButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
+            const despachadoSelloContainer = recordElement.querySelector(`#despachado-sello-container-${docId}`);
+            if (despachadoSelloContainer) {
+                // El sello de despachado se mostrará siempre que el pedido esté despachado
+                if (estaDespachado) {
+                    const despachadoText = despachadoPor ? `DESPACHADO POR: ${despachadoPor.toUpperCase()}` : 'DESPACHADO';
+                    despachadoSelloContainer.innerHTML = `<div class="despachado-sello absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-md font-bold text-sm uppercase shadow-md">${despachadoText}</div>`;
+                } else {
+                    despachadoSelloContainer.innerHTML = '';
+                }
+            }
+        }
+
+        /**
+         * Crea un nuevo elemento HTML para un registro de pedido.
+         * @param {string} docId - El ID del documento del pedido.
+         * @param {object} registro - Los datos del registro.
+         * @param {number} index - El índice del registro en la lista.
+         * @returns {HTMLElement} El elemento div que representa el registro.
+         */
+        function createRecordElement(docId, registro, index) {
+            const recordElement = document.createElement('div');
+            recordElement.className = 'record bg-white p-4 rounded-lg shadow-md mb-4 relative';
+            recordElement.dataset.id = docId;
+
+            const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const estaBloqueado = registro.bloqueado === true;
+            const estaDespachado = registro.despachado === true;
+            const despachadoPor = registro.despachadoPor || '';
+            const bloqueadoPor = registro.bloqueadoPor || '';
+
+            // Set initial data attributes for filtering and searching
+            recordElement.dataset.asesor = registro.asesor || 'N/A';
+            recordElement.dataset.cliente = registro.cliente || 'N/A';
+            recordElement.dataset.codigo = registro.codigo_unico || 'N/A';
+            recordElement.dataset.despachado = estaDespachado;
+            recordElement.dataset.bloqueado = estaBloqueado;
+            recordElement.dataset.despachadoPor = despachadoPor;
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;
+            recordElement.dataset.usuario = registro.usuario || 'N/A';
+
+            let productosTextoParaBusqueda = "";
+            let productosHTMLList = '<p class="text-gray-600 text-sm">Sin productos</p>';
+            if (Array.isArray(registro.productos) && registro.productos.length > 0) {
+                productosHTMLList = '<ul class="list-disc list-inside text-gray-700 text-sm">';
+                registro.productos.forEach((producto, i) => {
+                    const prodText = `${producto.referencia || 'N/A'} - ${producto.color || 'N/A'} - ${producto.talla || 'N/A'} - $${(producto.precio || 0).toLocaleString('es-CO')}`;
+                    productosHTMLList += `<li>Producto ${i + 1}: ${prodText}</li>`;
+                    productosTextoParaBusqueda += `${producto.referencia} ${producto.color} ${producto.talla} `;
+                });
+                productosHTMLList += '</ul>';
+            }
+            recordElement.dataset.productos = productosTextoParaBusqueda.trim(); // Para la búsqueda
+
+            let abonosHTMLList = '<p class="text-gray-600 text-sm">Sin abonos</p>';
+            if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
+                abonosHTMLList = '<ul class="list-disc list-inside text-gray-700 text-sm">';
+                registro.abonos.forEach((abono, j) => {
+                    abonosHTMLList += `<li>Abono ${j + 1}: ${abono.fecha || 'N/A'} - $${(abono.monto || 0).toLocaleString('es-CO')}</li>`;
+                });
+                abonosHTMLList += '</ul>';
+            }
+
+            let controlesHTML = '';
+            if (esAdministrador) {
+                // Checkbox para marcar como despachado (visible en filtro 'despachados' y 'noDespachados')
+                if (currentDispatchFilter !== 'all') {
+                    controlesHTML += `
+                        <div class="control-container flex items-center space-x-2 bg-green-50 border border-green-300 p-2 rounded-md my-2">
+                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)" class="h-4 w-4 text-green-600 rounded focus:ring-green-500">
+                            <label for="despachar_${docId}" class="text-sm font-medium text-gray-700">Marcar como Despachado</label>
+                        </div>`;
+                }
+                // Checkbox para bloquear pedido (visible solo en filtro 'all')
+                if (currentDispatchFilter === 'all') {
+                    controlesHTML += `
+                        <div class="control-container flex items-center space-x-2 bg-red-50 border border-red-300 p-2 rounded-md my-2">
+                            <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)" class="h-4 w-4 text-red-600 rounded focus:ring-red-500">
+                            <label for="bloquear_${docId}" class="text-sm font-medium text-gray-700">Bloquear Pedido</label>
+                        </div>`;
+                }
+            }
+            
+            const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
+            const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
+            const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
+            const bodeguerosEncargados = Array.isArray(registro.bodegueros_encargados) && registro.bodegueros_encargados.length > 0
+                ? registro.bodegueros_encargados.join(', ')
+                : 'N/A';
+
+            let recordContentHtml = '';
+            // Lógica para mostrar contenido diferente según el filtro (más conciso para despachados/no despachados)
+            if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
+                recordContentHtml = `
+                    <p class="text-lg font-bold text-gray-900">Cliente: ${registro.cliente || 'N/A'}</p>
+                    <p class="text-sm text-gray-700">Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                    <p class="num_pares text-sm text-gray-700">Número de Pares: ${registro.num_pares || 0}</p>
+                    <p class="valor_total text-sm text-gray-700">Valor Total: <span class="font-semibold">$${(registro.valor_total || 0).toLocaleString('es-CO')}</span></p>
+                    <span class="valor_total_raw hidden">${registro.valor_total || 0}</span>
+                    <p class="text-sm text-gray-700">Bodeguero(s): ${bodeguerosEncargados}</p>
+                    <p class="text-sm text-gray-700">Hora: ${horaFormateada}</p>
+                    <p class="text-sm text-gray-700">Observaciones: ${registro.observaciones || 'N/A'}</p>
+                `;
+            } else {
+                recordContentHtml = `
+                    <p class="text-lg font-bold text-gray-900">Registro ${index + 1}</p>
+                    <p class="text-sm text-gray-700">Fecha y Hora: ${fechaHoraFormateada}</p>
+                    <p class="text-sm text-gray-700">Código Único: ${registro.codigo_unico || 'N/A'}</p>
+                    <p class="text-sm text-gray-700">Cliente: ${registro.cliente || 'N/A'}</p>
+                    <p class="text-sm text-gray-700">Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                    <div class="mt-2 mb-2">
+                        <p class="text-sm font-semibold text-gray-800">Productos:</p>
+                        ${productosHTMLList}
+                    </div>
+                    <div class="mt-2 mb-2">
+                        <p class="text-sm font-semibold text-gray-800">Abonos:</p>
+                        ${abonosHTMLList}
+                    </div>
+                    <p class="num_pares text-sm text-gray-700">Número de Pares: ${registro.num_pares || 0}</p>
+                    <p class="valor_total text-sm text-gray-700">Valor Total: <span class="font-semibold">$${(registro.valor_total || 0).toLocaleString('es-CO')}</span></p>
+                    <span class="valor_total_raw hidden">${registro.valor_total || 0}</span>
+                    <p class="text-sm text-gray-700">Bodeguero(s): ${bodeguerosEncargados}</p>
+                    <p class="text-sm text-gray-700">Observaciones: ${registro.observaciones || 'N/A'}</p>
+                    <p class="text-sm text-gray-700">Saldo a Favor: <span class="font-semibold">$${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</span></p>
+                `;
+            }
+
+            recordElement.innerHTML = `
+                ${recordContentHtml}
+                <div class="status-messages-container mt-2" id="status-messages-${docId}"></div>
+                <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
+                ${controlesHTML} 
+                <div class="record-buttons flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mt-4">
+                    <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled' : ''} title="${!puedeModificarEliminar ? 'Pedido bloqueado o despachado' : ''}" class="flex-1 bg-yellow-500 text-white p-2 rounded-md hover:bg-yellow-600 transition duration-200 shadow-md ${!puedeModificarEliminar ? 'opacity-50 cursor-not-allowed' : ''}">Modificar</button>
+                    <button onclick="eliminarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled' : ''} title="${!puedeModificarEliminar ? 'Pedido bloqueado o despachado' : ''}" class="flex-1 bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md ${!puedeModificarEliminar ? 'opacity-50 cursor-not-allowed' : ''}">Eliminar</button>
+                </div>
+                <hr class="my-4 border-gray-200">
+            `;
+            return recordElement;
+        }
+
+        /**
+         * Actualiza un elemento de registro existente reemplazándolo por uno nuevo.
+         * @param {HTMLElement} existingElement - El elemento existente a actualizar.
+         * @param {object} updatedRegistro - Los datos actualizados del registro.
+         * @param {number} index - El índice del registro.
+         */
+        function updateExistingRecordElement(existingElement, updatedRegistro, index) {
+            const newRecordElement = createRecordElement(existingElement.dataset.id, updatedRegistro, index);
+            existingElement.parentNode.replaceChild(newRecordElement, existingElement);
+            updateRecordStatusAndButtons(existingElement.dataset.id, updatedRegistro);
+        }
+
+
+        /**
+         * Inicia la vista de pedidos en tiempo real, abriendo el modal y configurando el listener de Firestore.
+         */
+        function iniciarVistaPedidosEnTiempoReal() {
+            console.log("Iniciando vista de pedidos en tiempo real...");
+            mostrarModal('modal_pedidos');
+
+            // Limpiar el campo de búsqueda por cliente al abrir el modal
+            const searchClienteInput = document.getElementById('search_cliente_input');
+            if (searchClienteInput) {
+                searchClienteInput.value = '';
+                searchClienteInput.blur(); 
+                setTimeout(() => { 
+                    searchClienteInput.value = '';
+                    searchClienteInput.blur();
+                }, 100);
+            }
+
+            const listaPedidosContainer = document.getElementById('lista_pedidos_container');
+            listaPedidosContainer.innerHTML = '<p class="text-center text-gray-500">Cargando pedidos...</p>';
+            isInitialLoadPedidos = true;
+
+            // Si ya hay un listener activo, lo detiene para evitar duplicados
+            if (pedidosListenerUnsubscribe) {
+                pedidosListenerUnsubscribe();
+            }
+
+            let query = db.collection('registros').orderBy('fecha_hora', 'asc');
+            const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
+            const currentUserId = datosUsuario.usuario;
+            console.log("Rol del usuario para la consulta:", datosUsuario.permisos);
+            console.log("ID de usuario para la consulta (si es operador):", currentUserId);
+
+            // Si el usuario es un operador, filtra los pedidos por su usuario
+            if (isOperator) {
+                query = query.where('usuario', '==', currentUserId);
+            }
+
+            // Configura el listener de Firestore para cambios en tiempo real
+            pedidosListenerUnsubscribe = query.onSnapshot(snapshot => {
+                console.log("Datos de pedidos recibidos/actualizados.");
+                console.log("Número de documentos recibidos:", snapshot.size);
+                
+                // Guarda la posición de scroll actual antes de actualizar el DOM
+                if (!isInitialLoadPedidos) {
+                    scrollPosPedidos = listaPedidosContainer.scrollTop;
+                }
+
+                // Mapea los elementos de registro existentes para actualizaciones eficientes
+                const existingRecordElements = new Map();
+                listaPedidosContainer.querySelectorAll('.record').forEach(el => {
+                    existingRecordElements.set(el.dataset.id, el);
+                });
+
+                // Si es la carga inicial o el snapshot está vacío, limpia el contenedor
+                if (isInitialLoadPedidos || snapshot.empty) {
+                    listaPedidosContainer.innerHTML = '';
+                    if (snapshot.empty && isOperator) {
+                        listaPedidosContainer.innerHTML = '<p class="text-center text-gray-500">No hay pedidos asignados a este operador o no se encontraron pedidos con los filtros actuales.</p>';
+                    } else if (snapshot.empty) {
+                        listaPedidosContainer.innerHTML = '<p class="text-center text-gray-500">No hay pedidos para mostrar con los filtros actuales.</p>';
+                    }
+                }
+
+                // Procesa los cambios en los documentos (añadidos, modificados, eliminados)
+                snapshot.docChanges().forEach(change => {
+                    const doc = change.doc;
+                    const registro = doc.data();
+                    const docId = doc.id;
+                    const currentDocIndex = snapshot.docs.findIndex(d => d.id === docId);
+
+                    if (change.type === 'added') {
+                        console.log("Added record:", docId);
+                        const newRecordElement = createRecordElement(docId, registro, currentDocIndex);
+                        const nextElement = listaPedidosContainer.children[currentDocIndex];
+                        if (nextElement) {
+                            listaPedidosContainer.insertBefore(newRecordElement, nextElement);
+                        } else {
+                            listaPedidosContainer.appendChild(newRecordElement);
+                        }
+                        updateRecordStatusAndButtons(docId, registro);
+                    } else if (change.type === 'modified') {
+                        console.log("Modified record:", docId);
+                        const existingElement = existingRecordElements.get(docId);
+                        if (existingElement) {
+                            updateExistingRecordElement(existingElement, registro, currentDocIndex);
+                        }
+                    } else if (change.type === 'removed') {
+                        console.log("Removed record:", docId);
+                        const existingElement = existingRecordElements.get(docId);
+                        if (existingElement) {
+                            existingElement.remove();
+                        }
+                    }
+                });
+
+                // Después de procesar los cambios, vuelve a aplicar los filtros para asegurar la visibilidad y los conteos correctos
+                filtrarYBuscarPedidos();
+
+                // Recalcula y muestra el resumen de asesores
+                let asesores = new Set();
+                let resumenAsesores = {};
+                snapshot.forEach(doc => {
+                    const registro = doc.data();
+                    if(registro.asesor) asesores.add(registro.asesor);
+                    if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+                        if (registro.asesor && !resumenAsesores[registro.asesor]) {
+                            resumenAsesores[registro.asesor] = { num_pares: 0, valor_vendido: 0 };
+                        }
+                        if(registro.asesor){
+                            resumenAsesores[registro.asesor].num_pares += parseInt(registro.num_pares || 0);
+                            resumenAsesores[registro.asesor].valor_vendido += parseFloat(registro.valor_total || 0);
+                        }
+                    }
+                });
+
+                if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+                    mostrarResumenAsesores(resumenAsesores);
+                } else {
+                     document.getElementById('resumen_asesores').innerHTML = '';
+                }
+
+                // Actualiza el dropdown de filtro por asesor
+                const filtroAsesorDropdown = document.getElementById('filtro_asesor');
+                const valorActualFiltro = filtroAsesorDropdown.value;
+                resetearComboBoxAsesor();
+                asesores.forEach(asesor => {
+                    const option = document.createElement('option');
+                    option.value = asesor;
+                    option.textContent = asesor;
+                    filtroAsesorDropdown.appendChild(option);
+                });
+                if (Array.from(filtroAsesorDropdown.options).some(opt => opt.value === valorActualFiltro)) {
+                    filtroAsesorDropdown.value = valorActualFiltro;
+                }
+
+                setActiveDispatchFilterButton(currentDispatchFilter);
+
+                // Restaura la posición de scroll
+                if (isInitialLoadPedidos) {
+                    isInitialLoadPedidos = false;
+                } else {
+                    listaPedidosContainer.scrollTop = scrollPosPedidos;
+                }
+
+                // Limpiar el campo de búsqueda por cliente después de cargar/filtrar
+                const searchClienteInput = document.getElementById('search_cliente_input');
+                if (searchClienteInput) {
+                    setTimeout(() => {
+                        searchClienteInput.value = '';
+                        searchClienteInput.blur();
+                    }, 200); 
+                }
+
+            }, error => {
+                console.error("Error al escuchar los pedidos:", error);
+                listaPedidosContainer.innerHTML = '<p class="text-center text-red-500">Error al cargar los pedidos. Intente de nuevo.</p>';
+            });
+        }
+        
+        /**
+         * Alterna el estado de bloqueo de un pedido.
+         * @param {string} id - El ID del documento del pedido.
+         * @param {boolean} nuevoEstadoBloqueo - El nuevo estado de bloqueo (true para bloquear, false para desbloquear).
+         */
+        async function toggleBloqueoPedido(id, nuevoEstadoBloqueo) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                const checkbox = document.getElementById(`bloquear_${id}`);
+                if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
+                return;
+            }
+
+            if (!nuevoEstadoBloqueo) { // Si se está intentando desmarcar (quitar el chulo)
+                if (!window.confirm("¿Estás seguro de que quieres desbloquear este pedido?")) {
+                    const checkbox = document.getElementById(`bloquear_${id}`);
+                    if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
+                    return;
+                }
+            }
+
+            try {
+                const updateData = {};
+                if (nuevoEstadoBloqueo) {
+                    updateData.bloqueado = true;
+                    updateData.bloqueadoPor = datosUsuario.nombreCompleto;
+                } else {
+                    updateData.bloqueado = false;
+                    updateData.bloqueadoPor = ''; // Limpiar el campo cuando se desbloquea
+                }
+                await db.collection('registros').doc(id).update(updateData);
+                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo} por ${datosUsuario.nombreCompleto}`);
+                // El listener onSnapshot manejará la actualización de la UI automáticamente
+            } catch (error) {
+                console.error("Error al actualizar el estado de bloqueo:", error);
+                alert("Error al cambiar el estado de bloqueo del pedido.");
+                const checkbox = document.getElementById(`bloquear_${id}`);
+                if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
+            }
+        }
+
+        /**
+         * Alterna el estado de "despachado" de un pedido.
+         * @param {string} id - El ID del documento del pedido.
+         * @param {boolean} nuevoEstadoDespachado - El nuevo estado de despacho (true para despachar, false para desverificar).
+         */
+        async function toggleDespachadoPedido(id, nuevoEstadoDespachado) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                const checkbox = document.getElementById(`despachar_${id}`);
+                if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
+                return;
+            }
+
+            if (!nuevoEstadoDespachado) { // Si se está intentando desmarcar (quitar el chulo)
+                if (!window.confirm("¿Estás seguro de que quieres desverificar este pedido?")) {
+                    const checkbox = document.getElementById(`despachar_${id}`);
+                    if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
+                    return;
+                }
+            }
+
+            try {
+                const updateData = {};
+                if (nuevoEstadoDespachado) {
+                    updateData.despachado = true;
+                    updateData.despachadoPor = datosUsuario.nombreCompleto;
+                } else {
+                    updateData.despachado = false;
+                    updateData.despachadoPor = ''; // Limpiar el campo cuando se desverifica
+                }
+                await db.collection('registros').doc(id).update(updateData);
+                console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado} por ${datosUsuario.nombreCompleto}`);
+                // El listener onSnapshot manejará la actualización de la UI automáticamente
+            } catch (error) {
+                console.error("Error al actualizar el estado de despachado:", error);
+                alert("Error al cambiar el estado de despachado del pedido.");
+                const checkbox = document.getElementById(`despachar_${id}`);
+                if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
+            }
+        }
+
+        /**
+         * Muestra un resumen de los pedidos por asesor (solo para administradores).
+         * @param {object} resumen - Objeto con el resumen de asesores.
+         */
+        function mostrarResumenAsesores(resumen) {
+            let resumenHTML = '<h3 class="text-xl font-semibold text-gray-800 mb-4">Resumen de Asesores</h3><div class="space-y-4">';
+            for (const asesor in resumen) {
+                resumenHTML += `
+                    <div class="summary bg-white p-4 rounded-lg shadow-sm border border-green-300">
+                        <p class="font-bold text-gray-900">Asesor: ${asesor}</p>
+                        <p class="text-gray-700">Número de Pares: ${resumen[asesor].num_pares}</p>
+                        <p class="text-gray-700">Valor Vendido: <span class="font-semibold">$${(resumen[asesor].valor_vendido || 0).toLocaleString('es-CO')}</span></p>
+                    </div>
+                `;
+            }
+            resumenHTML += '</div>';
+            document.getElementById('resumen_asesores').innerHTML = resumenHTML;
+        }
+
+        /**
+         * Exporta todos los registros de pedidos a un archivo Excel.
+         */
+        async function exportarAExcel() {
+            console.log("Exportando a Excel...");
+            const querySnapshot = await db.collection('registros').orderBy('fecha_hora', 'asc').get();
+            let registros = [];
+
+            querySnapshot.forEach(doc => {
+                const registro = doc.data();
+                let fechaHoraFormateada = 'N/A';
+                if (registro.fecha_hora && typeof registro.fecha_hora.toDate === 'function') {
+                    const dateObj = registro.fecha_hora.toDate();
+                    const datePart = dateObj.toLocaleDateString('es-CO');
+                    let timePart = dateObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                    
+                    // Ajuste para formatos de AM/PM
+                    timePart = timePart.replace(/(\s[ap])\.\s?m\./i, '$1.m.');
+                    
+                    fechaHoraFormateada = `${datePart}, ${timePart}`;
+                }
+
+                registros.push({
+                    "Fecha y Hora": fechaHoraFormateada,
+                    "Código Único": registro.codigo_unico,
+                    "Cliente": registro.cliente,
+                    "Asesor": registro.asesor,
+                    "Productos": (registro.productos || []).map(p => `${p.referencia || ''} - ${p.color || ''} - ${p.talla || ''} - $${p.precio || 0}`).join('; '),
+                    "Num Pares": registro.num_pares,
+                    "Valor Total": registro.valor_total,
+                    "Observaciones": registro.observaciones,
+                    "Saldo a Favor": registro.saldo_a_favor,
+                    "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
+                    "Bodeguero(s)": (registro.bodegueros_encargados || []).join(', '),
+                    "Bloqueado": registro.bloqueadoPor || 'No bloqueado',
+                    "Despachado": registro.despachadoPor || 'No verificado'
+                });
+            });
+            const worksheet = XLSX.utils.json_to_sheet(registros);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Registros");
+
+            XLSX.writeFile(workbook, 'registros_pedidos.xlsx');
+        }
+
+        /**
+         * Carga los datos de un pedido para su modificación en el modal correspondiente.
+         * @param {string} id - El ID del documento del pedido a modificar.
+         */
+        async function modificarPedido(id) {
+            try {
+                const docRef = db.collection('registros').doc(id);
+                const docSnap = await docRef.get();
+
+                if (!docSnap.exists) {
+                    alert("El pedido no existe.");
+                    return;
+                }
+                const registro = docSnap.data();
+
+                // Permiso de operador: no puede modificar pedidos bloqueados o despachados
+                if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
+                    alert("Este pedido está bloqueado o despachado y no puede ser modificado.");
+                    return;
+                }
+
+                // Guarda una copia de los productos y abonos originales para detección de cambios
+                originalProductsForModification = JSON.parse(JSON.stringify(registro.productos || []));
+                originalAbonosForModification = JSON.parse(JSON.stringify(registro.abonos || []));
+
+                // Rellena los campos del formulario de modificación
+                document.getElementById('modificar_cliente').value = registro.cliente;
+                document.getElementById('modificar_num_pares').value = registro.num_pares; 
+                document.getElementById('modificar_valor_total').value = registro.valor_total;
+                document.getElementById('modificar_observaciones').value = registro.observaciones;
+                document.getElementById('modificar_saldo_a_favor').value = registro.saldo_a_favor;
+
+                renderModificarProductos(registro.productos || []);
+                renderModificarAbonos(registro.abonos || []);
+                populateBodegueroCheckboxes(registro.bodegueros_encargados || [], 'modificar_bodeguero_checkbox_container');
+                
+                actualizarValorTotalModificar();
+
+                // Asigna el evento de guardado al botón de guardar
+                const botonGuardar = document.querySelector('#modal_modificar button[type="submit"]');
+                botonGuardar.onclick = (event) => guardarCambios(event, id);
+
+                const modal = document.getElementById('modal_modificar');
+                modal.style.display = 'flex';
+                modal.style.zIndex = '1001'; // Asegura que el modal de modificación esté por encima de otros
+            } catch (error) {
+                console.error("Error al cargar el pedido para modificar:", error);
+                alert("Error al cargar el pedido. " + error.message);
+            }
+        }
+
+        /**
+         * Renderiza la lista de productos en el modal de modificación.
+         * @param {Array} products - Lista de productos a renderizar.
+         */
+        function renderModificarProductos(products) {
+            const container = document.getElementById('modificar_productos_list');
+            let html = '';
+            if (products.length === 0) {
+                html += '<p class="text-gray-600 text-sm">No hay productos en este pedido. Agregue uno:</p>';
+            }
+            products.forEach((product, index) => {
+                html += `
+                    <div class="product-item p-3 bg-white border border-gray-200 rounded-md shadow-sm" data-index="${index}">
+                        <label class="block text-gray-700 font-medium mb-1">Producto ${index + 1}:</label>
+                        <input type="text" class="mod_product_referencia w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${product.referencia || ''}" placeholder="Referencia">
+                        <input type="text" class="mod_product_color w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${product.color || ''}" placeholder="Color">
+                        <input type="text" class="mod_product_talla w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${product.talla || ''}" placeholder="Talla">
+                        <input type="number" class="mod_product_precio w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${product.precio || 0}" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
+                        <button type="button" onclick="removeProductModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md">Eliminar Producto</button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        /**
+         * Añade un nuevo campo de producto al modal de modificación.
+         */
+        function addProductModificar() {
+            const container = document.getElementById('modificar_productos_list');
+            if (container.querySelector('p')) {
+                container.innerHTML = ''; // Elimina el mensaje "No hay productos..."
+            }
+
+            const newIndex = container.children.length;
+            const newProductHtml = `
+                <div class="product-item p-3 bg-white border border-gray-200 rounded-md shadow-sm" data-index="${newIndex}">
+                    <label class="block text-gray-700 font-medium mb-1">Producto ${newIndex + 1}:</label>
+                    <input type="text" class="mod_product_referencia w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Referencia">
+                    <input type="text" class="mod_product_color w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Color">
+                    <input type="text" class="mod_product_talla w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Talla">
+                    <input type="number" class="mod_product_precio w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
+                    <button type="button" onclick="removeProductModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md">Eliminar Producto</button>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', newProductHtml);
+            actualizarValorTotalModificar();
+        }
+
+        /**
+         * Elimina un campo de producto del modal de modificación.
+         * @param {HTMLElement} buttonElement - El botón "Eliminar Producto" que fue clickeado.
+         */
+        function removeProductModificar(buttonElement) {
+            const productItem = buttonElement.closest('.product-item');
+            productItem.remove();
+            actualizarValorTotalModificar();
+            // Reajusta los índices y etiquetas después de eliminar
+            Array.from(document.querySelectorAll('#modificar_productos_list .product-item')).forEach((item, index) => {
+                item.dataset.index = index;
+                item.querySelector('label').textContent = `Producto ${index + 1}:`;
+            });
+            if (document.querySelectorAll('#modificar_productos_list .product-item').length === 0) {
+                document.getElementById('modificar_productos_list').innerHTML = '<p class="text-gray-600 text-sm">No hay productos en este pedido. Agregue uno:</p>';
+            }
+        }
+
+        /**
+         * Renderiza la lista de abonos en el modal de modificación.
+         * @param {Array} abonos - Lista de abonos a renderizar.
+         */
+        function renderModificarAbonos(abonos) {
+            const container = document.getElementById('modificar_abonos_list');
+            let html = '';
+            if (abonos.length === 0) {
+                html += '<p class="text-gray-600 text-sm">No hay abonos en este pedido. Agregue uno:</p>';
+            }
+            abonos.forEach((abono, index) => {
+                html += `
+                    <div class="abono-item p-3 bg-white border border-gray-200 rounded-md shadow-sm" data-index="${index}">
+                        <label class="block text-gray-700 font-medium mb-1">Abono ${index + 1}:</label>
+                        <input type="date" class="mod_abono_fecha w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${abono.fecha || ''}" placeholder="Fecha">
+                        <input type="number" class="mod_abono_monto w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${abono.monto || 0}" placeholder="Monto" step="any">
+                        <button type="button" onclick="removeAbonoModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md">Eliminar Abono</button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        /**
+         * Añade un nuevo campo de abono al modal de modificación.
+         */
+        function addAbonoModificar() {
+            const container = document.getElementById('modificar_abonos_list');
+            if (container.querySelector('p')) {
+                container.innerHTML = '';
+            }
+
+            const newIndex = container.children.length;
+            const newAbonoHtml = `
+                <div class="abono-item p-3 bg-white border border-gray-200 rounded-md shadow-sm" data-index="${newIndex}">
+                    <label class="block text-gray-700 font-medium mb-1">Abono ${newIndex + 1}:</label>
+                    <input type="date" class="mod_abono_fecha w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${new Date().toISOString().slice(0, 10)}" placeholder="Fecha">
+                    <input type="number" class="mod_abono_monto w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Monto" step="any">
+                    <button type="button" onclick="removeAbonoModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md">Eliminar Abono</button>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', newAbonoHtml);
+            Array.from(document.querySelectorAll('#modificar_abonos_list .abono-item')).forEach((item, index) => {
+                item.dataset.index = index;
+                item.querySelector('label').textContent = `Abono ${index + 1}:`;
+            });
+        }
+
+        /**
+         * Elimina un campo de abono del modal de modificación.
+         * @param {HTMLElement} buttonElement - El botón "Eliminar Abono" que fue clickeado.
+         */
+        function removeAbonoModificar(buttonElement) {
+            const abonoItem = buttonElement.closest('.abono-item');
+            abonoItem.remove();
+            Array.from(document.querySelectorAll('#modificar_abonos_list .abono-item')).forEach((item, index) => {
+                item.dataset.index = index;
+                item.querySelector('label').textContent = `Abono ${index + 1}:`;
+            });
+            if (document.querySelectorAll('#modificar_abonos_list .abono-item').length === 0) {
+                document.getElementById('modificar_abonos_list').innerHTML = '<p class="text-gray-600 text-sm">No hay abonos en este pedido. Agregue uno:</p>';
+            }
+        }
+
+        /**
+         * Guarda los cambios de un pedido modificado en Firebase.
+         * @param {Event} event - El evento de envío del formulario.
+         * @param {string} id - El ID del documento del pedido a guardar.
+         */
+        async function guardarCambios(event, id) {
+            event.preventDefault();
+            
+            try {
+                const docSnap = await db.collection('registros').doc(id).get();
+                if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
+                    alert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios.");
+                    cerrarModal('modal_modificar');
+                    return;
+                }
+            } catch (error) {
+                console.error("Error verificando estado antes de guardar:", error);
+                alert("Error de verificación. No se pudo guardar.");
+                return;
+            }
+
+            const ref = elId => document.getElementById(elId).value;
+            
+            const productosActualizados = Array.from(document.querySelectorAll('#modificar_productos_list .product-item')).map((el) => ({
+                referencia: el.querySelector('.mod_product_referencia').value,
+                color: el.querySelector('.mod_product_color').value,
+                talla: el.querySelector('.mod_product_talla').value,
+                precio: parseFloat(el.querySelector('.mod_product_precio').value) || 0
+            }));
+
+            const abonosActualizados = Array.from(document.querySelectorAll('#modificar_abonos_list .abono-item')).map((el) => ({
+                fecha: el.querySelector('.mod_abono_fecha').value,
+                monto: parseFloat(el.querySelector('.mod_abono_monto').value) || 0
+            }));
+
+            const bodeguerosActualizados = Array.from(document.querySelectorAll('#modificar_bodeguero_checkbox_container input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
+
+            const datosActualizados = { 
+                cliente: ref('modificar_cliente'),
+                num_pares: parseInt(ref('modificar_num_pares')) || 0,
+                valor_total: parseFloat(document.getElementById('modificar_valor_total').value) || 0,
+                observaciones: ref('modificar_observaciones'),
+                saldo_a_favor: ref('modificar_saldo_a_favor'),
+                productos: productosActualizados,
+                abonos: abonosActualizados,
+                bodegueros_encargados: bodeguerosActualizados
+            };
+
+            const productsChanged = JSON.stringify(originalProductsForModification) !== JSON.stringify(productosActualizados);
+
+            try {
+                await db.collection('registros').doc(id).update(datosActualizados);
+                alert("Pedido modificado exitosamente.");
+                cerrarModal('modal_modificar');
+
+                if (productsChanged) {
+                    showWarningModal(); // Muestra advertencia si los productos cambiaron
+                }
+            }
+            catch (error) {
+                console.error("Error al modificar el pedido:", error);
+                alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
+            }
+        }
+
+        /**
+         * Actualiza el valor total en el modal de modificación de pedidos.
+         */
+        function actualizarValorTotalModificar() {
+            const preciosProductos = Array.from(document.querySelectorAll('#modificar_productos_list .mod_product_precio')).map((el) => {
+                const val = parseFloat(el.value) || 0;
+                return val;
+            });
+            const valorTotalCalculado = preciosProductos.reduce((total, precio) => total + precio, 0);
+            document.getElementById('modificar_valor_total').value = valorTotalCalculado.toFixed(2);
+        }
+
+        /**
+         * Elimina un pedido de Firebase.
+         * @param {string} id - El ID del documento del pedido a eliminar.
+         */
+        async function eliminarPedido(id) {
+            console.log("Eliminando pedido:", id);
+
+            try {
+                const docRef = db.collection('registros').doc(id);
+                const docSnap = await docRef.get();
+                if (!docSnap.exists) {
+                    alert("El pedido que intenta eliminar no existe.");
+                    return;
+                }
+                const registro = docSnap.data();
+                if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
+                    alert("Este pedido está bloqueado o despachado y no puede ser eliminado.");
+                    return;
+                }
+            } catch (error) {
+                 console.error("Error al verificar el estado para eliminar:", error);
+                 alert("Error al verificar el estado del pedido. Inténtelo de nuevo.");
+                 return;
+            }
+
+            const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?");
+            if (confirmacion) {
+                try {
+                    await db.collection('registros').doc(id).delete();
+                    alert("Pedido eliminado correctamente.");
+                } catch (error) {
+                    console.error("Error al eliminar el pedido:", error);
+                    alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
+                }
+            }
+        }
+        
+        /**
+         * Muestra la barra de carga.
+         */
+        function mostrarBarraCargando() {
+            var loadingBar = document.getElementById("loading-bar");
+            var loadingBarFill = document.getElementById("loading-bar-fill");
+            if(loadingBar && loadingBarFill) {
+                loadingBar.style.display = "block";
+                loadingBarFill.style.width = "0%";
+                var width = 0;
+                var interval = setInterval(function() {
+                    if (width >= 100) {
+                        clearInterval(interval);
+                    } else {
+                        width++;
+                        loadingBarFill.style.width = width + "%";
+                        loadingBarFill.innerText = width + "%";
+                    }
+                }, 20);
+            }
+        }
+
+        /**
+         * Oculta la barra de carga.
+         */
+        function ocultarBarraCargando() {
+            var loadingBar = document.getElementById("loading-bar");
+            if (loadingBar) {
+                loadingBar.style.display = "none";
+            }
+        }
+
+        /**
+         * Función para actualizar el contador regresivo de bloqueo automático.
+         */
+        function updateCountdown() {
+            const now = new Date();
+            const targetTime = new Date(now);
+
+            // Determina la hora y minuto de bloqueo a usar (personalizada o por defecto)
+            const blockHourToUse = isAutoBlockEnabled ? customBlockHour : DEFAULT_BLOCK_HOUR;
+            const blockMinuteToUse = isAutoBlockEnabled ? customBlockMinute : DEFAULT_BLOCK_MINUTE;
+            
+            targetTime.setHours(blockHourToUse, blockMinuteToUse, 0, 0);
+
+            // Si ya pasó la hora de bloqueo para hoy, establece la hora de bloqueo para mañana
+            if (now.getTime() > targetTime.getTime()) {
+                targetTime.setDate(targetTime.getDate() + 1);
+            }
+
+            const timeLeftMs = targetTime.getTime() - now.getTime();
+
+            const countdownElement = document.getElementById('countdown_timer');
+            if (countdownElement) {
+                // Remueve todas las clases de estado de color previas
+                countdownElement.classList.remove('bg-blue-50', 'border-blue-600', 'text-blue-600', 'bg-yellow-100', 'border-yellow-600', 'text-yellow-700', 'bg-red-100', 'border-red-600', 'text-red-700');
+
+                if (isAutoBlockEnabled && isAutoBlockedPermanently) {
+                    countdownElement.textContent = "¡Bloqueo automático activado! (Indefinido)";
+                    countdownElement.classList.add('bg-yellow-100', 'border-yellow-600', 'text-yellow-700');
+                } else if (isAutoBlockEnabled && !isAutoBlockedPermanently) {
+                    countdownElement.textContent = `Bloqueo automático en: ${Math.floor(timeLeftMs / (1000 * 60 * 60))}h ${Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}m ${Math.floor((timeLeftMs % (1000 * 60)) / 1000)}s`;
+                    countdownElement.classList.add('bg-blue-50', 'border-blue-600', 'text-blue-600');
+
+                    // Actualiza la hora configurada en el modal de opciones de bloqueo (en formato de 12 horas)
+                    const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+                    const formattedTime = new Date(1, 1, 1, blockHourToUse, blockMinuteToUse).toLocaleTimeString('es-CO', formattedTimeOptions);
+                    document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
+
+                } else {
+                    countdownElement.textContent = "Bloqueo automático deshabilitado por el administrador.";
+                    countdownElement.classList.add('bg-red-100', 'border-red-600', 'text-red-700');
+                    document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: N/A (Deshabilitado)`;
+                }
+            }
+        }
+
+        /**
+         * Obtiene la lista de bodegueros desde Firestore.
+         * @returns {Promise<Array<string>>} Una promesa que resuelve con un array de nombres de bodegueros.
+         */
+        async function fetchBodegueros() {
+            try {
+                const bodeguerosSnapshot = await db.collection('usuarios').where('permisos', '==', 'Bodeguero').get();
+                const bodegueros = [];
+                bodeguerosSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.nombreCompleto) {
+                        bodegueros.push(data.nombreCompleto);
+                    }
+                });
+                return bodegueros;
+            } catch (error) {
+                console.error("Error fetching bodegueros:", error);
+                return [];
+            }
+        }
+
+        /**
+         * Rellena los checkboxes de bodegueros en un contenedor dado.
+         * @param {Array<string>} selectedBodegueros - Un array de nombres de bodegueros que deben estar seleccionados.
+         * @param {string} containerId - El ID del contenedor donde se deben poblar los checkboxes.
+         */
+        async function populateBodegueroCheckboxes(selectedBodegueros = [], containerId = 'bodeguero_checkbox_container') {
+            const bodegueroContainer = document.getElementById(containerId);
+            if (!bodegueroContainer) return;
+
+            bodegueroContainer.innerHTML = ''; // Limpia los checkboxes existentes
+
+            const bodegueros = await fetchBodegueros();
+
+            if (bodegueros.length === 0) {
+                bodegueroContainer.innerHTML = '<p class="text-gray-500 text-sm">No hay bodegueros disponibles.</p>';
+                return;
+            }
+
+            bodegueros.forEach((bodegueroName, index) => {
+                const checkboxItem = document.createElement('div');
+                checkboxItem.className = 'bodeguero-checkbox-item flex items-center';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `${containerId}_${index}`;
+                checkbox.name = 'bodegueros';
+                checkbox.value = bodegueroName;
+                if (selectedBodegueros.includes(bodegueroName)) {
+                    checkbox.checked = true;
+                }
+                checkbox.classList.add('h-4', 'w-4', 'text-green-600', 'rounded', 'focus:ring-green-500', 'cursor-pointer');
+
+                const label = document.createElement('label');
+                label.htmlFor = `${containerId}_${index}`;
+                label.textContent = bodegueroName;
+                label.classList.add('ml-2', 'text-gray-700', 'text-sm', 'cursor-pointer');
+
+                checkboxItem.appendChild(checkbox);
+                checkboxItem.appendChild(label);
+                bodegueroContainer.appendChild(checkboxItem);
+            });
+        }
+
+        /**
+         * Función que se ejecuta cuando la ventana ha cargado completamente.
+         */
+        window.onload = function() {
+            // Verifica que los datos de usuario estén cargados
+            if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
+                alert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
+                document.body.innerHTML = "<h1 class='text-center text-red-600 text-2xl mt-10'>Error crítico: Faltan datos de usuario.</h1>";
+                return;
+            }
+            console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
+            
+            // Oculta/muestra elementos según el rol del usuario
+            if (datosUsuario.permisos.toLowerCase() === 'operador') {
+                document.getElementById('exportar').classList.add('hidden');
+                document.getElementById('resumen_asesores').classList.add('hidden');
+                document.getElementById('gear_icon').classList.add('hidden');
+                // Oculta el botón "Ver Pedidos" fijo en el caso de operadores (ya tienen el inline)
+                document.getElementById('ver_pedidos').classList.add('hidden');
+            } else {
+                document.getElementById('gear_icon').classList.remove('hidden');
+                // Muestra el botón "Ver Pedidos" fijo para administradores
+                document.getElementById('ver_pedidos').classList.remove('hidden');
+            }
+
+            document.getElementById('asesor_input').value = datosUsuario.nombreCompleto;
+            ocultarBarraCargando();
+
+            // Asigna el evento 'input' al campo de búsqueda por cliente
+            const searchClienteInput = document.getElementById('search_cliente_input');
+            if(searchClienteInput) {
+                searchClienteInput.addEventListener('input', filtrarYBuscarPedidos);
+            }
+
+            // Listener para el estado de bloqueo global desde Firestore (en tiempo real)
+            globalSettingsRef.onSnapshot(doc => {
+                if (doc.exists) {
+                    isGlobalManualBlock = doc.data().isBlocked || false;
+                    isAutoBlockedPermanently = doc.data().isAutoBlockedPermanently || false; 
+                    isAutoBlockEnabled = doc.data().isAutoBlockEnabled || false;
+                    lastAutoBlockTriggerDate = doc.data().lastAutoBlockTriggerDate || null;
+                    
+                    customBlockHour = doc.data().customBlockHour !== undefined ? doc.data().customBlockHour : DEFAULT_BLOCK_HOUR;
+                    customBlockMinute = doc.data().customBlockMinute !== undefined ? doc.data().customBlockMinute : DEFAULT_BLOCK_MINUTE;
+
+                    console.log("Estado de bloqueo global (manual):", isGlobalManualBlock);
+                    console.log("Estado de bloqueo global (automático persistente):", isAutoBlockedPermanently);
+                    console.log("Estado de auto-bloqueo habilitado (admin):", isAutoBlockEnabled);
+                    console.log("Última fecha de activación auto-bloqueo:", lastAutoBlockTriggerDate);
+                    console.log(`Hora de bloqueo personalizada: ${customBlockHour}:${customBlockMinute}`);
+
+                } else {
+                    // Si el documento de configuración no existe, lo crea con valores iniciales
+                    globalSettingsRef.set({ 
+                        isBlocked: false, 
+                        isAutoBlockedPermanently: false, 
+                        isAutoBlockEnabled: false, 
+                        lastAutoBlockTriggerDate: null,
+                        customBlockHour: DEFAULT_BLOCK_HOUR,
+                        customBlockMinute: DEFAULT_BLOCK_MINUTE
+                    }).then(() => {
+                        isGlobalManualBlock = false;
+                        isAutoBlockedPermanently = false;
+                        isAutoBlockEnabled = false; 
+                        lastAutoBlockTriggerDate = null;
+                        customBlockHour = DEFAULT_BLOCK_HOUR;
+                        customBlockMinute = DEFAULT_BLOCK_MINUTE;
+                        console.log("Documento de configuración global creado con estado inicial.");
+                    }).catch(error => {
+                        console.error("Error al crear documento de configuración global:", error);
+                    });
+                }
+                applyBlockStatus(); // Aplica el estado de bloqueo después de obtenerlo de Firestore
+                updateCountdown(); // Actualiza el contador inmediatamente después de obtener los estados
+            });
+
+            checkTimeBlock(); // Ejecuta una verificación inicial del bloqueo por hora
+            setInterval(checkTimeBlock, 60 * 1000); // Verifica el estado del bloqueo por hora cada minuto
+
+            setInterval(updateCountdown, 1000); // Actualiza el contador regresivo cada segundo
+
+            populateBodegueroCheckboxes(); // Rellena los checkboxes de bodegueros al cargar la página
+        }
+
+        /**
+         * Pregunta al usuario si desea salir si hay datos de formulario no guardados.
+         * @param {Event} event - El evento beforeunload.
+         */
+        window.onbeforeunload = function(event) {
+            const cliente = document.getElementById('cliente_input').value;
+            const numPares = document.getElementById('num_pares_input').value;
+            if (productos.length > 0 || abonos.length > 0 || cliente || numPares > 0) {
+                const mensaje = "¿Estás seguro de que quieres salir? Perderás la información del pedido actual que no ha sido guardada.";
+                event.returnValue = mensaje; // Para navegadores antiguos
+                return mensaje; // Para navegadores modernos
+            }
+        };
+
+        /**
+         * Establece la clase 'active' para el botón de filtro de despacho seleccionado.
+         * @param {string} filterType - El tipo de filtro ('all', 'despachados', 'noDespachados').
+         */
+        function setActiveDispatchFilterButton(filterType) {
+            const allDispatchButtons = document.querySelectorAll('.dispatch-filter-button');
+            allDispatchButtons.forEach(button => {
+                button.classList.remove('active', 'bg-blue-600', 'text-white', 'bg-green-600', 'bg-red-600');
+                button.classList.add('bg-gray-200', 'text-gray-800'); // Estilo por defecto inactivo
+            });
+            if (filterType === 'all') {
+                document.getElementById('filterAllButton').classList.add('active', 'bg-blue-600', 'text-white');
+                document.getElementById('filterAllButton').classList.remove('bg-gray-200', 'text-gray-800');
+            } else if (filterType === 'despachados') {
+                document.getElementById('filterDespachadosButton').classList.add('active', 'bg-green-600', 'text-white');
+                document.getElementById('filterDespachadosButton').classList.remove('bg-gray-200', 'text-gray-800');
+            } else if (filterType === 'noDespachados') {
+                document.getElementById('filterNoDespachadosButton').classList.add('active', 'bg-red-600', 'text-white');
+                document.getElementById('filterNoDespachadosButton').classList.remove('bg-gray-200', 'text-gray-800');
+            }
+        }
+
+        // Listener para que se ejecute una vez que el DOM esté completamente cargado
+        document.addEventListener('DOMContentLoaded', () => {
+            const filterAllButton = document.getElementById('filterAllButton');
+            const filterDespachadosButton = document.getElementById('filterDespachadosButton');
+            const filterNoDespachadosButton = document.getElementById('filterNoDespachadosButton');
+
+            if (filterAllButton) {
+                filterAllButton.addEventListener('click', () => {
+                    const searchClienteInput = document.getElementById('search_cliente_input');
+                    if (searchClienteInput) {
+                        searchClienteInput.value = '';
+                        searchClienteInput.blur(); 
+                        setTimeout(() => { 
+                            searchClienteInput.value = '';
+                            searchClienteInput.blur();
+                        }, 100);
+                    }
+                    currentDispatchFilter = 'all';
+                    setActiveDispatchFilterButton('all');
+                    iniciarVistaPedidosEnTiempoReal();
+                });
+            }
+
+            if (filterDespachadosButton) {
+                filterDespachadosButton.addEventListener('click', () => {
+                    const searchClienteInput = document.getElementById('search_cliente_input');
+                    if (searchClienteInput) {
+                        searchClienteInput.value = '';
+                        searchClienteInput.blur(); 
+                        setTimeout(() => { 
+                            searchClienteInput.value = '';
+                            searchClienteInput.blur();
+                        }, 100);
+                    }
+                    currentDispatchFilter = 'despachados';
+                    setActiveDispatchFilterButton('despachados');
+                    iniciarVistaPedidosEnTiempoReal();
+                });
+            }
+
+            if (filterNoDespachadosButton) {
+                filterNoDespachadosButton.addEventListener('click', () => {
+                    const searchClienteInput = document.getElementById('search_cliente_input');
+                    if (searchClienteInput) {
+                        searchClienteInput.value = '';
+                        searchClienteInput.blur(); 
+                        setTimeout(() => { 
+                            searchClienteInput.value = '';
+                            searchClienteInput.blur();
+                        }, 100);
+                    }
+                    currentDispatchFilter = 'noDespachados';
+                    setActiveDispatchFilterButton('noDespachados');
+                    iniciarVistaPedidosEnTiempoReal();
+                });
+            }
+
+            setActiveDispatchFilterButton(currentDispatchFilter);
+        });
+
+        /**
+         * Muestra el modal de advertencia de pares.
+         */
+        function showWarningModal() {
+            document.getElementById('modal_pares_warning').style.display = 'flex';
+        }
+
+        /**
+         * Verifica la hora actual y, si se cumplen las condiciones, activa el bloqueo automático.
+         * Utiliza la hora de bloqueo personalizada si está habilitada, de lo contrario, usa la por defecto.
+         */
+        function checkTimeBlock() {
+            const now = new Date();
+            const todayDate = now.toISOString().slice(0, 10); // Formato YYYY-MM-DD
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+
+            // Determina la hora y minuto de bloqueo a usar
+            const blockHourToUse = isAutoBlockEnabled ? customBlockHour : DEFAULT_BLOCK_HOUR;
+            const blockMinuteToUse = isAutoBlockEnabled ? customBlockMinute : DEFAULT_BLOCK_MINUTE;
+
+            // Condición para verificar si la hora actual ha pasado la hora de bloqueo configurada
+            const timeConditionMet = (currentHour > blockHourToUse || (currentHour === blockHourToUse && currentMinute >= blockMinuteToUse));
+
+            console.log("--- checkTimeBlock Debug Info ---");
+            console.log(`Current Time (24h): ${currentHour}:${currentMinute}`);
+            console.log(`Block Time To Use (24h): ${blockHourToUse}:${blockMinuteToUse}`);
+            console.log(`Time Condition Met: ${timeConditionMet}`);
+            console.log(`isAutoBlockEnabled (desde Firestore): ${isAutoBlockEnabled}`);
+            console.log(`isAutoBlockedPermanently (desde Firestore): ${isAutoBlockedPermanently}`);
+            console.log(`lastAutoBlockTriggerDate (desde Firestore): ${lastAutoBlockTriggerDate}`);
+            console.log(`todayDate (fecha local del dispositivo): ${todayDate}`);
+            console.log(`Condición lastAutoBlockTriggerDate !== todayDate: ${lastAutoBlockTriggerDate !== todayDate}`);
+            console.log("---------------------------------");
+
+
+            // El auto-bloqueo se activa SI:
+            // 1. El administrador lo tiene HABILITADO (`isAutoBlockEnabled` es true)
+            // 2. La condición de tiempo se cumple (la hora actual es igual o posterior a la configurada)
+            // 3. El sistema NO está ya permanentemente bloqueado (`isAutoBlockedPermanently` es false)
+            // 4. El auto-bloqueo NO se ha activado/gestionado en el día de hoy (`lastAutoBlockTriggerDate` es diferente a la fecha actual)
+            if (isAutoBlockEnabled && timeConditionMet && !isAutoBlockedPermanently && lastAutoBlockTriggerDate !== todayDate) {
+                console.log("-----> Condición de bloqueo automático cumplida! Intentando activar bloqueo permanente.");
+                globalSettingsRef.set({ isAutoBlockedPermanently: true, lastAutoBlockTriggerDate: todayDate }, { merge: true }).then(() => {
+                    isAutoBlockedPermanently = true; // Actualizar estado local
+                    lastAutoBlockTriggerDate = todayDate; // Actualizar estado local
+                    console.log(`Bloqueo automático activado (permanente) a las ${blockHourToUse}:${blockMinuteToUse} y fecha de activación registrada exitosamente.`);
+                    applyBlockStatus(); // Aplica el estado de bloqueo en la UI
+                    updateCountdown(); // Actualiza el contador
+                }).catch(error => {
+                    console.error("Error al activar bloqueo automático permanente en Firebase:", error);
+                });
+            } else {
+                console.log("-----> Condición de bloqueo automático NO cumplida o ya bloqueado/gestionado.");
+            }
+        }
+
+        /**
+         * Aplica el estado de bloqueo a los elementos de la UI (botones, overlay).
+         */
+        function applyBlockStatus() {
+            const agregarPedidoBtn = document.getElementById('agregar_pedido_btn');
+            const verPedidosBtn = document.getElementById('ver_pedidos');
+            const verPedidosInlineBtn = document.getElementById('ver_pedidos_inline');
+            const blockOverlay = document.getElementById('block_overlay');
+            const autoBlockCheckbox = document.getElementById('auto_block_checkbox');
+            const globalManualBlockCheckbox = document.getElementById('global_manual_block_checkbox');
+
+            const shouldBeBlocked = isGlobalManualBlock || isAutoBlockedPermanently; // Determina si debe estar bloqueado
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+
+            if (agregarPedidoBtn) {
+                agregarPedidoBtn.disabled = shouldBeBlocked; // Deshabilita el botón de agregar si está bloqueado
+                if (shouldBeBlocked) {
+                    agregarPedidoBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    agregarPedidoBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+                agregarPedidoBtn.title = shouldBeBlocked ? "La funcionalidad de agregar pedidos está bloqueada temporalmente." : "";
+            }
+
+            // Los botones "Ver Pedidos" siempre deben estar habilitados
+            if (verPedidosBtn) {
+                verPedidosBtn.disabled = false;
+                verPedidosBtn.title = "";
+            }
+            if (verPedidosInlineBtn) {
+                verPedidosInlineBtn.disabled = false;
+                verPedidosInlineBtn.title = "";
+            }
+
+            if (blockOverlay) {
+                // El overlay se muestra solo si el usuario NO es administrador y hay un bloqueo activo
+                blockOverlay.style.display = (shouldBeBlocked && !isAdministrator) ? 'flex' : 'none';
+            }
+
+            // Actualiza el estado visual de los checkboxes de bloqueo en el modal de opciones (para el administrador)
+            if (isAdministrator) {
+                if (autoBlockCheckbox) autoBlockCheckbox.checked = isAutoBlockEnabled; 
+                if (globalManualBlockCheckbox) globalManualBlockCheckbox.checked = isGlobalManualBlock;
+            }
+        }
+
+        /**
+         * Alterna el estado del checkbox de bloqueo manual global.
+         * @param {HTMLInputElement} checkbox - El checkbox de bloqueo manual.
+         */
+        async function toggleGlobalManualBlockCheckbox(checkbox) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                checkbox.checked = !checkbox.checked; // Revierte el estado visual si no es admin
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+
+            if (!checkbox.checked) { // Si se está intentando desmarcar (quitar el chulo)
+                currentPasswordModalTargetCheckbox = checkbox; // Guarda la referencia al checkbox
+                showPasswordModal('global_manual'); // Pide contraseña
+            } else { // Si se está marcando (poner el chulo)
+                try {
+                    await globalSettingsRef.set({ isBlocked: true }, { merge: true }); // Activa el bloqueo en Firestore
+                    isGlobalManualBlock = true; // Actualiza el estado local
+                    console.log("Bloqueo inmediato activado globalmente.");
+                } catch (error) {
+                    console.error("Error al activar bloqueo inmediato:", error);
+                    alert("Error al activar el bloqueo inmediato.");
+                    checkbox.checked = false; // Revertir el estado del checkbox en caso de error
+                }
+            }
+        }
+        
+        /**
+         * Maneja el cambio en el checkbox de auto-bloqueo.
+         * Si el admin lo marca, habilita el mecanismo de auto-bloqueo y reinicia sus estados.
+         * Si lo desmarca, pide contraseña para deshabilitar el mecanismo y desactivar el bloqueo permanente.
+         * @param {HTMLInputElement} checkbox - El checkbox de auto-bloqueo.
+         */
+        async function toggleAutoBlockCheckbox(checkbox) {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                checkbox.checked = isAutoBlockEnabled; // Revierte al estado actual de isAutoBlockEnabled
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+
+            if (checkbox.checked) { // Si el admin lo MARCA (Habilitar auto-bloqueo)
+                try {
+                    // Al habilitar el auto-bloqueo:
+                    // 1. Habilitar el mecanismo (isAutoBlockEnabled = true)
+                    // 2. Desactivar el estado de bloqueo permanente (isAutoBlockedPermanently = false)
+                    // 3. Establecer lastAutoBlockTriggerDate a null para que pueda activarse al día siguiente
+                    await globalSettingsRef.set({ isAutoBlockEnabled: true, isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: null }, { merge: true });
+                    isAutoBlockEnabled = true;
+                    isAutoBlockedPermanently = false; // Actualizar estado local
+                    lastAutoBlockTriggerDate = null; // Actualizar estado local
+                    console.log("Mecanismo de Bloqueo Automático habilitado y estado de bloqueo permanente y fecha de activación reiniciados.");
+                } catch (error) {
+                    console.error("Error al habilitar el mecanismo de auto-bloqueo:", error);
+                    alert("Error al habilitar el bloqueo automático.");
+                    checkbox.checked = false; // Revertir el estado del checkbox en caso de error
+                }
+            } else { // Si el admin lo DESMARCA (Deshabilitar auto-bloqueo y posiblemente desbloquear)
+                currentPasswordModalTargetCheckbox = checkbox; // Guarda la referencia al checkbox
+                showPasswordModal('auto_permanent'); // Pide contraseña
+            }
+        }
+
+        /**
+         * Muestra el modal de contraseña para confirmar acciones administrativas.
+         * @param {string} type - El tipo de acción que requiere contraseña ('global_manual', 'auto_permanent', 'set_custom_time', 'reset_block_state').
+         */
+        function showPasswordModal(type) {
+            document.getElementById('password_modal').style.display = 'flex';
+            document.getElementById('password_input').value = '';
+            document.getElementById('password_error').textContent = '';
+            document.getElementById('password_modal_type').value = type;
+        }
+
+        /**
+         * Función para guardar la hora de bloqueo automático personalizada.
+         * Pide contraseña para confirmar y actualiza la configuración en Firestore.
+         */
+        async function setCustomBlockTime() {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+
+            const hourInput = document.getElementById('custom_block_hour_input');
+            const minuteInput = document.getElementById('custom_block_minute_input');
+            const errorDisplay = document.getElementById('custom_time_error');
+
+            const newHour = parseInt(hourInput.value);
+            const newMinute = parseInt(minuteInput.value);
+
+            // Valida las entradas de hora y minuto
+            if (isNaN(newHour) || newHour < 0 || newHour > 23 || isNaN(newMinute) || newMinute < 0 || newMinute > 59) {
+                errorDisplay.textContent = "Por favor, ingrese una hora (0-23) y un minuto (0-59) válidos.";
+                return;
+            }
+            errorDisplay.textContent = ''; // Limpiar mensaje de error si la validación pasa
+
+            currentPasswordModalTargetCheckbox = null; // No hay un checkbox directamente asociado a revertir aquí
+            // Almacena temporalmente los valores de hora y minuto para usarlos después de la verificación de contraseña
+            localStorage.setItem('tempCustomBlockHour', newHour);
+            localStorage.setItem('tempCustomBlockMinute', newMinute);
+
+            showPasswordModal('set_custom_time'); // Muestra modal de contraseña con el nuevo tipo
+        }
+
+        /**
+         * Función para reiniciar el estado de bloqueo automático y la fecha de activación.
+         * Solo para administradores, requiere contraseña.
+         */
+        function resetAutoBlockState() {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+            showPasswordModal('reset_block_state');
+        }
+
+        /**
+         * Verifica la contraseña ingresada y ejecuta la acción correspondiente al tipo de bloqueo.
+         */
+        async function verifyPassword() {
+            const passwordInput = document.getElementById('password_input');
+            const errorMessage = document.getElementById('password_error');
+            const enteredPassword = passwordInput.value;
+            const blockType = document.getElementById('password_modal_type').value;
+            const now = new Date();
+            const todayDate = now.toISOString().slice(0, 10);
+
+            if (enteredPassword === BLOCK_PASSWORD) {
+                if (blockType === 'global_manual') {
+                    try {
+                        await globalSettingsRef.set({ isBlocked: false }, { merge: true });
+                        isGlobalManualBlock = false;
+                        console.log("Bloqueo inmediato deshabilitado globalmente.");
+                    } catch (error) {
+                        console.error("Error al deshabilitar bloqueo inmediato:", error);
+                        errorMessage.textContent = "Error al deshabilitar el bloqueo. Inténtelo de nuevo.";
+                        if (currentPasswordModalTargetCheckbox) {
+                            currentPasswordModalTargetCheckbox.checked = true; // Revierte el checkbox si hubo error
+                        }
+                        return;
+                    }
+                } else if (blockType === 'auto_permanent') { // Maneja el tipo de bloqueo automático permanente
+                    try {
+                        // Al deshabilitar el auto-bloqueo:
+                        // 1. Deshabilita el mecanismo (isAutoBlockEnabled = false)
+                        // 2. Desactiva el estado de bloqueo permanente (isAutoBlockedPermanently = false)
+                        // 3. Marca la fecha actual para que no se reactive HOY.
+                        await globalSettingsRef.set({ isAutoBlockEnabled: false, isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: todayDate }, { merge: true });
+                        isAutoBlockEnabled = false; // Actualiza estado local
+                        isAutoBlockedPermanently = false; // Actualiza estado local
+                        lastAutoBlockTriggerDate = todayDate; // Actualiza estado local
+                        console.log("Mecanismo de Bloqueo Automático deshabilitado y Bloqueo Permanente desactivado para hoy.");
+                    } catch (error) {
+                        console.error("Error al deshabilitar bloqueo automático permanente:", error);
+                        errorMessage.textContent = "Error al deshabilitar el bloqueo automático. Inténtelo de nuevo.";
+                        if (currentPasswordModalTargetCheckbox) {
+                            currentPasswordModalTargetCheckbox.checked = true; // Revierte el checkbox si hubo error
+                        }
+                        return;
+                    }
+                } else if (blockType === 'set_custom_time') { // Maneja el tipo de guardar hora personalizada
+                    const tempHour = parseInt(localStorage.getItem('tempCustomBlockHour'));
+                    const tempMinute = parseInt(localStorage.getItem('tempCustomBlockMinute'));
+                    localStorage.removeItem('tempCustomBlockHour'); // Limpia temporales
+                    localStorage.removeItem('tempCustomBlockMinute');
+
+                    try {
+                        await globalSettingsRef.set({
+                            customBlockHour: tempHour,
+                            customBlockMinute: tempMinute
+                        }, { merge: true });
+                        customBlockHour = tempHour; // Actualiza estado local
+                        customBlockMinute = tempMinute; // Actualiza estado local
+                        console.log(`Hora de bloqueo automático personalizada guardada: ${tempHour}:${tempMinute}`);
+                        const customTimeErrorDisplay = document.getElementById('custom_time_error');
+                        if (customTimeErrorDisplay) customTimeErrorDisplay.textContent = 'Hora guardada exitosamente.';
+                        setTimeout(() => { if (customTimeErrorDisplay) customTimeErrorDisplay.textContent = ''; }, 3000); // Borra el mensaje después de 3 segundos
+                    } catch (error) {
+                        console.error("Error al guardar la hora personalizada:", error);
+                        errorMessage.textContent = "Error al guardar la hora personalizada. Inténtelo de nuevo.";
+                        return;
+                    }
+                } else if (blockType === 'reset_block_state') { // Maneja el tipo de reiniciar estado de bloqueo
+                    try {
+                        // Reinicia isAutoBlockedPermanently a false y lastAutoBlockTriggerDate a null
+                        await globalSettingsRef.set({ isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: null }, { merge: true });
+                        isAutoBlockedPermanently = false; // Actualiza estado local
+                        lastAutoBlockTriggerDate = null; // Actualiza estado local
+                        console.log("Estado de bloqueo automático reiniciado (isAutoBlockedPermanently a false, lastAutoBlockTriggerDate a null).");
+                        const customTimeErrorDisplay = document.getElementById('custom_time_error');
+                        if (customTimeErrorDisplay) customTimeErrorDisplay.textContent = 'Estado de bloqueo reiniciado exitosamente.';
+                        setTimeout(() => { if (customTimeErrorDisplay) customTimeErrorDisplay.textContent = ''; }, 3000);
+                    } catch (error) {
+                        console.error("Error al reiniciar estado de bloqueo:", error);
+                        errorMessage.textContent = "Error al reiniciar el estado de bloqueo. Inténtelo de nuevo.";
+                        return;
+                    }
+                }
+                cerrarModal('password_modal'); // Cierra el modal de contraseña
+                applyBlockStatus(); // Aplica el nuevo estado de bloqueo en la UI
+                updateCountdown(); // Actualiza el contador
+            } else {
+                errorMessage.textContent = "Contraseña incorrecta. Inténtelo de nuevo.";
+                // Revierte el estado del checkbox si la contraseña es incorrecta, excepto para 'set_custom_time' y 'reset_block_state'
+                if (blockType !== 'set_custom_time' && blockType !== 'reset_block_state' && currentPasswordModalTargetCheckbox) {
+                    currentPasswordModalTargetCheckbox.checked = !currentPasswordModalTargetCheckbox.checked; // Vuelve al estado original
+                }
+            }
+        }
+    </script>
+</body>
+</html>
