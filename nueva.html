@@ -406,15 +406,15 @@
 
         /* --- NUEVOS ESTILOS PARA LA ALERTA DE RETARDO --- */
         .retardo-indicator {
-            position: absolute;
-            top: 5px;
-            left: 5px;
+            /* Posición relativa para estar en el flujo del contenido */
+            position: relative;
             display: flex;
             align-items: center;
             font-weight: bold;
             color: #dc3545; /* Rojo */
             font-size: 1.1em;
-            z-index: 15; /* Asegurar que esté por encima de otros elementos */
+            margin-top: 5px; /* Pequeño espacio superior */
+            margin-bottom: 5px; /* Pequeño espacio inferior */
         }
 
         .retardo-indicator .exclamation-icon {
@@ -683,7 +683,8 @@
                     bloqueadoPor: '', // Initialize new field
                     // Nuevos campos para la lógica de "Enviado a Empaque" y retardo
                     enviadoAEmpaque: false,
-                    enviadoAEmpaqueTimestamp: null // Se llenará cuando se marque como despachado
+                    // EL timestamp se seteará cuando se marque como DESPACHADO, no aquí al crear.
+                    enviadoAEmpaqueTimestamp: null // Se llenará cuando se marque como despachado (despachadoTimestamp)
                 };
                 console.log("Datos a guardar:", datos);
 
@@ -811,6 +812,7 @@
             const despachadoPor = updatedRegistro.despachadoPor || '';
             const bloqueadoPor = updatedRegistro.bloqueadoPor || '';
             const enviadoAEmpaque = updatedRegistro.enviadoAEmpaque === true; // Nuevo campo
+            // El timestamp de enviadoAEmpaque se usa para el retardo, y es el mismo que el despachado timestamp.
             const enviadoAEmpaqueTimestamp = updatedRegistro.enviadoAEmpaqueTimestamp ? updatedRegistro.enviadoAEmpaqueTimestamp.toDate() : null; // Nuevo campo
 
             recordElement.dataset.bloqueado = estaBloqueado;
@@ -844,7 +846,9 @@
             }
             if (enviadoAEmpaqueCheckbox) {
                 enviadoAEmpaqueCheckbox.checked = enviadoAEmpaque;
+                // Mostrar solo si el pedido está despachado Y estamos en la vista "Todos"
                 enviadoAEmpaqueCheckbox.closest('.control-container').style.display = (estaDespachado && currentDispatchFilter === 'all') ? 'flex' : 'none';
+                // El checkbox de enviadoAEmpaque se deshabilita una vez marcado
                 enviadoAEmpaqueCheckbox.disabled = enviadoAEmpaque;
             }
             if (bloquearCheckbox) {
@@ -982,7 +986,7 @@
                     <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
                     <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                     <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                    <p>Bodeguero(s): ${bodeguerosEncargados}</p> <!-- La línea de bodegueros se mueve aquí para todos los filtros -->
+                    <p>Bodeguero(s): ${bodeguerosEncargados}</p> <!-- La línea de bodegueros se mantiene aquí -->
                     <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                     <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                 `;
@@ -992,7 +996,8 @@
             let controlsHtml = '';
             if (esAdministrador) {
                 if (currentDispatchFilter === 'all') {
-                    // Para la pestaña "Todos": "Enviado a Empaque" (si está despachado) y "Bloquear Pedido"
+                    // Para la pestaña "Todos": "Enviado a Empaque" y "Bloquear Pedido"
+                    // El "Enviado a Empaque" aparece si el pedido está despachado
                     controlsHtml += `
                         <div class="control-container" style="display: ${estaDespachado ? 'flex' : 'none'};">
                             <input type="checkbox" id="enviado_empaque_${docId}" ${enviadoAEmpaque ? 'checked' : ''} onchange="toggleEnviadoAEmpaque('${docId}', this.checked)" ${enviadoAEmpaque ? 'disabled' : ''}>
@@ -1015,12 +1020,12 @@
             }
             // Para operadores, controlsHtml estará vacío ya que no tienen permisos para estos checkboxes.
 
-            // Ensamblaje final del elemento del registro
+            // Ensamblaje final del elemento del registro, reordenando el indicador de retardo
             recordElement.innerHTML = `
-                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: none;"></div>
                 ${recordContentHtml}
                 <div class="status-messages-container" id="status-messages-${docId}"></div>
                 <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
+                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: none;"></div>
                 ${controlsHtml}
                 <div class="record-buttons">
                     <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
@@ -1261,7 +1266,8 @@
                     updateData.despachado = true;
                     updateData.despachadoPor = datosUsuario.nombreCompleto;
                     updateData.enviadoAEmpaque = false; // Reset "Enviado a Empaque" when dispatch status changes
-                    updateData.enviadoAEmpaqueTimestamp = firebase.firestore.Timestamp.fromDate(new Date()); // Set timestamp when dispatched
+                    // Este timestamp es la clave para la lógica de retardo de 20 minutos
+                    updateData.enviadoAEmpaqueTimestamp = firebase.firestore.Timestamp.fromDate(new Date());
                 } else {
                     updateData.despachado = false;
                     updateData.despachadoPor = ''; // Clear the field when undispatched
@@ -1298,6 +1304,15 @@
             }
 
             try {
+                // Primero, verifica si el pedido está despachado. Si no, no se puede marcar como "Enviado a Empaque"
+                const docSnap = await db.collection('registros').doc(id).get();
+                if (!docSnap.exists || docSnap.data().despachado !== true) {
+                    alert("Solo se puede marcar como 'Enviado a Empaque' un pedido que ya ha sido despachado.");
+                    const checkbox = document.getElementById(`enviado_empaque_${id}`);
+                    if (checkbox) checkbox.checked = false; // Revert state
+                    return;
+                }
+
                 // Solo actualizamos a true si se está marcando
                 await db.collection('registros').doc(id).update({
                     enviadoAEmpaque: true
@@ -2292,12 +2307,13 @@
                 records.forEach(recordElement => {
                     const estaDespachado = recordElement.dataset.despachado === 'true';
                     const enviadoAEmpaque = recordElement.dataset.enviadoAEmpaque === 'true';
-                    const timestampStr = recordElement.dataset.enviadoAEmpaqueTimestamp;
-                    const enviadoAEmpaqueTimestamp = timestampStr ? new Date(timestampStr) : null;
+                    // Este timestamp es el de DESPACHADO, no el de "Enviado a Empaque" como antes.
+                    const despachadoTimestampStr = recordElement.dataset.enviadoAEmpaqueTimestamp; // Reutilizamos el campo para el despachado timestamp
+                    const despachadoTimestamp = despachadoTimestampStr ? new Date(despachadoTimestampStr) : null;
 
                     // Solo verificar retardo si es la pestaña "Todos"
-                    if (currentDispatchFilter === 'all' && estaDespachado && !enviadoAEmpaque && enviadoAEmpaqueTimestamp) {
-                        const diffMs = now.getTime() - enviadoAEmpaqueTimestamp.getTime();
+                    if (currentDispatchFilter === 'all' && estaDespachado && !enviadoAEmpaque && despachadoTimestamp) {
+                        const diffMs = now.getTime() - despachadoTimestamp.getTime();
                         const diffMinutes = diffMs / (1000 * 60);
 
                         if (diffMinutes > minutesThreshold) {
@@ -2330,10 +2346,10 @@
                                                     .get();
                     querySnapshot.forEach(doc => {
                         const registro = doc.data();
-                        const enviadoAEmpaqueTimestamp = registro.enviadoAEmpaqueTimestamp ? registro.enviadoAEmpaqueTimestamp.toDate() : null;
+                        const despachadoTimestamp = registro.enviadoAEmpaqueTimestamp ? registro.enviadoAEmpaqueTimestamp.toDate() : null; // Este campo ahora almacena el timestamp de despachado
 
-                        if (enviadoAEmpaqueTimestamp) {
-                            const diffMs = now.getTime() - enviadoAEmpaqueTimestamp.getTime();
+                        if (despachadoTimestamp) {
+                            const diffMs = now.getTime() - despachadoTimestamp.getTime();
                             const diffMinutes = diffMs / (1000 * 60);
 
                             if (diffMinutes > minutesThreshold) {
