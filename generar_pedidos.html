@@ -1762,14 +1762,14 @@
             const timeConditionMet = (currentHour > blockHourToUse || (currentHour === blockHourToUse && currentMinute >= blockMinuteToUse));
 
             console.log("--- checkTimeBlock Debug Info ---");
-            console.log(`Current Time: ${currentHour}:${currentMinute}`);
-            console.log(`Block Time To Use: ${blockHourToUse}:${blockMinuteToUse}`);
-            console.log(`Time Condition Met: ${timeConditionMet}`);
-            console.log(`isAutoBlockEnabled: ${isAutoBlockEnabled}`);
-            console.log(`isAutoBlockedPermanently: ${isAutoBlockedPermanently}`);
-            console.log(`lastAutoBlockTriggerDate: ${lastAutoBlockTriggerDate}`);
-            console.log(`todayDate: ${todayDate}`);
-            console.log(`lastAutoBlockTriggerDate !== todayDate: ${lastAutoBlockTriggerDate !== todayDate}`);
+            console.log(`Current Time (24h): ${currentHour}:${currentMinute}`);
+            console.log(`Block Time To Use (24h): ${blockHourToUse}:${blockMinuteToUse}`);
+            console.log(`Time Condition Met (currentHour > blockHourToUse || (currentHour === blockHourToUse && currentMinute >= blockMinuteToUse)): ${timeConditionMet}`);
+            console.log(`isAutoBlockEnabled (desde Firestore): ${isAutoBlockEnabled}`);
+            console.log(`isAutoBlockedPermanently (desde Firestore): ${isAutoBlockedPermanently}`);
+            console.log(`lastAutoBlockTriggerDate (desde Firestore): ${lastAutoBlockTriggerDate}`);
+            console.log(`todayDate (fecha local del dispositivo): ${todayDate}`);
+            console.log(`Condición lastAutoBlockTriggerDate !== todayDate: ${lastAutoBlockTriggerDate !== todayDate}`);
             console.log("---------------------------------");
 
 
@@ -1779,17 +1779,18 @@
             // 3. NO está ya permanentemente bloqueado (isAutoBlockedPermanently)
             // 4. NO se ha activado/gestionado hoy (lastAutoBlockTriggerDate !== todayDate)
             if (isAutoBlockEnabled && timeConditionMet && !isAutoBlockedPermanently && lastAutoBlockTriggerDate !== todayDate) {
+                console.log("-----> Condición de bloqueo automático cumplida! Intentando activar bloqueo permanente.");
                 globalSettingsRef.set({ isAutoBlockedPermanently: true, lastAutoBlockTriggerDate: todayDate }, { merge: true }).then(() => {
                     isAutoBlockedPermanently = true; // Actualizar estado local
                     lastAutoBlockTriggerDate = todayDate; // Actualizar estado local
-                    console.log(`Bloqueo automático activado (permanente) a las ${blockHourToUse}:${blockMinuteToUse} y fecha de activación registrada.`);
+                    console.log(`Bloqueo automático activado (permanente) a las ${blockHourToUse}:${blockMinuteToUse} y fecha de activación registrada exitosamente.`);
                     applyBlockStatus();
                     updateCountdown();
-                }).catch(error => console.error("Error al activar bloqueo automático permanente:", error));
+                }).catch(error => {
+                    console.error("Error al activar bloqueo automático permanente en Firebase:", error);
+                });
             } else {
-                // Si el auto-bloqueo está habilitado y ya se activó/gestionó hoy, no se hace nada.
-                // Si no está habilitado, tampoco se hace nada.
-                // console.log("Bloqueo automático ya activado/gestionado hoy o no habilitado. No se re-activará automáticamente.");
+                console.log("-----> Condición de bloqueo automático NO cumplida o ya bloqueado/gestionado.");
             }
         }
 
