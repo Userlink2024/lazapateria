@@ -330,6 +330,15 @@
             font-weight: normal;
             cursor: pointer;
         }
+        #block_options_modal .form-field.custom-time-input {
+            flex-direction: column; /* For input fields to stack */
+            align-items: flex-start;
+        }
+        #block_options_modal .form-field.custom-time-input input {
+            width: 100px; /* Adjust width for hour/minute inputs */
+            text-align: center;
+        }
+
 
         /* Estilo para el contador regresivo */
         #countdown_timer {
@@ -434,13 +443,20 @@
 
         // --- NUEVAS VARIABLES PARA EL BLOQUEO ---
         const BLOCK_PASSWORD = "upm1022";
-        const BLOCK_HOUR = 17; // 5 PM
-        const BLOCK_MINUTE = 40; // 40 minutes
+        // Valores por defecto para la hora de bloqueo, usados si no hay una hora personalizada configurada en Firebase
+        const DEFAULT_BLOCK_HOUR = 17; // 5 PM
+        const DEFAULT_BLOCK_MINUTE = 40; // 40 minutes
+
         let isGlobalManualBlock = false; // Bloqueo manual/inmediato global, controlado por Firestore
         let isAutoBlockedPermanently = false; // Nuevo: Bloqueo automático persistente, controlado por Firestore
         let isAutoBlockEnabled = false; // NUEVO: Controla si el mecanismo de auto-bloqueo está habilitado por el admin
         let lastAutoBlockTriggerDate = null; // Nuevo: Para controlar que el auto-bloqueo se active solo una vez por día
         let currentPasswordModalTargetCheckbox = null; // Para saber qué checkbox se intentó desmarcar
+
+        // Nuevas variables para almacenar la hora de bloqueo personalizada desde Firebase
+        let customBlockHour = DEFAULT_BLOCK_HOUR;
+        let customBlockMinute = DEFAULT_BLOCK_MINUTE;
+
 
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
@@ -449,6 +465,14 @@
                 // El checkbox de auto_block_checkbox ahora refleja isAutoBlockEnabled
                 document.getElementById('auto_block_checkbox').checked = isAutoBlockEnabled; 
                 document.getElementById('global_manual_block_checkbox').checked = isGlobalManualBlock;
+
+                // Rellenar los campos de entrada de hora personalizada y mostrar la hora actual configurada
+                document.getElementById('custom_block_hour_input').value = customBlockHour;
+                document.getElementById('custom_block_minute_input').value = customBlockMinute;
+                
+                const formattedTime = `${customBlockHour.toString().padStart(2, '0')}:${customBlockMinute.toString().padStart(2, '0')}`;
+                document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
+                document.getElementById('custom_time_error').textContent = ''; // Limpiar cualquier mensaje de error previo
             }
             if (id === 'modal_producto') {
                 document.getElementById('producto_referencia').value = '';
@@ -1415,7 +1439,12 @@
         function updateCountdown() {
             const now = new Date();
             const targetTime = new Date(now);
-            targetTime.setHours(BLOCK_HOUR, BLOCK_MINUTE, 0, 0); // 5:40 PM hoy
+
+            // Determinar la hora y minuto de bloqueo a usar: personalizada si está habilitada, si no, por defecto
+            const blockHourToUse = isAutoBlockEnabled ? customBlockHour : DEFAULT_BLOCK_HOUR;
+            const blockMinuteToUse = isAutoBlockEnabled ? customBlockMinute : DEFAULT_BLOCK_MINUTE;
+            
+            targetTime.setHours(blockHourToUse, blockMinuteToUse, 0, 0); // Establecer la hora de bloqueo objetivo
 
             // Si ya pasó la hora de bloqueo para hoy, establece la hora de bloqueo para mañana
             if (now.getTime() > targetTime.getTime()) {
@@ -1435,10 +1464,16 @@
                     countdownElement.textContent = `Bloqueo automático en: ${Math.floor(timeLeftMs / (1000 * 60 * 60))}h ${Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}m ${Math.floor((timeLeftMs % (1000 * 60)) / 1000)}s`;
                     countdownElement.style.backgroundColor = '#e7f3ff'; // Default blue background
                     countdownElement.style.borderColor = '#007bff';
+
+                    // Actualizar la hora configurada en el modal de opciones de bloqueo
+                    const formattedTime = `${blockHourToUse.toString().padStart(2, '0')}:${blockMinuteToUse.toString().padStart(2, '0')}`;
+                    document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
+
                 } else { // Si el auto-bloqueo no está habilitado por el admin
                     countdownElement.textContent = "Bloqueo automático deshabilitado por el administrador.";
                     countdownElement.style.backgroundColor = '#f8d7da'; /* Light red */
                     countdownElement.style.borderColor = '#dc3545'; /* Red */
+                     document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: N/A (Deshabilitado)`;
                 }
             }
         }
@@ -1530,17 +1565,33 @@
                     isAutoBlockedPermanently = doc.data().isAutoBlockedPermanently || false; 
                     isAutoBlockEnabled = doc.data().isAutoBlockEnabled || false; // LEER NUEVO CAMPO
                     lastAutoBlockTriggerDate = doc.data().lastAutoBlockTriggerDate || null; // Read new field
+                    
+                    // Leer la hora personalizada, o usar los valores por defecto si no están definidos
+                    customBlockHour = doc.data().customBlockHour !== undefined ? doc.data().customBlockHour : DEFAULT_BLOCK_HOUR;
+                    customBlockMinute = doc.data().customBlockMinute !== undefined ? doc.data().customBlockMinute : DEFAULT_BLOCK_MINUTE;
+
                     console.log("Estado de bloqueo global (manual):", isGlobalManualBlock);
                     console.log("Estado de bloqueo global (automático persistente):", isAutoBlockedPermanently);
                     console.log("Estado de auto-bloqueo habilitado (admin):", isAutoBlockEnabled); // LOG NUEVO CAMPO
                     console.log("Última fecha de activación auto-bloqueo:", lastAutoBlockTriggerDate);
+                    console.log(`Hora de bloqueo personalizada: ${customBlockHour}:${customBlockMinute}`);
+
                 } else {
                     // Si el documento no existe, crearlo con un estado inicial
-                    globalSettingsRef.set({ isBlocked: false, isAutoBlockedPermanently: false, isAutoBlockEnabled: false, lastAutoBlockTriggerDate: null }).then(() => {
+                    globalSettingsRef.set({ 
+                        isBlocked: false, 
+                        isAutoBlockedPermanently: false, 
+                        isAutoBlockEnabled: false, 
+                        lastAutoBlockTriggerDate: null,
+                        customBlockHour: DEFAULT_BLOCK_HOUR, // Inicializar hora personalizada
+                        customBlockMinute: DEFAULT_BLOCK_MINUTE // Inicializar minuto personalizado
+                    }).then(() => {
                         isGlobalManualBlock = false;
                         isAutoBlockedPermanently = false;
-                        isAutoBlockEnabled = false; // INICIALIZAR NUEVO CAMPO
+                        isAutoBlockEnabled = false; 
                         lastAutoBlockTriggerDate = null;
+                        customBlockHour = DEFAULT_BLOCK_HOUR; // Actualizar localmente
+                        customBlockMinute = DEFAULT_BLOCK_MINUTE; // Actualizar localmente
                         console.log("Documento de configuración global creado con estado inicial.");
                     }).catch(error => {
                         console.error("Error al crear documento de configuración global:", error);
@@ -1689,24 +1740,32 @@
             document.getElementById('modal_pares_warning').style.display = 'flex';
         }
 
+        /**
+         * Verifica la hora actual y, si se cumplen las condiciones, activa el bloqueo automático.
+         * Utiliza la hora de bloqueo personalizada si está habilitada, de lo contrario, usa la por defecto.
+         */
         function checkTimeBlock() {
             const now = new Date();
-            const todayDate = now.toISOString().slice(0, 10); // Format YYYY-MM-DD
+            const todayDate = now.toISOString().slice(0, 10); // Formato YYYY-MM-DD
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
-            const timeConditionMet = (currentHour > BLOCK_HOUR || (currentHour === BLOCK_HOUR && currentMinute >= BLOCK_MINUTE));
+            // Determinar la hora y minuto de bloqueo a usar: personalizada si está habilitada, si no, por defecto
+            const blockHourToUse = isAutoBlockEnabled ? customBlockHour : DEFAULT_BLOCK_HOUR;
+            const blockMinuteToUse = isAutoBlockEnabled ? customBlockMinute : DEFAULT_BLOCK_MINUTE;
+
+            const timeConditionMet = (currentHour > blockHourToUse || (currentHour === blockHourToUse && currentMinute >= blockMinuteToUse));
 
             // El auto-bloqueo se activa SI:
             // 1. El admin lo tiene HABILITADO (isAutoBlockEnabled)
-            // 2. La condición de tiempo se cumple (pasó las 5:40 PM)
+            // 2. La condición de tiempo se cumple (pasó la hora configurada)
             // 3. NO está ya permanentemente bloqueado (isAutoBlockedPermanently)
             // 4. NO se ha activado/gestionado hoy (lastAutoBlockTriggerDate !== todayDate)
             if (isAutoBlockEnabled && timeConditionMet && !isAutoBlockedPermanently && lastAutoBlockTriggerDate !== todayDate) {
                 globalSettingsRef.set({ isAutoBlockedPermanently: true, lastAutoBlockTriggerDate: todayDate }, { merge: true }).then(() => {
-                    isAutoBlockedPermanently = true; // Update local state
-                    lastAutoBlockTriggerDate = todayDate; // Update local state
-                    console.log("Bloqueo automático activado (permanente) y fecha de activación registrada.");
+                    isAutoBlockedPermanently = true; // Actualizar estado local
+                    lastAutoBlockTriggerDate = todayDate; // Actualizar estado local
+                    console.log(`Bloqueo automático activado (permanente) a las ${blockHourToUse}:${blockMinuteToUse} y fecha de activación registrada.`);
                     applyBlockStatus();
                     updateCountdown();
                 }).catch(error => console.error("Error al activar bloqueo automático permanente:", error));
@@ -1779,7 +1838,12 @@
             }
         }
         
-        // Modificado: Función para manejar el cambio en el checkbox de auto-bloqueo
+        /**
+         * Maneja el cambio en el checkbox de auto-bloqueo.
+         * Si el admin lo marca, habilita el mecanismo de auto-bloqueo.
+         * Si lo desmarca, pide contraseña para deshabilitar el mecanismo y desactivar el bloqueo permanente.
+         * @param {HTMLInputElement} checkbox - El checkbox de auto-bloqueo.
+         */
         async function toggleAutoBlockCheckbox(checkbox) {
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 // Si no es admin, revertir el estado del checkbox y alertar
@@ -1807,6 +1871,10 @@
             }
         }
 
+        /**
+         * Muestra el modal de contraseña para confirmar acciones administrativas.
+         * @param {string} type - El tipo de acción que requiere contraseña ('global_manual', 'auto_permanent', 'set_custom_time').
+         */
         function showPasswordModal(type) {
             document.getElementById('password_modal').style.display = 'flex';
             document.getElementById('password_input').value = '';
@@ -1814,6 +1882,42 @@
             document.getElementById('password_modal_type').value = type;
         }
 
+        /**
+         * Función para guardar la hora de bloqueo automático personalizada.
+         * Pide contraseña para confirmar y actualiza la configuración en Firestore.
+         */
+        async function setCustomBlockTime() {
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+
+            const hourInput = document.getElementById('custom_block_hour_input');
+            const minuteInput = document.getElementById('custom_block_minute_input');
+            const errorDisplay = document.getElementById('custom_time_error');
+
+            const newHour = parseInt(hourInput.value);
+            const newMinute = parseInt(minuteInput.value);
+
+            // Validar las entradas de hora y minuto
+            if (isNaN(newHour) || newHour < 0 || newHour > 23 || isNaN(newMinute) || newMinute < 0 || newMinute > 59) {
+                errorDisplay.textContent = "Por favor, ingrese una hora (0-23) y un minuto (0-59) válidos.";
+                return;
+            }
+            errorDisplay.textContent = ''; // Limpiar mensaje de error si la validación pasa
+
+            currentPasswordModalTargetCheckbox = null; // No hay un checkbox directamente asociado a revertir aquí
+            // Almacenar temporalmente los valores de hora y minuto para usarlos después de la verificación de contraseña
+            localStorage.setItem('tempCustomBlockHour', newHour);
+            localStorage.setItem('tempCustomBlockMinute', newMinute);
+
+            showPasswordModal('set_custom_time'); // Mostrar modal de contraseña con el nuevo tipo
+        }
+
+
+        /**
+         * Verifica la contraseña ingresada y ejecuta la acción correspondiente al tipo de bloqueo.
+         */
         async function verifyPassword() {
             const passwordInput = document.getElementById('password_input');
             const errorMessage = document.getElementById('password_error');
@@ -1836,7 +1940,7 @@
                         }
                         return;
                     }
-                } else if (blockType === 'auto_permanent') { // Handle auto_permanent block type
+                } else if (blockType === 'auto_permanent') { // Manejar el tipo de bloqueo automático permanente
                     try {
                         // Al deshabilitar el auto-bloqueo:
                         // 1. Deshabilitar el mecanismo (isAutoBlockEnabled = false)
@@ -1855,14 +1959,37 @@
                         }
                         return;
                     }
+                } else if (blockType === 'set_custom_time') { // Manejar el tipo de guardar hora personalizada
+                    const tempHour = parseInt(localStorage.getItem('tempCustomBlockHour'));
+                    const tempMinute = parseInt(localStorage.getItem('tempCustomBlockMinute'));
+                    localStorage.removeItem('tempCustomBlockHour'); // Limpiar temporales
+                    localStorage.removeItem('tempCustomBlockMinute');
+
+                    try {
+                        await globalSettingsRef.set({
+                            customBlockHour: tempHour,
+                            customBlockMinute: tempMinute
+                        }, { merge: true });
+                        customBlockHour = tempHour; // Actualizar estado local
+                        customBlockMinute = tempMinute; // Actualizar estado local
+                        console.log(`Hora de bloqueo automático personalizada guardada: ${tempHour}:${tempMinute}`);
+                        // No hay checkbox que revertir en este caso, solo actualizar el mensaje de error.
+                        const customTimeErrorDisplay = document.getElementById('custom_time_error');
+                        if (customTimeErrorDisplay) customTimeErrorDisplay.textContent = 'Hora guardada exitosamente.';
+                        setTimeout(() => { if (customTimeErrorDisplay) customTimeErrorDisplay.textContent = ''; }, 3000); // Borrar después de 3 segundos
+                    } catch (error) {
+                        console.error("Error al guardar la hora personalizada:", error);
+                        errorMessage.textContent = "Error al guardar la hora personalizada. Inténtelo de nuevo.";
+                        return;
+                    }
                 }
                 cerrarModal('password_modal');
                 applyBlockStatus();
-                updateCountdown(); // Update countdown after unblocking
+                updateCountdown(); // Actualizar el contador después de cualquier acción de desbloqueo/configuración
             } else {
                 errorMessage.textContent = "Contraseña incorrecta. Inténtelo de nuevo.";
-                // Revertir el estado del checkbox si la contraseña es incorrecta
-                if (currentPasswordModalTargetCheckbox) {
+                // Revertir el estado del checkbox si la contraseña es incorrecta, excepto para 'set_custom_time'
+                if (blockType !== 'set_custom_time' && currentPasswordModalTargetCheckbox) {
                     currentPasswordModalTargetCheckbox.checked = !currentPasswordModalTargetCheckbox.checked; // Vuelve al estado original
                 }
             }
@@ -2073,6 +2200,20 @@
                 <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)">
                 <label for="global_manual_block_checkbox">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
             </div>
+
+            <hr style="margin: 20px 0;">
+            <h3>Configurar Hora de Bloqueo Automático</h3>
+            <p id="current_custom_block_time">Hora actual configurada: --:--</p>
+            <div class="form-field custom-time-input">
+                <label for="custom_block_hour_input">Hora (0-23):</label>
+                <input type="number" id="custom_block_hour_input" min="0" max="23" placeholder="Ej: 17">
+            </div>
+            <div class="form-field custom-time-input">
+                <label for="custom_block_minute_input">Minuto (0-59):</label>
+                <input type="number" id="custom_block_minute_input" min="0" max="59" placeholder="Ej: 40">
+            </div>
+            <button type="button" onclick="setCustomBlockTime()">Guardar Hora Personalizada</button>
+            <p id="custom_time_error" class="error-message"></p>
         </div>
     </div>
 
