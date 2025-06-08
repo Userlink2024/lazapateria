@@ -911,10 +911,10 @@
             const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
             const estaBloqueado = registro.bloqueado === true;
             const estaDespachado = registro.despachado === true;
-            const despachadoPor = registro.despachadoPor || ''; // Get despachadoPor
-            const bloqueadoPor = registro.bloqueadoPor || '';   // Get bloqueadoPor
-            const enviadoAEmpaque = registro.enviadoAEmpaque === true; // Nuevo campo
-            const enviadoAEmpaqueTimestamp = registro.enviadoAEmpaqueTimestamp ? registro.enviadoAEmpaqueTimestamp.toDate() : null; // Nuevo campo
+            const despachadoPor = registro.despachadoPor || '';
+            const bloqueadoPor = registro.bloqueadoPor || '';
+            const enviadoAEmpaque = registro.enviadoAEmpaque === true;
+            const enviadoAEmpaqueTimestamp = registro.enviadoAEmpaqueTimestamp ? registro.enviadoAEmpaqueTimestamp.toDate() : null;
 
             // Set initial data attributes
             recordElement.dataset.asesor = registro.asesor || 'N/A';
@@ -922,10 +922,10 @@
             recordElement.dataset.codigo = registro.codigo_unico || 'N/A';
             recordElement.dataset.despachado = estaDespachado;
             recordElement.dataset.bloqueado = estaBloqueado;
-            recordElement.dataset.despachadoPor = despachadoPor; // Add despachadoPor to dataset
-            recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Add bloqueadoPor to dataset
-            recordElement.dataset.enviadoAEmpaque = enviadoAEmpaque; // Add new field to dataset
-            recordElement.dataset.enviadoAEmpaqueTimestamp = enviadoAEmpaqueTimestamp ? enviadoAEmpaqueTimestamp.toISOString() : ''; // Add timestamp to dataset
+            recordElement.dataset.despachadoPor = despachadoPor;
+            recordElement.dataset.bloqueadoPor = bloqueadoPor;
+            recordElement.dataset.enviadoAEmpaque = enviadoAEmpaque;
+            recordElement.dataset.enviadoAEmpaqueTimestamp = enviadoAEmpaqueTimestamp ? enviadoAEmpaqueTimestamp.toISOString() : '';
 
             let productosTextoParaBusqueda = "";
             let productosHTMLList = 'Sin productos';
@@ -951,82 +951,26 @@
 
             const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
             const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
-            // Formatear hora a 12 horas para la visualización del registro
             const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
             const bodeguerosEncargados = Array.isArray(registro.bodegueros_encargados) && registro.bodegueros_encargados.length > 0
                 ? registro.bodegueros_encargados.join(', ')
                 : 'N/A';
 
-            let despachadoCheckboxHtml = '';
-            let enviadoAEmpaqueCheckboxHtml = '';
-            let bloquearCheckboxHtml = '';
-
-            // Lógica de visibilidad de checkboxes según la pestaña actual
-            if (esAdministrador) {
-                if (currentDispatchFilter === 'all') {
-                    // Pestaña "Todos": Solo "Enviado a Empaque" (si despachado) y "Bloquear Pedido"
-                    enviadoAEmpaqueCheckboxHtml = `
-                        <div class="control-container" style="display: ${estaDespachado ? 'flex' : 'none'};">
-                            <input type="checkbox" id="enviado_empaque_${docId}" ${enviadoAEmpaque ? 'checked' : ''} onchange="toggleEnviadoAEmpaque('${docId}', this.checked)" ${enviadoAEmpaque ? 'disabled' : ''}>
-                            <label for="enviado_empaque_${docId}">Enviado a Empaque</label>
-                        </div>`;
-                    bloquearCheckboxHtml = `
-                        <div class="control-container">
-                            <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)">
-                            <label for="bloquear_${docId}">Bloquear Pedido</label>
-                        </div>`;
-                } else if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                    // Pestañas "Despachados" y "No Despachados": Solo "Marcar como Despachado"
-                    despachadoCheckboxHtml = `
-                        <div class="control-container control-container-despachado">
-                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)">
-                            <label for="despachar_${docId}">Marcar como Despachado</label>
-                        </div>`;
-                }
-            }
-
-
-            // Construcción del contenido principal del registro
-            let recordContentHtml = `
-                <p><strong>Registro ${index + 1}</strong></p>
-                <p>Fecha y Hora: ${fechaHoraFormateada}</p>
-                <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
-                <p>Cliente: ${registro.cliente || 'N/A'}</p>
-                <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                ${productosHTMLList}
-                ${abonosHTMLList}
-                <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
-            `;
-
-            // Reorganización de los checkboxes según el filtro
-            let controlsHtml = '';
-            if (esAdministrador) {
-                if (currentDispatchFilter === 'all') {
-                    controlsHtml += `<p>Bodeguero(s): ${bodeguerosEncargados}</p>`; // Mostrar bodegueros
-                    controlsHtml += enviadoAEmpaqueCheckboxHtml; // "Enviado a Empaque" debajo de bodeguero
-                    controlsHtml += bloquearCheckboxHtml; // "Bloquear Pedido" en su posición
-                } else if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                    // Para estas pestañas, solo se muestra el checkbox de Despachado.
-                    // La información detallada del pedido se muestra para ambas.
-                    // Aquí se inserta el checkbox de despachado en su lugar.
-                    recordContentHtml = `
-                        <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
-                        <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                        <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                        <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                        <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                        <p>Bodeguero(s): ${bodeguerosEncargados}</p>
-                        <p>Hora: ${horaFormateada}</p>
-                        <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                    `;
-                    controlsHtml += despachadoCheckboxHtml;
-                }
-            } else { // Operador
-                // Para operadores, mostrar la información normal del pedido y no los checkboxes de admin.
+            // --- Construir el contenido principal del registro de forma consistente ---
+            let recordContentHtml = '';
+            if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
+                // Vista simplificada para Despachados/No Despachados
+                recordContentHtml = `
+                    <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
+                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
+                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
+                    <p>Bodeguero(s): ${bodeguerosEncargados}</p>
+                    <p>Hora: ${horaFormateada}</p>
+                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                `;
+            } else { // currentDispatchFilter === 'all' (o por defecto si no hay filtro activo)
                 recordContentHtml = `
                     <p><strong>Registro ${index + 1}</strong></p>
                     <p>Fecha y Hora: ${fechaHoraFormateada}</p>
@@ -1038,13 +982,40 @@
                     <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
                     <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                     <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                    <p>Bodeguero(s): ${bodeguerosEncargados}</p>
+                    <p>Bodeguero(s): ${bodeguerosEncargados}</p> <!-- La línea de bodegueros se mueve aquí para todos los filtros -->
                     <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                     <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                 `;
-                // No se muestran checkboxes de admin para operador.
             }
 
+            // --- Construir el HTML de los controles (checkboxes) basado en permisos y filtro ---
+            let controlsHtml = '';
+            if (esAdministrador) {
+                if (currentDispatchFilter === 'all') {
+                    // Para la pestaña "Todos": "Enviado a Empaque" (si está despachado) y "Bloquear Pedido"
+                    controlsHtml += `
+                        <div class="control-container" style="display: ${estaDespachado ? 'flex' : 'none'};">
+                            <input type="checkbox" id="enviado_empaque_${docId}" ${enviadoAEmpaque ? 'checked' : ''} onchange="toggleEnviadoAEmpaque('${docId}', this.checked)" ${enviadoAEmpaque ? 'disabled' : ''}>
+                            <label for="enviado_empaque_${docId}">Enviado a Empaque</label>
+                        </div>
+                        <div class="control-container">
+                            <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)">
+                            <label for="bloquear_${docId}">Bloquear Pedido</label>
+                        </div>
+                    `;
+                } else if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
+                    // Para las pestañas "Despachados" y "No Despachados": Solo "Marcar como Despachado"
+                    controlsHtml += `
+                        <div class="control-container control-container-despachado">
+                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)">
+                            <label for="despachar_${docId}">Marcar como Despachado</label>
+                        </div>
+                    `;
+                }
+            }
+            // Para operadores, controlsHtml estará vacío ya que no tienen permisos para estos checkboxes.
+
+            // Ensamblaje final del elemento del registro
             recordElement.innerHTML = `
                 <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: none;"></div>
                 ${recordContentHtml}
@@ -1732,9 +1703,9 @@
                 const bodeguerosSnapshot = await db.collection('usuarios').where('permisos', '==', 'Bodeguero').get();
                 const bodegueros = [];
                 bodeguerosSnapshot.forEach(doc => {
-                    const data = doc.data(); // CORRECTED LINE: Use .data() to get the document data
-                    if (data.nombreCompleto) { // Access data properties directly
-                        bodegueros.push(data.nombreComplepto); // Typo fixed: nombreComplepto should be nombreCompleto
+                    const data = doc.data();
+                    if (data.nombreCompleto) {
+                        bodegueros.push(data.nombreCompleto);
                     }
                 });
                 return bodegueros;
@@ -2380,7 +2351,12 @@
             if (hasRetarded && showModal) {
                 initAudioContext(); // Initialize audio context on user interaction
                 playAlarmSound();
-                showMessage('¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".', 'error');
+                // showMessage('¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".', 'error'); // No usar alert
+                const errorMessageModal = document.getElementById('messageBox');
+                errorMessageModal.textContent = '¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".';
+                errorMessageModal.style.backgroundColor = '#dc3545'; // Rojo
+                errorMessageModal.style.display = 'block';
+                setTimeout(() => { errorMessageModal.style.display = 'none'; }, 5000); // Ocultar después de 5 segundos
             }
         }
 
