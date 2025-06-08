@@ -1,16 +1,65 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Generar Pedidos</title>
+    <title>Sistema de Pedidos</title>
     <!-- Carga de Tailwind CSS para un diseño responsivo y moderno -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <!-- Carga de la fuente Inter de Google Fonts para una tipografía limpia -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome para iconos (ej. engranaje, menú) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         /* Estilos base para el cuerpo de la página */
         body {
             font-family: 'Inter', sans-serif;
-            @apply bg-gray-50 text-gray-800 antialiased; /* Fondo claro, texto oscuro, antialiasing */
+            @apply bg-gray-100 text-gray-800 antialiased flex flex-col md:flex-row min-h-screen;
+        }
+
+        /* Contenedor principal de la aplicación (dashboard) */
+        .dashboard-container {
+            @apply flex flex-1;
+        }
+
+        /* Sidebar de navegación (visible en escritorio, oculto en móvil por defecto) */
+        .sidebar {
+            @apply w-64 bg-gray-900 text-white flex-shrink-0 p-6 hidden md:block; /* Oculto en móvil por defecto */
+        }
+        .sidebar-nav-item {
+            @apply flex items-center p-3 rounded-lg text-lg font-medium hover:bg-gray-700 transition duration-200 cursor-pointer mb-2;
+        }
+        .sidebar-nav-item.active {
+            @apply bg-blue-600 hover:bg-blue-700;
+        }
+
+        /* Main content area */
+        .main-content {
+            @apply flex-1 p-4 md:p-8 bg-gray-50;
+        }
+
+        /* Mobile Header (visible en móvil, oculto en escritorio) */
+        .mobile-header {
+            @apply bg-gray-900 text-white p-4 flex justify-between items-center md:hidden;
+        }
+        .hamburger-menu-icon {
+            @apply text-3xl cursor-pointer;
+        }
+
+        /* Mobile Nav Drawer (para el menú hamburguesa) */
+        .mobile-nav-drawer {
+            display: none; /* Controlado por JS */
+            @apply fixed top-0 left-0 w-64 h-full bg-gray-900 text-white p-6 z-50 shadow-lg transform -translate-x-full transition-transform duration-300 ease-in-out;
+        }
+        .mobile-nav-drawer.open {
+            transform: translateX(0);
+        }
+        .mobile-nav-drawer .close-btn {
+            @apply text-white text-3xl absolute top-4 right-4 cursor-pointer;
+        }
+        .mobile-nav-item {
+            @apply flex items-center p-3 rounded-lg text-lg font-medium hover:bg-gray-700 transition duration-200 cursor-pointer mb-2;
+        }
+        .mobile-nav-item.active {
+            @apply bg-blue-600 hover:bg-blue-700;
         }
 
         /* Estilos para los modales (ocultos por defecto, mostrados con JS) */
@@ -68,7 +117,7 @@
             @apply block text-gray-700 font-medium mb-1;
         }
         .form-field input:not([type="checkbox"]), .form-field textarea, .form-field select {
-            @apply w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent transition duration-200;
+            @apply w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200;
         }
         .form-field input[readonly], .form-field textarea[readonly] {
             @apply bg-gray-100 cursor-not-allowed;
@@ -143,102 +192,199 @@
     <!-- Librería XLSX para exportar a Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
 </head>
-<body class="bg-gray-100 text-gray-800 antialiased">
+<body>
 
-    <!-- Contenedor principal de la aplicación -->
-    <div class="container mx-auto p-4 md:p-8 bg-white shadow-xl rounded-lg my-6 sm:my-8 w-11/12 max-w-4xl">
-        <h1 class="text-3xl font-bold text-green-600 text-center mb-6">Generar Pedidos</h1>
+    <!-- Mobile Header (Visible solo en móviles) -->
+    <header class="mobile-header">
+        <i class="fas fa-bars hamburger-menu-icon" onclick="toggleMobileNav()"></i>
+        <h1 class="text-xl font-bold">Sistema de Pedidos</h1>
+        <i class="fas fa-cog text-2xl cursor-pointer" onclick="mostrarModal('block_options_modal')"></i>
+    </header>
 
-        <div id="formulario" class="mb-8">
-            <h2 class="text-2xl font-semibold text-green-600 text-center mb-5">Agregar Nuevo Pedido</h2>
-            
-            <!-- Icono de configuración (engranaje) - Fijo en la esquina superior derecha -->
-            <span id="gear_icon" class="text-3xl cursor-pointer text-green-600 fixed top-4 right-4 z-50 hover:text-green-700 transition duration-200" title="Opciones de Bloqueo" onclick="mostrarModal('block_options_modal')">&#9881;</span>
+    <!-- Mobile Navigation Drawer (Menú hamburguesa) -->
+    <div id="mobile_nav_drawer" class="mobile-nav-drawer">
+        <i class="fas fa-times close-btn" onclick="toggleMobileNav()"></i>
+        <nav class="mt-8">
+            <h2 class="text-gray-400 text-sm uppercase tracking-wider mb-4">Navegación</h2>
+            <a href="#" class="mobile-nav-item" data-section="add_order" onclick="showSection('add_order', this); toggleMobileNav();">
+                <i class="fas fa-plus-circle mr-3"></i> Generar Pedido
+            </a>
+            <a href="#" class="mobile-nav-item" data-section="view_orders" onclick="showSection('view_orders', this); iniciarVistaPedidosEnTiempoReal(); toggleMobileNav();">
+                <i class="fas fa-list-alt mr-3"></i> Ver Pedidos
+            </a>
+            <a href="#" class="mobile-nav-item" data-section="advisor_summary" onclick="showSection('advisor_summary', this); toggleMobileNav();">
+                <i class="fas fa-chart-bar mr-3"></i> Resumen de Asesores
+            </a>
+            <a href="#" class="mobile-nav-item" data-section="settings" onclick="showSection('settings', this); mostrarModal('block_options_modal'); toggleMobileNav();">
+                <i class="fas fa-cog mr-3"></i> Configuración
+            </a>
+        </nav>
+    </div>
 
-            <!-- Formulario de agregar pedido -->
-            <form onsubmit="enviarFormulario(event);" class="space-y-5 p-4 md:p-6 bg-gray-50 rounded-lg shadow-inner">
-                <!-- Contador regresivo para bloqueo automático -->
-                <div id="countdown_timer" class="text-center font-bold text-blue-600 p-3 rounded-md border border-blue-600 bg-blue-50 mb-4"></div>
-                
-                <div class="form-field">
-                    <label for="cliente_input">Nombre del Cliente:</label>
-                    <input type="text" id="cliente_input" name="cliente" required placeholder="Escriba el nombre del cliente">
-                </div>
-                <div class="form-field">
-                    <label for="asesor_input">Asesor:</label>
-                    <input type="text" id="asesor_input" name="asesor" required readonly>
-                </div>
-                
-                <div class="form-field">
-                    <label>Productos:</label>
-                    <button type="button" onclick="mostrarModal('modal_producto')" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-md font-semibold">
-                        Agregar Producto
-                    </button>
-                    <div id="lista_productos" class="form-field border border-gray-200 rounded-md p-3 mt-3 bg-white min-h-[50px]">
-                        <p class="text-gray-500 text-sm">No hay productos agregados.</p>
-                    </div>
-                </div>
-                
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <button type="button" onclick="mostrarModal('modal_abono')" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-md font-semibold">
-                        Agregar Abono
-                    </button>
-                    <div id="lista_abonos" class="form-field border border-gray-200 rounded-md p-3 mt-3 bg-white min-h-[50px]">
-                        <p class="text-gray-500 text-sm">No hay abonos agregados.</p>
-                    </div>
-                </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div class="form-field">
-                        <label for="num_pares_input">Número de Pares:</label>
-                        <input type="number" id="num_pares_input" name="num_pares" required placeholder="Cantidad de pares">
-                    </div>
-                    <div class="form-field">
-                        <label id="valor_total_pesos">Valor Total: $0</label>
-                        <input type="number" id="valor_total" name="valor_total" required readonly>
-                    </div>
-                </div>
-                
-                <div class="form-field">
-                    <label>Bodeguero(s):</label>
-                    <div id="bodeguero_checkbox_container" class="bodeguero-checkbox-container">
-                        <p class="text-gray-500 text-sm">Cargando bodegueros...</p>
-                    </div>
-                </div>
-                
-                <div class="form-field">
-                    <label for="observaciones_input">Observaciones:</label>
-                    <textarea id="observaciones_input" name="observaciones" rows="3" placeholder="Notas adicionales del pedido"></textarea>
-                </div>
-                <div class="form-field">
-                    <label for="saldo_a_favor_input">Saldo a Favor:</label>
-                    <input type="number" id="saldo_a_favor_input" name="saldo_a_favor" value="0" required placeholder="Saldo a favor del cliente">
-                </div>
-                
-                <button type="submit" id="agregar_pedido_btn" class="w-full bg-blue-600 text-white p-4 rounded-lg hover:bg-blue-700 transition duration-200 shadow-xl font-bold text-xl">
-                    Agregar Pedido
-                </button>
-            </form>
-
-            <!-- Barra de carga (animación) -->
-            <div id="loading-bar" class="loading-bar">
-                <div id="loading-bar-fill" class="loading-bar-fill">0%</div>
+    <!-- Dashboard Container -->
+    <div class="dashboard-container">
+        <!-- Sidebar (Visible solo en escritorio) -->
+        <aside class="sidebar">
+            <div class="text-2xl font-bold mb-8 text-center">
+                <i class="fas fa-boxes mr-2"></i> Mi Empresa
             </div>
+            <nav>
+                <h2 class="text-gray-400 text-sm uppercase tracking-wider mb-4">Navegación</h2>
+                <a href="#" class="sidebar-nav-item active" data-section="add_order" onclick="showSection('add_order', this)">
+                    <i class="fas fa-plus-circle mr-3"></i> Generar Pedido
+                </a>
+                <a href="#" class="sidebar-nav-item" data-section="view_orders" onclick="showSection('view_orders', this); iniciarVistaPedidosEnTiempoReal();">
+                    <i class="fas fa-list-alt mr-3"></i> Ver Pedidos
+                </a>
+                <a href="#" class="sidebar-nav-item" data-section="advisor_summary" onclick="showSection('advisor_summary', this)">
+                    <i class="fas fa-chart-bar mr-3"></i> Resumen de Asesores
+                </a>
+                <a href="#" class="sidebar-nav-item" data-section="settings" onclick="showSection('settings', this); mostrarModal('block_options_modal');">
+                    <i class="fas fa-cog mr-3"></i> Configuración
+                </a>
+            </nav>
+        </aside>
 
-            <h2 class="text-2xl font-semibold text-green-600 text-center my-6">Gestión de Registros</h2>
-            <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 mb-4">
-                <button id="exportar" onclick="exportarAExcel()" class="w-full sm:w-auto bg-gray-200 text-gray-800 p-3 rounded-md hover:bg-gray-300 transition duration-200 shadow-md font-semibold">
-                    Exportar a Excel
-                </button>
-                <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal()" class="w-full sm:w-auto bg-indigo-600 text-white p-3 rounded-md hover:bg-indigo-700 transition duration-200 shadow-md font-semibold">
-                    Ver Pedidos Registrados
-                </button>
-            </div>
-        </div>
-        <!-- Sección de resumen de asesores (visible solo para administradores) -->
-        <div id="resumen_asesores" class="mt-8 p-4 bg-green-50 border border-green-300 rounded-lg shadow-sm">
-        </div>
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Sección: Generar Nuevo Pedido -->
+            <section id="add_order_section" class="content-section">
+                <h1 class="text-3xl font-bold text-green-700 mb-6 text-center">Generar Nuevo Pedido</h1>
+                <form onsubmit="enviarFormulario(event);" class="space-y-5 p-4 md:p-6 bg-white rounded-lg shadow-xl">
+                    <div id="countdown_timer" class="text-center font-bold text-blue-600 p-3 rounded-md border border-blue-600 bg-blue-50 mb-4"></div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-field">
+                            <label for="cliente_input">Nombre del Cliente:</label>
+                            <input type="text" id="cliente_input" name="cliente" required placeholder="Escriba el nombre del cliente">
+                        </div>
+                        <div class="form-field">
+                            <label for="asesor_input">Asesor:</label>
+                            <input type="text" id="asesor_input" name="asesor" required readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="form-field">
+                        <label>Productos:</label>
+                        <button type="button" onclick="mostrarModal('modal_producto')" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-md font-semibold flex items-center justify-center">
+                            <i class="fas fa-box mr-2"></i> Agregar Producto
+                        </button>
+                        <div id="lista_productos" class="form-field border border-gray-200 rounded-md p-3 mt-3 bg-gray-50 min-h-[50px]">
+                            <p class="text-gray-500 text-sm">No hay productos agregados.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="form-field">
+                        <label>Abonos:</label>
+                        <button type="button" onclick="mostrarModal('modal_abono')" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-md font-semibold flex items-center justify-center">
+                            <i class="fas fa-wallet mr-2"></i> Agregar Abono
+                        </button>
+                        <div id="lista_abonos" class="form-field border border-gray-200 rounded-md p-3 mt-3 bg-gray-50 min-h-[50px]">
+                            <p class="text-gray-500 text-sm">No hay abonos agregados.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-field">
+                            <label for="num_pares_input">Número de Pares:</label>
+                            <input type="number" id="num_pares_input" name="num_pares" required placeholder="Cantidad de pares">
+                        </div>
+                        <div class="form-field">
+                            <label id="valor_total_pesos">Valor Total: $0</label>
+                            <input type="number" id="valor_total" name="valor_total" required readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="form-field">
+                        <label>Bodeguero(s):</label>
+                        <div id="bodeguero_checkbox_container" class="bodeguero-checkbox-container">
+                            <p class="text-gray-500 text-sm">Cargando bodegueros...</p>
+                        </div>
+                    </div>
+                    
+                    <div class="form-field">
+                        <label for="observaciones_input">Observaciones:</label>
+                        <textarea id="observaciones_input" name="observaciones" rows="3" placeholder="Notas adicionales del pedido"></textarea>
+                    </div>
+                    <div class="form-field">
+                        <label for="saldo_a_favor_input">Saldo a Favor:</label>
+                        <input type="number" id="saldo_a_favor_input" name="saldo_a_favor" value="0" required placeholder="Saldo a favor del cliente">
+                    </div>
+                    
+                    <button type="submit" id="agregar_pedido_btn" class="w-full bg-blue-600 text-white p-4 rounded-lg hover:bg-blue-700 transition duration-200 shadow-xl font-bold text-xl flex items-center justify-center">
+                        <i class="fas fa-paper-plane mr-2"></i> Registrar Pedido
+                    </button>
+                </form>
+
+                <!-- Barra de carga (animación) -->
+                <div id="loading-bar" class="loading-bar">
+                    <div id="loading-bar-fill" class="loading-bar-fill">0%</div>
+                </div>
+            </section>
+
+            <!-- Sección: Ver Pedidos Registrados -->
+            <section id="view_orders_section" class="content-section hidden">
+                <h1 class="text-3xl font-bold text-green-700 mb-6 text-center">Pedidos Registrados</h1>
+                <div class="bg-white p-4 md:p-6 rounded-lg shadow-xl">
+                    <!-- Barra de búsqueda -->
+                    <div class="form-field mb-4">
+                        <label for="search_cliente_input">Buscar Pedido:</label>
+                        <input type="search" id="search_cliente_input" name="client_search_query" 
+                            placeholder="Cliente, código, producto..." 
+                            autocorrect="off" 
+                            spellcheck="false" 
+                            role="searchbox"
+                            aria-label="Barra de Búsqueda de Clientes"
+                            inputmode="text">
+                    </div>
+
+                    <!-- Filtro por asesor -->
+                    <div class="form-field mb-4">
+                        <label for="filtro_asesor">Filtrar por Asesor:</label>
+                        <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()" class="w-full">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Botones de filtro de despacho -->
+                    <div class="flex flex-wrap gap-2 mb-4 justify-center">
+                        <button id="filterAllButton" class="dispatch-filter-button"><i class="fas fa-boxes mr-1"></i> Todos</button>
+                        <button id="filterDespachadosButton" class="dispatch-filter-button"><i class="fas fa-check-circle mr-1"></i> Despachados</button>
+                        <button id="filterNoDespachadosButton" class="dispatch-filter-button"><i class="fas fa-times-circle mr-1"></i> No Despachados</button>
+                    </div>
+
+                    <!-- Totales de pares y valor vendido -->
+                    <div class="flex flex-col sm:flex-row justify-between items-center bg-green-50 border border-green-300 rounded-md p-3 mb-4 text-gray-800 font-semibold shadow-sm">
+                        <label id="total_pares">Total Pares: 0</label>
+                        <label id="valor_vendido">Valor Vendido: $0</label>
+                    </div>
+                    <div class="flex justify-end mb-4">
+                        <button id="exportar" onclick="exportarAExcel()" class="bg-gray-200 text-gray-800 p-3 rounded-md hover:bg-gray-300 transition duration-200 shadow-md font-semibold flex items-center">
+                            <i class="fas fa-file-excel mr-2"></i> Exportar a Excel
+                        </button>
+                    </div>
+                    <div id="lista_pedidos_container" class="space-y-4 max-h-[60vh] overflow-y-auto p-3 border border-gray-200 rounded-md bg-gray-50">
+                        <p class="text-center text-gray-500">Cargando pedidos...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección: Resumen de Asesores -->
+            <section id="advisor_summary_section" class="content-section hidden">
+                <h1 class="text-3xl font-bold text-green-700 mb-6 text-center">Resumen de Asesores</h1>
+                <div id="resumen_asesores" class="p-4 bg-white border border-green-300 rounded-lg shadow-xl">
+                    <p class="text-gray-500 text-center">Cargando resumen de asesores...</p>
+                </div>
+            </section>
+
+            <!-- Sección: Configuración (Contendrá el modal de opciones de bloqueo) -->
+            <section id="settings_section" class="content-section hidden">
+                <h1 class="text-3xl font-bold text-green-700 mb-6 text-center">Configuración del Sistema</h1>
+                <div class="bg-white p-6 rounded-lg shadow-xl">
+                    <p class="text-gray-700 text-center">Accede a las opciones de bloqueo haciendo clic en el icono de engranaje <i class="fas fa-cog"></i> en la esquina superior derecha o en el menú de navegación.</p>
+                </div>
+            </section>
+        </main>
     </div>
 
     <!-- Modales -->
@@ -264,8 +410,8 @@
                     <label for="producto_precio">Precio:</label>
                     <input type="number" id="producto_precio" step="any" required placeholder="Ej: 120000">
                 </div>
-                <button type="button" onclick="agregarProducto()" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-lg font-semibold">
-                    Agregar Producto
+                <button type="button" onclick="agregarProducto()" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-lg font-semibold flex items-center justify-center">
+                    <i class="fas fa-plus mr-2"></i> Agregar Producto
                 </button>
             </div>
         </div>
@@ -285,8 +431,8 @@
                     <label for="abono_monto">Monto:</label>
                     <input type="number" id="abono_monto" step="any" required placeholder="Ej: 50000">
                 </div>
-                <button type="button" onclick="agregarAbono()" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-lg font-semibold">
-                    Agregar Abono
+                <button type="button" onclick="agregarAbono()" class="w-full bg-green-500 text-white p-3 rounded-md hover:bg-green-600 transition duration-200 shadow-lg font-semibold flex items-center justify-center">
+                    <i class="fas fa-plus mr-2"></i> Agregar Abono
                 </button>
             </div>
         </div>
@@ -307,8 +453,8 @@
                     <div id="modificar_productos_list" class="space-y-3 p-3 border border-gray-200 rounded-md bg-gray-50">
                         <p class="text-gray-500 text-sm">Cargando productos...</p>
                     </div>
-                    <button type="button" onclick="addProductModificar()" class="add-item-button bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-200 shadow-md font-semibold mt-3">
-                        Agregar Otro Producto
+                    <button type="button" onclick="addProductModificar()" class="add-item-button bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-200 shadow-md font-semibold mt-3 flex items-center justify-center">
+                        <i class="fas fa-plus mr-2"></i> Agregar Otro Producto
                     </button>
                 </div>
                 <div class="form-field">
@@ -316,8 +462,8 @@
                     <div id="modificar_abonos_list" class="space-y-3 p-3 border border-gray-200 rounded-md bg-gray-50">
                         <p class="text-gray-500 text-sm">Cargando abonos...</p>
                     </div>
-                    <button type="button" onclick="addAbonoModificar()" class="add-item-button bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-200 shadow-md font-semibold mt-3">
-                        Agregar Otro Abono
+                    <button type="button" onclick="addAbonoModificar()" class="add-item-button bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-200 shadow-md font-semibold mt-3 flex items-center justify-center">
+                        <i class="fas fa-plus mr-2"></i> Agregar Otro Abono
                     </button>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -344,54 +490,10 @@
                     <label for="modificar_saldo_a_favor">Saldo a Favor:</label>
                     <input type="number" id="modificar_saldo_a_favor" step="any" required>
                 </div>
-                <button type="submit" id="guardarCambiosBtn" class="w-full bg-green-600 text-white p-3 rounded-md hover:bg-green-700 transition duration-200 shadow-lg font-semibold">
-                    Guardar Cambios
+                <button type="submit" id="guardarCambiosBtn" class="w-full bg-green-600 text-white p-3 rounded-md hover:bg-green-700 transition duration-200 shadow-lg font-semibold flex items-center justify-center">
+                    <i class="fas fa-save mr-2"></i> Guardar Cambios
                 </button>
             </form>
-        </div>
-    </div>
-
-    <!-- Modal para ver pedidos registrados -->
-    <div id="modal_pedidos" class="modal">
-        <div class="modal-content modal-pedidos-content">
-            <span class="close" onclick="cerrarModal('modal_pedidos');">&times;</span>
-            <h2 class="text-2xl font-semibold text-green-600 mb-5 text-center">Pedidos Registrados</h2>
-            
-            <!-- Barra de búsqueda -->
-            <div class="form-field mb-4">
-                <label for="search_cliente_input">Buscar Pedido:</label>
-                <input type="search" id="search_cliente_input" name="client_search_query" 
-                       placeholder="Cliente, código, producto..." 
-                       autocorrect="off" 
-                       spellcheck="false" 
-                       role="searchbox"
-                       aria-label="Barra de Búsqueda de Clientes"
-                       inputmode="text">
-            </div>
-
-            <!-- Filtro por asesor -->
-            <div class="form-field mb-4">
-                <label for="filtro_asesor">Filtrar por Asesor:</label>
-                <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()">
-                    <option value="">Todos</option>
-                </select>
-            </div>
-            
-            <!-- Botones de filtro de despacho -->
-            <div class="flex flex-wrap gap-2 mb-4 justify-center">
-                <button id="filterAllButton" class="dispatch-filter-button">Todos</button>
-                <button id="filterDespachadosButton" class="dispatch-filter-button">Despachados</button>
-                <button id="filterNoDespachadosButton" class="dispatch-filter-button">No Despachados</button>
-            </div>
-
-            <!-- Totales de pares y valor vendido -->
-            <div class="flex flex-col sm:flex-row justify-between items-center bg-green-50 border border-green-300 rounded-md p-3 mb-4 text-gray-800 font-semibold shadow-sm">
-                <label id="total_pares">Total Pares: 0</label>
-                <label id="valor_vendido">Valor Vendido: $0</label>
-            </div>
-            <div id="lista_pedidos_container" class="form-field space-y-4 max-h-[60vh] overflow-y-auto p-3 border border-gray-200 rounded-md bg-gray-50">
-                <p class="text-center text-gray-500">Cargando pedidos...</p>
-            </div>
         </div>
     </div>
 
@@ -869,7 +971,7 @@
          */
         function createRecordElement(docId, registro, index) {
             const recordElement = document.createElement('div');
-            recordElement.className = 'record'; // Aplicar clases Tailwind aquí
+            recordElement.className = 'record'; // Tailwind classes already defined in .record style
             recordElement.dataset.id = docId;
 
             const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
@@ -978,8 +1080,8 @@
                 <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
                 ${controlesHTML} 
                 <div class="record-buttons flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mt-4">
-                    <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled' : ''} title="${!puedeModificarEliminar ? 'Pedido bloqueado o despachado' : ''}" class="bg-yellow-500 text-white hover:bg-yellow-600">Modificar</button>
-                    <button onclick="eliminarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled' : ''} title="${!puedeModificarEliminar ? 'Pedido bloqueado o despachado' : ''}" class="bg-red-500 text-white hover:bg-red-600">Eliminar</button>
+                    <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled' : ''} title="${!puedeModificarEliminar ? 'Pedido bloqueado o despachado' : ''}" class="bg-yellow-500 text-white hover:bg-yellow-600"><i class="fas fa-edit mr-2"></i> Modificar</button>
+                    <button onclick="eliminarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled' : ''} title="${!puedeModificarEliminar ? 'Pedido bloqueado o despachado' : ''}" class="bg-red-500 text-white hover:bg-red-600"><i class="fas fa-trash-alt mr-2"></i> Eliminar</button>
                 </div>
             `;
             return recordElement;
@@ -1003,19 +1105,7 @@
          */
         function iniciarVistaPedidosEnTiempoReal() {
             console.log("Iniciando vista de pedidos en tiempo real...");
-            mostrarModal('modal_pedidos');
-
-            // Limpiar el campo de búsqueda por cliente al abrir el modal
-            const searchClienteInput = document.getElementById('search_cliente_input');
-            if (searchClienteInput) {
-                searchClienteInput.value = '';
-                searchClienteInput.blur(); 
-                setTimeout(() => { 
-                    searchClienteInput.value = '';
-                    searchClienteInput.blur();
-                }, 100);
-            }
-
+            
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
             listaPedidosContainer.innerHTML = '<p class="text-center text-gray-500">Cargando pedidos...</p>';
             isInitialLoadPedidos = true;
@@ -1117,7 +1207,7 @@
                 if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                     mostrarResumenAsesores(resumenAsesores);
                 } else {
-                     document.getElementById('resumen_asesores').innerHTML = '';
+                     document.getElementById('resumen_asesores').innerHTML = '<p class="text-gray-500 text-center">Permisos de administrador requeridos para ver el resumen.</p>';
                 }
 
                 // Actualiza el dropdown de filtro por asesor
@@ -1373,7 +1463,7 @@
                         <input type="text" class="mod_product_color w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${product.color || ''}" placeholder="Color">
                         <input type="text" class="mod_product_talla w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${product.talla || ''}" placeholder="Talla">
                         <input type="number" class="mod_product_precio w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${product.precio || 0}" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
-                        <button type="button" onclick="removeProductModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md font-semibold">Eliminar Producto</button>
+                        <button type="button" onclick="removeProductModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md font-semibold"><i class="fas fa-minus-circle mr-2"></i> Eliminar Producto</button>
                     </div>
                 `;
             });
@@ -1397,7 +1487,7 @@
                     <input type="text" class="mod_product_color w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Color">
                     <input type="text" class="mod_product_talla w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Talla">
                     <input type="number" class="mod_product_precio w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
-                    <button type="button" onclick="removeProductModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md font-semibold">Eliminar Producto</button>
+                    <button type="button" onclick="removeProductModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md font-semibold"><i class="fas fa-minus-circle mr-2"></i> Eliminar Producto</button>
                 </div>
             `;
             container.insertAdjacentHTML('beforeend', newProductHtml);
@@ -1437,7 +1527,7 @@
                         <label class="block text-gray-700 font-medium mb-1">Abono ${index + 1}:</label>
                         <input type="date" class="mod_abono_fecha w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${abono.fecha || ''}" placeholder="Fecha">
                         <input type="number" class="mod_abono_monto w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${abono.monto || 0}" placeholder="Monto" step="any">
-                        <button type="button" onclick="removeAbonoModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md font-semibold">Eliminar Abono</button>
+                        <button type="button" onclick="removeAbonoModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md font-semibold"><i class="fas fa-minus-circle mr-2"></i> Eliminar Abono</button>
                     </div>
                 `;
             });
@@ -1459,7 +1549,7 @@
                     <label class="block text-gray-700 font-medium mb-1">Abono ${newIndex + 1}:</label>
                     <input type="date" class="mod_abono_fecha w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" value="${new Date().toISOString().slice(0, 10)}" placeholder="Fecha">
                     <input type="number" class="mod_abono_monto w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-2 focus:ring-green-500" placeholder="Monto" step="any">
-                    <button type="button" onclick="removeAbonoModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md font-semibold">Eliminar Abono</button>
+                    <button type="button" onclick="removeAbonoModificar(this)" class="w-full bg-red-500 text-white p-2 rounded-md hover:bg-red-600 transition duration-200 shadow-md font-semibold"><i class="fas fa-minus-circle mr-2"></i> Eliminar Abono</button>
                 </div>
             `;
             container.insertAdjacentHTML('beforeend', newAbonoHtml);
@@ -1752,11 +1842,25 @@
             
             // Oculta/muestra elementos según el rol del usuario
             if (datosUsuario.permisos.toLowerCase() === 'operador') {
-                document.getElementById('exportar').classList.add('hidden');
-                document.getElementById('resumen_asesores').classList.add('hidden');
-                document.getElementById('gear_icon').classList.add('hidden');
-            } else {
-                document.getElementById('gear_icon').classList.remove('hidden');
+                // Oculta la sección de resumen de asesores para operadores
+                document.getElementById('advisor_summary_section').classList.add('hidden');
+                // Oculta el item de navegación del resumen de asesores en el sidebar
+                document.querySelector('.sidebar-nav-item[data-section="advisor_summary"]').classList.add('hidden');
+                // Oculta el item de navegación del resumen de asesores en el drawer móvil
+                document.querySelector('.mobile-nav-item[data-section="advisor_summary"]').classList.add('hidden');
+                // Oculta el item de configuración para operadores
+                document.querySelector('.sidebar-nav-item[data-section="settings"]').classList.add('hidden');
+                document.querySelector('.mobile-nav-item[data-section="settings"]').classList.add('hidden');
+                document.querySelector('.mobile-header .fa-cog').classList.add('hidden');
+
+            } else { // Administrador
+                // Muestra elementos específicos de administrador
+                document.getElementById('advisor_summary_section').classList.remove('hidden');
+                document.querySelector('.sidebar-nav-item[data-section="advisor_summary"]').classList.remove('hidden');
+                document.querySelector('.mobile-nav-item[data-section="advisor_summary"]').classList.remove('hidden');
+                document.querySelector('.sidebar-nav-item[data-section="settings"]').classList.remove('hidden');
+                document.querySelector('.mobile-nav-item[data-section="settings"]').classList.remove('hidden');
+                document.querySelector('.mobile-header .fa-cog').classList.remove('hidden');
             }
 
             document.getElementById('asesor_input').value = datosUsuario.nombreCompleto;
@@ -1816,6 +1920,9 @@
             setInterval(updateCountdown, 1000); // Actualiza el contador regresivo cada segundo
 
             populateBodegueroCheckboxes(); // Rellena los checkboxes de bodegueros al cargar la página
+            
+            // Mostrar la sección inicial (Generar Pedido)
+            showSection('add_order', document.querySelector('.sidebar-nav-item[data-section="add_order"]') || document.querySelector('.mobile-nav-item[data-section="add_order"]'));
         }
 
         /**
@@ -1977,7 +2084,6 @@
          */
         function applyBlockStatus() {
             const agregarPedidoBtn = document.getElementById('agregar_pedido_btn');
-            const verPedidosInlineBtn = document.getElementById('ver_pedidos_inline');
             const blockOverlay = document.getElementById('block_overlay');
             const autoBlockCheckbox = document.getElementById('auto_block_checkbox');
             const globalManualBlockCheckbox = document.getElementById('global_manual_block_checkbox');
@@ -1993,12 +2099,6 @@
                     agregarPedidoBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                 }
                 agregarPedidoBtn.title = shouldBeBlocked ? "La funcionalidad de agregar pedidos está bloqueada temporalmente." : "";
-            }
-
-            // El botón "Ver Pedidos Registrados" siempre debe estar habilitado
-            if (verPedidosInlineBtn) {
-                verPedidosInlineBtn.disabled = false;
-                verPedidosInlineBtn.title = "";
             }
 
             if (blockOverlay) {
@@ -2221,6 +2321,43 @@
                 if (blockType !== 'set_custom_time' && blockType !== 'reset_block_state' && currentPasswordModalTargetCheckbox) {
                     currentPasswordModalTargetCheckbox.checked = !currentPasswordModalTargetCheckbox.checked; // Vuelve al estado original
                 }
+            }
+        }
+
+        /**
+         * Muestra la sección de contenido especificada y oculta las demás.
+         * Actualiza el estado activo de los ítems de navegación.
+         * @param {string} sectionId - El ID de la sección a mostrar (ej. 'add_order_section').
+         * @param {HTMLElement} clickedElement - El elemento de navegación que fue clickeado.
+         */
+        function showSection(sectionId, clickedElement) {
+            // Oculta todas las secciones de contenido
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.add('hidden');
+            });
+            // Muestra la sección deseada
+            document.getElementById(`${sectionId}_section`).classList.remove('hidden');
+
+            // Actualiza el estado activo de los ítems de navegación (sidebar y móvil)
+            document.querySelectorAll('.sidebar-nav-item, .mobile-nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            if (clickedElement) {
+                clickedElement.classList.add('active');
+            }
+        }
+
+        /**
+         * Alterna la visibilidad del menú de navegación móvil (drawer).
+         */
+        function toggleMobileNav() {
+            const navDrawer = document.getElementById('mobile_nav_drawer');
+            navDrawer.classList.toggle('open');
+            // Deshabilita el scroll del cuerpo cuando el drawer está abierto
+            if (navDrawer.classList.contains('open')) {
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = '';
             }
         }
     </script>
