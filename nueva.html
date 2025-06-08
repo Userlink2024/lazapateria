@@ -162,6 +162,22 @@
             border-radius: 4px;
             margin-top: 5px;
         }
+        /* Estilo para el checkbox de enviado a empaque */
+        .control-container-empaque {
+            display: flex;
+            align-items: center;
+            margin-top: 5px;
+            margin-bottom: 5px;
+            background-color: #f0f8ff; /* Light blue background */
+            border: 1px solid #007bff; /* Blue border */
+            padding: 5px;
+            border-radius: 4px;
+        }
+        .control-container-empaque label {
+            margin-left: 5px;
+            font-weight: normal;
+        }
+
         button:disabled {
             background-color: #ccc;
             cursor: not-allowed;
@@ -404,7 +420,7 @@
             border-color: #dc3545;
         }
 
-        /* --- NUEVOS ESTILOS PARA LA ALERTA DE RETARDO --- */
+        /* --- NUEVOS ESTILOS PARA LA ALERTA DE RETARDO EN EL PEDIDO --- */
         .retardo-indicator {
             /* Posición relativa para estar en el flujo del contenido */
             position: relative;
@@ -429,6 +445,48 @@
             0% { text-shadow: 0 0 0px rgba(255, 0, 0, 0.4); opacity: 1; }
             50% { text-shadow: 0 0 10px rgba(255, 0, 0, 0.8), 0 0 20px rgba(255, 0, 0, 0.6); opacity: 0.7; }
             100% { text-shadow: 0 0 0px rgba(255, 0, 0, 0.4); opacity: 1; }
+        }
+
+        /* --- ESTILOS PARA EL NUEVO MODAL DE ALERTA --- */
+        #retardo_alert_modal.modal {
+            background-color: rgba(0, 0, 0, 0.0); /* Fondo transparente para no oscurecer la vista */
+            pointer-events: none; /* No interactuable por defecto */
+            z-index: 1005; /* Más alto que otros modales */
+            justify-content: center; /* Centrar horizontalmente */
+            align-items: flex-start; /* Alinear arriba */
+            padding-top: 20px; /* Separación del borde superior */
+        }
+
+        #retardo_alert_modal .modal-content {
+            background-color: #dc3545; /* Fondo rojo para la alerta */
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            max-width: 90%; /* Ancho máximo para el modal de alerta */
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            animation: fadeInOut 5s forwards; /* Animación de entrada y salida */
+            pointer-events: all; /* Hacerlo interactuable cuando se muestra */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px; /* Espacio entre el icono y el texto */
+        }
+
+        #retardo_alert_modal .modal-content .close {
+            color: white;
+            position: relative; /* Ajustado para que el cierre sea parte del flex */
+            margin-left: auto; /* Moverlo a la derecha */
+            top: 0;
+            right: 0;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-50px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-50px); }
         }
     </style>
     <!-- Font Awesome para el signo de admiración -->
@@ -596,10 +654,10 @@
                 document.getElementById('password_input').value = ''; // Limpiar campo de contraseña
                 document.getElementById('password_error').textContent = ''; // Limpiar mensaje de error
             }
-            if (id === 'retardo_alert_modal') {
-                // Re-enable body scrolling if it was disabled
-                document.body.style.overflow = '';
-            }
+            // retardo_alert_modal gestiona su propio cierre con animación
+            // if (id === 'retardo_alert_modal') {
+            //     document.body.style.overflow = ''; // Not needed as it's a fixed modal on top
+            // }
         };
 
         function agregarProducto() {
@@ -735,10 +793,11 @@
             let totalDespachadosFiltered = 0;
             let totalNoDespachadosFiltered = 0;
 
-            const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
+            // Updated logic to check if the user role requires filtering by their own ID
+            const isUserFilteredRole = datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero';
             const currentUserId = datosUsuario.usuario;
             console.log("Rol del usuario para la consulta:", datosUsuario.permisos);
-            console.log("ID de usuario para la consulta (si es operador):", currentUserId);
+            console.log("ID de usuario para la consulta (si es operador/bodeguero):", currentUserId);
 
             records.forEach(recordElement => {
                 const asesorDelRegistro = recordElement.dataset.asesor;
@@ -756,7 +815,12 @@
                     coincideBusqueda = clienteDelRegistro.includes(searchTerm) || codigoDelRegistro.includes(searchTerm) || productosDelRegistro.includes(searchTerm);
                 }
 
-                if (coincideAsesor && coincideBusqueda && (isOperator ? usuarioDelRegistro === currentUserId : true)) {
+                // Check if the record belongs to the current user if their role requires it
+                const userMatches = (isUserFilteredRole ? usuarioDelRegistro === currentUserId : true);
+
+
+                if (coincideAsesor && coincideBusqueda && userMatches) {
+                     // Only count for totals if it matches advisor/search and user role
                     if (despachadoDelRegistro) {
                         totalDespachadosFiltered++;
                     } else {
@@ -764,6 +828,7 @@
                     }
                 }
 
+                // Now determine if the record should be displayed based on ALL filters including dispatch filter
                 let recordShouldBeDisplayed = true;
                 if (currentDispatchFilter === 'despachados') {
                     recordShouldBeDisplayed = despachadoDelRegistro;
@@ -771,7 +836,6 @@
                     recordShouldBeDisplayed = !despachadoDelRegistro;
                 }
 
-                const userMatches = (isOperator ? usuarioDelRegistro === currentUserId : true);
                 console.log(`Record ${recordElement.dataset.id}: Despachado=${despachadoDelRegistro}, UserMatches=${userMatches}, ShouldBeDisplayed=${recordShouldBeDisplayed}, CoincideAsesor=${coincideAsesor}, CoincideBusqueda=${coincideBusqueda}`);
 
 
@@ -934,6 +998,9 @@
             recordElement.dataset.enviadoAEmpaque = enviadoAEmpaque;
             recordElement.dataset.enviadoAEmpaqueTimestamp = enviadoAEmpaqueTimestamp ? enviadoAEmpaqueTimestamp.toISOString() : '';
             recordElement.dataset.fechaHoraCreacionIso = fechaHoraCreacion ? fechaHoraCreacion.toISOString() : '';
+            // Store the 'usuario' (user ID) in the dataset for filtering purposes
+            recordElement.dataset.usuario = registro.usuario || '';
+
 
             let productosTextoParaBusqueda = "";
             let productosHTMLList = 'Sin productos';
@@ -1073,12 +1140,13 @@
             }
 
             let query = db.collection('registros').orderBy('fecha_hora', 'asc');
-            const isOperator = datosUsuario.permisos.toLowerCase() === 'operador';
+            // Updated logic: if user is operator OR bodeguero, filter by their own ID
+            const isUserFilteredRole = datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero';
             const currentUserId = datosUsuario.usuario;
             console.log("Rol del usuario para la consulta:", datosUsuario.permisos);
-            console.log("ID de usuario para la consulta (si es operador):", currentUserId);
+            console.log("ID de usuario para la consulta (si es operador/bodeguero):", currentUserId);
 
-            if (isOperator) {
+            if (isUserFilteredRole) {
                 query = query.where('usuario', '==', currentUserId);
             }
 
@@ -1099,8 +1167,8 @@
                 // Clear the container if it's the initial load or if the snapshot is empty after filtering
                 if (isInitialLoadPedidos || snapshot.empty) {
                     listaPedidosContainer.innerHTML = '';
-                    if (snapshot.empty && isOperator) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos asignados a este operador o no se encontraron pedidos con los filtros actuales.</p>';
+                    if (snapshot.empty && isUserFilteredRole) {
+                        listaPedidosContainer.innerHTML = '<p>No hay pedidos asignados a este usuario o no se encontraron pedidos con los filtros actuales.</p>';
                     } else if (snapshot.empty) {
                         listaPedidosContainer.innerHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
                     }
@@ -1779,7 +1847,8 @@
             }
             console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
 
-            if (datosUsuario.permisos.toLowerCase() === 'operador') {
+            // Ajustar visibilidad del icono de la tuerca y opciones de exportación/resumen
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 document.getElementById('exportar').style.display = 'none';
                 document.getElementById('resumen_asesores').style.display = 'none';
                 document.getElementById('gear_icon').style.display = 'none';
@@ -2371,12 +2440,29 @@
             if (hasRetarded && showModal) {
                 initAudioContext(); // Initialize audio context on user interaction
                 playAlarmSound();
-                // showMessage('¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".', 'error'); // No usar alert
-                const errorMessageModal = document.getElementById('messageBox');
-                errorMessageModal.textContent = '¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".';
-                errorMessageModal.style.backgroundColor = '#dc3545'; // Rojo
-                errorMessageModal.style.display = 'block';
-                setTimeout(() => { errorMessageModal.style.display = 'none'; }, 5000); // Ocultar después de 5 segundos
+                // Mostrar el nuevo modal de alerta
+                const retardoAlertModal = document.getElementById('retardo_alert_modal');
+                const retardoAlertContent = document.getElementById('retardo_alert_content');
+
+                if (retardoAlertContent) {
+                    retardoAlertContent.innerHTML = `
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".</span>
+                        <span class="close" onclick="cerrarModal('retardo_alert_modal')">&times;</span>
+                    `;
+                }
+                if (retardoAlertModal) {
+                    retardoAlertModal.style.display = 'flex';
+                    // Reset animation to play every time
+                    retardoAlertModal.querySelector('.modal-content').style.animation = 'none';
+                    void retardoAlertModal.querySelector('.modal-content').offsetWidth; // Trigger reflow
+                    retardoAlertModal.querySelector('.modal-content').style.animation = 'fadeInOut 5s forwards';
+
+                    // Cierra el modal automáticamente después de la duración de la animación
+                    setTimeout(() => {
+                        cerrarModal('retardo_alert_modal');
+                    }, 5000);
+                }
             }
         }
 
@@ -2615,7 +2701,12 @@
         <p>Temporalmente bloqueado y a la espera de desbloqueo.</p>
     </div>
 
-    <div id="messageBox" class="message-box"></div>
+    <!-- Nuevo Modal de Alerta de Retardo -->
+    <div id="retardo_alert_modal" class="modal">
+        <div class="modal-content" id="retardo_alert_content">
+            <!-- El contenido se inyectará aquí dinámicamente -->
+        </div>
+    </div>
 
 
 </body>
