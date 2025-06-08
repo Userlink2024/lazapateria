@@ -419,6 +419,12 @@
             background-color: #dc3545; /* Rojo */
             border-color: #dc3545;
         }
+        /* Nuevo estilo para el botón "Retardos" cuando está activo */
+        .dispatch-filter-button.active.retardos-active {
+            background-color: #ffc107; /* Amarillo */
+            color: #333;
+            border-color: #ffc107;
+        }
 
         /* --- NUEVOS ESTILOS PARA LA ALERTA DE RETARDO EN EL PEDIDO --- */
         .retardo-indicator {
@@ -523,7 +529,7 @@
         let pedidosListenerUnsubscribe = null;
         let scrollPosPedidos = 0;
         let isInitialLoadPedidos = true;
-        let currentDispatchFilter = 'all'; // 'all', 'despachados', 'noDespachados'
+        let currentDispatchFilter = 'all'; // 'all', 'despachados', 'noDespachados', 'retardos'
 
         // Global variables to store original products and abonos for comparison
         let originalProductsForModification = [];
@@ -802,6 +808,7 @@
             let visibleTotalCount = 0;
             let totalDespachadosFiltered = 0;
             let totalNoDespachadosFiltered = 0;
+            let totalRetardosFiltered = 0; // New: for retardos count
 
             // Updated logic to check if the user role requires filtering by their own ID
             const isUserFilteredRole = datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero';
@@ -815,39 +822,38 @@
                 const codigoDelRegistro = recordElement.dataset.codigo ? recordElement.dataset.codigo.toLowerCase() : '';
                 const productosDelRegistro = recordElement.dataset.productos ? recordElement.dataset.productos.toLowerCase() : '';
                 const despachadoDelRegistro = recordElement.dataset.despachado === 'true';
+                const retardoDelRegistro = recordElement.dataset.retardo === 'true'; // New: Read data-retardo
                 const usuarioDelRegistro = recordElement.dataset.usuario;
 
                 const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
-
-                // Filtrar por nombre de cliente
                 let coincideBusqueda = true;
                 if (searchTerm) {
                     coincideBusqueda = clienteDelRegistro.includes(searchTerm) || codigoDelRegistro.includes(searchTerm) || productosDelRegistro.includes(searchTerm);
                 }
-
-                // Check if the record belongs to the current user if their role requires it
                 const userMatches = (isUserFilteredRole ? usuarioDelRegistro === currentUserId : true);
 
-
+                // Count for overall filter buttons (before applying currentDispatchFilter)
                 if (coincideAsesor && coincideBusqueda && userMatches) {
-                     // Only count for totals if it matches advisor/search and user role
                     if (despachadoDelRegistro) {
                         totalDespachadosFiltered++;
                     } else {
                         totalNoDespachadosFiltered++;
                     }
+                    if (retardoDelRegistro) { // Count for retardos
+                        totalRetardosFiltered++;
+                    }
                 }
 
-                // Now determine if the record should be displayed based on ALL filters including dispatch filter
+                // Now determine if the record should be displayed based on ALL filters including dispatch/retardo filter
                 let recordShouldBeDisplayed = true;
                 if (currentDispatchFilter === 'despachados') {
                     recordShouldBeDisplayed = despachadoDelRegistro;
                 } else if (currentDispatchFilter === 'noDespachados') {
                     recordShouldBeDisplayed = !despachadoDelRegistro;
+                } else if (currentDispatchFilter === 'retardos') { // New filter logic
+                    recordShouldBeDisplayed = retardoDelRegistro;
                 }
-
-                console.log(`Record ${recordElement.dataset.id}: Despachado=${despachadoDelRegistro}, UserMatches=${userMatches}, ShouldBeDisplayed=${recordShouldBeDisplayed}, CoincideAsesor=${coincideAsesor}, CoincideBusqueda=${coincideBusqueda}`);
-
+                // For 'all' filter, no specific dispatch/retardo filtering is needed here.
 
                 if (coincideAsesor && coincideBusqueda && userMatches && recordShouldBeDisplayed) {
                     recordElement.style.display = 'block';
@@ -871,6 +877,7 @@
             document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`;
             document.getElementById('filterDespachadosButton').textContent = `Despachados (${totalDespachadosFiltered})`;
             document.getElementById('filterNoDespachadosButton').textContent = `No Despachados (${totalNoDespachadosFiltered})`;
+            document.getElementById('filterRetardosButton').textContent = `Retardos (${totalRetardosFiltered})`; // Update retardos count
             console.log("--- Finaliza filtrarYBuscarPedidos ---");
         }
 
@@ -962,19 +969,15 @@
 
                 // El indicador de retardo solo es relevante en la pestaña "Todos"
                 // Condición: NO enviado a empaque Y NO despachado Y (tiempo_actual - tiempo_creacion) > retardTimeMinutes
-                if (currentDispatchFilter === 'all' && !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion) {
-                    const diffMs = now.getTime() - fechaHoraCreacion.getTime();
-                    const diffMinutes = diffMs / (1000 * 60);
+                const isCurrentlyRetarded = !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > minutesThreshold);
+                recordElement.dataset.retardo = isCurrentlyRetarded; // Update data-retardo attribute
 
-                    if (diffMinutes > minutesThreshold) {
-                        retardoIndicatorContainer.style.display = 'flex';
-                        retardoIndicatorContainer.innerHTML = `
+                if (currentDispatchFilter === 'all' && isCurrentlyRetarded) {
+                    retardoIndicatorContainer.style.display = 'flex';
+                    retardoIndicatorContainer.innerHTML = `
                             <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
                             <span>En retardo</span>
                         `;
-                    } else {
-                        retardoIndicatorContainer.style.display = 'none';
-                    }
                 } else {
                     retardoIndicatorContainer.style.display = 'none';
                 }
@@ -996,6 +999,10 @@
             const enviadoAEmpaqueTimestamp = registro.enviadoAEmpaqueTimestamp ? registro.enviadoAEmpaqueTimestamp.toDate() : null;
             const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
 
+            // Determine if the record is currently in a "retardo" state
+            const now = new Date();
+            const minutesThreshold = retardTimeMinutes;
+            const isCurrentlyRetarded = !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > minutesThreshold);
 
             // Set initial data attributes
             recordElement.dataset.asesor = registro.asesor || 'N/A';
@@ -1008,6 +1015,7 @@
             recordElement.dataset.enviadoAEmpaque = enviadoAEmpaque;
             recordElement.dataset.enviadoAEmpaqueTimestamp = enviadoAEmpaqueTimestamp ? enviadoAEmpaqueTimestamp.toISOString() : '';
             recordElement.dataset.fechaHoraCreacionIso = fechaHoraCreacion ? fechaHoraCreacion.toISOString() : '';
+            recordElement.dataset.retardo = isCurrentlyRetarded; // Set data-retardo attribute here
             // Store the 'usuario' (user ID) in the dataset for filtering purposes
             recordElement.dataset.usuario = registro.usuario || '';
 
@@ -1043,8 +1051,8 @@
 
             // --- Construir el contenido principal del registro de forma consistente ---
             let recordContentHtml = '';
-            if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                // Vista simplificada para Despachados/No Despachados
+            if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados' || currentDispatchFilter === 'retardos') {
+                // Vista simplificada para Despachados/No Despachados/Retardos
                 recordContentHtml = `
                     <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
                     <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
@@ -1105,7 +1113,7 @@
                 <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                 <div class="status-messages-container" id="status-messages-${docId}"></div>
                 <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
-                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: ${currentDispatchFilter === 'all' && !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((new Date().getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > retardTimeMinutes) ? 'flex' : 'none'};"></div>
+                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: ${currentDispatchFilter === 'all' && isCurrentlyRetarded ? 'flex' : 'none'};"></div>
                 ${controlsHtmlAdmins}
                 <div class="record-buttons">
                     <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
@@ -1314,7 +1322,7 @@
                 }
                 await db.collection('registros').doc(id).update(updateData);
                 playConfirmationSound(); // Play sound on checkbox click
-                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueado} por ${datosUsuario.nombreCompleto}`);
+                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo} por ${datosUsuario.nombreCompleto}`);
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
@@ -1946,6 +1954,7 @@
             allDispatchButtons.forEach(button => {
                 button.classList.remove('active');
                 button.classList.remove('no-despachados-active');
+                button.classList.remove('retardos-active'); // New class for retardos
             });
             if (filterType === 'all') {
                 document.getElementById('filterAllButton').classList.add('active');
@@ -1954,6 +1963,9 @@
             } else if (filterType === 'noDespachados') {
                 document.getElementById('filterNoDespachadosButton').classList.add('active');
                 document.getElementById('filterNoDespachadosButton').classList.add('no-despachados-active');
+            } else if (filterType === 'retardos') { // New filter type
+                document.getElementById('filterRetardosButton').classList.add('active');
+                document.getElementById('filterRetardosButton').classList.add('retardos-active'); // Apply a specific color for retardos if desired
             }
         }
 
@@ -2026,11 +2038,35 @@
                 iniciarVistaPedidosEnTiempoReal();
             });
 
+            // New Retardos button
+            const filterRetardosButton = document.createElement('button');
+            filterRetardosButton.id = 'filterRetardosButton';
+            filterRetardosButton.className = 'dispatch-filter-button';
+            filterRetardosButton.textContent = 'Retardos';
+            filterRetardosButton.addEventListener('click', () => {
+                initAudioContext(); // Initialize audio context on user interaction
+                // Limpiar el campo de búsqueda por cliente al cambiar de filtro
+                const searchClienteInput = document.getElementById('search_cliente_input');
+                if (searchClienteInput) {
+                    searchClienteInput.value = '';
+                    searchClienteInput.blur();
+                    setTimeout(() => {
+                        searchClienteInput.value = '';
+                        searchClienteInput.blur();
+                    }, 100);
+                }
+                currentDispatchFilter = 'retardos';
+                setActiveDispatchFilterButton('retardos');
+                iniciarVistaPedidosEnTiempoReal();
+            });
+
+
             const filterContainer = document.createElement('div');
             filterContainer.className = 'flex space-x-2 mt-1 mb-4';
             filterContainer.appendChild(filterAllButton);
             filterContainer.appendChild(filterDespachadosButton);
             filterContainer.appendChild(filterNoDespachadosButton);
+            filterContainer.appendChild(filterRetardosButton); // Add the new button here
 
             const modalPedidosContent = document.querySelector('#modal_pedidos .modal-content');
             const h2PedidosRegistrados = modalPedidosContent.querySelector('h2');
@@ -2447,29 +2483,26 @@
 
                     // El indicador de retardo solo es relevante en la pestaña "Todos"
                     // Condición: NO enviado a empaque Y NO despachado Y (tiempo_actual - tiempo_creacion) > retardTimeMinutes
-                    if (currentDispatchFilter === 'all' && !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion) {
-                        const diffMs = now.getTime() - fechaHoraCreacion.getTime();
-                        const diffMinutes = diffMs / (1000 * 60);
+                    const isCurrentlyRetarded = !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > minutesThreshold);
+                    recordElement.dataset.retardo = isCurrentlyRetarded; // Update data-retardo attribute
 
-                        if (diffMinutes > minutesThreshold) {
-                            hasRetarded = true;
-                            // Actualizar el indicador visual en el record
-                            const retardoIndicator = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
-                            if (retardoIndicator) {
-                                retardoIndicator.style.display = 'flex';
-                                retardoIndicator.innerHTML = `
-                                    <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
-                                    <span>En retardo</span>
-                                `;
-                            }
-                        } else {
-                             const retardoIndicator = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
-                             if (retardoIndicator) retardoIndicator.style.display = 'none';
+                    if (currentDispatchFilter === 'all' && isCurrentlyRetarded) { // Only show in 'all' tab
+                        retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
+                        if (retardoIndicatorContainer) {
+                            retardoIndicatorContainer.style.display = 'flex';
+                            retardoIndicatorContainer.innerHTML = `
+                                <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
+                                <span>En retardo</span>
+                            `;
                         }
                     } else {
-                        // Si no cumple las condiciones de retardo, asegurarse de que el indicador esté oculto
-                        const retardoIndicator = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
-                        if (retardoIndicator) retardoIndicator.style.display = 'none';
+                        // If not in 'all' tab or not retarded, ensure indicator is hidden
+                        retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
+                        if (retardoIndicatorContainer) retardoIndicatorContainer.style.display = 'none';
+                    }
+
+                    if (isCurrentlyRetarded) { // Always track if there's *any* retarded for the overall alert
+                        hasRetarded = true;
                     }
                 });
             } else {
@@ -2694,6 +2727,13 @@
             <div class="totals">
                 <label id="total_pares">Total Pares: 0</label>
                 <label id="valor_vendido">Valor Vendido: $0</label>
+            </div>
+            <!-- Botones de filtro de despacho -->
+            <div class="flex space-x-2 mt-1 mb-4">
+                <button id="filterAllButton" class="dispatch-filter-button"></button>
+                <button id="filterDespachadosButton" class="dispatch-filter-button"></button>
+                <button id="filterNoDespachadosButton" class="dispatch-filter-button"></button>
+                <button id="filterRetardosButton" class="dispatch-filter-button"></button> <!-- NEW BUTTON -->
             </div>
             <div id="lista_pedidos_container" class="form-field">
             </div>
