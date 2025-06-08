@@ -470,7 +470,9 @@
                 document.getElementById('custom_block_hour_input').value = customBlockHour;
                 document.getElementById('custom_block_minute_input').value = customBlockMinute;
                 
-                const formattedTime = `${customBlockHour.toString().padStart(2, '0')}:${customBlockMinute.toString().padStart(2, '0')}`;
+                // Formatear la hora en formato de 12 horas para la visualización
+                const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+                const formattedTime = new Date(1, 1, 1, customBlockHour, customBlockMinute).toLocaleTimeString('es-CO', formattedTimeOptions);
                 document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
                 document.getElementById('custom_time_error').textContent = ''; // Limpiar cualquier mensaje de error previo
             }
@@ -808,6 +810,7 @@
             
             const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
             const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
+            // Formatear hora a 12 horas para la visualización del registro
             const horaFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A';
             const bodeguerosEncargados = Array.isArray(registro.bodegueros_encargados) && registro.bodegueros_encargados.length > 0
                 ? registro.bodegueros_encargados.join(', ')
@@ -1122,6 +1125,7 @@
                 if (registro.fecha_hora && typeof registro.fecha_hora.toDate === 'function') {
                     const dateObj = registro.fecha_hora.toDate();
                     const datePart = dateObj.toLocaleDateString('es-CO');
+                    // Formatear la hora a 12 horas para la exportación
                     let timePart = dateObj.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
                     
                     timePart = timePart.replace(/(\s[ap])\.\s?m\./i, '$1.m.');
@@ -1465,8 +1469,9 @@
                     countdownElement.style.backgroundColor = '#e7f3ff'; // Default blue background
                     countdownElement.style.borderColor = '#007bff';
 
-                    // Actualizar la hora configurada en el modal de opciones de bloqueo
-                    const formattedTime = `${blockHourToUse.toString().padStart(2, '0')}:${blockMinuteToUse.toString().padStart(2, '0')}`;
+                    // Actualizar la hora configurada en el modal de opciones de bloqueo (en formato de 12 horas)
+                    const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+                    const formattedTime = new Date(1, 1, 1, blockHourToUse, blockMinuteToUse).toLocaleTimeString('es-CO', formattedTimeOptions);
                     document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
 
                 } else { // Si el auto-bloqueo no está habilitado por el admin
@@ -1755,6 +1760,18 @@
             const blockMinuteToUse = isAutoBlockEnabled ? customBlockMinute : DEFAULT_BLOCK_MINUTE;
 
             const timeConditionMet = (currentHour > blockHourToUse || (currentHour === blockHourToUse && currentMinute >= blockMinuteToUse));
+
+            console.log("--- checkTimeBlock Debug Info ---");
+            console.log(`Current Time: ${currentHour}:${currentMinute}`);
+            console.log(`Block Time To Use: ${blockHourToUse}:${blockMinuteToUse}`);
+            console.log(`Time Condition Met: ${timeConditionMet}`);
+            console.log(`isAutoBlockEnabled: ${isAutoBlockEnabled}`);
+            console.log(`isAutoBlockedPermanently: ${isAutoBlockedPermanently}`);
+            console.log(`lastAutoBlockTriggerDate: ${lastAutoBlockTriggerDate}`);
+            console.log(`todayDate: ${todayDate}`);
+            console.log(`lastAutoBlockTriggerDate !== todayDate: ${lastAutoBlockTriggerDate !== todayDate}`);
+            console.log("---------------------------------");
+
 
             // El auto-bloqueo se activa SI:
             // 1. El admin lo tiene HABILITADO (isAutoBlockEnabled)
@@ -2194,7 +2211,7 @@
             <h2>Opciones de Bloqueo</h2>
             <div class="form-field">
                 <input type="checkbox" id="auto_block_checkbox" onchange="toggleAutoBlockCheckbox(this)">
-                <label for="auto_block_checkbox">Bloqueo Automático (5:40 p.m. hora Colombia) - Permanente</label>
+                <label for="auto_block_checkbox">Bloqueo por hora</label>
             </div>
             <div class="form-field">
                 <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)">
