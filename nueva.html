@@ -547,25 +547,52 @@
             }
         }
 
-        // Function to play sound for new order alert
-        async function playNewOrderSound() {
+        /**
+         * Checks Firestore for orders that are dispatched but not packed.
+         * @returns {Promise<number>} The count of pending orders.
+         */
+        async function checkPendingOrdersCount() {
             try {
-                await Tone.start();
-                newOrderAlertSoundSynth.triggerAttackRelease('G3', '8n'); // Lower pitch for new order
-                console.log('Sonido de nueva orden reproducido: G3');
+                const querySnapshot = await db.collection('registros')
+                    .where('despachado', '==', true)
+                    .where('empacado', '==', false)
+                    .get();
+                return querySnapshot.size;
             } catch (error) {
-                console.error('Error al reproducir sonido de nueva orden:', error);
+                console.error("Error al verificar pedidos pendientes:", error);
+                return 0;
             }
         }
 
-        // Function to play sound for view orders alert (pending)
+        // Function to play sound for new order alert, only if pending orders exist
+        async function playNewOrderSound() {
+            const pendingCount = await checkPendingOrdersCount();
+            if (pendingCount > 0) {
+                try {
+                    await Tone.start();
+                    newOrderAlertSoundSynth.triggerAttackRelease('G3', '8n'); // Lower pitch for new order
+                    console.log('Sonido de nueva orden reproducido (con pendientes): G3');
+                } catch (error) {
+                    console.error('Error al reproducir sonido de nueva orden:', error);
+                }
+            } else {
+                console.log('No hay pedidos pendientes, no se reproduce sonido de nueva orden.');
+            }
+        }
+
+        // Function to play sound for view orders alert (pending), only if pending orders exist
         async function playViewOrdersSound() {
-            try {
-                await Tone.start();
-                viewOrdersAlertSoundSynth.triggerAttackRelease('D4', '8n'); // Different pitch for view orders
-                console.log('Sonido de ver pedidos reproducido: D4');
-            } catch (error) {
-                console.error('Error al reproducir sonido de ver pedidos:', error);
+            const pendingCount = await checkPendingOrdersCount();
+            if (pendingCount > 0) {
+                try {
+                    await Tone.start();
+                    viewOrdersAlertSoundSynth.triggerAttackRelease('D4', '8n'); // Different pitch for view orders
+                    console.log('Sonido de ver pedidos reproducido (con pendientes): D4');
+                } catch (error) {
+                    console.error('Error al reproducir sonido de ver pedidos:', error);
+                }
+            } else {
+                console.log('No hay pedidos pendientes, no se reproduce sonido de ver pedidos.');
             }
         }
 
@@ -701,7 +728,7 @@
                     await db.collection('registros').add(datos);
                     console.log("Datos guardados en Firebase:", datos);
                     alert("Pedido agregado exitosamente!");
-                    playNewOrderSound(); // Play sound for new order
+                    playNewOrderSound(); // Play sound for new order (conditional)
                     // Check for pending orders and show alert message
                     checkAndDisplayPendingAlert();
 
@@ -830,6 +857,9 @@
             recordElement.dataset.despachadoPor = despachadoPor; // Update dataset
             recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Update dataset
             recordElement.dataset.empacadoPor = empacadoPor;     // Update dataset
+            // Update despachadoAt dataset to a string to store milliseconds
+            recordElement.dataset.despachadoAt = updatedRegistro.despachadoAt ? updatedRegistro.despachadoAt.toDate().getTime().toString() : '0';
+
 
             const statusMessagesContainer = recordElement.querySelector(`#status-messages-${docId}`);
             if (statusMessagesContainer) {
@@ -917,6 +947,7 @@
             recordElement.dataset.bloqueadoPor = bloqueadoPor;   // Add bloqueadoPor to dataset
             recordElement.dataset.empacadoPor = empacadoPor;     // Add empacadoPor to dataset
             recordElement.dataset.usuario = registro.usuario || 'N/A';
+            recordElement.dataset.despachadoAt = registro.despachadoAt ? registro.despachadoAt.toDate().getTime().toString() : '0'; // Add despachadoAt as milliseconds
 
             let productosTextoParaBusqueda = "";
             let productosHTMLList = 'Sin productos';
@@ -1037,7 +1068,7 @@
         function iniciarVistaPedidosEnTiempoReal() {
             console.log("Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos'); // This will show the modal
-            playViewOrdersSound(); // Play sound when viewing orders
+            playViewOrdersSound(); // Play sound when viewing orders (conditional)
 
             // Limpiar el campo de búsqueda por cliente al abrir el modal
             const searchClienteInput = document.getElementById('search_cliente_input');
@@ -1221,7 +1252,7 @@
                 }
                 await db.collection('registros').doc(id).update(updateData);
                 playSoundOnCheckbox(); // Reproducir sonido al cambiar el estado de bloqueo
-                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueado} por ${datosUsuario.nombreCompleto}`);
+                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo} por ${datosUsuario.nombreCompleto}`);
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
