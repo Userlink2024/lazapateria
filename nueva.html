@@ -534,6 +534,7 @@
         // Valores por defecto para la hora de bloqueo, usados si no hay una hora personalizada configurada en Firebase
         const DEFAULT_BLOCK_HOUR = 17; // 5 PM
         const DEFAULT_BLOCK_MINUTE = 40; // 40 minutes
+        const DEFAULT_RETARD_MINUTES = 20; // Default retard time in minutes
 
         let isGlobalManualBlock = false; // Bloqueo manual/inmediato global, controlado por Firestore
         let isAutoBlockedPermanently = false; // Nuevo: Bloqueo automático persistente, controlado por Firestore
@@ -544,6 +545,8 @@
         // Nuevas variables para almacenar la hora de bloqueo personalizada desde Firebase
         let customBlockHour = DEFAULT_BLOCK_HOUR;
         let customBlockMinute = DEFAULT_BLOCK_MINUTE;
+        let retardTimeMinutes = DEFAULT_RETARD_MINUTES; // Configurable retard time
+
 
         // --- NUEVAS VARIABLES Y FUNCIONES PARA SONIDOS ---
         let audioContext = null;
@@ -625,11 +628,18 @@
                 document.getElementById('custom_block_hour_input').value = customBlockHour;
                 document.getElementById('custom_block_minute_input').value = customBlockMinute;
 
+                // Rellenar el campo de entrada de tiempo de retardo y mostrar el tiempo actual configurado
+                document.getElementById('retard_minutes_input').value = retardTimeMinutes;
+                document.getElementById('current_retard_time').textContent = `Tiempo de retardo actual configurado: ${retardTimeMinutes} minutos`;
+
+
                 // Formatear la hora en formato de 12 horas para la visualización
                 const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
                 const formattedTime = new Date(1, 1, 1, customBlockHour, customBlockMinute).toLocaleTimeString('es-CO', formattedTimeOptions);
                 document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
                 document.getElementById('custom_time_error').textContent = ''; // Limpiar cualquier mensaje de error previo
+                document.getElementById('retard_time_error').textContent = ''; // Clear any previous error message for retard time
+
             }
             if (id === 'modal_producto') {
                 document.getElementById('producto_referencia').value = '';
@@ -948,10 +958,10 @@
             const retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${docId}`);
             if (retardoIndicatorContainer) {
                 const now = new Date();
-                const minutesThreshold = 20; // 20 minutos de retardo
+                const minutesThreshold = retardTimeMinutes; // Use configurable retard time
 
                 // El indicador de retardo solo es relevante en la pestaña "Todos"
-                // Condición: NO enviado a empaque Y NO despachado Y (tiempo_actual - tiempo_creacion) > 20 minutos
+                // Condición: NO enviado a empaque Y NO despachado Y (tiempo_actual - tiempo_creacion) > retardTimeMinutes
                 if (currentDispatchFilter === 'all' && !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion) {
                     const diffMs = now.getTime() - fechaHoraCreacion.getTime();
                     const diffMinutes = diffMs / (1000 * 60);
@@ -1095,7 +1105,7 @@
                 <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                 <div class="status-messages-container" id="status-messages-${docId}"></div>
                 <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
-                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: ${currentDispatchFilter === 'all' && !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((new Date().getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > 20) ? 'flex' : 'none'};"></div>
+                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: ${currentDispatchFilter === 'all' && !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((new Date().getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > retardTimeMinutes) ? 'flex' : 'none'};"></div>
                 ${controlsHtmlAdmins}
                 <div class="record-buttons">
                     <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
@@ -1304,7 +1314,7 @@
                 }
                 await db.collection('registros').doc(id).update(updateData);
                 playConfirmationSound(); // Play sound on checkbox click
-                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueo} por ${datosUsuario.nombreCompleto}`);
+                console.log(`Pedido ${id} actualizado a bloqueado: ${nuevoEstadoBloqueado} por ${datosUsuario.nombreCompleto}`);
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
@@ -1872,6 +1882,7 @@
                     isAutoBlockedPermanently = doc.data().isAutoBlockedPermanently || false;
                     isAutoBlockEnabled = doc.data().isAutoBlockEnabled || false; // LEER NUEVO CAMPO
                     lastAutoBlockTriggerDate = doc.data().lastAutoBlockTriggerDate || null; // Read new field
+                    retardTimeMinutes = doc.data().retardTimeMinutes !== undefined ? doc.data().retardTimeMinutes : DEFAULT_RETARD_MINUTES; // Read retard time
 
                     // Leer la hora personalizada, o usar los valores por defecto si no están definidos
                     customBlockHour = doc.data().customBlockHour !== undefined ? doc.data().customBlockHour : DEFAULT_BLOCK_HOUR;
@@ -1882,6 +1893,7 @@
                     console.log("Estado de auto-bloqueo habilitado (admin):", isAutoBlockEnabled); // LOG NUEVO CAMPO
                     console.log("Última fecha de activación auto-bloqueo:", lastAutoBlockTriggerDate);
                     console.log(`Hora de bloqueo personalizada: ${customBlockHour}:${customBlockMinute}`);
+                    console.log(`Tiempo de retardo: ${retardTimeMinutes} minutos`);
 
                 } else {
                     // Si el documento no existe, crearlo con un estado inicial
@@ -1891,7 +1903,8 @@
                         isAutoBlockEnabled: false,
                         lastAutoBlockTriggerDate: null,
                         customBlockHour: DEFAULT_BLOCK_HOUR, // Inicializar hora personalizada
-                        customBlockMinute: DEFAULT_BLOCK_MINUTE // Inicializar minuto personalizado
+                        customBlockMinute: DEFAULT_BLOCK_MINUTE, // Inicializar minuto personalizado
+                        retardTimeMinutes: DEFAULT_RETARD_MINUTES // Inicializar tiempo de retardo
                     }).then(() => {
                         isGlobalManualBlock = false;
                         isAutoBlockedPermanently = false;
@@ -1899,6 +1912,7 @@
                         lastAutoBlockTriggerDate = null;
                         customBlockHour = DEFAULT_BLOCK_HOUR; // Actualizar localmente
                         customBlockMinute = DEFAULT_BLOCK_MINUTE; // Actualizar localmente
+                        retardTimeMinutes = DEFAULT_RETARD_MINUTES; // Actualizar localmente
                         console.log("Documento de configuración global creado con estado inicial.");
                     }).catch(error => {
                         console.error("Error al crear documento de configuración global:", error);
@@ -2206,7 +2220,7 @@
 
         /**
          * Muestra el modal de contraseña para confirmar acciones administrativas.
-         * @param {string} type - El tipo de acción que requiere contraseña ('global_manual', 'auto_permanent', 'set_custom_time', 'reset_block_state').
+         * @param {string} type - El tipo de acción que requiere contraseña ('global_manual', 'auto_permanent', 'set_custom_time', 'reset_block_state', 'set_retard_time').
          */
         function showPasswordModal(type) {
             document.getElementById('password_modal').style.display = 'flex';
@@ -2246,6 +2260,35 @@
             localStorage.setItem('tempCustomBlockMinute', newMinute);
 
             showPasswordModal('set_custom_time'); // Mostrar modal de contraseña con el nuevo tipo
+        }
+
+        /**
+         * Función para guardar el tiempo de retardo personalizado.
+         * Pide contraseña para confirmar y actualiza la configuración en Firestore.
+         */
+        async function setRetardTime() {
+            initAudioContext(); // Initialize audio context on user interaction
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+
+            const minutesInput = document.getElementById('retard_minutes_input');
+            const errorDisplay = document.getElementById('retard_time_error');
+
+            const newMinutes = parseInt(minutesInput.value);
+
+            // Validar la entrada de minutos
+            if (isNaN(newMinutes) || newMinutes < 1) {
+                errorDisplay.textContent = "Por favor, ingrese un valor de minutos válido (mayor a 0).";
+                return;
+            }
+            errorDisplay.textContent = ''; // Limpiar mensaje de error si la validación pasa
+
+            currentPasswordModalTargetCheckbox = null;
+            localStorage.setItem('tempRetardMinutes', newMinutes);
+
+            showPasswordModal('set_retard_time'); // Mostrar modal de contraseña con el nuevo tipo
         }
 
         /**
@@ -2332,6 +2375,25 @@
                         errorMessage.textContent = "Error al guardar la hora personalizada. Inténtelo de nuevo.";
                         return;
                     }
+                } else if (blockType === 'set_retard_time') { // Handle setting retard time
+                    const tempRetardMinutes = parseInt(localStorage.getItem('tempRetardMinutes'));
+                    localStorage.removeItem('tempRetardMinutes'); // Clear temporary storage
+
+                    try {
+                        await globalSettingsRef.set({
+                            retardTimeMinutes: tempRetardMinutes
+                        }, { merge: true });
+                        retardTimeMinutes = tempRetardMinutes; // Update local state
+                        playConfirmationSound(); // Play sound
+                        console.log(`Tiempo de retardo guardado: ${tempRetardMinutes} minutos`);
+                        const retardTimeErrorDisplay = document.getElementById('retard_time_error');
+                        if (retardTimeErrorDisplay) retardTimeErrorDisplay.textContent = 'Tiempo de retardo guardado exitosamente.';
+                        setTimeout(() => { if (retardTimeErrorDisplay) retardTimeErrorDisplay.textContent = ''; }, 3000);
+                    } catch (error) {
+                        console.error("Error al guardar el tiempo de retardo:", error);
+                        errorMessage.textContent = "Error al guardar el tiempo de retardo. Inténtelo de nuevo.";
+                        return;
+                    }
                 } else if (blockType === 'reset_block_state') { // Manejar el tipo de reiniciar estado de bloqueo
                     try {
                         // Reiniciar isAutoBlockedPermanently a false y lastAutoBlockTriggerDate a null
@@ -2355,7 +2417,7 @@
             } else {
                 errorMessage.textContent = "Contraseña incorrecta. Inténtelo de nuevo.";
                 // Revertir el estado del checkbox si la contraseña es incorrecta, excepto para 'set_custom_time' y 'reset_block_state'
-                if (blockType !== 'set_custom_time' && blockType !== 'reset_block_state' && currentPasswordModalTargetCheckbox) {
+                if (blockType !== 'set_custom_time' && blockType !== 'set_retard_time' && blockType !== 'reset_block_state' && currentPasswordModalTargetCheckbox) {
                     currentPasswordModalTargetCheckbox.checked = !currentPasswordModalTargetCheckbox.checked; // Vuelve al estado original
                 }
             }
@@ -2368,7 +2430,7 @@
         async function checkForRetardedDispatches(showModal = false) {
             let hasRetarded = false;
             const now = new Date();
-            const minutesThreshold = 20; // 20 minutos
+            const minutesThreshold = retardTimeMinutes; // Use configurable retard time
 
             // Obtener todos los pedidos del Snapshot actual (en iniciarVistaPedidosEnTiempoReal)
             // Si la vista de pedidos no está activa, hacemos una nueva consulta.
@@ -2384,7 +2446,7 @@
                     const fechaHoraCreacion = fechaHoraCreacionStr ? new Date(fechaHoraCreacionStr) : null;
 
                     // El indicador de retardo solo es relevante en la pestaña "Todos"
-                    // Condición: NO enviado a empaque Y NO despachado Y (tiempo_actual - tiempo_creacion) > 20 minutos
+                    // Condición: NO enviado a empaque Y NO despachado Y (tiempo_actual - tiempo_creacion) > retardTimeMinutes
                     if (currentDispatchFilter === 'all' && !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion) {
                         const diffMs = now.getTime() - fechaHoraCreacion.getTime();
                         const diffMinutes = diffMs / (1000 * 60);
@@ -2687,6 +2749,16 @@
             </div>
             <button type="button" onclick="setCustomBlockTime()">Guardar Hora Personalizada</button>
             <p id="custom_time_error" class="error-message"></p>
+
+            <hr style="margin: 20px 0;">
+            <h3>Configurar Tiempo de Retardo de Pedidos</h3>
+            <p id="current_retard_time">Tiempo de retardo actual configurado: -- minutos</p>
+            <div class="form-field">
+                <label for="retard_minutes_input">Minutos:</label>
+                <input type="number" id="retard_minutes_input" min="1" placeholder="Ej: 20">
+            </div>
+            <button type="button" onclick="setRetardTime()">Guardar Tiempo de Retardo</button>
+            <p id="retard_time_error" class="error-message"></p>
 
             <hr style="margin: 20px 0;">
             <h3>Estado del Bloqueo Automático</h3>
