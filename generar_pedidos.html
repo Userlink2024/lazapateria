@@ -570,6 +570,17 @@
             color: #222;
         }
 
+        /* New button for deleting dispatches */
+        #block_options_modal button[onclick*="deleteAllDispatches"] {
+            background-image: linear-gradient(135deg, #dc3545 0%, #c82333 100%); /* Red gradient */
+            color: white;
+            box-shadow: 0 4px 10px rgba(220, 53, 69, 0.2);
+        }
+        #block_options_modal button[onclick*="deleteAllDispatches"]:hover {
+            background-image: linear-gradient(135deg, #c82333 0%, #bb2d3b 100%);
+            color: white;
+        }
+
 
         /* Countdown Timer */
         #countdown_timer {
@@ -1037,6 +1048,7 @@
                 document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
                 document.getElementById('custom_time_error').textContent = ''; // Limpiar cualquier mensaje de error previo
                 document.getElementById('retard_time_error').textContent = ''; // Clear any previous error message for retard time
+                document.getElementById('delete_dispatches_error').textContent = ''; // Limpiar mensaje de error de eliminación
 
             }
             if (id === 'modal_producto') {
@@ -2692,7 +2704,7 @@
 
         /**
          * Muestra el modal de contraseña para confirmar acciones administrativas.
-         * @param {string} type - El tipo de acción que requiere contraseña ('global_manual', 'auto_permanent', 'set_custom_time', 'reset_block_state', 'set_retard_time').
+         * @param {string} type - El tipo de acción que requiere contraseña ('global_manual', 'auto_permanent', 'set_custom_time', 'reset_block_state', 'set_retard_time', 'delete_all_dispatches').
          */
         function showPasswordModal(type) {
             document.getElementById('password_modal').style.display = 'flex';
@@ -2774,6 +2786,19 @@
                 return;
             }
             showPasswordModal('reset_block_state');
+        }
+
+        /**
+         * Función para eliminar todos los pedidos que están marcados como "despachado".
+         * Solo para administradores, requiere contraseña.
+         */
+        async function deleteAllDispatches() {
+            initAudioContext(); // Initialize audio context on user interaction
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                alert("Esta acción solo puede ser realizada por un administrador.");
+                return;
+            }
+            showPasswordModal('delete_all_dispatches'); // Show password modal for this specific action
         }
 
         /**
@@ -2882,13 +2907,47 @@
                         errorMessage.textContent = "Error al reiniciar el estado de bloqueo. Inténtelo de nuevo.";
                         return;
                     }
+                } else if (blockType === 'delete_all_dispatches') { // Handle deleting all dispatched orders
+                    try {
+                        mostrarBarraCargando(); // Show loading bar
+                        const querySnapshot = await db.collection('registros').where('despachado', '==', true).get();
+                        const batch = db.batch();
+                        let deletedCount = 0;
+
+                        if (querySnapshot.empty) {
+                            alert("No hay pedidos despachados para eliminar.");
+                            ocultarBarraCargando();
+                            cerrarModal('password_modal');
+                            return;
+                        }
+
+                        querySnapshot.forEach(doc => {
+                            batch.delete(doc.ref);
+                            deletedCount++;
+                        });
+
+                        await batch.commit();
+                        playConfirmationSound();
+                        alert(`Se eliminaron ${deletedCount} pedidos despachados correctamente.`);
+                        console.log(`Se eliminaron ${deletedCount} pedidos despachados.`);
+                        const deleteDispatchesErrorDisplay = document.getElementById('delete_dispatches_error');
+                        if (deleteDispatchesErrorDisplay) deleteDispatchesErrorDisplay.textContent = `Se eliminaron ${deletedCount} despachos.`;
+                        setTimeout(() => { if (deleteDispatchesErrorDisplay) deleteDispatchesErrorDisplay.textContent = ''; }, 3000); // Clear after 3 seconds
+                    } catch (error) {
+                        console.error("Error al eliminar despachos:", error);
+                        errorMessage.textContent = "Error al eliminar los despachos. Inténtelo de nuevo.";
+                        const deleteDispatchesErrorDisplay = document.getElementById('delete_dispatches_error');
+                        if (deleteDispatchesErrorDisplay) deleteDispatchesErrorDisplay.textContent = 'Error al eliminar despachos.';
+                    } finally {
+                        ocultarBarraCargando();
+                    }
                 }
                 cerrarModal('password_modal');
                 applyBlockStatus();
                 updateCountdown(); // Actualizar el contador después de cualquier acción de desbloqueo/configuración
             } else {
                 errorMessage.textContent = "Contraseña incorrecta. Inténtelo de nuevo.";
-                // Revertir el estado del checkbox si la contraseña es incorrecta, excepto para 'set_custom_time' y 'reset_block_state'
+                // Revertir el estado del checkbox si la contraseña es incorrecta, excepto para 'set_custom_time', 'set_retard_time' y 'reset_block_state'
                 if (blockType !== 'set_custom_time' && blockType !== 'set_retard_time' && blockType !== 'reset_block_state' && currentPasswordModalTargetCheckbox) {
                     currentPasswordModalTargetCheckbox.checked = !currentPasswordModalTargetCheckbox.checked; // Vuelve al estado original
                 }
@@ -3253,7 +3312,12 @@
 
             <hr style="margin: 20px 0;">
             <h3>Estado del Bloqueo Automático</h3>
-            <button type="button" onclick="resetAutoBlockState()" style="background-color: #ffc107; color: #333;">Reiniciar Estado de Bloqueo (Admin)</button>
+            <button type="button" onclick="resetAutoBlockState()">Reiniciar Estado de Bloqueo (Admin)</button>
+
+            <hr style="margin: 20px 0;">
+            <h3>Opciones de Despachos</h3>
+            <button type="button" onclick="deleteAllDispatches()">Eliminar todos los despachos</button>
+            <p id="delete_dispatches_error" class="error-message"></p>
         </div>
     </div>
 
