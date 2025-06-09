@@ -365,6 +365,16 @@
                 opacity: 1;
             }
         }
+        /* NEW: Keyframes for oscillating despachado seal */
+        @keyframes oscillate-sello {
+            0% { transform: translateX(0) rotate(5deg); }
+            50% { transform: translateX(8px) rotate(3deg); } /* Move right slightly */
+            100% { transform: translateX(0) rotate(5deg); }
+        }
+        .despachado-sello.animated {
+            animation: stampIn 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards,
+                       oscillate-sello 3s ease-in-out infinite 0.6s; /* Run oscillate after stampIn finishes */
+        }
 
 
         /* Product/Abono items in modification modal */
@@ -663,8 +673,13 @@
             font-size: 1.6em; /* Larger icon */
             position: relative;
             /* Animation for the exclamation icon */
-            animation: pulse-aura 1.5s infinite ease-out;
+            animation: spin-retardo 1.5s linear infinite, pulse-aura 1.5s infinite ease-out; /* Added spin-retardo */
             display: inline-block;
+        }
+        /* NEW: Keyframes for spinning retardo icon */
+        @keyframes spin-retardo {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         /* Keyframes for Exclamation Icon Pulse Animation */
@@ -1313,7 +1328,7 @@
             if (despachadoSelloContainer) {
                 if (estaDespachado) {
                     const despachadoText = despachadoPor ? `DESPACHADO POR: ${despachadoPor.toUpperCase()}` : 'DESPACHADO';
-                    despachadoSelloContainer.innerHTML = `<div class="despachado-sello">${despachadoText}</div>`;
+                    despachadoSelloContainer.innerHTML = `<div class="despachado-sello animated">${despachadoText}</div>`; // Add 'animated' class here
                 } else {
                     despachadoSelloContainer.innerHTML = '';
                 }
@@ -1325,16 +1340,25 @@
                 const now = new Date();
                 const minutesThreshold = retardTimeMinutes; // Use configurable retard time
 
-                // El indicador de retardo solo es relevante en la pestaña "Todos"
                 // Condición: NO enviado a empaque Y NO despachado Y (tiempo_actual - tiempo_creacion) > retardTimeMinutes
                 const isCurrentlyRetarded = !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > minutesThreshold);
                 recordElement.dataset.retardo = isCurrentlyRetarded; // Update data-retardo attribute
 
-                if (currentDispatchFilter === 'all' && isCurrentlyRetarded) {
+                let timeOverdueText = '';
+                if (isCurrentlyRetarded) {
+                    const diffMinutes = (now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60);
+                    const minutesOverdue = Math.floor(diffMinutes - minutesThreshold);
+                    const hoursOverdue = Math.floor(minutesOverdue / 60);
+                    const remainingMinutesOverdue = minutesOverdue % 60;
+                    timeOverdueText = `(Retrasado: ${hoursOverdue}h ${remainingMinutesOverdue}m)`;
+                }
+
+
+                if (isCurrentlyRetarded && (currentDispatchFilter === 'all' || currentDispatchFilter === 'retardos')) {
                     retardoIndicatorContainer.style.display = 'flex';
                     retardoIndicatorContainer.innerHTML = `
                             <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
-                            <span>En retardo</span>
+                            <span>En retardo ${timeOverdueText}</span>
                         `;
                 } else {
                     retardoIndicatorContainer.style.display = 'none';
@@ -1471,13 +1495,26 @@
                 }
             }
 
+            // --- LÓGICA DE RETARDO para crear elemento ---
+            let timeOverdueText = '';
+            if (isCurrentlyRetarded) {
+                const diffMinutes = (now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60);
+                const minutesOverdue = Math.floor(diffMinutes - minutesThreshold);
+                const hoursOverdue = Math.floor(minutesOverdue / 60);
+                const remainingMinutesOverdue = minutesOverdue % 60;
+                timeOverdueText = `(Retrasado: ${hoursOverdue}h ${remainingMinutesOverdue}m)`;
+            }
+
             // Ensamblaje final del elemento del registro, reordenando el indicador de retardo
             recordElement.innerHTML = `
                 ${recordContentHtml}
                 <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                 <div class="status-messages-container" id="status-messages-${docId}"></div>
                 <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
-                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: ${currentDispatchFilter === 'all' && isCurrentlyRetarded ? 'flex' : 'none'};"></div>
+                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: ${isCurrentlyRetarded && (currentDispatchFilter === 'all' || currentDispatchFilter === 'retardos') ? 'flex' : 'none'};">
+                    <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
+                    <span>En retardo ${timeOverdueText}</span>
+                </div>
                 ${controlsHtmlAdmins}
                 <div class="record-buttons">
                     <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
@@ -2846,16 +2883,25 @@
 
                     let retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`); // Declare here
 
-                    if (currentDispatchFilter === 'all' && isCurrentlyRetarded) { // Only show in 'all' tab
+                    let timeOverdueText = '';
+                    if (isCurrentlyRetarded) {
+                        const diffMinutes = (now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60);
+                        const minutesOverdue = Math.floor(diffMinutes - minutesThreshold);
+                        const hoursOverdue = Math.floor(minutesOverdue / 60);
+                        const remainingMinutesOverdue = minutesOverdue % 60;
+                        timeOverdueText = `(Retrasado: ${hoursOverdue}h ${remainingMinutesOverdue}m)`;
+                    }
+
+                    if (isCurrentlyRetarded && (currentDispatchFilter === 'all' || currentDispatchFilter === 'retardos')) { // Only show in 'all' or 'retardos' tab
                         if (retardoIndicatorContainer) {
                             retardoIndicatorContainer.style.display = 'flex';
                             retardoIndicatorContainer.innerHTML = `
                                 <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
-                                <span>En retardo</span>
+                                <span>En retardo ${timeOverdueText}</span>
                             `;
                         }
                     } else {
-                        // If not in 'all' tab or not retarded, ensure indicator is hidden
+                        // If not in 'all' or 'retardos' tab or not retarded, ensure indicator is hidden
                         if (retardoIndicatorContainer) retardoIndicatorContainer.style.display = 'none';
                     }
 
