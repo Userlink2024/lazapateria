@@ -1,500 +1,35 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generar Pedidos</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f0f2f5;
-            color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
-        }
-        .container {
-            width: 90%;
-            max-width: 800px;
-            margin: 20px auto;
-            padding: 20px;
-            background-color: #fff;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-        }
-        h1, h2 {
-            color: #4CAF50;
-            text-align: center;
-        }
-        h1 {
-            font-size: 1.4em;
-            margin-bottom: 20px;
-        }
-        h2 {
-            font-size: 1.2em;
-            margin-bottom: 15px;
-        }
-        .form-field {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 10px;
-        }
-        label {
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input, textarea, select, button {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 0.9em;
-            transition: all 0.3s ease;
-        }
-        input:focus, textarea:focus, select:focus, button:focus {
-            border-color: #4CAF50;
-            outline: none;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            justify-content: center;
-            align-items: center;
-        }
-        .modal-content {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 400px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            position: relative;
-            margin: auto;
-            top: 3px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        .modal-content.modal-pedidos-content { /* Estilo específico para el modal de pedidos */
-            max-width: 950px; /* Más ancho para la lista de pedidos */
-            width: 95%;
-        }
-        .close {
-            color: #aaa;
-            float: right;
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
-            position: absolute;
-            top: 10px;
-            right: 15px;
-        }
-        .close:hover, .close:focus {
-            color: black;
-            text-decoration: none;
-        }
-        .record {
-            background-color: #f9f9f9;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            margin-bottom: 10px;
-            font-size: 0.9em;
-            position: relative; /* Esencial para el posicionamiento absoluto del sello */
-        }
-        .record p, .record ul {
-            margin: 5px 0;
-        }
-        .record button {
-            margin-top: 10px;
-            padding: 5px 10px;
-            font-size: 0.9em;
-        }
-        .record hr {
-            margin-top: 10px;
-        }
-        .summary {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #e7f3e7;
-            border: 1px solid #4CAF50;
-            border-radius: 6px;
-        }
-        .totals {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
-            margin-bottom: 10px;
-            padding: 10px;
-            background-color: #e7f3e7;
-            border: 1px solid #4CAF50;
-            border-radius: 6px;
-        }
-        .control-container { /* Renombrado de bloqueo-container */
-            display: flex;
-            align-items: center;
-            margin-top: 5px;
-            margin-bottom: 5px;
-        }
-        .control-container label {
-            margin-left: 5px;
-            font-weight: normal;
-        }
-        /* Estilo específico para el área de "Marcar como Despachado" */
-        .control-container-despachado {
-            background-color: #e6ffe6; /* Fondo verde claro */
-            border: 1px solid #4CAF50; /* Borde verde */
-            padding: 5px;
-            border-radius: 4px;
-            margin-top: 5px;
-        }
-        /* Estilo para el checkbox de enviado a empaque */
-        .control-container-empaque {
-            display: flex;
-            align-items: center;
-            margin-top: 5px;
-            margin-bottom: 5px;
-            background-color: #f0f8ff; /* Light blue background */
-            border: 1px solid #007bff; /* Blue border */
-            padding: 5px;
-            border-radius: 4px;
-        }
-        .control-container-empaque label {
-            margin-left: 5px;
-            font-weight: normal;
-        }
-
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        #lista_pedidos_container {
-            max-height: 55vh; /* Ajustado para dar espacio a la búsqueda */
-            overflow-y: auto;
-            border: 1px solid #eee;
-            padding: 5px;
-            margin-top: 10px;
-        }
-        .search-bar-container {
-            margin-bottom: 15px;
-        }
-        .search-bar-container input {
-            width: calc(100% - 20px); /* Ajustar para padding */
-        }
-        /* Adjusted styles for status messages to display name */
-        .status-despachado {
-            color: green;
-            font-weight: bold;
-        }
-        .status-bloqueado {
-            color: red;
-            font-weight: bold;
-        }
-        /* Estilo para el sello de "Despachado" */
-        .despachado-sello {
-            position: absolute;
-            top: 15px; /* Ajustado para que sea más visible */
-            right: 15px; /* Ajustado para que sea más visible */
-            background-color: rgba(76, 175, 80, 0.9); /* Verde con más opacidad */
-            color: white;
-            padding: 5px 10px; /* Ligeramente más grande */
-            border-radius: 5px; /* Un poco más de borde redondeado */
-            font-weight: bold;
-            font-size: 0.9em; /* Ligeramente más grande */
-            text-transform: uppercase;
-            pointer-events: none; /* Para que no interfiera con clics */
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3); /* Sombra más pronunciada */
-            z-index: 10; /* Asegurar que esté por encima de otros elementos */
-        }
-        /* Styles for product/abono items in modification modal */
-        .product-item, .abono-item {
-            border: 1px solid #eee;
-            padding: 8px;
-            margin-bottom: 8px;
-            border-radius: 4px;
-            background-color: #fcfcfc;
-        }
-        .product-item input, .abono-item input {
-            margin-bottom: 5px; /* Space between inputs within an item */
-        }
-        .product-item button, .abono-item button {
-            background-color: #dc3545;
-            margin-top: 5px;
-            padding: 5px 10px;
-            font-size: 0.85em;
-        }
-        .product-item button:hover, .abono-item button:hover {
-            background-color: #c82333;
-        }
-        /* Styles for add buttons in modification modal */
-        .add-item-button {
-            background-color: #28a745;
-            margin-top: 10px;
-            padding: 8px 15px;
-            font-size: 0.9em;
-        }
-        .add-item-button:hover {
-            background-color: #218838;
-        }
-
-        /* --- NUEVOS ESTILOS PARA EL BLOQUEO --- */
-        /* Overlay para el bloqueo visual */
-        .block-overlay {
-            display: none; /* Se muestra con JS */
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7); /* Fondo semi-transparente oscuro */
-            /* Z-index más bajo para permitir que los modales y el icono de tuerca estén por encima */
-            z-index: 999;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            color: white;
-            font-size: 1.5em;
-            text-align: center;
-        }
-
-        /* Círculo rojo giratorio */
-        .block-circle {
-            width: 150px;
-            height: 150px;
-            border: 10px solid #f3f3f3; /* Light grey */
-            border-top: 10px solid #dc3545; /* Red */
-            border-radius: 50%;
-            animation: spin 2s linear infinite; /* Animación de giro */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin-bottom: 20px;
-            font-size: 0.8em; /* Tamaño de fuente dentro del círculo */
-            font-weight: bold;
-            color: #dc3545; /* Color del texto dentro del círculo */
-            background-color: rgba(255, 255, 255, 0.9); /* Fondo blanco semi-transparente */
-        }
-
-        /* Animación de giro */
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Estilos para el modal de contraseña */
-        #password_modal.modal { /* Specificity for modal parent */
-            z-index: 1002; /* Increased z-index */
-        }
-        #password_modal .modal-content {
-            max-width: 350px;
-            padding: 25px;
-        }
-        #password_modal label {
-            text-align: left;
-            margin-bottom: 10px;
-        }
-        #password_modal input[type="password"] {
-            width: calc(100% - 20px); /* Ajustar para padding */
-            margin-bottom: 15px;
-            padding: 10px;
-            font-size: 1.1em;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        #password_modal button {
-            width: 100%;
-            padding: 10px;
-            font-size: 1em;
-        }
-        #password_modal .error-message {
-            color: #dc3545;
-            margin-top: 10px;
-            font-size: 0.9em;
-        }
-
-        /* Estilos para el modal de opciones de bloqueo (tuerca) */
-        #block_options_modal .modal-content {
-            max-width: 450px;
-            padding: 25px;
-        }
-        #block_options_modal .form-field {
-            flex-direction: row; /* Para alinear checkbox y label */
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        #block_options_modal .form-field input[type="checkbox"] {
-            margin-right: 10px;
-            width: auto; /* Deshacer el 100% de ancho */
-            padding: 0;
-        }
-        #block_options_modal .form-field label {
-            margin-bottom: 0;
-            font-weight: normal;
-            cursor: pointer;
-        }
-        #block_options_modal .form-field.custom-time-input {
-            flex-direction: column; /* For input fields to stack */
-            align-items: flex-start;
-        }
-        #block_options_modal .form-field.custom-time-input input {
-            width: 100px; /* Adjust width for hour/minute inputs */
-            text-align: center;
-        }
-
-
-        /* Estilo para el contador regresivo */
-        #countdown_timer {
-            text-align: center;
-            font-size: 1.1em;
-            font-weight: bold;
-            color: #007bff; /* Un color que destaque */
-            margin-bottom: 15px;
-            padding: 8px;
-            border: 1px solid #007bff;
-            border-radius: 5px;
-            background-color: #e7f3ff;
-        }
-
-        /* Styles for bodeguero checkboxes container */
-        .bodeguero-checkbox-container {
-            display: flex;
-            flex-direction: column; /* Display checkboxes vertically */
-            gap: 5px; /* Space between checkbox items */
-            margin-top: 5px;
-            padding: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: #f9f9f9;
-        }
-        .bodeguero-checkbox-item {
-            display: flex;
-            align-items: center;
-        }
-        .bodeguero-checkbox-item input[type="checkbox"] {
-            width: auto; /* Override 100% width */
-            margin-right: 8px; /* Space between checkbox and label */
-            cursor: pointer;
-        }
-        .bodeguero-checkbox-item label {
-            margin-bottom: 0; /* Override default label margin */
-            font-weight: normal;
-            cursor: pointer;
-        }
-        /* Estilos para los botones de filtro de despacho */
-        .dispatch-filter-button {
-            background-color: #f0f0f0;
-            color: #333;
-            border: 1px solid #ccc;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-right: 5px; /* Espacio entre botones */
-        }
-        .dispatch-filter-button:hover {
-            background-color: #e0e0e0;
-        }
-        .dispatch-filter-button.active {
-            background-color: #4CAF50; /* Default active green */
-            color: white;
-            border-color: #4CAF50;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
-        }
-        /* Estilo específico para el botón "No Despachados" cuando está activo */
-        .dispatch-filter-button.active.no-despachados-active {
-            background-color: #dc3545; /* Rojo */
-            border-color: #dc3545;
-        }
-        /* Nuevo estilo para el botón "Retardos" cuando está activo */
-        .dispatch-filter-button.active.retardos-active {
-            background-color: #ffc107; /* Amarillo */
-            color: #333;
-            border-color: #ffc107;
-        }
-
-        /* --- NUEVOS ESTILOS PARA LA ALERTA DE RETARDO EN EL PEDIDO --- */
-        .retardo-indicator {
-            /* Posición relativa para estar en el flujo del contenido */
-            position: relative;
-            display: flex;
-            align-items: center;
-            font-weight: bold;
-            color: #dc3545; /* Rojo */
-            font-size: 1.1em;
-            margin-top: 5px; /* Pequeño espacio superior */
-            margin-bottom: 5px; /* Pequeño espacio inferior */
-        }
-
-        .retardo-indicator .exclamation-icon {
-            margin-right: 5px;
-            font-size: 1.5em; /* Tamaño del signo de admiración */
-            position: relative;
-            animation: pulse-aura 1.5s infinite ease-out; /* Animación de aura intermitente */
-            display: inline-block; /* Para que la sombra se aplique correctamente */
-        }
-
-        @keyframes pulse-aura {
-            0% { text-shadow: 0 0 0px rgba(255, 0, 0, 0.4); opacity: 1; }
-            50% { text-shadow: 0 0 10px rgba(255, 0, 0, 0.8), 0 0 20px rgba(255, 0, 0, 0.6); opacity: 0.7; }
-            100% { text-shadow: 0 0 0px rgba(255, 0, 0, 0.4); opacity: 1; }
-        }
-
-        /* --- ESTILOS PARA EL NUEVO MODAL DE ALERTA --- */
-        #retardo_alert_modal.modal {
-            background-color: rgba(0, 0, 0, 0.0); /* Fondo transparente para no oscurecer la vista */
-            pointer-events: none; /* No interactuable por defecto */
-            z-index: 1005; /* Más alto que otros modales */
-            justify-content: center; /* Centrar horizontalmente */
-            align-items: flex-start; /* Alinear arriba */
-            padding-top: 20px; /* Separación del borde superior */
-        }
-
-        #retardo_alert_modal .modal-content {
-            background-color: #dc3545; /* Fondo rojo para la alerta */
-            color: white;
-            text-align: center;
-            font-weight: bold;
-            max-width: 90%; /* Ancho máximo para el modal de alerta */
-            padding: 15px 25px;
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            animation: fadeInOut 5s forwards; /* Animación de entrada y salida */
-            pointer-events: all; /* Hacerlo interactuable cuando se muestra */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px; /* Espacio entre el icono y el texto */
-        }
-
-        #retardo_alert_modal .modal-content .close {
-            color: white;
-            position: relative; /* Ajustado para que el cierre sea parte del flex */
-            margin-left: auto; /* Moverlo a la derecha */
-            top: 0;
-            right: 0;
-        }
-
-        @keyframes fadeInOut {
-            0% { opacity: 0; transform: translateY(-50px); }
-            10% { opacity: 1; transform: translateY(0); }
-            90% { opacity: 1; transform: translateY(0); }
-            100% { opacity: 0; transform: translateY(-50px); }
-        }
-    </style>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#3B82F6', /* Azul más vibrante */
+                        secondary: '#60A5FA', /* Azul más claro */
+                        accent: '#F97316', /* Naranja para detalles */
+                        success: '#10B981', /* Verde para éxito */
+                        danger: '#EF4444', /* Rojo para errores */
+                        warning: '#F59E0B', /* Amarillo-naranja para advertencias */
+                        info: '#3B82F6', /* Azul para información */
+                        background: '#F3F4F6', /* Gris claro de fondo */
+                        card: '#FFFFFF', /* Blanco para tarjetas/contenedores */
+                        textPrimary: '#1F2937', /* Gris oscuro para texto principal */
+                        textSecondary: '#6B7280', /* Gris medio para texto secundario */
+                    }
+                }
+            }
+        }
+    </script>
     <!-- Font Awesome para el signo de admiración -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 
@@ -701,15 +236,15 @@
             let html = '';
             lista.forEach((item, index) => {
                 if (tipo === 'productos') {
-                    html += `<div class="record">
-                        <p><strong>Producto ${index + 1}</strong></p>
+                    html += `<div class="bg-blue-50 p-3 rounded-lg mb-2 text-sm text-gray-700 shadow-sm">
+                        <p class="font-semibold">Producto ${index + 1}</p>
                         <p>Referencia: ${item.referencia}</p>
                         <p>Color: ${item.color}</p> <p>Talla: ${item.talla}</p>
                         <p>Precio: ${item.precio}</p>
                     </div>`;
                 } else if (tipo === 'abonos') {
-                    html += `<div class="record">
-                        <p><strong>Abono ${index + 1}</strong></p>
+                    html += `<div class="bg-green-50 p-3 rounded-lg mb-2 text-sm text-gray-700 shadow-sm">
+                        <p class="font-semibold">Abono ${index + 1}</p>
                         <p>Fecha: ${item.fecha}</p>
                         <p>Monto: ${item.monto}</p> </div>`;
                 }
@@ -909,7 +444,7 @@
                 // Display BLOQUEADO status only if current filter is 'all'
                 if (estaBloqueado && currentDispatchFilter === 'all') {
                     const blockedText = bloqueadoPor ? `BLOQUEADO POR: ${bloqueadoPor.toUpperCase()}` : 'BLOQUEADO';
-                    newStatusHtml += `<p class="status-bloqueado">${blockedText}</p>`;
+                    newStatusHtml += `<p class="text-danger font-bold">${blockedText}</p>`;
                 }
                 statusMessagesContainer.innerHTML = newStatusHtml;
             }
@@ -918,12 +453,21 @@
             const despachadoCheckbox = recordElement.querySelector(`#despachar_${docId}`);
             const enviadoAEmpaqueCheckbox = recordElement.querySelector(`#enviado_empaque_${docId}`);
             const bloquearCheckbox = recordElement.querySelector(`#bloquear_${docId}`);
+            const enviadoAEmpaqueTimeSpan = recordElement.querySelector(`#enviado_empaque_time_${docId}`);
+
 
             // Visibilidad para "Enviado a Empaque" (Visible para todos en pestaña "Todos")
             if (enviadoAEmpaqueCheckbox) {
                 enviadoAEmpaqueCheckbox.closest('.control-container-empaque').style.display = (currentDispatchFilter === 'all') ? 'flex' : 'none';
                 enviadoAEmpaqueCheckbox.checked = enviadoAEmpaque;
                 enviadoAEmpaqueCheckbox.disabled = enviadoAEmpaque || estaDespachado; // Deshabilita si ya fue enviado a empaque o si ya fue despachado
+
+                // Mostrar la hora si está marcado como "Enviado a Empaque"
+                if (enviadoAEmpaque && enviadoAEmpaqueTimestamp) {
+                    enviadoAEmpaqueTimeSpan.textContent = enviadoAEmpaqueTimestamp.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+                } else {
+                    enviadoAEmpaqueTimeSpan.textContent = ''; // Limpiar si no está marcado
+                }
             }
             // Visibilidad para "Bloquear Pedido" (Solo para administradores en pestaña "Todos")
             if (bloquearCheckbox) {
@@ -955,7 +499,7 @@
             if (despachadoSelloContainer) {
                 if (estaDespachado) {
                     const despachadoText = despachadoPor ? `DESPACHADO POR: ${despachadoPor.toUpperCase()}` : 'DESPACHADO';
-                    despachadoSelloContainer.innerHTML = `<div class="despachado-sello">${despachadoText}</div>`;
+                    despachadoSelloContainer.innerHTML = `<div class="absolute top-4 right-4 bg-success text-white px-3 py-1 rounded-md font-bold text-sm uppercase shadow-md z-10">${despachadoText}</div>`;
                 } else {
                     despachadoSelloContainer.innerHTML = '';
                 }
@@ -987,7 +531,7 @@
         // Helper function to create a new record element
         function createRecordElement(docId, registro, index) {
             const recordElement = document.createElement('div');
-            recordElement.className = 'record';
+            recordElement.className = 'record bg-white p-4 rounded-lg shadow-md mb-4 text-gray-800 relative';
             recordElement.dataset.id = docId;
 
             const esAdministrador = datosUsuario.permisos.toLowerCase() === 'administrador';
@@ -1021,9 +565,9 @@
 
 
             let productosTextoParaBusqueda = "";
-            let productosHTMLList = 'Sin productos';
+            let productosHTMLList = '<p class="text-sm text-gray-500">Sin productos</p>';
             if (Array.isArray(registro.productos) && registro.productos.length > 0) {
-                productosHTMLList = '<ul>';
+                productosHTMLList = '<ul class="list-disc list-inside text-sm text-gray-700 mt-2">';
                 registro.productos.forEach((producto, i) => {
                     const prodText = `${producto.referencia || 'N/A'} - ${producto.color || 'N/A'} - ${producto.talla || 'N/A'} - $${(producto.precio || 0).toLocaleString('es-CO')}`;
                     productosHTMLList += `<li>Producto ${i + 1}: ${prodText}</li>`;
@@ -1033,9 +577,9 @@
             }
             recordElement.dataset.productos = productosTextoParaBusqueda.trim();
 
-            let abonosHTMLList = 'Sin abonos';
+            let abonosHTMLList = '<p class="text-sm text-gray-500">Sin abonos</p>';
             if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
-                abonosHTMLList = '<ul>';
+                abonosHTMLList = '<ul class="list-disc list-inside text-sm text-gray-700 mt-2">';
                 registro.abonos.forEach((abono, j) => {
                     abonosHTMLList += `<li>Abono ${j + 1}: ${abono.fecha || 'N/A'} - $${(abono.monto || 0).toLocaleString('es-CO')}</li>`;
                 });
@@ -1049,38 +593,50 @@
                 ? registro.bodegueros_encargados.join(', ')
                 : 'N/A';
 
+            // Formatear la hora de enviadoAEmpaque si existe
+            const enviadoAEmpaqueTime = enviadoAEmpaque && enviadoAEmpaqueTimestamp ?
+                `<span id="enviado_empaque_time_${docId}" class="ml-2 font-semibold text-primary">${enviadoAEmpaqueTimestamp.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>` :
+                `<span id="enviado_empaque_time_${docId}" class="ml-2 font-semibold text-primary"></span>`;
+
             // --- Construir el contenido principal del registro de forma consistente ---
             let recordContentHtml = '';
             if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados' || currentDispatchFilter === 'retardos') {
                 // Vista simplificada para Despachados/No Despachados/Retardos
                 recordContentHtml = `
-                    <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
-                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                    <p>Bodeguero(s): ${bodeguerosEncargados}</p>
-                    <p>Hora: ${horaFormateada}</p>
-                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                    <p class="text-lg font-bold text-gray-900 mb-1">Cliente: ${registro.cliente || 'N/A'}</p>
+                    <p class="text-sm text-gray-600 mb-1">Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                    <p class="num_pares text-sm text-gray-600 mb-1">Número de Pares: ${registro.num_pares || 0}</p>
+                    <p class="valor_total text-sm text-gray-600 mb-1">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                    <span class="valor_total_raw hidden">${registro.valor_total || 0}</span>
+                    <p class="text-sm text-gray-600 mb-1">Bodeguero(s): ${bodeguerosEncargados}</p>
+                    <p class="text-sm text-gray-600 mb-1">Hora: ${horaFormateada}</p>
+                    <p class="text-sm text-gray-600">Observaciones: ${registro.observaciones || 'N/A'}</p>
                 `;
             } else { // currentDispatchFilter === 'all' (o por defecto si no hay filtro activo)
                 recordContentHtml = `
-                    <p><strong>Registro ${index + 1}</strong></p>
-                    <p>Fecha y Hora: ${fechaHoraFormateada}</p>
-                    <p>Código Único: ${registro.codigo_unico || 'N/A'}</p>
-                    <p>Cliente: ${registro.cliente || 'N/A'}</p>
-                    <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
-                    ${productosHTMLList}
-                    ${abonosHTMLList}
-                    <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
-                    <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
-                    <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
-                    <p>Bodeguero(s): ${bodeguerosEncargados}</p> <!-- La línea de bodegueros se mantiene aquí -->
-                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                    <p class="text-lg font-bold text-gray-900 mb-1">Registro ${index + 1}</p>
+                    <p class="text-sm text-gray-600 mb-1">Fecha y Hora: ${fechaHoraFormateada}</p>
+                    <p class="text-sm text-gray-600 mb-1">Código Único: ${registro.codigo_unico || 'N/A'}</p>
+                    <p class="text-lg font-semibold text-gray-900 mb-1">Cliente: ${registro.cliente || 'N/A'}</p>
+                    <p class="text-sm text-gray-600 mb-1">Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
+                    <div class="mb-2">
+                        <p class="font-semibold text-gray-700">Productos:</p>
+                        ${productosHTMLList}
+                    </div>
+                    <div class="mb-2">
+                        <p class="font-semibold text-gray-700">Abonos:</p>
+                        ${abonosHTMLList}
+                    </div>
+                    <p class="num_pares text-sm text-gray-600 mb-1">Número de Pares: ${registro.num_pares || 0}</p>
+                    <p class="valor_total text-sm text-gray-600 mb-1">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
+                    <span class="valor_total_raw hidden">${registro.valor_total || 0}</span>
+                    <p class="text-sm text-gray-600 mb-1">Bodeguero(s): ${bodeguerosEncargados}</p>
+                    <p class="text-sm text-gray-600 mb-2">Observaciones: ${registro.observaciones || 'N/A'}</p>
                     <!-- Checkbox Enviado a Empaque: visible para todos en la pestaña "Todos" -->
-                    <div class="control-container control-container-empaque" style="display: ${currentDispatchFilter === 'all' ? 'flex' : 'none'};">
-                        <input type="checkbox" id="enviado_empaque_${docId}" ${enviadoAEmpaque ? 'checked' : ''} onchange="toggleEnviadoAEmpaque('${docId}', this.checked)" ${enviadoAEmpaque || estaDespachado ? 'disabled' : ''}>
-                        <label for="enviado_empaque_${docId}">Enviado a Empaque</label>
+                    <div class="flex items-center mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md" style="display: ${currentDispatchFilter === 'all' ? 'flex' : 'none'};">
+                        <input type="checkbox" id="enviado_empaque_${docId}" ${enviadoAEmpaque ? 'checked' : ''} onchange="toggleEnviadoAEmpaque('${docId}', this.checked)" class="form-checkbox h-5 w-5 text-blue-600 rounded-md" ${enviadoAEmpaque || estaDespachado ? 'disabled' : ''}>
+                        <label for="enviado_empaque_${docId}" class="ml-2 text-sm font-medium text-gray-700">Enviado a Empaque</label>
+                        ${enviadoAEmpaqueTime}
                     </div>
                 `;
             }
@@ -1091,17 +647,17 @@
                 if (currentDispatchFilter === 'all') {
                     // Para la pestaña "Todos": "Bloquear Pedido" (solo admin)
                     controlsHtmlAdmins += `
-                        <div class="control-container">
-                            <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)">
-                            <label for="bloquear_${docId}">Bloquear Pedido</label>
+                        <div class="flex items-center mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                            <input type="checkbox" id="bloquear_${docId}" ${estaBloqueado ? 'checked' : ''} onchange="toggleBloqueoPedido('${docId}', this.checked)" class="form-checkbox h-5 w-5 text-red-600 rounded-md">
+                            <label for="bloquear_${docId}" class="ml-2 text-sm font-medium text-gray-700">Bloquear Pedido</label>
                         </div>
                     `;
-                } else if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados') {
-                    // Para las pestañas "Despachados" y "No Despachados": Solo "Marcar como Despachado" (solo admin)
+                } else if (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados' || currentDispatchFilter === 'retardos') {
+                    // Para las pestañas "Despachados", "No Despachados" y "Retardos": Solo "Marcar como Despachado" (solo admin)
                     controlsHtmlAdmins += `
-                        <div class="control-container control-container-despachado">
-                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)">
-                            <label for="despachar_${docId}">Marcar como Despachado</label>
+                        <div class="flex items-center mt-2 p-2 bg-green-50 border border-green-200 rounded-md" style="display: ${datosUsuario.permisos.toLowerCase() === 'administrador' ? 'flex' : 'none'};">
+                            <input type="checkbox" id="despachar_${docId}" ${estaDespachado ? 'checked' : ''} onchange="toggleDespachadoPedido('${docId}', this.checked)" class="form-checkbox h-5 w-5 text-green-600 rounded-md">
+                            <label for="despachar_${docId}" class="ml-2 text-sm font-medium text-gray-700">Marcar como Despachado</label>
                         </div>
                     `;
                 }
@@ -1110,16 +666,16 @@
             // Ensamblaje final del elemento del registro, reordenando el indicador de retardo
             recordElement.innerHTML = `
                 ${recordContentHtml}
-                <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
-                <div class="status-messages-container" id="status-messages-${docId}"></div>
-                <div class="despachado-sello-container" id="despachado-sello-container-${docId}"></div>
-                <div class="retardo-indicator" id="retardo-indicator-${docId}" style="display: ${currentDispatchFilter === 'all' && isCurrentlyRetarded ? 'flex' : 'none'};"></div>
+                <p class="text-sm text-gray-600 mt-2">Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
+                <div class="mt-2" id="status-messages-${docId}"></div>
+                <div id="despachado-sello-container-${docId}"></div>
+                <div class="flex items-center font-bold text-danger text-lg mt-2" id="retardo-indicator-${docId}" style="display: ${currentDispatchFilter === 'all' && isCurrentlyRetarded ? 'flex' : 'none'};"></div>
                 ${controlsHtmlAdmins}
-                <div class="record-buttons">
-                    <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
-                    <button onclick="eliminarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
+                <div class="flex space-x-2 mt-4">
+                    <button onclick="modificarPedido('${docId}')" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-secondary transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">Modificar</button>
+                    <button onclick="eliminarPedido('${docId}')" class="px-4 py-2 bg-danger text-white rounded-md hover:bg-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">Eliminar</button>
                 </div>
-                <hr>
+                <hr class="my-4 border-gray-200">
             `;
             return recordElement;
         }
@@ -1150,7 +706,7 @@
             }
 
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
-            listaPedidosContainer.innerHTML = '<p>Cargando pedidos...</p>';
+            listaPedidosContainer.innerHTML = '<p class="text-gray-500 text-center">Cargando pedidos...</p>';
             isInitialLoadPedidos = true;
 
             if (pedidosListenerUnsubscribe) {
@@ -1186,9 +742,9 @@
                 if (isInitialLoadPedidos || snapshot.empty) {
                     listaPedidosContainer.innerHTML = '';
                     if (snapshot.empty && isUserFilteredRole) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos asignados a este usuario o no se encontraron pedidos con los filtros actuales.</p>';
+                        listaPedidosContainer.innerHTML = '<p class="text-gray-500 text-center">No hay pedidos asignados a este usuario o no se encontraron pedidos con los filtros actuales.</p>';
                     } else if (snapshot.empty) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
+                        listaPedidosContainer.innerHTML = '<p class="text-gray-500 text-center">No hay pedidos para mostrar con los filtros actuales.</p>';
                     }
                 }
 
@@ -1290,7 +846,7 @@
 
             }, error => {
                 console.error("Error al escuchar los pedidos:", error);
-                listaPedidosContainer.innerHTML = '<p>Error al cargar los pedidos. Intente de nuevo.</p>';
+                listaPedidosContainer.innerHTML = '<p class="text-danger text-center">Error al cargar los pedidos. Intente de nuevo.</p>';
             });
         }
 
@@ -1419,13 +975,13 @@
 
 
         function mostrarResumenAsesores(resumen) {
-            let resumenHTML = '<h3>Resumen de Asesores</h3><div>';
+            let resumenHTML = '<h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">Resumen de Asesores</h3><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
             for (const asesor in resumen) {
                 resumenHTML += `
-                    <div class="summary">
-                        <p><strong>Asesor: ${asesor}</strong></p>
-                        <p>Número de Pares: ${resumen[asesor].num_pares}</p>
-                        <p>Valor Vendido: $${(resumen[asesor].valor_vendido || 0).toLocaleString('es-CO')}</p> </div>
+                    <div class="bg-blue-50 p-4 rounded-lg shadow-md border border-blue-200">
+                        <p class="font-bold text-lg text-primary mb-1">Asesor: ${asesor}</p>
+                        <p class="text-sm text-gray-700">Número de Pares: <span class="font-semibold">${resumen[asesor].num_pares}</span></p>
+                        <p class="text-sm text-gray-700">Valor Vendido: <span class="font-semibold">$${(resumen[asesor].valor_vendido || 0).toLocaleString('es-CO')}</span></p> </div>
                 `;
             }
             resumenHTML += '</div>';
@@ -1511,6 +1067,7 @@
 
                 const modal = document.getElementById('modal_modificar');
                 modal.style.display = 'flex';
+                modal.classList.add('animate-fade-in');
                 modal.style.zIndex = '1001';
             } catch (error) {
                 console.error("Error al cargar el pedido para modificar:", error);
@@ -1522,17 +1079,17 @@
             const container = document.getElementById('modificar_productos_list');
             let html = '';
             if (products.length === 0) {
-                html += '<p>No hay productos en este pedido. Agregue uno:</p>';
+                html += '<p class="text-sm text-gray-500 mb-2">No hay productos en este pedido. Agregue uno:</p>';
             }
             products.forEach((product, index) => {
                 html += `
-                    <div class="product-item" data-index="${index}">
-                        <label>Producto ${index + 1}:</label>
-                        <input type="text" class="mod_product_referencia" value="${product.referencia || ''}" placeholder="Referencia">
-                        <input type="text" class="mod_product_color" value="${product.color || ''}" placeholder="Color">
-                        <input type="text" class="mod_product_talla" value="${product.talla || ''}" placeholder="Talla">
-                        <input type="number" class="mod_product_precio" value="${product.precio || 0}" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
-                        <button type="button" onclick="removeProductModificar(this)">Eliminar Producto</button>
+                    <div class="product-item bg-gray-50 p-3 rounded-md mb-2 border border-gray-200" data-index="${index}">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Producto ${index + 1}:</label>
+                        <input type="text" class="mod_product_referencia w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" value="${product.referencia || ''}" placeholder="Referencia">
+                        <input type="text" class="mod_product_color w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" value="${product.color || ''}" placeholder="Color">
+                        <input type="text" class="mod_product_talla w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" value="${product.talla || ''}" placeholder="Talla">
+                        <input type="number" class="mod_product_precio w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" value="${product.precio || 0}" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
+                        <button type="button" onclick="removeProductModificar(this)" class="px-3 py-1 bg-danger text-white rounded-md hover:bg-red-700 transition-colors duration-200 text-sm">Eliminar Producto</button>
                     </div>
                 `;
             });
@@ -1547,13 +1104,13 @@
 
             const newIndex = container.children.length;
             const newProductHtml = `
-                <div class="product-item" data-index="${newIndex}">
-                    <label>Producto ${newIndex + 1}:</label>
-                    <input type="text" class="mod_product_referencia" placeholder="Referencia">
-                    <input type="text" class="mod_product_color" placeholder="Color">
-                    <input type="text" class="mod_product_talla" placeholder="Talla">
-                    <input type="number" class="mod_product_precio" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
-                    <button type="button" onclick="removeProductModificar(this)">Eliminar Producto</button>
+                <div class="product-item bg-gray-50 p-3 rounded-md mb-2 border border-gray-200" data-index="${newIndex}">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Producto ${newIndex + 1}:</label>
+                    <input type="text" class="mod_product_referencia w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" placeholder="Referencia">
+                    <input type="text" class="mod_product_color w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" placeholder="Color">
+                    <input type="text" class="mod_product_talla w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" placeholder="Talla">
+                    <input type="number" class="mod_product_precio w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" placeholder="Precio" step="any" oninput="actualizarValorTotalModificar()">
+                    <button type="button" onclick="removeProductModificar(this)" class="px-3 py-1 bg-danger text-white rounded-md hover:bg-red-700 transition-colors duration-200 text-sm">Eliminar Producto</button>
                 </div>
             `;
             container.insertAdjacentHTML('beforeend', newProductHtml);
@@ -1569,7 +1126,7 @@
                 item.querySelector('label').textContent = `Producto ${index + 1}:`;
             });
             if (document.querySelectorAll('#modificar_productos_list .product-item').length === 0) {
-                document.getElementById('modificar_productos_list').innerHTML = '<p>No hay productos en este pedido. Agregue uno:</p>';
+                document.getElementById('modificar_productos_list').innerHTML = '<p class="text-sm text-gray-500 mb-2">No hay productos en este pedido. Agregue uno:</p>';
             }
         }
 
@@ -1577,15 +1134,15 @@
             const container = document.getElementById('modificar_abonos_list');
             let html = '';
             if (abonos.length === 0) {
-                html += '<p>No hay abonos en este pedido. Agregue uno:</p>';
+                html += '<p class="text-sm text-gray-500 mb-2">No hay abonos en este pedido. Agregue uno:</p>';
             }
             abonos.forEach((abono, index) => {
                 html += `
-                    <div class="abono-item" data-index="${index}">
-                        <label>Abono ${index + 1}:</label>
-                        <input type="date" class="mod_abono_fecha" value="${abono.fecha || ''}" placeholder="Fecha">
-                        <input type="number" class="mod_abono_monto" value="${abono.monto || 0}" placeholder="Monto" step="any">
-                        <button type="button" onclick="removeAbonoModificar(this)">Eliminar Abono</button>
+                    <div class="abono-item bg-gray-50 p-3 rounded-md mb-2 border border-gray-200" data-index="${index}">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Abono ${index + 1}:</label>
+                        <input type="date" class="mod_abono_fecha w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" value="${abono.fecha || ''}" placeholder="Fecha">
+                        <input type="number" class="mod_abono_monto w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" value="${abono.monto || 0}" placeholder="Monto" step="any">
+                        <button type="button" onclick="removeAbonoModificar(this)" class="px-3 py-1 bg-danger text-white rounded-md hover:bg-red-700 transition-colors duration-200 text-sm">Eliminar Abono</button>
                     </div>
                 `;
             });
@@ -1600,11 +1157,11 @@
 
             const newIndex = container.children.length;
             const newAbonoHtml = `
-                <div class="abono-item" data-index="${newIndex}">
-                    <label>Abono ${newIndex + 1}:</label>
-                    <input type="date" class="mod_abono_fecha" value="${new Date().toISOString().slice(0, 10)}" placeholder="Fecha">
-                    <input type="number" class="mod_abono_monto" placeholder="Monto" step="any">
-                    <button type="button" onclick="removeAbonoModificar(this)">Eliminar Abono</button>
+                <div class="abono-item bg-gray-50 p-3 rounded-md mb-2 border border-gray-200" data-index="${newIndex}">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Abono ${newIndex + 1}:</label>
+                    <input type="date" class="mod_abono_fecha w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" value="${new Date().toISOString().slice(0, 10)}" placeholder="Fecha">
+                    <input type="number" class="mod_abono_monto w-full p-2 border border-gray-300 rounded-md mb-2 focus:ring-primary focus:border-primary" placeholder="Monto" step="any">
+                    <button type="button" onclick="removeAbonoModificar(this)" class="px-3 py-1 bg-danger text-white rounded-md hover:bg-red-700 transition-colors duration-200 text-sm">Eliminar Abono</button>
                 </div>
             `;
             container.insertAdjacentHTML('beforeend', newAbonoHtml);
@@ -1622,7 +1179,7 @@
                 item.querySelector('label').textContent = `Abono ${index + 1}:`;
             });
             if (document.querySelectorAll('#modificar_abonos_list .abono-item').length === 0) {
-                document.getElementById('modificar_abonos_list').innerHTML = '<p>No hay abonos en este pedido. Agregue uno:</p>';
+                document.getElementById('modificar_abonos_list').innerHTML = '<p class="text-sm text-gray-500 mb-2">No hay abonos en este pedido. Agregue uno:</p>';
             }
         }
 
@@ -1736,8 +1293,9 @@
             var loadingBar = document.getElementById("loading-bar");
             var loadingBarFill = document.getElementById("loading-bar-fill");
             if(loadingBar && loadingBarFill) {
-                loadingBar.style.display = "block";
+                loadingBar.classList.remove('hidden');
                 loadingBarFill.style.width = "0%";
+                loadingBarFill.textContent = "0%";
                 var width = 0;
                 var interval = setInterval(function() {
                     if (width >= 100) {
@@ -1745,7 +1303,7 @@
                     } else {
                         width++;
                         loadingBarFill.style.width = width + "%";
-                        loadingBarFill.innerText = width + "%";
+                        loadingBarFill.textContent = width + "%";
                     }
                 }, 20);
             }
@@ -1754,7 +1312,7 @@
         function ocultarBarraCargando() {
             var loadingBar = document.getElementById("loading-bar");
             if (loadingBar) {
-                loadingBar.style.display = "none";
+                loadingBar.classList.add('hidden');
             }
         }
 
@@ -1781,12 +1339,12 @@
                 // Si el auto-bloqueo está habilitado (por el admin) Y ya se activó permanentemente
                 if (isAutoBlockEnabled && isAutoBlockedPermanently) {
                     countdownElement.textContent = "¡Bloqueo automático activado! (Indefinido)";
-                    countdownElement.style.backgroundColor = '#ffc107'; // Yellow background for active auto block
-                    countdownElement.style.borderColor = '#ffc107';
+                    countdownElement.classList.remove('bg-info', 'border-info', 'bg-red-100', 'border-danger');
+                    countdownElement.classList.add('bg-warning', 'border-warning');
                 } else if (isAutoBlockEnabled && !isAutoBlockedPermanently) { // Si el auto-bloqueo está habilitado pero aún no se activa hoy
                     countdownElement.textContent = `Bloqueo automático en: ${Math.floor(timeLeftMs / (1000 * 60 * 60))}h ${Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}m ${Math.floor((timeLeftMs % (1000 * 60)) / 1000)}s`;
-                    countdownElement.style.backgroundColor = '#e7f3ff'; // Default blue background
-                    countdownElement.style.borderColor = '#007bff';
+                    countdownElement.classList.remove('bg-warning', 'border-warning', 'bg-red-100', 'border-danger');
+                    countdownElement.classList.add('bg-info', 'border-info');
 
                     // Actualizar la hora configurada en el modal de opciones de bloqueo (en formato de 12 horas)
                     const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
@@ -1795,8 +1353,8 @@
 
                 } else { // Si el auto-bloqueo no está habilitado por el admin
                     countdownElement.textContent = "Bloqueo automático deshabilitado por el administrador.";
-                    countdownElement.style.backgroundColor = '#f8d7da'; /* Light red */
-                    countdownElement.style.borderColor = '#dc3545'; /* Red */
+                    countdownElement.classList.remove('bg-info', 'border-info', 'bg-warning', 'border-warning');
+                    countdownElement.classList.add('bg-red-100', 'border-danger');
                      document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: N/A (Deshabilitado)`;
                 }
             }
@@ -1830,19 +1388,20 @@
             const bodegueros = await fetchBodegueros();
 
             if (bodegueros.length === 0) {
-                bodegueroContainer.innerHTML = '<p>No hay bodegueros disponibles.</p>';
+                bodegueroContainer.innerHTML = '<p class="text-sm text-gray-500">No hay bodegueros disponibles.</p>';
                 return;
             }
 
             bodegueros.forEach((bodegueroName, index) => {
                 const checkboxItem = document.createElement('div');
-                checkboxItem.className = 'bodeguero-checkbox-item';
+                checkboxItem.className = 'flex items-center';
 
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.id = `${containerId}_${index}`;
                 checkbox.name = 'bodegueros';
                 checkbox.value = bodegueroName;
+                checkbox.classList.add('form-checkbox', 'h-4', 'w-4', 'text-primary', 'rounded');
                 if (selectedBodegueros.includes(bodegueroName)) {
                     checkbox.checked = true;
                 }
@@ -1850,6 +1409,7 @@
                 const label = document.createElement('label');
                 label.htmlFor = `${containerId}_${index}`;
                 label.textContent = bodegueroName;
+                label.classList.add('ml-2', 'text-sm', 'text-gray-700', 'cursor-pointer');
 
                 checkboxItem.appendChild(checkbox);
                 checkboxItem.appendChild(label);
@@ -1860,18 +1420,18 @@
         window.onload = function() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
                 alert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
-                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>";
+                document.body.innerHTML = "<h1 class='text-danger text-center text-xl mt-10'>Error crítico: Faltan datos de usuario.</h1>";
                 return;
             }
             console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
 
             // Ajustar visibilidad del icono de la tuerca y opciones de exportación/resumen
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                document.getElementById('exportar').style.display = 'none';
-                document.getElementById('resumen_asesores').style.display = 'none';
-                document.getElementById('gear_icon').style.display = 'none';
+                document.getElementById('exportar').classList.add('hidden');
+                document.getElementById('resumen_asesores').classList.add('hidden');
+                document.getElementById('gear_icon').classList.add('hidden');
             } else {
-                document.getElementById('gear_icon').style.display = 'inline-block';
+                document.getElementById('gear_icon').classList.remove('hidden');
             }
 
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
@@ -1952,20 +1512,22 @@
         function setActiveDispatchFilterButton(filterType) {
             const allDispatchButtons = document.querySelectorAll('.dispatch-filter-button');
             allDispatchButtons.forEach(button => {
-                button.classList.remove('active');
-                button.classList.remove('no-despachados-active');
-                button.classList.remove('retardos-active'); // New class for retardos
+                button.classList.remove('bg-primary', 'text-white', 'hover:bg-primary/90');
+                button.classList.remove('bg-red-500', 'text-white', 'hover:bg-red-600');
+                button.classList.remove('bg-warning', 'text-gray-800', 'hover:bg-warning/90');
+                button.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
             });
-            if (filterType === 'all') {
-                document.getElementById('filterAllButton').classList.add('active');
-            } else if (filterType === 'despachados') {
-                document.getElementById('filterDespachadosButton').classList.add('active');
-            } else if (filterType === 'noDespachados') {
-                document.getElementById('filterNoDespachadosButton').classList.add('active');
-                document.getElementById('filterNoDespachadosButton').classList.add('no-despachados-active');
-            } else if (filterType === 'retardos') { // New filter type
-                document.getElementById('filterRetardosButton').classList.add('active');
-                document.getElementById('filterRetardosButton').classList.add('retardos-active'); // Apply a specific color for retardos if desired
+
+            const activeButton = document.getElementById(`filter${filterType.charAt(0).toUpperCase() + filterType.slice(1)}Button`);
+            if (activeButton) {
+                activeButton.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+                if (filterType === 'despachados' || filterType === 'all') {
+                    activeButton.classList.add('bg-primary', 'text-white', 'hover:bg-primary/90');
+                } else if (filterType === 'noDespachados') {
+                    activeButton.classList.add('bg-danger', 'text-white', 'hover:bg-red-600');
+                } else if (filterType === 'retardos') {
+                    activeButton.classList.add('bg-warning', 'text-gray-800', 'hover:bg-warning/90');
+                }
             }
         }
 
@@ -1977,7 +1539,7 @@
 
             const filterAllButton = document.createElement('button');
             filterAllButton.id = 'filterAllButton';
-            filterAllButton.className = 'dispatch-filter-button';
+            filterAllButton.className = 'dispatch-filter-button px-4 py-2 rounded-md transition-colors duration-200';
             filterAllButton.textContent = 'Todos';
             filterAllButton.addEventListener('click', () => {
                 initAudioContext(); // Initialize audio context on user interaction
@@ -1998,7 +1560,7 @@
 
             const filterDespachadosButton = document.createElement('button');
             filterDespachadosButton.id = 'filterDespachadosButton';
-            filterDespachadosButton.className = 'dispatch-filter-button';
+            filterDespachadosButton.className = 'dispatch-filter-button px-4 py-2 rounded-md transition-colors duration-200';
             filterDespachadosButton.textContent = 'Despachados';
             filterDespachadosButton.addEventListener('click', () => {
                 initAudioContext(); // Initialize audio context on user interaction
@@ -2019,7 +1581,7 @@
 
             const filterNoDespachadosButton = document.createElement('button');
             filterNoDespachadosButton.id = 'filterNoDespachadosButton';
-            filterNoDespachadosButton.className = 'dispatch-filter-button';
+            filterNoDespachadosButton.className = 'dispatch-filter-button px-4 py-2 rounded-md transition-colors duration-200';
             filterNoDespachadosButton.textContent = 'No Despachados';
             filterNoDespachadosButton.addEventListener('click', () => {
                 initAudioContext(); // Initialize audio context on user interaction
@@ -2041,7 +1603,7 @@
             // New Retardos button
             const filterRetardosButton = document.createElement('button');
             filterRetardosButton.id = 'filterRetardosButton';
-            filterRetardosButton.className = 'dispatch-filter-button';
+            filterRetardosButton.className = 'dispatch-filter-button px-4 py-2 rounded-md transition-colors duration-200';
             filterRetardosButton.textContent = 'Retardos';
             filterRetardosButton.addEventListener('click', () => {
                 initAudioContext(); // Initialize audio context on user interaction
@@ -2062,7 +1624,7 @@
 
 
             const filterContainer = document.createElement('div');
-            filterContainer.className = 'flex space-x-2 mt-1 mb-4';
+            filterContainer.className = 'flex flex-wrap gap-2 mb-4';
             filterContainer.appendChild(filterAllButton);
             filterContainer.appendChild(filterDespachadosButton);
             filterContainer.appendChild(filterNoDespachadosButton);
@@ -2073,11 +1635,12 @@
 
             // Crear el contenedor de la barra de búsqueda
             const searchBarContainer = document.createElement('div');
-            searchBarContainer.className = 'form-field search-bar-container';
+            searchBarContainer.className = 'mb-4';
             searchBarContainer.innerHTML = `
-                <label for="search_cliente_input">Barra de Búsqueda:</label>
+                <label for="search_cliente_input" class="block text-sm font-medium text-gray-700 mb-1">Barra de Búsqueda:</label>
                 <input type="search" id="search_cliente_input" name="client_search_query"
-                       placeholder=""
+                       placeholder="Buscar por cliente, código o producto..."
+                       class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"
                        autocorrect="off"
                        spellcheck="false"
                        role="searchbox"
@@ -2099,6 +1662,7 @@
 
         function showWarningModal() {
             document.getElementById('modal_pares_warning').style.display = 'flex';
+            document.getElementById('modal_pares_warning').classList.add('animate-fade-in');
         }
 
         /**
@@ -2130,12 +1694,12 @@
                 // Si el auto-bloqueo está habilitado (por el admin) Y ya se activó permanentemente
                 if (isAutoBlockEnabled && isAutoBlockedPermanently) {
                     countdownElement.textContent = "¡Bloqueo automático activado! (Indefinido)";
-                    countdownElement.style.backgroundColor = '#ffc107'; // Yellow background for active auto block
-                    countdownElement.style.borderColor = '#ffc107';
+                    countdownElement.classList.remove('bg-info', 'border-info', 'bg-red-100', 'border-danger');
+                    countdownElement.classList.add('bg-warning', 'border-warning');
                 } else if (isAutoBlockEnabled && !isAutoBlockedPermanently) { // Si el auto-bloqueo está habilitado pero aún no se activa hoy
                     countdownElement.textContent = `Bloqueo automático en: ${Math.floor(timeLeftMs / (1000 * 60 * 60))}h ${Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}m ${Math.floor((timeLeftMs % (1000 * 60)) / 1000)}s`;
-                    countdownElement.style.backgroundColor = '#e7f3ff'; // Default blue background
-                    countdownElement.style.borderColor = '#007bff';
+                    countdownElement.classList.remove('bg-warning', 'border-warning', 'bg-red-100', 'border-danger');
+                    countdownElement.classList.add('bg-info', 'border-info');
 
                     // Actualizar la hora configurada en el modal de opciones de bloqueo (en formato de 12 horas)
                     const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
@@ -2144,8 +1708,8 @@
 
                 } else { // Si el auto-bloqueo no está habilitado por el admin
                     countdownElement.textContent = "Bloqueo automático deshabilitado por el administrador.";
-                    countdownElement.style.backgroundColor = '#f8d7da'; /* Light red */
-                    countdownElement.style.borderColor = '#dc3545'; /* Red */
+                    countdownElement.classList.remove('bg-info', 'border-info', 'bg-warning', 'border-warning');
+                    countdownElement.classList.add('bg-red-100', 'border-danger');
                      document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: N/A (Deshabilitado)`;
                 }
             }
@@ -2165,21 +1729,34 @@
             if (agregarPedidoBtn) {
                 agregarPedidoBtn.disabled = shouldBeBlocked;
                 agregarPedidoBtn.title = shouldBeBlocked ? "La funcionalidad de agregar pedidos está bloqueada temporalmente." : "";
+                if (shouldBeBlocked) {
+                    agregarPedidoBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    agregarPedidoBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
             }
 
             // Both "Ver Pedidos" buttons should always be enabled
             if (verPedidosBtn) {
                 verPedidosBtn.disabled = false;
                 verPedidosBtn.title = "";
+                verPedidosBtn.classList.remove('opacity-50', 'cursor-not-allowed');
             }
             if (verPedidosInlineBtn) { // Ensure the new inline button is also always enabled
                 verPedidosInlineBtn.disabled = false;
                 verPedidosInlineBtn.title = "";
+                verPedidosInlineBtn.classList.remove('opacity-50', 'cursor-not-allowed');
             }
 
             if (blockOverlay) {
                 // El overlay se muestra solo si el usuario NO es administrador y hay un bloqueo activo
-                blockOverlay.style.display = (shouldBeBlocked && !isAdministrator) ? 'flex' : 'none';
+                if (shouldBeBlocked && !isAdministrator) {
+                    blockOverlay.classList.remove('hidden');
+                    blockOverlay.classList.add('flex');
+                } else {
+                    blockOverlay.classList.add('hidden');
+                    blockOverlay.classList.remove('flex');
+                }
             }
 
             // Actualizar el estado de los checkboxes de bloqueo en el modal de opciones para el administrador
@@ -2260,6 +1837,7 @@
          */
         function showPasswordModal(type) {
             document.getElementById('password_modal').style.display = 'flex';
+            document.getElementById('password_modal').classList.add('animate-fade-in');
             document.getElementById('password_input').value = '';
             document.getElementById('password_error').textContent = '';
             document.getElementById('password_modal_type').value = type;
@@ -2486,19 +2064,20 @@
                     const isCurrentlyRetarded = !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > minutesThreshold);
                     recordElement.dataset.retardo = isCurrentlyRetarded; // Update data-retardo attribute
 
+                    let retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`); // Declare here
+
                     if (currentDispatchFilter === 'all' && isCurrentlyRetarded) { // Only show in 'all' tab
-                        retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
                         if (retardoIndicatorContainer) {
-                            retardoIndicatorContainer.style.display = 'flex';
+                            retardoIndicatorContainer.classList.add('flex');
+                            retardoIndicatorContainer.classList.remove('hidden');
                             retardoIndicatorContainer.innerHTML = `
-                                <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
+                                <span class="exclamation-icon text-2xl"><i class="fas fa-exclamation-triangle"></i></span>
                                 <span>En retardo</span>
                             `;
                         }
                     } else {
                         // If not in 'all' tab or not retarded, ensure indicator is hidden
-                        retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
-                        if (retardoIndicatorContainer) retardoIndicatorContainer.style.display = 'none';
+                        if (retardoIndicatorContainer) retardoIndicatorContainer.classList.add('hidden');
                     }
 
                     if (isCurrentlyRetarded) { // Always track if there's *any* retarded for the overall alert
@@ -2541,13 +2120,14 @@
 
                 if (retardoAlertContent) {
                     retardoAlertContent.innerHTML = `
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <span>¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".</span>
-                        <span class="close" onclick="cerrarModal('retardo_alert_modal')">&times;</span>
+                        <i class="fas fa-exclamation-triangle mr-2 text-3xl"></i>
+                        <span class="text-lg">¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".</span>
+                        <span class="close ml-auto text-white text-3xl font-bold cursor-pointer" onclick="cerrarModal('retardo_alert_modal')">&times;</span>
                     `;
                 }
                 if (retardoAlertModal) {
-                    retardoAlertModal.style.display = 'flex';
+                    retardoAlertModal.classList.remove('hidden');
+                    retardoAlertModal.classList.add('flex', 'animate-fade-in');
                     // Reset animation to play every time
                     retardoAlertModal.querySelector('.modal-content').style.animation = 'none';
                     void retardoAlertModal.querySelector('.modal-content').offsetWidth; // Trigger reflow
@@ -2564,262 +2144,313 @@
 
     </script>
 </head>
-<body>
-    <div class="container">
-        <h1>Generar Pedidos</h1>
-        <div id="formulario">
-            <h2>Agregar Registro</h2>
-            <span id="gear_icon" style="font-size: 2em; cursor: pointer; color: #4CAF50; position: fixed; top: 20px; right: 20px; z-index: 2001; display: none;" title="Opciones de Bloqueo" onclick="mostrarModal('block_options_modal')">&#9881;</span>
+<body class="font-sans bg-background text-textPrimary antialiased">
+    <div class="container mx-auto p-6 bg-card shadow-lg rounded-xl my-8 max-w-4xl">
+        <h1 class="text-3xl font-extrabold text-primary mb-6 text-center">Generar Pedidos</h1>
+        <div id="formulario" class="relative">
+            <h2 class="text-2xl font-semibold text-primary mb-4 text-center">Agregar Registro</h2>
+            <span id="gear_icon" class="absolute top-0 right-0 text-3xl cursor-pointer text-primary hover:text-secondary transition-colors duration-200 z-20 hidden" title="Opciones de Bloqueo" onclick="mostrarModal('block_options_modal')">&#9881;</span>
 
-            <form onsubmit="enviarFormulario(event);">
-                <div id="countdown_timer"></div> <div class="form-field">
-                    <label>Nombre del Cliente:</label>
-                    <input type="text" name="cliente" required>
+            <form onsubmit="enviarFormulario(event);" class="space-y-4">
+                <div id="countdown_timer" class="text-center text-lg font-bold p-3 rounded-lg border-2 mb-4 bg-info border-info text-primary-dark"></div>
+                
+                <div class="form-field">
+                    <label for="cliente" class="block text-sm font-medium text-gray-700 mb-1">Nombre del Cliente:</label>
+                    <input type="text" id="cliente" name="cliente" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                 </div>
                 <div class="form-field">
-                    <label>Asesor:</label>
-                    <input type="text" name="asesor" required readonly>
+                    <label for="asesor" class="block text-sm font-medium text-gray-700 mb-1">Asesor:</label>
+                    <input type="text" id="asesor" name="asesor" required readonly class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed sm:text-sm">
                 </div>
                 <div class="form-field">
-                    <label>Productos:</label>
-                    <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Productos:</label>
+                    <button type="button" onclick="mostrarModal('modal_producto')" class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 transition-colors duration-200 shadow-md">Agregar Producto</button>
                 </div>
-                <div id="lista_productos" class="form-field">
-                </div>
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button>
-                </div>
-                <div id="lista_abonos" class="form-field">
+                <div id="lista_productos" class="form-field space-y-2">
                 </div>
                 <div class="form-field">
-                    <label>Número de Pares:</label>
-                    <input type="number" name="num_pares" required>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Abonos:</label>
+                    <button type="button" onclick="mostrarModal('modal_abono')" class="w-full bg-success text-white py-2 px-4 rounded-md hover:bg-success/90 transition-colors duration-200 shadow-md">Agregar Abono</button>
+                </div>
+                <div id="lista_abonos" class="form-field space-y-2">
                 </div>
                 <div class="form-field">
-                    <label id="valor_total_pesos">Valor Total:</label>
-                    <input type="number" id="valor_total" name="valor_total" required readonly>
+                    <label for="num_pares" class="block text-sm font-medium text-gray-700 mb-1">Número de Pares:</label>
+                    <input type="number" id="num_pares" name="num_pares" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                 </div>
                 <div class="form-field">
-                    <label>Bodeguero(s):</label>
-                    <div id="bodeguero_checkbox_container" class="bodeguero-checkbox-container">
+                    <label id="valor_total_pesos" class="block text-sm font-medium text-gray-700 mb-1">Valor Total:</label>
+                    <input type="number" id="valor_total" name="valor_total" required readonly class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed sm:text-sm">
+                </div>
+                <div class="form-field">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bodeguero(s):</label>
+                    <div id="bodeguero_checkbox_container" class="bodeguero-checkbox-container p-3 border border-gray-200 rounded-md bg-gray-50 space-y-2">
                         </div>
                 </div>
                 <div class="form-field">
-                    <label>Observaciones:</label>
-                    <textarea name="observaciones"></textarea>
+                    <label for="observaciones" class="block text-sm font-medium text-gray-700 mb-1">Observaciones:</label>
+                    <textarea id="observaciones" name="observaciones" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"></textarea>
                 </div>
                 <div class="form-field">
-                    <label>Saldo a Favor:</label>
-                    <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required>
+                    <label for="saldo_a_favor" class="block text-sm font-medium text-gray-700 mb-1">Saldo a Favor:</label>
+                    <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                 </div>
-                <input type="submit" value="Agregar Pedido" id="agregar_pedido_btn">
+                <button type="submit" id="agregar_pedido_btn" class="w-full bg-primary text-white py-3 px-4 rounded-md font-semibold text-lg hover:bg-primary/90 transition-colors duration-200 shadow-lg mt-6">Agregar Pedido</button>
             </form>
-            <div id="loading-bar" style="width: 100%; background-color: #ddd; margin-top:10px; display: none;">
-                <div id="loading-bar-fill" style="height: 24px; width: 0%; background-color: #4CAF50; text-align: center; line-height: 24px; color: white;">0%</div>
+            <div id="loading-bar" class="w-full bg-gray-200 rounded-full h-6 mt-4 overflow-hidden hidden">
+                <div id="loading-bar-fill" class="bg-success h-full flex items-center justify-center text-white text-sm font-semibold transition-all duration-500 ease-out">0%</div>
             </div>
-            <h2>Registros</h2>
-            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
-            <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal(true)" style="margin-top: 10px;">Ver Pedidos</button>
-            <button id="ver_pedidos" onclick="iniciarVistaPedidosEnTiempoReal(true)" style="position: fixed; bottom: 20px; right: 20px; z-index: 2001; background-color: #007bff; color: white; padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer;">Ver Pedidos</button>
+            <h2 class="text-2xl font-semibold text-primary mt-8 mb-4 text-center">Registros</h2>
+            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 mb-6">
+                <button id="exportar" onclick="exportarAExcel()" class="flex-1 bg-gray-700 text-white py-2 px-4 rounded-md hover:bg-gray-800 transition-colors duration-200 shadow-md">Exportar a Excel</button>
+                <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal(true)" class="flex-1 bg-info text-white py-2 px-4 rounded-md hover:bg-info/90 transition-colors duration-200 shadow-md">Ver Pedidos (Inline)</button>
+            </div>
+            <button id="ver_pedidos" onclick="iniciarVistaPedidosEnTiempoReal(true)" class="fixed bottom-6 right-6 z-30 bg-primary text-white py-3 px-6 rounded-full shadow-lg hover:bg-primary/90 transition-colors duration-200 text-lg font-semibold animate-bounce-slow">Ver Pedidos</button>
         </div>
-        <div id="resumen_asesores" style="margin-top: 20px;">
-        </div>
-    </div>
-
-    <div id="modal_producto" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_producto')">&times;</span>
-            <h2>Agregar Producto</h2>
-            <div class="form-field">
-                <label>Referencia:</label>
-                <input type="text" id="producto_referencia" required>
-            </div>
-            <div class="form-field">
-                <label>Color:</label>
-                <input type="text" id="producto_color" required>
-            </div>
-            <div class="form-field">
-                <label>Talla:</label>
-                <input type="text" id="producto_talla" required>
-            </div>
-            <div class="form-field">
-                <label>Precio:</label>
-                <input type="number" id="producto_precio" step="any" required>
-            </div>
-            <button type="button" onclick="agregarProducto()">Agregar Producto</button>
+        <div id="resumen_asesores" class="mt-8 p-4 bg-blue-50 rounded-lg shadow-inner hidden">
         </div>
     </div>
 
-    <div id="modal_abono" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_abono')">&times;</span>
-            <h2>Agregar Abono</h2>
-            <div class="form-field">
-                <label>Fecha:</label>
-                <input type="date" id="abono_fecha" required>
+    <div id="modal_producto" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden animate-fade-in">
+        <div class="bg-card p-6 rounded-xl shadow-2xl w-full max-w-md relative">
+            <span class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-3xl font-bold cursor-pointer" onclick="cerrarModal('modal_producto')">&times;</span>
+            <h2 class="text-2xl font-semibold text-primary mb-4 text-center">Agregar Producto</h2>
+            <div class="space-y-4">
+                <div class="form-field">
+                    <label for="producto_referencia" class="block text-sm font-medium text-gray-700 mb-1">Referencia:</label>
+                    <input type="text" id="producto_referencia" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
+                <div class="form-field">
+                    <label for="producto_color" class="block text-sm font-medium text-gray-700 mb-1">Color:</label>
+                    <input type="text" id="producto_color" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
+                <div class="form-field">
+                    <label for="producto_talla" class="block text-sm font-medium text-gray-700 mb-1">Talla:</label>
+                    <input type="text" id="producto_talla" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
+                <div class="form-field">
+                    <label for="producto_precio" class="block text-sm font-medium text-gray-700 mb-1">Precio:</label>
+                    <input type="number" id="producto_precio" step="any" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
+                <button type="button" onclick="agregarProducto()" class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 transition-colors duration-200 shadow-md">Agregar Producto</button>
             </div>
-            <div class="form-field">
-                <label>Monto:</label>
-                <input type="number" id="abono_monto" step="any" required>
-            </div>
-            <button type="button" onclick="agregarAbono()">Agregar Abono</button>
         </div>
     </div>
 
-    <div id="modal_modificar" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_modificar')">&times;</span>
-            <h2>Modificar Pedido</h2>
-            <form id="modificar_formulario">
+    <div id="modal_abono" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden animate-fade-in">
+        <div class="bg-card p-6 rounded-xl shadow-2xl w-full max-w-md relative">
+            <span class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-3xl font-bold cursor-pointer" onclick="cerrarModal('modal_abono')">&times;</span>
+            <h2 class="text-2xl font-semibold text-primary mb-4 text-center">Agregar Abono</h2>
+            <div class="space-y-4">
                 <div class="form-field">
-                    <label>Nombre del Cliente:</label>
-                    <input type="text" id="modificar_cliente" required>
+                    <label for="abono_fecha" class="block text-sm font-medium text-gray-700 mb-1">Fecha:</label>
+                    <input type="date" id="abono_fecha" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                 </div>
                 <div class="form-field">
-                    <label>Productos:</label>
-                    <div id="modificar_productos_list">
+                    <label for="abono_monto" class="block text-sm font-medium text-gray-700 mb-1">Monto:</label>
+                    <input type="number" id="abono_monto" step="any" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
+                <button type="button" onclick="agregarAbono()" class="w-full bg-success text-white py-2 px-4 rounded-md hover:bg-success/90 transition-colors duration-200 shadow-md">Agregar Abono</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal_modificar" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden animate-fade-in">
+        <div class="bg-card p-6 rounded-xl shadow-2xl w-full max-w-2xl relative max-h-[90vh] overflow-y-auto">
+            <span class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-3xl font-bold cursor-pointer" onclick="cerrarModal('modal_modificar')">&times;</span>
+            <h2 class="text-2xl font-semibold text-primary mb-4 text-center">Modificar Pedido</h2>
+            <form id="modificar_formulario" class="space-y-4">
+                <div class="form-field">
+                    <label for="modificar_cliente" class="block text-sm font-medium text-gray-700 mb-1">Nombre del Cliente:</label>
+                    <input type="text" id="modificar_cliente" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
+                <div class="form-field">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Productos:</label>
+                    <div id="modificar_productos_list" class="space-y-2">
                         </div>
-                    <button type="button" class="add-item-button" onclick="addProductModificar()">Agregar Otro Producto</button>
+                    <button type="button" onclick="addProductModificar()" class="w-full bg-success text-white py-2 px-4 rounded-md hover:bg-success/90 transition-colors duration-200 shadow-md">Agregar Otro Producto</button>
                 </div>
                 <div class="form-field">
-                    <label>Abonos:</label>
-                    <div id="modificar_abonos_list">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Abonos:</label>
+                    <div id="modificar_abonos_list" class="space-y-2">
                         </div>
-                    <button type="button" class="add-item-button" onclick="addAbonoModificar()">Agregar Otro Abono</button>
+                    <button type="button" onclick="addAbonoModificar()" class="w-full bg-info text-white py-2 px-4 rounded-md hover:bg-info/90 transition-colors duration-200 shadow-md">Agregar Otro Abono</button>
                 </div>
                 <div class="form-field">
-                    <label>Número de Pares:</label>
-                    <input type="number" id="modificar_num_pares" required>
+                    <label for="modificar_num_pares" class="block text-sm font-medium text-gray-700 mb-1">Número de Pares:</label>
+                    <input type="number" id="modificar_num_pares" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                 </div>
                 <div class="form-field">
-                    <label>Valor Total:</label>
-                    <input type="number" id="modificar_valor_total" step="any" required readonly>
+                    <label for="modificar_valor_total" class="block text-sm font-medium text-gray-700 mb-1">Valor Total:</label>
+                    <input type="number" id="modificar_valor_total" step="any" required readonly class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed sm:text-sm">
                 </div>
-                <div class="form-field">
-                    <label>Bodeguero(s):</label>
-                    <div id="modificar_bodeguero_checkbox_container" class="bodeguero-checkbox-container">
+                 <div class="form-field">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Bodeguero(s):</label>
+                    <div id="modificar_bodeguero_checkbox_container" class="bodeguero-checkbox-container p-3 border border-gray-200 rounded-md bg-gray-50 space-y-2">
                         </div>
                 </div>
                 <div class="form-field">
-                    <label>Observaciones:</label>
-                    <textarea id="modificar_observaciones"></textarea>
+                    <label for="modificar_observaciones" class="block text-sm font-medium text-gray-700 mb-1">Observaciones:</label>
+                    <textarea id="modificar_observaciones" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm"></textarea>
                 </div>
                 <div class="form-field">
-                    <label>Saldo a Favor:</label>
-                    <input type="number" id="modificar_saldo_a_favor" step="any" required>
+                    <label for="modificar_saldo_a_favor" class="block text-sm font-medium text-gray-700 mb-1">Saldo a Favor:</label>
+                    <input type="number" id="modificar_saldo_a_favor" step="any" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                 </div>
-                <button type="submit" id="guardarCambiosBtn">Guardar Cambios</button>
+                <button type="submit" id="guardarCambiosBtn" class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 transition-colors duration-200 shadow-md">Guardar Cambios</button>
             </form>
         </div>
     </div>
 
-    <div id="modal_pedidos" class="modal">
-        <div class="modal-content modal-pedidos-content">
-            <span class="close" onclick="cerrarModal('modal_pedidos');">&times;</span>
-            <h2>Pedidos Registrados</h2>
-            <div class="form-field">
-                <label>Filtrar por Asesor:</label>
-                <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()">
+    <div id="modal_pedidos" class="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center p-4 z-50 hidden animate-fade-in">
+        <div class="bg-card p-6 rounded-xl shadow-2xl w-full max-w-4xl relative mt-8 max-h-[90vh] overflow-y-auto">
+            <span class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-3xl font-bold cursor-pointer" onclick="cerrarModal('modal_pedidos');">&times;</span>
+            <h2 class="text-2xl font-semibold text-primary mb-4 text-center">Pedidos Registrados</h2>
+            <div class="mb-4">
+                <label for="filtro_asesor" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Asesor:</label>
+                <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
                     <option value="">Todos</option>
                 </select>
             </div>
-            <div class="totals">
-                <label id="total_pares">Total Pares: 0</label>
+            <div class="flex flex-col sm:flex-row justify-between items-center bg-blue-50 p-4 rounded-lg shadow-inner mb-4 text-primary font-semibold">
+                <label id="total_pares" class="mb-2 sm:mb-0">Total Pares: 0</label>
                 <label id="valor_vendido">Valor Vendido: $0</label>
             </div>
             <!-- Botones de filtro de despacho -->
-            <div class="flex space-x-2 mt-1 mb-4">
-                <button id="filterAllButton" class="dispatch-filter-button"></button>
-                <button id="filterDespachadosButton" class="dispatch-filter-button"></button>
-                <button id="filterNoDespachadosButton" class="dispatch-filter-button"></button>
-                <button id="filterRetardosButton" class="dispatch-filter-button"></button> <!-- NEW BUTTON -->
+            <div class="flex flex-wrap gap-2 mb-4">
+                <button id="filterAllButton" class="dispatch-filter-button px-4 py-2 rounded-md transition-colors duration-200"></button>
+                <button id="filterDespachadosButton" class="dispatch-filter-button px-4 py-2 rounded-md transition-colors duration-200"></button>
+                <button id="filterNoDespachadosButton" class="dispatch-filter-button px-4 py-2 rounded-md transition-colors duration-200"></button>
+                <button id="filterRetardosButton" class="dispatch-filter-button px-4 py-2 rounded-md transition-colors duration-200"></button>
             </div>
-            <div id="lista_pedidos_container" class="form-field">
+            <div id="lista_pedidos_container" class="space-y-4 max-h-80vh overflow-y-auto border border-gray-200 p-4 rounded-md">
             </div>
         </div>
     </div>
 
-    <div id="modal_pares_warning" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_pares_warning')">&times;</span>
-            <h2>Advertencia de Pares</h2>
-            <p>Se han realizado cambios en los productos del pedido. Por favor, **verifique y ajuste el "Número de Pares"** para asegurar que sea correcto antes de continuar.</p>
-            <button type="button" onclick="cerrarModal('modal_pares_warning')">Entendido</button>
+    <div id="modal_pares_warning" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden animate-fade-in">
+        <div class="bg-card p-6 rounded-xl shadow-2xl w-full max-w-md relative text-center">
+            <span class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-3xl font-bold cursor-pointer" onclick="cerrarModal('modal_pares_warning')">&times;</span>
+            <h2 class="text-2xl font-semibold text-warning mb-4">Advertencia de Pares</h2>
+            <p class="text-gray-700 mb-6">Se han realizado cambios en los productos del pedido. Por favor, <strong class="text-accent">verifique y ajuste el "Número de Pares"</strong> para asegurar que sea correcto antes de continuar.</p>
+            <button type="button" onclick="cerrarModal('modal_pares_warning')" class="w-full bg-warning text-white py-2 px-4 rounded-md hover:bg-warning/90 transition-colors duration-200 shadow-md">Entendido</button>
         </div>
     </div>
 
-    <div id="password_modal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('password_modal')">&times;</span>
-            <h2>Desbloquear Funcionalidad</h2>
-            <p>Por favor, ingrese la contraseña para deshabilitar el bloqueo.</p>
-            <div class="form-field">
-                <label for="password_input">Contraseña:</label>
-                <input type="password" id="password_input" placeholder="Ingrese la contraseña" autocomplete="new-password">
-                <input type="hidden" id="password_modal_type" value=""> <p id="password_error" class="error-message"></p>
+    <div id="password_modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden animate-fade-in">
+        <div class="bg-card p-6 rounded-xl shadow-2xl w-full max-w-sm relative">
+            <span class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-3xl font-bold cursor-pointer" onclick="cerrarModal('password_modal')">&times;</span>
+            <h2 class="text-2xl font-semibold text-primary mb-4 text-center">Desbloquear Funcionalidad</h2>
+            <p class="text-gray-700 mb-4 text-center">Por favor, ingrese la contraseña para deshabilitar el bloqueo.</p>
+            <div class="form-field mb-4">
+                <label for="password_input" class="block text-sm font-medium text-gray-700 mb-1">Contraseña:</label>
+                <input type="password" id="password_input" placeholder="Ingrese la contraseña" autocomplete="new-password" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                <input type="hidden" id="password_modal_type" value="">
+                <p id="password_error" class="text-danger text-sm mt-2"></p>
             </div>
-            <button type="button" onclick="verifyPassword()">Confirmar</button>
+            <button type="button" onclick="verifyPassword()" class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 transition-colors duration-200 shadow-md">Confirmar</button>
         </div>
     </div>
 
-    <div id="block_options_modal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('block_options_modal')">&times;</span>
-            <h2>Opciones de Bloqueo</h2>
-            <div class="form-field">
-                <input type="checkbox" id="auto_block_checkbox" onchange="toggleAutoBlockCheckbox(this)">
-                <label for="auto_block_checkbox">Bloqueo por hora</label>
+    <div id="block_options_modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden animate-fade-in">
+        <div class="bg-card p-6 rounded-xl shadow-2xl w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
+            <span class="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-3xl font-bold cursor-pointer" onclick="cerrarModal('block_options_modal')">&times;</span>
+            <h2 class="text-2xl font-semibold text-primary mb-6 text-center">Opciones de Bloqueo</h2>
+            
+            <div class="flex items-center mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+                <input type="checkbox" id="auto_block_checkbox" onchange="toggleAutoBlockCheckbox(this)" class="form-checkbox h-5 w-5 text-primary rounded-md focus:ring-primary">
+                <label for="auto_block_checkbox" class="ml-3 text-base font-medium text-gray-700">Bloqueo por hora</label>
             </div>
-            <div class="form-field">
-                <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)">
-                <label for="global_manual_block_checkbox">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
+            
+            <div class="flex items-center mb-6 p-3 bg-red-50 border border-red-200 rounded-lg shadow-sm">
+                <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)" class="form-checkbox h-5 w-5 text-danger rounded-md focus:ring-danger">
+                <label for="global_manual_block_checkbox" class="ml-3 text-base font-medium text-gray-700">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
             </div>
 
-            <hr style="margin: 20px 0;">
-            <h3>Configurar Hora de Bloqueo Automático</h3>
-            <p id="current_custom_block_time">Hora actual configurada: --:--</p>
-            <div class="form-field custom-time-input">
-                <label for="custom_block_hour_input">Hora (0-23):</label>
-                <input type="number" id="custom_block_hour_input" min="0" max="23" placeholder="Ej: 17">
+            <hr class="my-6 border-gray-200">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Configurar Hora de Bloqueo Automático</h3>
+            <p id="current_custom_block_time" class="text-textSecondary mb-4">Hora actual configurada: --:--</p>
+            <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                <div class="form-field flex-1">
+                    <label for="custom_block_hour_input" class="block text-sm font-medium text-gray-700 mb-1">Hora (0-23):</label>
+                    <input type="number" id="custom_block_hour_input" min="0" max="23" placeholder="Ej: 17" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
+                <div class="form-field flex-1">
+                    <label for="custom_block_minute_input" class="block text-sm font-medium text-gray-700 mb-1">Minuto (0-59):</label>
+                    <input type="number" id="custom_block_minute_input" min="0" max="59" placeholder="Ej: 40" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
+                </div>
             </div>
-            <div class="form-field custom-time-input">
-                <label for="custom_block_minute_input">Minuto (0-59):</label>
-                <input type="number" id="custom_block_minute_input" min="0" max="59" placeholder="Ej: 40">
-            </div>
-            <button type="button" onclick="setCustomBlockTime()">Guardar Hora Personalizada</button>
-            <p id="custom_time_error" class="error-message"></p>
+            <button type="button" onclick="setCustomBlockTime()" class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 transition-colors duration-200 shadow-md">Guardar Hora Personalizada</button>
+            <p id="custom_time_error" class="text-danger text-sm mt-2"></p>
 
-            <hr style="margin: 20px 0;">
-            <h3>Configurar Tiempo de Retardo de Pedidos</h3>
-            <p id="current_retard_time">Tiempo de retardo actual configurado: -- minutos</p>
-            <div class="form-field">
-                <label for="retard_minutes_input">Minutos:</label>
-                <input type="number" id="retard_minutes_input" min="1" placeholder="Ej: 20">
+            <hr class="my-6 border-gray-200">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Configurar Tiempo de Retardo de Pedidos</h3>
+            <p id="current_retard_time" class="text-textSecondary mb-4">Tiempo de retardo actual configurado: -- minutos</p>
+            <div class="form-field mb-4">
+                <label for="retard_minutes_input" class="block text-sm font-medium text-gray-700 mb-1">Minutos:</label>
+                <input type="number" id="retard_minutes_input" min="1" placeholder="Ej: 20" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary sm:text-sm">
             </div>
-            <button type="button" onclick="setRetardTime()">Guardar Tiempo de Retardo</button>
-            <p id="retard_time_error" class="error-message"></p>
+            <button type="button" onclick="setRetardTime()" class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 transition-colors duration-200 shadow-md">Guardar Tiempo de Retardo</button>
+            <p id="retard_time_error" class="text-danger text-sm mt-2"></p>
 
-            <hr style="margin: 20px 0;">
-            <h3>Estado del Bloqueo Automático</h3>
-            <button type="button" onclick="resetAutoBlockState()" style="background-color: #ffc107; color: #333;">Reiniciar Estado de Bloqueo (Admin)</button>
+            <hr class="my-6 border-gray-200">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Estado del Bloqueo Automático</h3>
+            <button type="button" onclick="resetAutoBlockState()" class="w-full bg-warning text-gray-800 py-2 px-4 rounded-md hover:bg-warning/90 transition-colors duration-200 shadow-md">Reiniciar Estado de Bloqueo (Admin)</button>
         </div>
     </div>
 
-    <div id="block_overlay" class="block-overlay">
-        <div class="block-circle">
-            <p>BLOQUEADO</p>
+    <div id="block_overlay" class="fixed inset-0 bg-black bg-opacity-70 z-[999] flex flex-col items-center justify-center text-white text-3xl text-center hidden">
+        <div class="w-40 h-40 border-8 border-gray-300 border-t-8 border-t-danger rounded-full flex items-center justify-center mb-8 animate-spin-slow">
+            <p class="text-danger font-bold text-xl">BLOQUEADO</p>
         </div>
-        <p>Temporalmente bloqueado y a la espera de desbloqueo.</p>
+        <p class="text-white text-lg">Temporalmente bloqueado y a la espera de desbloqueo.</p>
     </div>
 
     <!-- Nuevo Modal de Alerta de Retardo -->
-    <div id="retardo_alert_modal" class="modal">
-        <div class="modal-content" id="retardo_alert_content">
+    <div id="retardo_alert_modal" class="fixed inset-0 bg-transparent flex items-start justify-center p-4 z-[1005] hidden">
+        <div class="modal-content bg-danger text-white p-4 rounded-lg shadow-2xl w-full max-w-xl text-center font-bold flex items-center justify-center gap-4 animate-fadeInOut-custom">
             <!-- El contenido se inyectará aquí dinámicamente -->
         </div>
     </div>
+    
+    <style>
+        /* Custom animations for the modern design */
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
 
+        @keyframes bounce-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        .animate-bounce-slow {
+            animation: bounce-slow 2s infinite ease-in-out;
+        }
 
+        /* Override for existing modal animations if any, or ensure Tailwind applies correctly */
+        #retardo_alert_modal .modal-content {
+            animation: fadeInOut 5s forwards;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-50px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-50px); }
+        }
+
+        .animate-spin-slow {
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </body>
 </html>
