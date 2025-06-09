@@ -112,12 +112,18 @@
             box-shadow: 0 2px 5px rgba(40, 167, 69, 0.2); /* Softer shadow on active */
         }
 
-        button:disabled, input[type="submit"]:disabled {
-            background-image: linear-gradient(135deg, #cccccc 0%, #b3b3b3 100%); /* Grey gradient for disabled */
+        /* Styles for DISABLED buttons */
+        button:disabled, input[type="submit"]:disabled,
+        .record button:disabled { /* Apply specifically to buttons within .record as well */
+            background-image: none; /* Remove any gradients */
+            background-color: #e0e0e0; /* A clear gray background */
+            color: #a0a0a0; /* Lighter gray text */
             cursor: not-allowed;
-            box-shadow: none;
-            transform: none;
+            box-shadow: none; /* No shadow when disabled */
+            transform: none; /* No transform when disabled */
+            opacity: 0.8; /* Slight transparency to emphasize disabled state */
         }
+
 
         /* Modals */
         .modal {
@@ -1258,7 +1264,7 @@
             });
 
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
-            document.getElementById('valor_vendido').innerText = `Valor Vendido: $${totalValorFiltrado.toLocaleString('es-CO')}`;
+            document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
 
             document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`;
             document.getElementById('filterDespachadosButton').textContent = `Despachados (${totalDespachadosFiltered})`;
@@ -1337,13 +1343,27 @@
             const modificarButton = recordElement.querySelector('button[onclick*="modificarPedido"]');
             const eliminarButton = recordElement.querySelector('button[onclick*="eliminarPedido"]');
 
-            if (modificarButton) {
-                modificarButton.disabled = !puedeModificarEliminar;
-                modificarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
-            }
-            if (eliminarButton) {
-                eliminarButton.disabled = !puedeModificarEliminar;
-                eliminarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
+            // Apply disabled state only if not an administrator.
+            // Admins should always see them enabled because they can override the status.
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                if (modificarButton) {
+                    modificarButton.disabled = !puedeModificarEliminar;
+                    modificarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
+                }
+                if (eliminarButton) {
+                    eliminarButton.disabled = !puedeModificarEliminar;
+                    eliminarButton.title = !puedeModificarEliminar ? "Pedido bloqueado o despachado" : "";
+                }
+            } else {
+                // For administrators, ensure buttons are always enabled.
+                if (modificarButton) {
+                    modificarButton.disabled = false;
+                    modificarButton.title = "";
+                }
+                if (eliminarButton) {
+                    eliminarButton.disabled = false;
+                    eliminarButton.title = "";
+                }
             }
 
             const despachadoSelloContainer = recordElement.querySelector(`#despachado-sello-container-${docId}`);
@@ -1539,8 +1559,8 @@
                 </div>
                 ${controlsHtmlAdmins}
                 <div class="record-buttons">
-                    <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
-                    <button onclick="eliminarPedido('${docId}')" ${!puedeModificarEliminar ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
+                    <button onclick="modificarPedido('${docId}')" ${!puedeModificarEliminar && !esAdministrador ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Modificar</button>
+                    <button onclick="eliminarPedido('${docId}')" ${!puedeModificarEliminar && !esAdministrador ? 'disabled title="Pedido bloqueado o despachado"' : ''}>Eliminar</button>
                 </div>
                 <hr>
             `;
