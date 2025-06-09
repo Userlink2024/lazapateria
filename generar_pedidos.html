@@ -161,7 +161,29 @@
         .modal-content.modal-pedidos-content {
             max-width: 1000px; /* Wider for orders list */
             width: 95%;
+            display: flex; /* Use flexbox for vertical layout */
+            flex-direction: column; /* Stack children vertically */
+            height: 90vh; /* Set a fixed height for the modal content to enable internal scrolling */
+            overflow: hidden; /* Prevent scrolling of the entire modal content */
         }
+
+        /* Container for fixed controls (filters, totals, search, buttons) */
+        .pedidos-controls-fixed {
+            padding-bottom: 15px; /* Add some space below the fixed controls */
+        }
+
+        /* Container for the scrollable list of orders */
+        .pedidos-list-scrollable {
+            flex-grow: 1; /* Allow this div to take up all available vertical space */
+            overflow-y: auto; /* Enable vertical scrolling for the order list */
+            padding-right: 15px; /* Add padding to the right to prevent scrollbar overlapping content */
+            padding-left: 5px; /* Optional: add some padding to the left */
+        }
+        /* Ensure the form-field styles don't conflict with flex behavior here */
+        .pedidos-list-scrollable.form-field {
+            margin-bottom: 0; /* Remove bottom margin from form-field if it affects spacing */
+        }
+
 
         .close {
             color: #888;
@@ -1236,7 +1258,7 @@
             });
 
             document.getElementById('total_pares').innerText = `Total Pares: ${totalPares}`;
-            document.getElementById('valor_vendido').innerText = `Valor Vendido: $${valorTotalFiltrado.toLocaleString('es-CO')}`;
+            document.getElementById('valor_vendido').innerText = `Valor Vendido: $${totalValorFiltrado.toLocaleString('es-CO')}`;
 
             document.getElementById('filterAllButton').textContent = `Todos (${visibleTotalCount})`;
             document.getElementById('filterDespachadosButton').textContent = `Despachados (${totalDespachadosFiltered})`;
@@ -1305,7 +1327,7 @@
             }
             // Visibilidad para "Marcar como Despachado" (Solo para administradores en pestañas "Despachados" o "No Despachados")
             if (despachadoCheckbox) {
-                despachadoCheckbox.closest('.control-container-despachado').style.display = (datosUsuario.permisos.toLowerCase() === 'administrador' && (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados')) ? 'flex' : 'none';
+                despachadoCheckbox.closest('.control-container-despachado').style.display = (datosUsuario.permisos.toLowerCase() === 'administrador' && (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados' || currentDispatchFilter === 'retardos')) ? 'flex' : 'none';
                 despachadoCheckbox.checked = estaDespachado;
                 despachadoCheckbox.disabled = false; // Sin dependencia de "Enviado a Empaque"
             }
@@ -2449,7 +2471,10 @@
             }
 
             const modalPedidosContent = document.querySelector('#modal_pedidos .modal-content');
-            const h2PedidosRegistrados = modalPedidosContent.querySelector('h2');
+            // Select the new fixed controls container
+            const pedidosControlsFixed = modalPedidosContent.querySelector('.pedidos-controls-fixed');
+            // Select the dispatch filter button container within the fixed controls for correct insertion point
+            const dispatchFilterButtonContainer = pedidosControlsFixed.querySelector('.dispatch-filter-button-container');
 
             // Crear el contenedor de la barra de búsqueda si no existe ya en el HTML
             let searchBarContainer = document.querySelector('.search-bar-container');
@@ -2468,17 +2493,13 @@
                 `;
             }
 
-
-            // Insertar la barra de búsqueda antes del contenedor de botones de filtro existente
-            const existingFilterButtonContainer = modalPedidosContent.querySelector('.dispatch-filter-button-container');
-            if (h2PedidosRegistrados && existingFilterButtonContainer) {
-                h2PedidosRegistrados.parentNode.insertBefore(searchBarContainer, h2PedidosRegistrados.nextSibling);
-            } else if (modalPedidosContent && existingFilterButtonContainer) {
-                modalPedidosContent.insertBefore(searchBarContainer, existingFilterButtonContainer);
-            } else if (h2PedidosRegistrados) {
-                h2PedidosRegistrados.parentNode.insertBefore(searchBarContainer, h2PedidosRegistrados.nextSibling);
-            } else {
-                modalPedidosContent.appendChild(searchBarContainer);
+            // Insert the search bar right before the dispatch filter buttons within the fixed controls
+            // This ensures it's part of the fixed header section.
+            if (pedidosControlsFixed && dispatchFilterButtonContainer) {
+                pedidosControlsFixed.insertBefore(searchBarContainer, dispatchFilterButtonContainer);
+            } else if (pedidosControlsFixed) {
+                // Fallback if dispatchFilterButtonContainer is not found
+                pedidosControlsFixed.appendChild(searchBarContainer);
             }
 
             // Asignar el evento 'input' a la barra de búsqueda
@@ -3124,24 +3145,28 @@
         <div class="modal-content modal-pedidos-content">
             <span class="close" onclick="cerrarModal('modal_pedidos');">&times;</span>
             <h2>Pedidos Registrados</h2>
-            <div class="form-field">
-                <label>Filtrar por Asesor:</label>
-                <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()">
-                    <option value="">Todos</option>
-                </select>
+            <!-- Este div contendrá todos los elementos estáticos (filtros, totales, búsqueda, botones) -->
+            <div class="pedidos-controls-fixed">
+                <div class="form-field">
+                    <label>Filtrar por Asesor:</label>
+                    <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="totals">
+                    <label id="total_pares">Total Pares: 0</label>
+                    <label id="valor_vendido">Valor Vendido: $0</label>
+                </div>
+                <!-- La barra de búsqueda se insertará aquí por JavaScript -->
+                <div class="dispatch-filter-button-container">
+                    <button id="filterAllButton" class="dispatch-filter-button"></button>
+                    <button id="filterDespachadosButton" class="dispatch-filter-button"></button>
+                    <button id="filterNoDespachadosButton" class="dispatch-filter-button"></button>
+                    <button id="filterRetardosButton" class="dispatch-filter-button"></button>
+                </div>
             </div>
-            <div class="totals">
-                <label id="total_pares">Total Pares: 0</label>
-                <label id="valor_vendido">Valor Vendido: $0</label>
-            </div>
-            <!-- Botones de filtro de despacho -->
-            <div class="dispatch-filter-button-container">
-                <button id="filterAllButton" class="dispatch-filter-button"></button>
-                <button id="filterDespachadosButton" class="dispatch-filter-button"></button>
-                <button id="filterNoDespachadosButton" class="dispatch-filter-button"></button>
-                <button id="filterRetardosButton" class="dispatch-filter-button"></button>
-            </div>
-            <div id="lista_pedidos_container" class="form-field">
+            <!-- Este div contendrá la lista de pedidos con scroll -->
+            <div id="lista_pedidos_container" class="form-field pedidos-list-scrollable">
             </div>
         </div>
     </div>
