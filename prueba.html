@@ -3358,12 +3358,8 @@
             const now = new Date();
             const minutesThreshold = retardTimeMinutes; // Use configurable retard time
 
-            // Obtener todos los pedidos del Snapshot actual (en iniciarVistaPedidosEnTiempoReal)
-            // Si la vista de pedidos no está activa, hacemos una nueva consulta.
-            const isUserFilteredRole = datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero';
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
             const currentUserId = datosUsuario.usuario;
-
-            let pedidosToExamine = [];
 
             if (pedidosListenerUnsubscribe && document.getElementById('modal_pedidos').style.display === 'flex') {
                 // Si el modal está abierto, ya tenemos los datos en tiempo real.
@@ -3376,10 +3372,10 @@
                     const fechaHoraCreacion = fechaHoraCreacionStr ? new Date(fechaHoraCreacionStr) : null;
                     const usuarioDelRegistro = recordElement.dataset.usuario;
 
-                    // Apply user-specific filter here for DOM elements too if needed for alert logic
-                    if (isUserFilteredRole && usuarioDelRegistro !== currentUserId) {
-                        return; // Skip records of other users if current user role is filtered
-                    }
+                    // Condition to determine if THIS specific record contributes to the alert
+                    // For admins, only count if it's their own record. For others, count if it's their own.
+                    const shouldTriggerAlertForThisRecord = (isAdministrator && usuarioDelRegistro === currentUserId) || (!isAdministrator);
+
 
                     // The retardo indicator is only relevant in the "Todos" tab
                     // Condition: NOT sent to packing AND NOT dispatched AND (current_time - creation_time) > retardTimeMinutes
@@ -3410,7 +3406,7 @@
                         if (retardoIndicatorContainer) retardoIndicatorContainer.style.display = 'none';
                     }
 
-                    if (isCurrentlyRetarded) { // Always track if there's *any* retarded for the overall alert
+                    if (isCurrentlyRetarded && shouldTriggerAlertForThisRecord) { // Only track for alert if it's *their* record
                         hasRetarded = true;
                     }
                 });
@@ -3421,8 +3417,8 @@
                                     .where('enviadoAEmpaque', '==', false)
                                     .where('despachado', '==', false); // Solo si NO está despachado
 
-                    // APLICA LA CORRECCIÓN AQUÍ: FILTRA POR EL USUARIO ACTUAL SI ES OPERADOR O BODEGUERO
-                    if (isUserFilteredRole) {
+                    // APLICA LA CORRECCIÓN AQUÍ: FILTRA POR EL USUARIO ACTUAL SI ES ADMINISTRADOR
+                    if (isAdministrator) {
                         query = query.where('usuario', '==', currentUserId);
                     }
 
