@@ -3359,11 +3359,10 @@
             const minutesThreshold = retardTimeMinutes; // Use configurable retard time
 
             const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
-            const currentUserId = datosUsuario.usuario;
+            const currentUserId = datosUsuario.usuario; // This is the 'usuario' field in Firestore
 
+            // Scenario 1: Modal "Ver Pedidos" is currently open and records are in DOM
             if (pedidosListenerUnsubscribe && document.getElementById('modal_pedidos').style.display === 'flex') {
-                // Si el modal está abierto, ya tenemos los datos en tiempo real.
-                // Iterar los elementos del DOM si ya están renderizados.
                 const records = document.getElementById('lista_pedidos_container').querySelectorAll('.record');
                 records.forEach(recordElement => {
                     const estaDespachado = recordElement.dataset.despachado === 'true';
@@ -3372,17 +3371,14 @@
                     const fechaHoraCreacion = fechaHoraCreacionStr ? new Date(fechaHoraCreacionStr) : null;
                     const usuarioDelRegistro = recordElement.dataset.usuario;
 
-                    // Condition to determine if THIS specific record contributes to the alert
-                    // For admins, only count if it's their own record. For others, count if it's their own.
-                    const shouldTriggerAlertForThisRecord = (isAdministrator && usuarioDelRegistro === currentUserId) || (!isAdministrator);
+                    // This is the key change for the alert logic
+                    // An alert should ONLY trigger if the dispatch belongs to the CURRENT user
+                    const isRecordForCurrentUser = (usuarioDelRegistro === currentUserId);
 
-
-                    // The retardo indicator is only relevant in the "Todos" tab
-                    // Condition: NOT sent to packing AND NOT dispatched AND (current_time - creation_time) > retardTimeMinutes
                     const isCurrentlyRetarded = !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > minutesThreshold);
-                    recordElement.dataset.retardo = isCurrentlyRetarded; // Update data-retardo attribute
+                    recordElement.dataset.retardo = isCurrentlyRetarded;
 
-                    let retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`); // Declare here
+                    let retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
 
                     let timeOverdueText = '';
                     if (isCurrentlyRetarded) {
@@ -3393,7 +3389,7 @@
                         timeOverdueText = `(Retrasado: ${hoursOverdue}h ${remainingMinutesOverdue}m)`;
                     }
 
-                    if (isCurrentlyRetarded && (currentDispatchFilter === 'all' || currentDispatchFilter === 'retardos')) { // Only show in 'all' or 'retardos' tab
+                    if (isCurrentlyRetarded && (currentDispatchFilter === 'all' || currentDispatchFilter === 'retardos')) {
                         if (retardoIndicatorContainer) {
                             retardoIndicatorContainer.style.display = 'flex';
                             retardoIndicatorContainer.innerHTML = `
@@ -3402,25 +3398,27 @@
                             `;
                         }
                     } else {
-                        // If not in 'all' or 'retardos' tab or not retarded, ensure indicator is hidden
                         if (retardoIndicatorContainer) retardoIndicatorContainer.style.display = 'none';
                     }
 
-                    if (isCurrentlyRetarded && shouldTriggerAlertForThisRecord) { // Only track for alert if it's *their* record
+                    // Only set hasRetarded to true if the retarded record is for the current user
+                    if (isCurrentlyRetarded && isRecordForCurrentUser) {
                         hasRetarded = true;
                     }
                 });
-            } else {
-                // Si el modal no está abierto, hacemos una consulta específica para encontrar retardos
+            }
+            // Scenario 2: Modal "Ver Pedidos" is NOT open, perform a specific Firestore query for alerts
+            else {
                 try {
                     let query = db.collection('registros')
                                     .where('enviadoAEmpaque', '==', false)
-                                    .where('despachado', '==', false); // Solo si NO está despachado
+                                    .where('despachado', '==', false);
 
-                    // APLICA LA CORRECCIÓN AQUÍ: FILTRA POR EL USUARIO ACTUAL SI ES ADMINISTRADOR
-                    if (isAdministrator) {
-                        query = query.where('usuario', '==', currentUserId);
-                    }
+                    // APLICA LA CORRECCIÓN AQUÍ: Para las ALERTA, SIEMPRE FILTRAR por el usuario actual,
+                    // INDEPENDIENTEMENTE de si es administrador o no.
+                    // Los administradores verán TODOS en la vista, pero la alerta es PERSONAL.
+                    query = query.where('usuario', '==', currentUserId);
+
 
                     const querySnapshot = await query.get();
                     querySnapshot.forEach(doc => {
@@ -3433,7 +3431,7 @@
 
                             if (diffMinutes > minutesThreshold) {
                                 hasRetarded = true;
-                                // No se actualiza el DOM aquí, solo se detecta la existencia de retardos
+                                // No se actualiza el DOM aquí, solo se detecta la existencia de retardos para la alerta
                             }
                         }
                     });
@@ -3453,7 +3451,7 @@
                 if (retardoAlertContent) {
                     retardoAlertContent.innerHTML = `
                         <i class="fas fa-exclamation-triangle"></i>
-                        <span>¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".</span>
+                        <span>¡Advertencia! Hay uno o más despachos "En retardo" que son tuyos. Por favor, revise la sección "Ver Pedidos".</span>
                         <span class="close" onclick="cerrarModal('retardo_alert_modal')">&times;</span>
                     `;
                 }
