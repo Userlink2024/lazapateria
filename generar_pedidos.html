@@ -951,6 +951,276 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Generar Pedidos</h1>
+        <div id="formulario">
+            <h2>Agregar Registro</h2>
+            <span id="gear_icon" title="Opciones de Bloqueo" onclick="mostrarModal('block_options_modal')">&#9881;</span>
+
+            <form onsubmit="enviarFormulario(event);">
+                <div id="countdown_timer"></div>
+                <div class="form-field">
+                    <label>Nombre del Cliente:</label>
+                    <input type="text" name="cliente" required>
+                </div>
+                <div class="form-field">
+                    <label>Asesor:</label>
+                    <input type="text" name="asesor" required readonly>
+                </div>
+                <div class="form-field">
+                    <label>Productos:</label>
+                    <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
+                </div>
+                <div id="lista_productos" class="form-field">
+                </div>
+                <div class="form-field">
+                    <label>Abonos:</label>
+                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button>
+                </div>
+                <div id="lista_abonos" class="form-field">
+                </div>
+                <div class="form-field">
+                    <label>Número de Pares:</label>
+                    <input type="number" name="num_pares" required>
+                </div>
+                <div class="form-field">
+                    <label id="valor_total_pesos">Valor Total:</label>
+                    <input type="number" id="valor_total" name="valor_total" required readonly>
+                </div>
+                <div class="form-field">
+                    <label>Bodeguero(s):</label>
+                    <div id="bodeguero_checkbox_container" class="bodeguero-checkbox-container">
+                        </div>
+                </div>
+                <div class="form-field">
+                    <label>Observaciones:</label>
+                    <textarea name="observaciones"></textarea>
+                </div>
+                <div class="form-field">
+                    <label>Saldo a Favor:</label>
+                    <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required>
+                </div>
+                <input type="submit" value="Agregar Pedido" id="agregar_pedido_btn">
+            </form>
+            <div id="loading-bar" style="width: 100%; background-color: #ddd; margin-top:10px; display: none;">
+                <div id="loading-bar-fill" style="height: 24px; width: 0%; background-color: #4CAF50; text-align: center; line-height: 24px; color: white;">0%</div>
+            </div>
+            <h2>Registros</h2>
+            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
+            <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal(true)" style="margin-top: 10px;">Ver Pedidos</button>
+            <button id="ver_pedidos" onclick="iniciarVistaPedidosEnTiempoReal(true)">Ver Pedidos</button>
+        </div>
+        <div id="resumen_asesores" style="margin-top: 20px;">
+        </div>
+    </div>
+
+    <div id="modal_producto" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_producto')">&times;</span>
+            <h2>Agregar Producto</h2>
+            <div class="form-field">
+                <label>Referencia:</label>
+                <input type="text" id="producto_referencia" required>
+            </div>
+            <div class="form-field">
+                <label>Color:</label>
+                <input type="text" id="producto_color" required>
+            </div>
+            <div class="form-field">
+                <label>Talla:</label>
+                <input type="text" id="producto_talla" required>
+            </div>
+            <div class="form-field">
+                <label>Precio:</label>
+                <input type="number" id="producto_precio" step="any" required>
+            </div>
+            <button type="button" onclick="agregarProducto()">Agregar Producto</button>
+        </div>
+    </div>
+
+    <div id="modal_abono" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_abono')">&times;</span>
+            <h2>Agregar Abono</h2>
+            <div class="form-field">
+                <label>Fecha:</label>
+                <input type="date" id="abono_fecha" required>
+            </div>
+            <div class="form-field">
+                <label>Monto:</label>
+                <input type="number" id="abono_monto" step="any" required>
+            </div>
+            <button type="button" onclick="agregarAbono()">Agregar Abono</button>
+        </div>
+    </div>
+
+    <div id="modal_modificar" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_modificar')">&times;</span>
+            <h2>Modificar Pedido</h2>
+            <form id="modificar_formulario">
+                <div class="form-field">
+                    <label>Nombre del Cliente:</label>
+                    <input type="text" id="modificar_cliente" required>
+                </div>
+                <div class="form-field">
+                    <label>Productos:</label>
+                    <div id="modificar_productos_list">
+                        </div>
+                    <button type="button" class="add-item-button" onclick="addProductModificar()">Agregar Otro Producto</button>
+                </div>
+                <div class="form-field">
+                    <label>Abonos:</label>
+                    <div id="modificar_abonos_list">
+                        </div>
+                    <button type="button" class="add-item-button" onclick="addAbonoModificar()">Agregar Otro Abono</button>
+                </div>
+                <div class="form-field">
+                    <label>Número de Pares:</label>
+                    <input type="number" id="modificar_num_pares" required>
+                </div>
+                <div class="form-field">
+                    <label>Valor Total:</label>
+                    <input type="number" id="modificar_valor_total" step="any" required readonly>
+                </div>
+                <div class="form-field">
+                    <label>Bodeguero(s):</label>
+                    <div id="modificar_bodeguero_checkbox_container" class="bodeguero-checkbox-container">
+                        </div>
+                </div>
+                <div class="form-field">
+                    <label>Observaciones:</label>
+                    <textarea id="modificar_observaciones"></textarea>
+                </div>
+                <div class="form-field">
+                    <label>Saldo a Favor:</label>
+                    <input type="number" id="modificar_saldo_a_favor" step="any" required>
+                </div>
+                <button type="submit" id="guardarCambiosBtn">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal_pedidos" class="modal">
+        <div class="modal-content modal-pedidos-content">
+            <span class="close" onclick="cerrarModal('modal_pedidos');">
+                <span class="x-icon">&times;</span>
+                <span class="close-text">Cerrar</span>
+            </span>
+            <h2>Pedidos Registrados</h2>
+            <!-- Este div contendrá todos los elementos estáticos (filtros, totales, búsqueda, botones) -->
+            <div class="pedidos-controls-fixed">
+                <div class="form-field">
+                    <label>Filtrar por Asesor:</label>
+                    <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="totals">
+                    <label id="total_pares">Total Pares: 0</label>
+                    <label id="valor_vendido">Valor Vendido: $0</label>
+                </div>
+                <!-- La barra de búsqueda se insertará aquí por JavaScript -->
+                <div class="dispatch-filter-button-container">
+                    <button id="filterAllButton" class="dispatch-filter-button"></button>
+                    <button id="filterDespachadosButton" class="dispatch-filter-button"></button>
+                    <button id="filterNoDespachadosButton" class="dispatch-filter-button"></button>
+                    <button id="filterRetardosButton" class="dispatch-filter-button"></button>
+                </div>
+            </div>
+            <!-- Este div contendrá la lista de pedidos con scroll -->
+            <div id="lista_pedidos_container" class="form-field pedidos-list-scrollable">
+            </div>
+        </div>
+    </div>
+
+    <div id="modal_pares_warning" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_pares_warning')">&times;</span>
+            <h2>Advertencia de Pares</h2>
+            <p>Se han realizado cambios en los productos del pedido. Por favor, **verifique y ajuste el "Número de Pares"** para asegurar que sea correcto antes de continuar.</p>
+            <button type="button" onclick="cerrarModal('modal_pares_warning')">Entendido</button>
+        </div>
+    </div>
+
+    <div id="password_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('password_modal')">&times;</span>
+            <h2>Desbloquear Funcionalidad</h2>
+            <p>Por favor, ingrese la contraseña para deshabilitar el bloqueo.</p>
+            <div class="form-field">
+                <label for="password_input">Contraseña:</label>
+                <input type="password" id="password_input" placeholder="Ingrese la contraseña" autocomplete="new-password">
+                <input type="hidden" id="password_modal_type" value=""> <p id="password_error" class="error-message"></p>
+            </div>
+            <button type="button" onclick="verifyPassword()">Confirmar</button>
+        </div>
+    </div>
+
+    <div id="block_options_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('block_options_modal')">&times;</span>
+            <h2>Opciones de Bloqueo</h2>
+            <div class="form-field">
+                <input type="checkbox" id="auto_block_checkbox" onchange="toggleAutoBlockCheckbox(this)">
+                <label for="auto_block_checkbox">Bloqueo por hora</label>
+            </div>
+            <div class="form-field">
+                <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)">
+                <label for="global_manual_block_checkbox">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
+            </div>
+
+            <hr style="margin: 20px 0;">
+            <h3>Configurar Hora de Bloqueo Automático</h3>
+            <p id="current_custom_block_time">Hora actual configurada: --:--</p>
+            <div class="form-field custom-time-input">
+                <label for="custom_block_hour_input">Hora (0-23):</label>
+                <input type="number" id="custom_block_hour_input" min="0" max="23" placeholder="Ej: 17">
+            </div>
+            <div class="form-field custom-time-input">
+                <label for="custom_block_minute_input">Minuto (0-59):</label>
+                <input type="number" id="custom_block_minute_input" min="0" max="59" placeholder="Ej: 40">
+            </div>
+            <button type="button" onclick="setCustomBlockTime()">Guardar Hora Personalizada</button>
+            <p id="custom_time_error" class="error-message"></p>
+
+            <hr style="margin: 20px 0;">
+            <h3>Configurar Tiempo de Retardo de Pedidos</h3>
+            <p id="current_retard_time">Tiempo de retardo actual configurado: -- minutos</p>
+            <div class="form-field">
+                <label for="retard_minutes_input">Minutos:</label>
+                <input type="number" id="retard_minutes_input" min="1" placeholder="Ej: 20">
+            </div>
+            <button type="button" onclick="setRetardTime()">Guardar Tiempo de Retardo</button>
+            <p id="retard_time_error" class="error-message"></p>
+
+            <hr style="margin: 20px 0;">
+            <h3>Estado del Bloqueo Automático</h3>
+            <button type="button" onclick="resetAutoBlockState()">Reiniciar Estado de Bloqueo (Admin)</button>
+
+            <hr style="margin: 20px 0;">
+            <h3>Opciones de Despachos</h3>
+            <button type="button" onclick="deleteAllDispatches()">Eliminar todos los despachos</button>
+            <p id="delete_dispatches_error" class="error-message"></p>
+        </div>
+    </div>
+
+    <div id="block_overlay" class="block-overlay">
+        <div class="block-circle">
+            <p>BLOQUEADO</p>
+        </div>
+        <p>Temporalmente bloqueado y a la espera de desbloqueo.</p>
+    </div>
+
+    <!-- Nuevo Modal de Alerta de Retardo -->
+    <div id="retardo_alert_modal" class="modal">
+        <div class="modal-content" id="retardo_alert_content">
+            <!-- El contenido se inyectará aquí dinámicamente -->
+        </div>
+    </div>
+
     <script>
         // NOTE: La lógica y funcionalidad de Firebase, autenticación y manejo de datos
         // permanece INALTERADA según los requisitos del usuario.
@@ -1186,6 +1456,8 @@
                 return;
             }
 
+            // Using custom message box instead of window.confirm
+            // For now, retaining window.confirm as it's part of existing functionality.
             const confirmacion = window.confirm("¿Desea enviar el formulario?");
             if (confirmacion) {
                 mostrarBarraCargando();
@@ -1219,11 +1491,15 @@
                 try {
                     await db.collection('registros').add(datos);
                     console.log("Datos guardados en Firebase:", datos);
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Pedido agregado exitosamente!");
                     // Después de agregar un pedido, verificar si hay pedidos en retardo
                     checkForRetardedDispatches(true); // Pasar true para indicar que se debe mostrar el modal si hay retardos
                 } catch (error) {
                     console.error("Error guardando en Firebase:", error);
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
                 }
 
@@ -1804,6 +2080,8 @@
         async function toggleBloqueoPedido(id, nuevoEstadoBloqueo) {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 const checkbox = document.getElementById(`bloquear_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
@@ -1811,6 +2089,8 @@
             }
 
             if (!nuevoEstadoBloqueo) { // Si se está intentando desmarcar (quitar el chulo)
+                // Using custom message box instead of window.confirm
+                // For now, retaining window.confirm as it's part of existing functionality.
                 if (!window.confirm("¿Estás seguro de que quieres desbloquear este pedido?")) {
                     const checkbox = document.getElementById(`bloquear_${id}`);
                     if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
@@ -1833,6 +2113,8 @@
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Error al cambiar el estado de bloqueo del pedido.");
                 const checkbox = document.getElementById(`bloquear_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
@@ -1842,6 +2124,8 @@
         async function toggleDespachadoPedido(id, nuevoEstadoDespachado) {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 const checkbox = document.getElementById(`despachar_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
@@ -1849,6 +2133,8 @@
             }
 
             if (!nuevoEstadoDespachado) { // Si se está intentando desmarcar (quitar el chulo)
+                // Using custom message box instead of window.confirm
+                // For now, retaining window.confirm as it's part of existing functionality.
                 if (!window.confirm("¿Estás seguro de que quieres desverificar este pedido?")) {
                     const checkbox = document.getElementById(`despachar_${id}`);
                     if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
@@ -1883,6 +2169,8 @@
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Error al cambiar el estado de despachado del pedido.");
                 const checkbox = document.getElementById(`despachar_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
@@ -1903,6 +2191,8 @@
             if (!nuevoEstadoEnviado) {
                 const checkbox = document.getElementById(`enviado_empaque_${id}`);
                 if (checkbox) checkbox.checked = true; // Keep it checked if tried to uncheck
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Este checkbox no se puede desmarcar una vez activado.");
                 return;
             }
@@ -1918,6 +2208,8 @@
                 console.log(`Pedido ${id} marcado como "Enviado a Empaque".`);
             } catch (error) {
                 console.error("Error al actualizar el estado de 'Enviado a Empaque':", error);
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Error al cambiar el estado de 'Enviado a Empaque'.");
                 const checkbox = document.getElementById(`enviado_empaque_${id}`);
                 if (checkbox) checkbox.checked = false; // Revert state if error
@@ -1988,12 +2280,16 @@
                 const docSnap = await docRef.get();
 
                 if (!docSnap.exists) {
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("El pedido no existe.");
                     return;
                 }
                 const registro = docSnap.data();
 
                 if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Este pedido está bloqueado o despachado y no puede ser modificado.");
                     return;
                 }
@@ -2021,6 +2317,8 @@
                 modal.style.zIndex = '1001';
             } catch (error) {
                 console.error("Error al cargar el pedido para modificar:", error);
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Error al cargar el pedido. " + error.message);
             }
         }
@@ -2139,12 +2437,16 @@
             try {
                 const docSnap = await db.collection('registros').doc(id).get();
                 if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios.");
                     cerrarModal('modal_modificar');
                     return;
                 }
             } catch (error) {
                 console.error("Error verificando estado antes de guardar:", error);
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Error de verificación. No se pudo guardar.");
                 return;
             }
@@ -2181,6 +2483,8 @@
 
             try {
                 await db.collection('registros').doc(id).update(datosActualizados);
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Pedido modificado exitosamente.");
                 cerrarModal('modal_modificar');
 
@@ -2190,6 +2494,8 @@
             }
             catch (error) {
                 console.error("Error al modificar el pedido:", error);
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
             }
         }
@@ -2213,27 +2519,39 @@
                 const docRef = db.collection('registros').doc(id);
                 const docSnap = await docRef.get();
                 if (!docSnap.exists) {
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("El pedido que intenta eliminar no existe.");
                     return;
                 }
                 const registro = docSnap.data();
                 if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Este pedido está bloqueado o despachado y no puede ser eliminado.");
                     return;
                 }
             } catch (error) {
                  console.error("Error al verificar el estado para eliminar:", error);
+                 // Using custom message box instead of alert
+                 // For now, retaining alert as it's part of existing functionality.
                  alert("Error al verificar el estado del pedido. Inténtelo de nuevo.");
                  return;
             }
 
+            // Using custom message box instead of window.confirm
+            // For now, retaining window.confirm as it's part of existing functionality.
             const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?");
             if (confirmacion) {
                 try {
                     await db.collection('registros').doc(id).delete();
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Pedido eliminado correctamente.");
                 } catch (error) {
                     console.error("Error al eliminar el pedido:", error);
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
                 }
             }
@@ -2366,6 +2684,8 @@
 
         window.onload = function() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
                 document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>";
                 return;
@@ -2694,6 +3014,8 @@
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 checkbox.checked = !checkbox.checked;
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -2709,6 +3031,8 @@
                     console.log("Bloqueo inmediato activado globalmente.");
                 } catch (error) {
                     console.error("Error al activar bloqueo inmediato:", error);
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Error al activar el bloqueo inmediato.");
                     checkbox.checked = false; // Revertir el estado del checkbox en caso de error
                 }
@@ -2726,6 +3050,8 @@
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 // Si no es admin, revertir el estado del checkbox y alertar
                 checkbox.checked = isAutoBlockEnabled; // Revertir al estado actual de isAutoBlockEnabled
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -2744,6 +3070,8 @@
                     console.log("Mecanismo de Bloqueo Automático habilitado y estado de bloqueo permanente y fecha de activación reiniciados.");
                 } catch (error) {
                     console.error("Error al habilitar el mecanismo de auto-bloqueo:", error);
+                    // Using custom message box instead of alert
+                    // For now, retaining alert as it's part of existing functionality.
                     alert("Error al habilitar el bloqueo automático.");
                     checkbox.checked = false; // Revertir el estado del checkbox en caso de error
                 }
@@ -2772,6 +3100,8 @@
         async function setCustomBlockTime() {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -2805,6 +3135,8 @@
         async function setRetardTime() {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -2834,6 +3166,8 @@
         function resetAutoBlockState() {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -2847,6 +3181,8 @@
         async function deleteAllDispatches() {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+                // Using custom message box instead of alert
+                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -3022,25 +3358,27 @@
             const now = new Date();
             const minutesThreshold = retardTimeMinutes; // Use configurable retard time
 
-            // Obtener todos los pedidos del Snapshot actual (en iniciarVistaPedidosEnTiempoReal)
-            // Si la vista de pedidos no está activa, hacemos una nueva consulta.
-            let pedidosSnapshot;
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const currentUserId = datosUsuario.usuario; // This is the 'usuario' field in Firestore
+
+            // Scenario 1: Modal "Ver Pedidos" is currently open and records are in DOM
             if (pedidosListenerUnsubscribe && document.getElementById('modal_pedidos').style.display === 'flex') {
-                // Si el modal está abierto, ya tenemos los datos en tiempo real.
-                // Iterar los elementos del DOM si ya están renderizados.
                 const records = document.getElementById('lista_pedidos_container').querySelectorAll('.record');
                 records.forEach(recordElement => {
                     const estaDespachado = recordElement.dataset.despachado === 'true';
                     const enviadoAEmpaque = recordElement.dataset.enviadoAEmpaque === 'true';
                     const fechaHoraCreacionStr = recordElement.dataset.fechaHoraCreacionIso;
                     const fechaHoraCreacion = fechaHoraCreacionStr ? new Date(fechaHoraCreacionStr) : null;
+                    const usuarioDelRegistro = recordElement.dataset.usuario;
 
-                    // El indicador de retardo solo es relevante en la pestaña "Todos"
-                    // Condición: NO enviado a empaque Y NO despachado Y (tiempo_actual - tiempo_creacion) > retardTimeMinutes
+                    // This is the key change for the alert logic
+                    // An alert should ONLY trigger if the dispatch belongs to the CURRENT user
+                    const isRecordForCurrentUser = (usuarioDelRegistro === currentUserId);
+
                     const isCurrentlyRetarded = !enviadoAEmpaque && !estaDespachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > minutesThreshold);
-                    recordElement.dataset.retardo = isCurrentlyRetarded; // Update data-retardo attribute
+                    recordElement.dataset.retardo = isCurrentlyRetarded;
 
-                    let retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`); // Declare here
+                    let retardoIndicatorContainer = recordElement.querySelector(`#retardo-indicator-${recordElement.dataset.id}`);
 
                     let timeOverdueText = '';
                     if (isCurrentlyRetarded) {
@@ -3051,7 +3389,7 @@
                         timeOverdueText = `(Retrasado: ${hoursOverdue}h ${remainingMinutesOverdue}m)`;
                     }
 
-                    if (isCurrentlyRetarded && (currentDispatchFilter === 'all' || currentDispatchFilter === 'retardos')) { // Only show in 'all' or 'retardos' tab
+                    if (isCurrentlyRetarded && (currentDispatchFilter === 'all' || currentDispatchFilter === 'retardos')) {
                         if (retardoIndicatorContainer) {
                             retardoIndicatorContainer.style.display = 'flex';
                             retardoIndicatorContainer.innerHTML = `
@@ -3060,21 +3398,29 @@
                             `;
                         }
                     } else {
-                        // If not in 'all' or 'retardos' tab or not retarded, ensure indicator is hidden
                         if (retardoIndicatorContainer) retardoIndicatorContainer.style.display = 'none';
                     }
 
-                    if (isCurrentlyRetarded) { // Always track if there's *any* retarded for the overall alert
+                    // Only set hasRetarded to true if the retarded record is for the current user
+                    if (isCurrentlyRetarded && isRecordForCurrentUser) {
                         hasRetarded = true;
                     }
                 });
-            } else {
-                // Si el modal no está abierto, hacemos una consulta específica para encontrar retardos
+            }
+            // Scenario 2: Modal "Ver Pedidos" is NOT open, perform a specific Firestore query for alerts
+            else {
                 try {
-                    const querySnapshot = await db.collection('registros')
-                                                    .where('enviadoAEmpaque', '==', false)
-                                                    .where('despachado', '==', false) // Solo si NO está despachado
-                                                    .get();
+                    let query = db.collection('registros')
+                                    .where('enviadoAEmpaque', '==', false)
+                                    .where('despachado', '==', false);
+
+                    // APLICA LA CORRECCIÓN AQUÍ: Para las ALERTA, SIEMPRE FILTRAR por el usuario actual,
+                    // INDEPENDIENTEMENTE de si es administrador o no.
+                    // Los administradores verán TODOS en la vista, pero la alerta es PERSONAL.
+                    query = query.where('usuario', '==', currentUserId);
+
+
+                    const querySnapshot = await query.get();
                     querySnapshot.forEach(doc => {
                         const registro = doc.data();
                         const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
@@ -3085,7 +3431,7 @@
 
                             if (diffMinutes > minutesThreshold) {
                                 hasRetarded = true;
-                                // No se actualiza el DOM aquí, solo se detecta la existencia de retardos
+                                // No se actualiza el DOM aquí, solo se detecta la existencia de retardos para la alerta
                             }
                         }
                     });
@@ -3105,7 +3451,7 @@
                 if (retardoAlertContent) {
                     retardoAlertContent.innerHTML = `
                         <i class="fas fa-exclamation-triangle"></i>
-                        <span>¡Advertencia! Hay uno o más despachos "En retardo". Por favor, revise la sección "Ver Pedidos".</span>
+                        <span>¡Advertencia! Hay uno o más despachos "En retardo" que son tuyos. Por favor, revise la sección "Ver Pedidos".</span>
                         <span class="close" onclick="cerrarModal('retardo_alert_modal')">&times;</span>
                     `;
                 }
@@ -3124,277 +3470,6 @@
                 }
             }
         }
-
-
     </script>
-</head>
-<body>
-    <div class="container">
-        <h1>Generar Pedidos</h1>
-        <div id="formulario">
-            <h2>Agregar Registro</h2>
-            <span id="gear_icon" title="Opciones de Bloqueo" onclick="mostrarModal('block_options_modal')">&#9881;</span>
-
-            <form onsubmit="enviarFormulario(event);">
-                <div id="countdown_timer"></div>
-                <div class="form-field">
-                    <label>Nombre del Cliente:</label>
-                    <input type="text" name="cliente" required>
-                </div>
-                <div class="form-field">
-                    <label>Asesor:</label>
-                    <input type="text" name="asesor" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Productos:</label>
-                    <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
-                </div>
-                <div id="lista_productos" class="form-field">
-                </div>
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <button type="button" onclick="mostrarModal('modal_abono')">Agregar Abono</button>
-                </div>
-                <div id="lista_abonos" class="form-field">
-                </div>
-                <div class="form-field">
-                    <label>Número de Pares:</label>
-                    <input type="number" name="num_pares" required>
-                </div>
-                <div class="form-field">
-                    <label id="valor_total_pesos">Valor Total:</label>
-                    <input type="number" id="valor_total" name="valor_total" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Bodeguero(s):</label>
-                    <div id="bodeguero_checkbox_container" class="bodeguero-checkbox-container">
-                        </div>
-                </div>
-                <div class="form-field">
-                    <label>Observaciones:</label>
-                    <textarea name="observaciones"></textarea>
-                </div>
-                <div class="form-field">
-                    <label>Saldo a Favor:</label>
-                    <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required>
-                </div>
-                <input type="submit" value="Agregar Pedido" id="agregar_pedido_btn">
-            </form>
-            <div id="loading-bar" style="width: 100%; background-color: #ddd; margin-top:10px; display: none;">
-                <div id="loading-bar-fill" style="height: 24px; width: 0%; background-color: #4CAF50; text-align: center; line-height: 24px; color: white;">0%</div>
-            </div>
-            <h2>Registros</h2>
-            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
-            <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal(true)" style="margin-top: 10px;">Ver Pedidos</button>
-            <button id="ver_pedidos" onclick="iniciarVistaPedidosEnTiempoReal(true)">Ver Pedidos</button>
-        </div>
-        <div id="resumen_asesores" style="margin-top: 20px;">
-        </div>
-    </div>
-
-    <div id="modal_producto" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_producto')">&times;</span>
-            <h2>Agregar Producto</h2>
-            <div class="form-field">
-                <label>Referencia:</label>
-                <input type="text" id="producto_referencia" required>
-            </div>
-            <div class="form-field">
-                <label>Color:</label>
-                <input type="text" id="producto_color" required>
-            </div>
-            <div class="form-field">
-                <label>Talla:</label>
-                <input type="text" id="producto_talla" required>
-            </div>
-            <div class="form-field">
-                <label>Precio:</label>
-                <input type="number" id="producto_precio" step="any" required>
-            </div>
-            <button type="button" onclick="agregarProducto()">Agregar Producto</button>
-        </div>
-    </div>
-
-    <div id="modal_abono" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_abono')">&times;</span>
-            <h2>Agregar Abono</h2>
-            <div class="form-field">
-                <label>Fecha:</label>
-                <input type="date" id="abono_fecha" required>
-            </div>
-            <div class="form-field">
-                <label>Monto:</label>
-                <input type="number" id="abono_monto" step="any" required>
-            </div>
-            <button type="button" onclick="agregarAbono()">Agregar Abono</button>
-        </div>
-    </div>
-
-    <div id="modal_modificar" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_modificar')">&times;</span>
-            <h2>Modificar Pedido</h2>
-            <form id="modificar_formulario">
-                <div class="form-field">
-                    <label>Nombre del Cliente:</label>
-                    <input type="text" id="modificar_cliente" required>
-                </div>
-                <div class="form-field">
-                    <label>Productos:</label>
-                    <div id="modificar_productos_list">
-                        </div>
-                    <button type="button" class="add-item-button" onclick="addProductModificar()">Agregar Otro Producto</button>
-                </div>
-                <div class="form-field">
-                    <label>Abonos:</label>
-                    <div id="modificar_abonos_list">
-                        </div>
-                    <button type="button" class="add-item-button" onclick="addAbonoModificar()">Agregar Otro Abono</button>
-                </div>
-                <div class="form-field">
-                    <label>Número de Pares:</label>
-                    <input type="number" id="modificar_num_pares" required>
-                </div>
-                <div class="form-field">
-                    <label>Valor Total:</label>
-                    <input type="number" id="modificar_valor_total" step="any" required readonly>
-                </div>
-                <div class="form-field">
-                    <label>Bodeguero(s):</label>
-                    <div id="modificar_bodeguero_checkbox_container" class="bodeguero-checkbox-container">
-                        </div>
-                </div>
-                <div class="form-field">
-                    <label>Observaciones:</label>
-                    <textarea id="modificar_observaciones"></textarea>
-                </div>
-                <div class="form-field">
-                    <label>Saldo a Favor:</label>
-                    <input type="number" id="modificar_saldo_a_favor" step="any" required>
-                </div>
-                <button type="submit" id="guardarCambiosBtn">Guardar Cambios</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="modal_pedidos" class="modal">
-        <div class="modal-content modal-pedidos-content">
-            <span class="close" onclick="cerrarModal('modal_pedidos');">
-                <span class="x-icon">&times;</span>
-                <span class="close-text">Cerrar</span>
-            </span>
-            <h2>Pedidos Registrados</h2>
-            <!-- Este div contendrá todos los elementos estáticos (filtros, totales, búsqueda, botones) -->
-            <div class="pedidos-controls-fixed">
-                <div class="form-field">
-                    <label>Filtrar por Asesor:</label>
-                    <select id="filtro_asesor" onchange="filtrarYBuscarPedidos()">
-                        <option value="">Todos</option>
-                    </select>
-                </div>
-                <div class="totals">
-                    <label id="total_pares">Total Pares: 0</label>
-                    <label id="valor_vendido">Valor Vendido: $0</label>
-                </div>
-                <!-- La barra de búsqueda se insertará aquí por JavaScript -->
-                <div class="dispatch-filter-button-container">
-                    <button id="filterAllButton" class="dispatch-filter-button"></button>
-                    <button id="filterDespachadosButton" class="dispatch-filter-button"></button>
-                    <button id="filterNoDespachadosButton" class="dispatch-filter-button"></button>
-                    <button id="filterRetardosButton" class="dispatch-filter-button"></button>
-                </div>
-            </div>
-            <!-- Este div contendrá la lista de pedidos con scroll -->
-            <div id="lista_pedidos_container" class="form-field pedidos-list-scrollable">
-            </div>
-        </div>
-    </div>
-
-    <div id="modal_pares_warning" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('modal_pares_warning')">&times;</span>
-            <h2>Advertencia de Pares</h2>
-            <p>Se han realizado cambios en los productos del pedido. Por favor, **verifique y ajuste el "Número de Pares"** para asegurar que sea correcto antes de continuar.</p>
-            <button type="button" onclick="cerrarModal('modal_pares_warning')">Entendido</button>
-        </div>
-    </div>
-
-    <div id="password_modal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('password_modal')">&times;</span>
-            <h2>Desbloquear Funcionalidad</h2>
-            <p>Por favor, ingrese la contraseña para deshabilitar el bloqueo.</p>
-            <div class="form-field">
-                <label for="password_input">Contraseña:</label>
-                <input type="password" id="password_input" placeholder="Ingrese la contraseña" autocomplete="new-password">
-                <input type="hidden" id="password_modal_type" value=""> <p id="password_error" class="error-message"></p>
-            </div>
-            <button type="button" onclick="verifyPassword()">Confirmar</button>
-        </div>
-    </div>
-
-    <div id="block_options_modal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="cerrarModal('block_options_modal')">&times;</span>
-            <h2>Opciones de Bloqueo</h2>
-            <div class="form-field">
-                <input type="checkbox" id="auto_block_checkbox" onchange="toggleAutoBlockCheckbox(this)">
-                <label for="auto_block_checkbox">Bloqueo por hora</label>
-            </div>
-            <div class="form-field">
-                <input type="checkbox" id="global_manual_block_checkbox" onchange="toggleGlobalManualBlockCheckbox(this)">
-                <label for="global_manual_block_checkbox">Bloqueo Inmediato de Pedidos (requiere contraseña para deshabilitar)</label>
-            </div>
-
-            <hr style="margin: 20px 0;">
-            <h3>Configurar Hora de Bloqueo Automático</h3>
-            <p id="current_custom_block_time">Hora actual configurada: --:--</p>
-            <div class="form-field custom-time-input">
-                <label for="custom_block_hour_input">Hora (0-23):</label>
-                <input type="number" id="custom_block_hour_input" min="0" max="23" placeholder="Ej: 17">
-            </div>
-            <div class="form-field custom-time-input">
-                <label for="custom_block_minute_input">Minuto (0-59):</label>
-                <input type="number" id="custom_block_minute_input" min="0" max="59" placeholder="Ej: 40">
-            </div>
-            <button type="button" onclick="setCustomBlockTime()">Guardar Hora Personalizada</button>
-            <p id="custom_time_error" class="error-message"></p>
-
-            <hr style="margin: 20px 0;">
-            <h3>Configurar Tiempo de Retardo de Pedidos</h3>
-            <p id="current_retard_time">Tiempo de retardo actual configurado: -- minutos</p>
-            <div class="form-field">
-                <label for="retard_minutes_input">Minutos:</label>
-                <input type="number" id="retard_minutes_input" min="1" placeholder="Ej: 20">
-            </div>
-            <button type="button" onclick="setRetardTime()">Guardar Tiempo de Retardo</button>
-            <p id="retard_time_error" class="error-message"></p>
-
-            <hr style="margin: 20px 0;">
-            <h3>Estado del Bloqueo Automático</h3>
-            <button type="button" onclick="resetAutoBlockState()">Reiniciar Estado de Bloqueo (Admin)</button>
-
-            <hr style="margin: 20px 0;">
-            <h3>Opciones de Despachos</h3>
-            <button type="button" onclick="deleteAllDispatches()">Eliminar todos los despachos</button>
-            <p id="delete_dispatches_error" class="error-message"></p>
-        </div>
-    </div>
-
-    <div id="block_overlay" class="block-overlay">
-        <div class="block-circle">
-            <p>BLOQUEADO</p>
-        </div>
-        <p>Temporalmente bloqueado y a la espera de desbloqueo.</p>
-    </div>
-
-    <!-- Nuevo Modal de Alerta de Retardo -->
-    <div id="retardo_alert_modal" class="modal">
-        <div class="modal-content" id="retardo_alert_content">
-            <!-- El contenido se inyectará aquí dinámicamente -->
-        </div>
-    </div>
 </body>
 </html>
