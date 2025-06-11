@@ -757,6 +757,53 @@
             setTimeout(autoSaveDailyProgress, timeToNextRun);
         }
 
+        // Centralized function to calculate and display accumulated progress
+        function _calculateAndDisplayAccumulatedProgress(historicalSnapshotsData) {
+            let tempAccumulatedWeekPares = 0;
+            let tempAccumulatedWeekValor = 0;
+            let tempAccumulatedMonthPares = 0;
+            let tempAccumulatedMonthValor = 0;
+
+            const today = new Date();
+            const todayStr = today.toISOString().slice(0, 10);
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - (today.getDay() + 6) % 7); // Monday
+            startOfWeek.setHours(0, 0, 0, 0);
+
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            startOfMonth.setHours(0, 0, 0, 0);
+
+            historicalSnapshotsData.forEach(data => { // Iterate through the data provided (can be from onSnapshot or get)
+                const snapshotDate = new Date(data.id); // Assuming data has 'id' property or doc.id
+                snapshotDate.setHours(0,0,0,0);
+
+                if (data.id !== todayStr) { // Only add historical snapshots
+                    if (snapshotDate >= startOfWeek) {
+                        tempAccumulatedWeekPares += (data.pares || 0);
+                        tempAccumulatedWeekValor += (data.valor || 0);
+                    }
+                    if (snapshotDate >= startOfMonth) {
+                        tempAccumulatedMonthPares += (data.pares || 0);
+                        tempAccumulatedMonthValor += (data.valor || 0);
+                    }
+                }
+            });
+
+            // Add today's real-time values (currentDayPares, currentDayValor)
+            // to the accumulated totals for the current week and month.
+            accumulatedWeekPares = tempAccumulatedWeekPares + currentDayPares;
+            accumulatedWeekValor = tempAccumulatedWeekValor + currentDayValor;
+            accumulatedMonthPares = tempAccumulatedMonthPares + currentDayPares;
+            accumulatedMonthValor = tempAccumulatedMonthValor + currentDayValor;
+
+            document.getElementById('total_pares_week_card').textContent = accumulatedWeekPares;
+            document.getElementById('total_valor_week_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
+            document.getElementById('total_pares_month_card').textContent = accumulatedMonthPares;
+            document.getElementById('total_valor_month_card').textContent = `$${accumulatedMonthValor.toLocaleString('es-CO')}`;
+
+            updateGoalProgress(); // Update progress bars with newly calculated accumulated values
+        }
+
 
         window.onload = function() {
             // No longer checking specific permissions, accessible to all users.
@@ -831,18 +878,23 @@
               .where('fecha_hora', '>=', startOfDay)
               .where('fecha_hora', '<=', endOfDay)
               .onSnapshot(snapshot => {
-                  updateDailySummary(snapshot); // Update "Hoy" cards
+                  updateDailySummary(snapshot); // Update "Hoy" cards and trigger accumulated updates
               }, error => {
                   console.error("Error listening to today's dispatches:", error);
               });
 
             // --- Listener for Daily Sales Snapshots (for weekly/monthly accumulated progress) ---
+            // This listener will primarily handle updates when the 6 PM auto-save happens for past days,
+            // or when a manual save from a different session/device happens.
+            // When this fires, it will trigger the _calculateAndDisplayAccumulatedProgress.
             db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
                 .onSnapshot(snapshot => {
-                    updateAccumulatedProgress(snapshot); // Update weekly/monthly accumulated cards
+                    const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    _calculateAndDisplayAccumulatedProgress(historicalData);
                 }, error => {
                     console.error("Error listening to daily sales snapshots:", error);
                 });
+
 
             // --- Listener for Global Block Configuration ---
             db.collection('settings').doc('global_block').onSnapshot(doc => {
@@ -1003,10 +1055,23 @@
             document.getElementById('dispatched_orders_card').textContent = dispatchedOrders;
             document.getElementById('retarded_orders_card').textContent = retardedOrders;
 
-            updateGoalProgress(); // Update progress bars as daily data changes
+            // Trigger re-calculation and display of accumulated progress to include today's real-time sales
+            db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
+                .get() // Get all historical snapshots
+                .then(snapshot => {
+                    const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    _calculateAndDisplayAccumulatedProgress(historicalData); // Pass historical data to the central function
+                })
+                .catch(error => {
+                    console.error("Error fetching historical snapshots for real-time daily update:", error);
+                });
+
+            updateGoalProgress(); // This will be called again by _calculateAndDisplayAccumulatedProgress, but keeping here for direct impact on goal displays if needed.
         }
 
-        function updateAccumulatedProgress(snapshot) {
+        // Renamed and centralized function to calculate and display accumulated progress
+        // This function is now called from both the daily_sales_snapshot listener AND updateDailySummary
+        function _calculateAndDisplayAccumulatedProgress(historicalSnapshotsData) {
             let tempAccumulatedWeekPares = 0;
             let tempAccumulatedWeekValor = 0;
             let tempAccumulatedMonthPares = 0;
@@ -1021,13 +1086,11 @@
             const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             startOfMonth.setHours(0, 0, 0, 0);
 
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                const snapshotDate = new Date(doc.id); // Doc ID is YYYY-MM-DD
-                snapshotDate.setHours(0,0,0,0); // Normalize to start of day for comparison
+            historicalSnapshotsData.forEach(data => { // Iterate through the data provided (can be from onSnapshot or get)
+                const snapshotDate = new Date(data.id); // Assuming data has 'id' property or doc.id
+                snapshotDate.setHours(0,0,0,0);
 
-                // Only add historical snapshots. Today's currentDayPares/Valor will be added separately.
-                if (doc.id !== todayStr) {
+                if (data.id !== todayStr) { // Only add historical snapshots (not today's data from snapshot)
                     if (snapshotDate >= startOfWeek) {
                         tempAccumulatedWeekPares += (data.pares || 0);
                         tempAccumulatedWeekValor += (data.valor || 0);
@@ -1039,19 +1102,19 @@
                 }
             });
 
-            // Add today's real-time values to the accumulated totals for the current week and month
+            // Add today's real-time values (currentDayPares, currentDayValor)
+            // to the accumulated totals for the current week and month.
             accumulatedWeekPares = tempAccumulatedWeekPares + currentDayPares;
             accumulatedWeekValor = tempAccumulatedWeekValor + currentDayValor;
             accumulatedMonthPares = tempAccumulatedMonthPares + currentDayPares;
             accumulatedMonthValor = tempAccumulatedMonthValor + currentDayValor;
-
 
             document.getElementById('total_pares_week_card').textContent = accumulatedWeekPares;
             document.getElementById('total_valor_week_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
             document.getElementById('total_pares_month_card').textContent = accumulatedMonthPares;
             document.getElementById('total_valor_month_card').textContent = `$${accumulatedMonthValor.toLocaleString('es-CO')}`;
 
-            updateGoalProgress(); // Update progress bars as accumulated data changes
+            updateGoalProgress(); // Update progress bars with newly calculated accumulated values
         }
 
         function updateGoalProgress() {
