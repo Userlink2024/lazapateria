@@ -892,6 +892,16 @@
             transition: width 0.4s ease-out; /* Smooth width transition */
         }
 
+        /* Custom colors for Abonos sum display */
+        .color-verde {
+            color: #28a745; /* Verde Bootstrap */
+            font-weight: bold;
+        }
+        .color-rojo {
+            color: #dc3545; /* Rojo Bootstrap */
+            font-weight: bold;
+        }
+
         /* Media Queries for Responsiveness */
         @media (max-width: 768px) {
             .container {
@@ -1746,6 +1756,15 @@
                     retardoIndicatorContainer.style.display = 'none';
                 }
             }
+
+            // --- Update the abonos sum display ---
+            const totalAbonosElement = recordElement.querySelector(`#total_abonos_display_${docId}`);
+            if (totalAbonosElement) {
+                const totalAbonos = (updatedRegistro.abonos || []).reduce((sum, abono) => sum + (parseFloat(abono.monto) || 0), 0);
+                const valorTotal = parseFloat(updatedRegistro.valor_total) || 0;
+                const className = totalAbonos === valorTotal ? 'color-verde' : 'color-rojo';
+                totalAbonosElement.innerHTML = `<p>Total Abonos: <span class="${className}">$${totalAbonos.toLocaleString('es-CO')}</span></p>`;
+            }
         }
 
         // Helper function to create a new record element
@@ -1798,13 +1817,20 @@
             recordElement.dataset.productos = productosTextoParaBusqueda.trim();
 
             let abonosHTMLList = 'Sin abonos';
+            let totalAbonos = 0; // Calculate total abonos
             if (Array.isArray(registro.abonos) && registro.abonos.length > 0) {
                 abonosHTMLList = '<ul>';
                 registro.abonos.forEach((abono, j) => {
                     abonosHTMLList += `<li>Abono ${j + 1}: ${abono.fecha || 'N/A'} - $${(abono.monto || 0).toLocaleString('es-CO')}</li>`;
+                    totalAbonos += parseFloat(abono.monto) || 0; // Sum abono amounts
                 });
                 abonosHTMLList += '</ul>';
             }
+
+            // Determine color for total abonos display
+            const valorTotalRegistro = parseFloat(registro.valor_total) || 0;
+            const abonosDisplayClass = (totalAbonos === valorTotalRegistro) ? 'color-verde' : 'color-rojo';
+
 
             const puedeModificarEliminar = esAdministrador || (!estaBloqueado && !estaDespachado);
             const fechaHoraFormateada = registro.fecha_hora && registro.fecha_hora.toDate ? registro.fecha_hora.toDate().toLocaleString() : (registro.fecha_hora || 'N/A');
@@ -1841,6 +1867,7 @@
                     <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
                     ${productosHTMLList}
                     ${abonosHTMLList}
+                    <p id="total_abonos_display_${docId}">Total Abonos: <span class="${abonosDisplayClass}">$${totalAbonos.toLocaleString('es-CO')}</span></p>
                     <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
                     <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                     <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
@@ -2925,9 +2952,9 @@
          * Verifica la hora actual y, si se cumplen las condiciones, activa el bloqueo automático.
          * Utiliza la hora de bloqueo personalizada si está habilitada, de lo contrario, usa la por defecto.
          */
-        function checkTimeBlock() {
+        async function checkTimeBlock() { // Added async keyword
             const now = new Date();
-            const todayDate = now.toISOString().slice(0, 10); // FormatoYYYY-MM-DD
+            const todayDate = now.toISOString().slice(0, 10); // Formato YYYY-MM-DD
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
@@ -2939,36 +2966,56 @@
             targetTime.setHours(blockHourToUse, blockMinuteToUse, 0, 0); // Establecer la hora de bloqueo objetivo
 
             // Si ya pasó la hora de bloqueo para hoy, establece la hora de bloqueo para mañana
+            // (Esto es solo para el cálculo del contador, no para el bloqueo en sí)
             if (now.getTime() > targetTime.getTime()) {
                 targetTime.setDate(targetTime.getDate() + 1);
             }
 
             const timeLeftMs = targetTime.getTime() - now.getTime();
 
+            // *** LÓGICA DE ACTIVACIÓN DEL BLOQUEO PERMANENTE ***
+            // Solo si el auto-bloqueo está habilitado, NO está ya bloqueado permanentemente,
+            // la hora actual es >= la hora de bloqueo y NO se activó hoy
+            if (isAutoBlockEnabled && !isAutoBlockedPermanently &&
+                (currentHour > blockHourToUse || (currentHour === blockHourToUse && currentMinute >= blockMinuteToUse)) &&
+                lastAutoBlockTriggerDate !== todayDate) {
+                try {
+                    await globalSettingsRef.set({
+                        isAutoBlockedPermanently: true,
+                        lastAutoBlockTriggerDate: todayDate
+                    }, { merge: true });
+                    isAutoBlockedPermanently = true; // Update local state immediately
+                    lastAutoBlockTriggerDate = todayDate; // Update local state immediately
+                    console.log(`Bloqueo automático activado permanentemente para hoy (${todayDate}) a las ${blockHourToUse}:${blockMinuteToUse}.`);
+                    playAlarmSound(); // Play an alarm sound when block activates
+                } catch (error) {
+                    console.error("Error al activar bloqueo automático permanente:", error);
+                }
+            }
+
+            // Actualizar el display del contador
             const countdownElement = document.getElementById('countdown_timer');
             if (countdownElement) {
-                // Si el auto-bloqueo está habilitado (por el admin) Y ya se activó permanentemente
                 if (isAutoBlockEnabled && isAutoBlockedPermanently) {
                     countdownElement.textContent = "¡Bloqueo automático activado! (Indefinido)";
                     countdownElement.style.backgroundColor = '#ffc107'; // Yellow background for active auto block
                     countdownElement.style.borderColor = '#ffc107';
-                } else if (isAutoBlockEnabled && !isAutoBlockedPermanently) { // Si el auto-bloqueo está habilitado pero aún no se activa hoy
+                } else if (isAutoBlockEnabled && !isAutoBlockedPermanently) {
                     countdownElement.textContent = `Bloqueo automático en: ${Math.floor(timeLeftMs / (1000 * 60 * 60))}h ${Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}m ${Math.floor((timeLeftMs % (1000 * 60)) / 1000)}s`;
                     countdownElement.style.backgroundColor = '#e7f3ff'; // Default blue background
                     countdownElement.style.borderColor = '#007bff';
 
-                    // Actualizar la hora configurada en el modal de opciones de bloqueo (en formato de 12 horas)
                     const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
                     const formattedTime = new Date(1, 1, 1, blockHourToUse, blockMinuteToUse).toLocaleTimeString('es-CO', formattedTimeOptions);
                     document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
-
-                } else { // Si el auto-bloqueo no está habilitado por el admin
+                } else {
                     countdownElement.textContent = "Bloqueo automático deshabilitado por el administrador.";
                     countdownElement.style.backgroundColor = '#f8d7da'; /* Light red */
                     countdownElement.style.borderColor = '#dc3545'; /* Red */
-                     document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: N/A (Deshabilitado)`;
+                    document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: N/A (Deshabilitado)`;
                 }
             }
+            applyBlockStatus(); // Ensure UI reflects current block state after potential changes
         }
 
         function applyBlockStatus() {
