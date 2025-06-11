@@ -124,6 +124,25 @@
             opacity: 0.8; /* Slight transparency to emphasize disabled state */
         }
 
+        /* New button group styling */
+        .button-group {
+            display: flex;
+            flex-wrap: wrap; /* Allow buttons to wrap to next line on smaller screens */
+            gap: 15px; /* Space between buttons */
+            justify-content: center; /* Center the buttons horizontally */
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        /* Style for the "Ver Progreso" button */
+        #ver_progreso_btn {
+            background-image: linear-gradient(135deg, #17a2b8 0%, #138496 100%); /* Blue-green for distinction */
+            box-shadow: 0 4px 10px rgba(23, 162, 184, 0.2);
+        }
+        #ver_progreso_btn:hover {
+            background-image: linear-gradient(135deg, #138496 0%, #0d6d7d 100%);
+            box-shadow: 0 6px 15px rgba(23, 162, 184, 0.3);
+        }
+
 
         /* Modals */
         .modal {
@@ -944,6 +963,13 @@
             .dispatch-filter-button {
                 max-width: 100%; /* Full width for stacked buttons */
             }
+            .button-group {
+                flex-direction: column; /* Stack buttons on small screens */
+                align-items: stretch;
+            }
+            .button-group button {
+                max-width: 100%; /* Full width for stacked buttons */
+            }
             /* Adjust the size and position of the close button for smaller screens for better touch target */
             #modal_pedidos .close {
                 font-size: 60px; /* Even larger on mobile */
@@ -1018,9 +1044,13 @@
                 <div id="loading-bar-fill" style="height: 24px; width: 0%; background-color: #4CAF50; text-align: center; line-height: 24px; color: white;">0%</div>
             </div>
             <h2>Registros</h2>
-            <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
-            <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal(true)" style="margin-top: 10px;">Ver Pedidos</button>
-            <button id="ver_pedidos" onclick="iniciarVistaPedidosEnTiempoReal(true)">Ver Pedidos</button>
+            <div class="button-group">
+                <button id="exportar" onclick="exportarAExcel()">Exportar a Excel</button>
+                <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal(true)">Ver Pedidos (Modal)</button>
+                <button id="ver_progreso_btn" onclick="location.href='https://userlink2024.github.io/lazapateria/progreso.html'">Ver Progreso</button>
+            </div>
+            <!-- The fixed "Ver Pedidos" button remains outside this group -->
+            <button id="ver_pedidos" onclick="iniciarVistaPedidosEnTiempoReal(true)">Ver Pedidos (Fijo)</button>
         </div>
         <div id="resumen_asesores" style="margin-top: 20px;">
         </div>
@@ -1466,8 +1496,6 @@
                 return;
             }
 
-            // Using custom message box instead of window.confirm
-            // For now, retaining window.confirm as it's part of existing functionality.
             const confirmacion = window.confirm("¿Desea enviar el formulario?");
             if (confirmacion) {
                 mostrarBarraCargando();
@@ -1501,15 +1529,11 @@
                 try {
                     await db.collection('registros').add(datos);
                     console.log("Datos guardados en Firebase:", datos);
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Pedido agregado exitosamente!");
                     // Después de agregar un pedido, verificar si hay pedidos en retardo
                     checkForRetardedDispatches(true); // Pasar true para indicar que se debe mostrar el modal si hay retardos
                 } catch (error) {
                     console.error("Error guardando en Firebase:", error);
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Hubo un error al guardar el pedido. Inténtelo de nuevo.");
                 }
 
@@ -1747,13 +1771,15 @@
 
 
                 if (isCurrentlyRetarded && (currentDispatchFilter === 'all' || currentDispatchFilter === 'retardos')) {
-                    retardoIndicatorContainer.style.display = 'flex';
-                    retardoIndicatorContainer.innerHTML = `
+                    if (retardoIndicatorContainer) { // Check if container exists before updating
+                        retardoIndicatorContainer.style.display = 'flex';
+                        retardoIndicatorContainer.innerHTML = `
                             <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
                             <span>En retardo ${timeOverdueText}</span>
                         `;
+                    }
                 } else {
-                    retardoIndicatorContainer.style.display = 'none';
+                    if (retardoIndicatorContainer) retardoIndicatorContainer.style.display = 'none';
                 }
             }
 
@@ -2107,8 +2133,6 @@
         async function toggleBloqueoPedido(id, nuevoEstadoBloqueo) {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 const checkbox = document.getElementById(`bloquear_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
@@ -2116,8 +2140,6 @@
             }
 
             if (!nuevoEstadoBloqueo) { // Si se está intentando desmarcar (quitar el chulo)
-                // Using custom message box instead of window.confirm
-                // For now, retaining window.confirm as it's part of existing functionality.
                 if (!window.confirm("¿Estás seguro de que quieres desbloquear este pedido?")) {
                     const checkbox = document.getElementById(`bloquear_${id}`);
                     if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
@@ -2140,8 +2162,6 @@
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de bloqueo:", error);
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Error al cambiar el estado de bloqueo del pedido.");
                 const checkbox = document.getElementById(`bloquear_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoBloqueo;
@@ -2151,8 +2171,6 @@
         async function toggleDespachadoPedido(id, nuevoEstadoDespachado) {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 const checkbox = document.getElementById(`despachar_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
@@ -2160,8 +2178,6 @@
             }
 
             if (!nuevoEstadoDespachado) { // Si se está intentando desmarcar (quitar el chulo)
-                // Using custom message box instead of window.confirm
-                // For now, retaining window.confirm as it's part of existing functionality.
                 if (!window.confirm("¿Estás seguro de que quieres desverificar este pedido?")) {
                     const checkbox = document.getElementById(`despachar_${id}`);
                     if (checkbox) checkbox.checked = true; // Revertir el estado del checkbox
@@ -2196,8 +2212,6 @@
                 // The onSnapshot listener will handle the UI update automatically
             } catch (error) {
                 console.error("Error al actualizar el estado de despachado:", error);
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Error al cambiar el estado de despachado del pedido.");
                 const checkbox = document.getElementById(`despachar_${id}`);
                 if (checkbox) checkbox.checked = !nuevoEstadoDespachado;
@@ -2218,8 +2232,6 @@
             if (!nuevoEstadoEnviado) {
                 const checkbox = document.getElementById(`enviado_empaque_${id}`);
                 if (checkbox) checkbox.checked = true; // Keep it checked if tried to uncheck
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Este checkbox no se puede desmarcar una vez activado.");
                 return;
             }
@@ -2235,8 +2247,6 @@
                 console.log(`Pedido ${id} marcado como "Enviado a Empaque".`);
             } catch (error) {
                 console.error("Error al actualizar el estado de 'Enviado a Empaque':", error);
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Error al cambiar el estado de 'Enviado a Empaque'.");
                 const checkbox = document.getElementById(`enviado_empaque_${id}`);
                 if (checkbox) checkbox.checked = false; // Revert state if error
@@ -2307,16 +2317,12 @@
                 const docSnap = await docRef.get();
 
                 if (!docSnap.exists) {
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("El pedido no existe.");
                     return;
                 }
                 const registro = docSnap.data();
 
                 if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Este pedido está bloqueado o despachado y no puede ser modificado.");
                     return;
                 }
@@ -2344,8 +2350,6 @@
                 modal.style.zIndex = '1001';
             } catch (error) {
                 console.error("Error al cargar el pedido para modificar:", error);
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Error al cargar el pedido. " + error.message);
             }
         }
@@ -2464,16 +2468,12 @@
             try {
                 const docSnap = await db.collection('registros').doc(id).get();
                 if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios.");
                     cerrarModal('modal_modificar');
                     return;
                 }
             } catch (error) {
                 console.error("Error verificando estado antes de guardar:", error);
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Error de verificación. No se pudo guardar.");
                 return;
             }
@@ -2510,8 +2510,6 @@
 
             try {
                 await db.collection('registros').doc(id).update(datosActualizados);
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Pedido modificado exitosamente.");
                 cerrarModal('modal_modificar');
 
@@ -2521,8 +2519,6 @@
             }
             catch (error) {
                 console.error("Error al modificar el pedido:", error);
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Hubo un error al modificar el pedido. Inténtelo de nuevo.");
             }
         }
@@ -2546,39 +2542,27 @@
                 const docRef = db.collection('registros').doc(id);
                 const docSnap = await docRef.get();
                 if (!docSnap.exists) {
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("El pedido que intenta eliminar no existe.");
                     return;
                 }
                 const registro = docSnap.data();
                 if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Este pedido está bloqueado o despachado y no puede ser eliminado.");
                     return;
                 }
             } catch (error) {
                  console.error("Error al verificar el estado para eliminar:", error);
-                 // Using custom message box instead of alert
-                 // For now, retaining alert as it's part of existing functionality.
                  alert("Error al verificar el estado del pedido. Inténtelo de nuevo.");
                  return;
             }
 
-            // Using custom message box instead of window.confirm
-            // For now, retaining window.confirm as it's part of existing functionality.
             const confirmacion = window.confirm("¿Estás seguro de que deseas eliminar este pedido?");
             if (confirmacion) {
                 try {
                     await db.collection('registros').doc(id).delete();
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Pedido eliminado correctamente.");
                 } catch (error) {
                     console.error("Error al eliminar el pedido:", error);
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Hubo un error al eliminar el pedido. Inténtelo de nuevo.");
                 }
             }
@@ -2711,8 +2695,6 @@
 
         window.onload = function() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
                 document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>";
                 return;
@@ -2954,7 +2936,7 @@
          */
         async function checkTimeBlock() { // Added async keyword
             const now = new Date();
-            const todayDate = now.toISOString().slice(0, 10); // Formato YYYY-MM-DD
+            const todayDate = now.toISOString().slice(0, 10); // FormatoYYYY-MM-DD
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
@@ -3061,8 +3043,6 @@
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 checkbox.checked = !checkbox.checked;
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -3078,8 +3058,6 @@
                     console.log("Bloqueo inmediato activado globalmente.");
                 } catch (error) {
                     console.error("Error al activar bloqueo inmediato:", error);
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Error al activar el bloqueo inmediato.");
                     checkbox.checked = false; // Revertir el estado del checkbox en caso de error
                 }
@@ -3097,8 +3075,6 @@
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
                 // Si no es admin, revertir el estado del checkbox y alertar
                 checkbox.checked = isAutoBlockEnabled; // Revertir al estado actual de isAutoBlockEnabled
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -3117,8 +3093,6 @@
                     console.log("Mecanismo de Bloqueo Automático habilitado y estado de bloqueo permanente y fecha de activación reiniciados.");
                 } catch (error) {
                     console.error("Error al habilitar el mecanismo de auto-bloqueo:", error);
-                    // Using custom message box instead of alert
-                    // For now, retaining alert as it's part of existing functionality.
                     alert("Error al habilitar el bloqueo automático.");
                     checkbox.checked = false; // Revertir el estado del checkbox en caso de error
                 }
@@ -3147,8 +3121,6 @@
         async function setCustomBlockTime() {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -3182,8 +3154,6 @@
         async function setRetardTime() {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -3213,8 +3183,6 @@
         function resetAutoBlockState() {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -3228,8 +3196,6 @@
         async function deleteAllDispatches() {
             initAudioContext(); // Initialize audio context on user interaction
             if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                // Using custom message box instead of alert
-                // For now, retaining alert as it's part of existing functionality.
                 alert("Esta acción solo puede ser realizada por un administrador.");
                 return;
             }
@@ -3350,7 +3316,6 @@
                         let deletedCount = 0;
 
                         if (querySnapshot.empty) {
-                            // Using a custom message box instead of alert
                             const deleteDispatchesErrorDisplay = document.getElementById('delete_dispatches_error');
                             if (deleteDispatchesErrorDisplay) {
                                 deleteDispatchesErrorDisplay.textContent = "No hay pedidos despachados para eliminar.";
@@ -3368,7 +3333,6 @@
 
                         await batch.commit();
                         playConfirmationSound();
-                        // Using a custom message box instead of alert
                         const deleteDispatchesErrorDisplay = document.getElementById('delete_dispatches_error');
                         if (deleteDispatchesErrorDisplay) {
                             deleteDispatchesErrorDisplay.textContent = `Se eliminaron ${deletedCount} pedidos despachados correctamente.`;
