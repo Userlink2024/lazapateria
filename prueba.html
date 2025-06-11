@@ -490,23 +490,17 @@
         <div class="goal-progress" style="margin-top: 40px;">
             <h2>Progreso Actual</h2>
             <h3>Progreso Semanal</h3>
-            <p>Pares Actuales: <span id="current_pares_week_progress">0</span> de <span id="goal_pares_week_display">0</span></p>
-            <div class="progress-bar-container">
-                <div class="progress-bar-fill" id="pares_week_progress_bar">0%</div>
-            </div>
+            <!-- Solo se muestra la barra de progreso de Valor para la semana -->
             <p>Valor Actual: $<span id="current_value_week_progress">0</span> de $<span id="goal_value_week_display">0</span></p>
             <div class="progress-bar-container">
                 <div class="progress-bar-fill" id="value_week_progress_bar">0%</div>
             </div>
 
             <h3>Progreso Mensual</h3>
+            <!-- Solo se muestra la barra de progreso de Pares para el mes -->
             <p>Pares Actuales: <span id="current_pares_month_progress">0</span> de <span id="goal_pares_month_display">0</span></p>
             <div class="progress-bar-container">
                 <div class="progress-bar-fill" id="pares_month_progress_bar">0%</div>
-            </div>
-            <p>Valor Actual: $<span id="current_value_month_progress">0</span> de $<span id="goal_value_month_display">0</span></p>
-            <div class="progress-bar-container">
-                <div class="progress-bar-fill" id="value_month_progress_bar">0%</div>
             </div>
         </div>
 
@@ -522,7 +516,6 @@
             <h2>Configurar Metas</h2>
             <div class="goals-section" style="border: none; box-shadow: none; padding: 0;">
                 <h3>Metas Semanales</h3>
-                <!-- Removed 'Meta de Pares' for weekly -->
                 <div class="form-field">
                     <label for="weekly_value_goal">Meta de Valor ($):</label>
                     <input type="number" id="weekly_value_goal" value="0" min="0">
@@ -537,7 +530,6 @@
                     <label for="monthly_pares_goal">Meta de Pares:</label>
                     <input type="number" id="monthly_pares_goal" value="0" min="0">
                 </div>
-                <!-- Removed 'Meta de Valor' for monthly -->
                 <div class="goal-buttons">
                     <button onclick="saveMonthlyGoals()">Guardar Metas Mensuales</button>
                     <button class="reset-button" onclick="resetMonthlyGoals()">Reiniciar Metas Mensuales</button>
@@ -630,9 +622,7 @@
             document.getElementById(id).style.display = 'flex';
             // If it's the goals settings modal, ensure inputs reflect current goals
             if (id === 'goals_settings_modal') {
-                // weekly_pares_goal is removed for weekly, only weekly_value_goal remains
                 document.getElementById('weekly_value_goal').value = weeklyValorGoal;
-                // monthly_value_goal is removed for monthly, only monthly_pares_goal remains
                 document.getElementById('monthly_pares_goal').value = monthlyParesGoal;
             }
         };
@@ -756,8 +746,6 @@
                     weeklyParesGoal = 0;
                     weeklyValorGoal = 0;
                 }
-                // Update input fields in modal if it's open, otherwise they'll update when modal is opened
-                // document.getElementById('weekly_pares_goal').value = weeklyParesGoal; // This field is removed
                 document.getElementById('weekly_value_goal').value = weeklyValorGoal;
                 updateGoalProgress(); // Update progress after goals are loaded
             }, error => {
@@ -778,9 +766,7 @@
                     monthlyParesGoal = 0;
                     monthlyValorGoal = 0;
                 }
-                // Update input fields in modal if it's open, otherwise they'll update when modal is opened
                 document.getElementById('monthly_pares_goal').value = monthlyParesGoal;
-                // document.getElementById('monthly_value_goal').value = monthlyValorGoal; // This field is removed
                 updateGoalProgress(); // Update progress after goals are loaded
             }, error => {
                 console.error("Error listening to monthly goals:", error);
@@ -845,13 +831,11 @@
             const currentWeek = getWeekNumber(new Date());
             const currentWeekId = `${currentYear}-${currentWeek}`;
 
-            // Only saving weekly_value_goal
             const weeklyValor = parseInt(document.getElementById('weekly_value_goal').value) || 0;
 
             try {
                 const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
                 await weeklyGoalsRef.set({
-                    // pares_goal: weeklyPares, // Removed
                     valor_goal: weeklyValor
                 }, { merge: true });
 
@@ -873,7 +857,7 @@
 
                 try {
                     const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
-                    await weeklyGoalsRef.set({ pares_goal: 0, valor_goal: 0 }, { merge: true }); // Reset both for consistency, even if one is not used in UI
+                    await weeklyGoalsRef.set({ valor_goal: 0 }, { merge: true }); // Only reset valor_goal
 
                     alert("Meta semanal reiniciada exitosamente.");
                     playConfirmationSound();
@@ -891,14 +875,12 @@
             const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
             const currentMonthId = `${currentYear}-${currentMonth}`;
 
-            // Only saving monthly_pares_goal
             const monthlyPares = parseInt(document.getElementById('monthly_pares_goal').value) || 0;
 
             try {
                 const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
                 await monthlyGoalsRef.set({
-                    pares_goal: monthlyPares,
-                    // valor_goal: monthlyValor // Removed
+                    pares_goal: monthlyPares
                 }, { merge: true });
 
                 alert("Meta mensual guardada exitosamente.");
@@ -919,7 +901,7 @@
 
                 try {
                     const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
-                    await monthlyGoalsRef.set({ pares_goal: 0, valor_goal: 0 }, { merge: true }); // Reset both for consistency, even if one is not used in UI
+                    await monthlyGoalsRef.set({ pares_goal: 0 }, { merge: true }); // Only reset pares_goal
 
                     alert("Meta mensual reiniciada exitosamente.");
                     playConfirmationSound();
@@ -1014,54 +996,39 @@
         }
 
         function updateGoalProgress() {
-            // Weekly Progress
-            document.getElementById('goal_pares_week_display').textContent = weeklyParesGoal; // Still display, even if not set by user
+            // Weekly Progress - Only Valor
             document.getElementById('goal_value_week_display').textContent = weeklyValorGoal.toLocaleString('es-CO');
-            document.getElementById('current_pares_week_progress').textContent = accumulatedWeekPares;
             document.getElementById('current_value_week_progress').textContent = accumulatedWeekValor.toLocaleString('es-CO');
 
-            const paresWeekProgressBar = document.getElementById('pares_week_progress_bar');
             const valueWeekProgressBar = document.getElementById('value_week_progress_bar');
-
-            // Pares progress for weekly - will always be 0% if weeklyParesGoal is 0 or not set by user
-            let paresWeekProgress = 0;
-            if (weeklyParesGoal > 0) {
-                paresWeekProgress = Math.min(100, (accumulatedWeekPares / weeklyParesGoal) * 100);
-            }
-            paresWeekProgressBar.style.width = `${paresWeekProgress}%`;
-            paresWeekProgressBar.textContent = `${Math.round(paresWeekProgress)}%`;
-            updateProgressBarColor(paresWeekProgressBar, paresWeekProgress);
-
             let valueWeekProgress = 0;
             if (weeklyValorGoal > 0) {
                 valueWeekProgress = Math.min(100, (accumulatedWeekValor / weeklyValorGoal) * 100);
             }
-            valueWeekProgressBar.style.width = `${valueWeekProgress}%`;
-            valueWeekProgressBar.textContent = `${Math.round(valueWeekProgress)}%`;
-            updateProgressBarColor(valueWeekProgressBar, valueWeekProgress);
+            if (valueWeekProgressBar) { // Check if element exists before updating
+                valueWeekProgressBar.style.width = `${valueWeekProgress}%`;
+                valueWeekProgressBar.textContent = `${Math.round(valueWeekProgress)}%`;
+                updateProgressBarColor(valueWeekProgressBar, valueWeekProgress);
+            }
 
-            // Monthly Progress
+            // Monthly Progress - Only Pares
             document.getElementById('goal_pares_month_display').textContent = monthlyParesGoal;
-            document.getElementById('goal_value_month_display').textContent = monthlyValorGoal.toLocaleString('es-CO'); // Still display, even if not set by user
             document.getElementById('current_pares_month_progress').textContent = accumulatedMonthPares;
-            document.getElementById('current_value_month_progress').textContent = accumulatedMonthValor.toLocaleString('es-CO');
 
+            const paresMonthProgressBar = document.getElementById('pares_month_progress_bar');
             let paresMonthProgress = 0;
             if (monthlyParesGoal > 0) {
                 paresMonthProgress = Math.min(100, (accumulatedMonthPares / monthlyParesGoal) * 100);
             }
-            paresMonthProgressBar.style.width = `${paresMonthProgress}%`;
-            paresMonthProgressBar.textContent = `${Math.round(paresMonthProgress)}%`;
-            updateProgressBarColor(paresMonthProgressBar, paresMonthProgress);
-
-            // Valor progress for monthly - will always be 0% if monthlyValorGoal is 0 or not set by user
-            let valueMonthProgress = 0;
-            if (monthlyValorGoal > 0) {
-                valueMonthProgress = Math.min(100, (accumulatedMonthValor / monthlyValorGoal) * 100);
+            if (paresMonthProgressBar) { // Check if element exists before updating
+                paresMonthProgressBar.style.width = `${paresMonthProgress}%`;
+                paresMonthProgressBar.textContent = `${Math.round(paresMonthProgress)}%`;
+                updateProgressBarColor(paresMonthProgressBar, paresMonthProgress);
             }
-            valueMonthProgressBar.style.width = `${valueMonthProgress}%`;
-            valueMonthProgressBar.textContent = `${Math.round(valueMonthProgress)}%`;
-            updateProgressBarColor(valueMonthProgressBar, valueMonthProgress);
+            // The monthly valor goal is not set/displayed by the user, and the progress bar for it is removed.
+            // No need to update 'goal_value_month_display' or 'current_value_month_progress' from here for monthly valor.
+            // The global monthlyValorGoal is still maintained in JS for consistency with Firebase structure,
+            // but its UI display and progress bar are removed as per requirement.
         }
 
         function updateProgressBarColor(progressBarElement, progress) {
