@@ -170,18 +170,43 @@
             border-radius: 6px;
         }
 
+        .goals-section .goal-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
         .goals-section button {
             padding: 10px 20px;
             font-size: 1em;
-            margin-top: 20px;
             background-image: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
             color: white;
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0, 123, 255, 0.2);
+            transition: all 0.3s ease;
+            flex-grow: 1; /* Permitir que los botones crezcan */
+            max-width: 180px; /* Limitar ancho */
         }
         .goals-section button:hover {
             background-image: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 123, 255, 0.3);
         }
+        .goals-section button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
+        }
+        .goals-section button.reset-button {
+            background-image: linear-gradient(135deg, #ffc107 0%, #e0a800 100%); /* Amarillo para reiniciar */
+            color: #333;
+            box-shadow: 0 4px 10px rgba(255, 193, 7, 0.2);
+        }
+        .goals-section button.reset-button:hover {
+            background-image: linear-gradient(135deg, #e0a800 0%, #c28800 100%);
+            color: #222;
+        }
+
 
         .goal-progress {
             margin-top: 20px;
@@ -309,6 +334,9 @@
                 max-width: 100%;
                 width: 100%;
             }
+            .goals-section .goal-buttons {
+                flex-direction: column; /* Apilar botones en pantallas pequeñas */
+            }
             #create_order_btn {
                 padding: 12px 20px;
                 font-size: 1em;
@@ -333,12 +361,12 @@
 
         <h2>Resumen de tus Ventas</h2>
         <div class="dashboard-grid">
-            <div class="dashboard-card">
+            <div class="dashboard-card" id="total_pares_card_container">
                 <i class="fas fa-cubes card-icon"></i>
                 <div class="card-title">Pares Totales</div>
                 <div class="card-value" id="total_pares_card">0</div>
             </div>
-            <div class="dashboard-card">
+            <div class="dashboard-card" id="total_valor_card_container">
                 <i class="fas fa-dollar-sign card-icon"></i>
                 <div class="card-title">Valor Total Vendido</div>
                 <div class="card-value" id="total_valor_card">$0</div>
@@ -375,7 +403,10 @@
                 <label for="daily_value_goal">Meta de Valor ($):</label>
                 <input type="number" id="daily_value_goal" value="0" min="0">
             </div>
-            <button onclick="saveDailyGoals()">Guardar Metas</button>
+            <div class="goal-buttons">
+                <button onclick="saveDailyGoals()">Guardar Metas</button>
+                <button class="reset-button" onclick="resetDailyGoals()">Reiniciar Metas</button>
+            </div>
 
             <div class="goal-progress">
                 <h3>Progreso del Día</h3>
@@ -415,6 +446,12 @@
         let isAutoBlockedPermanently = false;
         let isAutoBlockEnabled = false;
         let retardTimeMinutes = 20; // Default, se actualizará desde Firestore
+
+        // Variables globales para el progreso y las metas (actualizadas por los listeners)
+        let currentDayPares = 0;
+        let currentDayValor = 0;
+        let dailyParesGoal = 0;
+        let dailyValorGoal = 0;
 
         // --- Funciones de Audio (copiadas de prueba.html para consistencia) ---
         let audioContext = null;
@@ -469,12 +506,72 @@
             asesorNombreCompleto = datosUsuario.nombreCompleto;
             document.getElementById('welcome_message').textContent = `¡Bienvenido, ${asesorNombreCompleto}!`;
 
-            // Cargar metas diarias desde localStorage
-            const savedGoals = JSON.parse(localStorage.getItem(`dailyGoals_${asesorId}`)) || { pares: 0, valor: 0 };
-            document.getElementById('daily_pares_goal').value = savedGoals.pares;
-            document.getElementById('daily_value_goal').value = savedGoals.valor;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Establecer a inicio del día para la comparación
+            const todayStr = today.toISOString().slice(0, 10); // Formato YYYY-MM-DD
 
-            // Escuchar cambios en la configuración global de bloqueo
+            // --- Listener para las Metas Diarias del Asesor (Firestore) ---
+            const dailyGoalsRef = db.collection('users').doc(asesorId).collection('daily_goals').doc(todayStr);
+            dailyGoalsRef.onSnapshot(async docSnap => {
+                if (docSnap.exists) {
+                    const data = docSnap.data();
+                    // Si la fecha guardada no coincide con hoy, significa que es un nuevo día y debemos reiniciar
+                    if (data.last_goal_set_date !== todayStr) {
+                         console.log("Detectado un nuevo día, reiniciando metas para hoy.");
+                         // Reiniciar metas en Firebase y luego actualizar la UI
+                         await dailyGoalsRef.set({
+                            pares_goal: 0,
+                            valor_goal: 0,
+                            last_goal_set_date: todayStr // Marcar con la fecha de hoy
+                         }, { merge: true }); // Usar merge para no sobrescribir otros campos si los hubiera
+
+                         dailyParesGoal = 0;
+                         dailyValorGoal = 0;
+                         document.getElementById('daily_pares_goal').value = 0;
+                         document.getElementById('daily_value_goal').value = 0;
+                         alert("Tus metas diarias han sido reiniciadas para hoy."); // Informar al usuario
+                    } else {
+                        dailyParesGoal = data.pares_goal || 0;
+                        dailyValorGoal = data.valor_goal || 0;
+                        document.getElementById('daily_pares_goal').value = dailyParesGoal;
+                        document.getElementById('daily_value_goal').value = dailyValorGoal;
+                    }
+                } else {
+                    // Si el documento no existe para hoy, crearlo con valores iniciales
+                    console.log("Creando documento de metas diarias para hoy.");
+                    await dailyGoalsRef.set({
+                        pares_goal: 0,
+                        valor_goal: 0,
+                        last_goal_set_date: todayStr
+                    });
+                    dailyParesGoal = 0;
+                    dailyValorGoal = 0;
+                    document.getElementById('daily_pares_goal').value = 0;
+                    document.getElementById('daily_value_goal').value = 0;
+                }
+                updateGoalProgress(); // Actualizar el progreso después de cargar/reiniciar metas
+            }, error => {
+                console.error("Error al escuchar las metas diarias:", error);
+            });
+
+            // --- Listener para los Pedidos del Asesor del Día Actual (Firestore) ---
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date();
+            endOfDay.setHours(23, 59, 59, 999);
+
+            db.collection('registros')
+              .where('usuario', '==', asesorId)
+              .where('fecha_hora', '>=', startOfDay) // Filtrar por fecha de hoy (inicio)
+              .where('fecha_hora', '<=', endOfDay)   // Filtrar por fecha de hoy (fin)
+              .orderBy('fecha_hora', 'asc') // Ordenar para consistencia
+              .onSnapshot(snapshot => {
+                  updateDashboard(snapshot); // Actualizar el dashboard con los datos del snapshot
+              }, error => {
+                  console.error("Error al escuchar los pedidos del asesor del día:", error);
+              });
+
+            // --- Listener para la Configuración Global de Bloqueo (Firestore) ---
             db.collection('settings').doc('global_block').onSnapshot(doc => {
                 if (doc.exists) {
                     const data = doc.data();
@@ -487,31 +584,55 @@
             }, error => {
                 console.error("Error al obtener la configuración de bloqueo:", error);
             });
-
-            // Escuchar cambios en los pedidos del asesor en tiempo real
-            db.collection('registros')
-              .where('usuario', '==', asesorId) // Filtrar por el usuario actual
-              .orderBy('fecha_hora', 'asc') // Ordenar para consistencia
-              .onSnapshot(snapshot => {
-                  updateDashboard(snapshot); // Actualizar el dashboard con los datos del snapshot
-              }, error => {
-                  console.error("Error al escuchar los pedidos del asesor:", error);
-                  // Mostrar un mensaje de error en la UI si es necesario
-              });
-
-            // Actualizar el progreso de las metas al cargar la página
-            updateGoalProgress();
         };
 
-        function saveDailyGoals() {
+        async function saveDailyGoals() {
             initAudioContext(); // Ensure audio context is active
-            const paresGoal = parseInt(document.getElementById('daily_pares_goal').value) || 0;
-            const valueGoal = parseInt(document.getElementById('daily_value_goal').value) || 0;
+            const paresInput = parseInt(document.getElementById('daily_pares_goal').value) || 0;
+            const valorInput = parseInt(document.getElementById('daily_value_goal').value) || 0;
+            const todayStr = new Date().toISOString().slice(0, 10);
 
-            localStorage.setItem(`dailyGoals_${asesorId}`, JSON.stringify({ pares: paresGoal, valor: valueGoal }));
-            alert("Metas diarias guardadas."); // Usando alert, como en prueba.html
-            playConfirmationSound(); // Sonido de confirmación
-            updateGoalProgress(); // Actualizar el progreso después de guardar
+            try {
+                const dailyGoalsRef = db.collection('users').doc(asesorId).collection('daily_goals').doc(todayStr);
+                await dailyGoalsRef.set({
+                    pares_goal: paresInput,
+                    valor_goal: valorInput,
+                    last_goal_set_date: todayStr // Guardar la fecha de la última actualización
+                }, { merge: true }); // Usar merge para actualizar solo estos campos
+                dailyParesGoal = paresInput; // Actualizar variable global
+                dailyValorGoal = valorInput; // Actualizar variable global
+                alert("Metas diarias guardadas exitosamente.");
+                playConfirmationSound();
+                updateGoalProgress(); // Actualizar el progreso después de guardar
+            } catch (error) {
+                console.error("Error al guardar las metas diarias:", error);
+                alert("Error al guardar las metas diarias. Inténtelo de nuevo.");
+            }
+        }
+
+        async function resetDailyGoals() {
+            initAudioContext(); // Ensure audio context is active
+            if (confirm("¿Estás seguro de que quieres reiniciar tus metas diarias para hoy? Esto borrará tus metas actuales y las pondrá en 0.")) {
+                const todayStr = new Date().toISOString().slice(0, 10);
+                try {
+                    const dailyGoalsRef = db.collection('users').doc(asesorId).collection('daily_goals').doc(todayStr);
+                    await dailyGoalsRef.set({
+                        pares_goal: 0,
+                        valor_goal: 0,
+                        last_goal_set_date: todayStr // Marcar la fecha de reinicio
+                    }, { merge: true });
+                    dailyParesGoal = 0; // Actualizar variable global
+                    dailyValorGoal = 0; // Actualizar variable global
+                    document.getElementById('daily_pares_goal').value = 0;
+                    document.getElementById('daily_value_goal').value = 0;
+                    alert("Metas diarias reiniciadas exitosamente.");
+                    playConfirmationSound();
+                    updateGoalProgress(); // Actualizar el progreso después de reiniciar
+                } catch (error) {
+                    console.error("Error al reiniciar las metas diarias:", error);
+                    alert("Error al reiniciar las metas diarias. Inténtelo de nuevo.");
+                }
+            }
         }
 
         function updateDashboard(snapshot) {
@@ -528,8 +649,7 @@
                 const registro = doc.data();
                 const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
 
-                // Sumar pares y valor total solo para los despachados (o todos, depende de la lógica de negocio)
-                // Para este dashboard, sumaremos todo lo que el asesor ha agregado.
+                // Sumar pares y valor total para todos los pedidos del asesor DEL DÍA ACTUAL
                 totalPares += parseInt(registro.num_pares || 0);
                 totalValor += parseFloat(registro.valor_total || 0);
 
@@ -549,62 +669,41 @@
                 }
             });
 
-            document.getElementById('total_pares_card').textContent = totalPares;
-            document.getElementById('total_valor_card').textContent = `$${totalValor.toLocaleString('es-CO')}`;
+            // Actualizar las variables globales con el progreso del día
+            currentDayPares = totalPares;
+            currentDayValor = totalValor;
+
+            document.getElementById('total_pares_card').textContent = currentDayPares;
+            document.getElementById('total_valor_card').textContent = `$${currentDayValor.toLocaleString('es-CO')}`;
             document.getElementById('pending_orders_card').textContent = pendingOrders;
             document.getElementById('in_packaging_orders_card').textContent = inPackagingOrders;
             document.getElementById('dispatched_orders_card').textContent = dispatchedOrders;
             document.getElementById('retarded_orders_card').textContent = retardedOrders;
 
             // Actualizar el progreso de las metas
-            updateGoalProgress(totalPares, totalValor);
+            updateGoalProgress();
         }
 
-        function updateGoalProgress(currentPares = null, currentValue = null) {
-            const paresGoal = parseInt(document.getElementById('daily_pares_goal').value) || 0;
-            const valueGoal = parseInt(document.getElementById('daily_value_goal').value) || 0;
-
-            // Si no se pasaron los valores actuales, asumimos que estamos en una actualización de meta sin nuevos datos de pedidos
-            if (currentPares === null || currentValue === null) {
-                // Tendríamos que re-calcularlos o tenerlos en una variable global actualizada por el onSnapshot
-                // Por simplicidad aquí, y dado que `updateDashboard` llama a esta función con los valores,
-                // este caso solo ocurriría si se guarda la meta sin que haya habido cambios en los pedidos recientemente.
-                // En un escenario real, se podría forzar un re-cálculo o esperar la próxima actualización de snapshot.
-                // Para mantenerlo funcional, usaremos un valor temporal para las barras de progreso si no hay datos de pedidos frescos.
-                // Sin embargo, `updateDashboard` SIEMPRE llama a esta función con los valores correctos,
-                // así que este `if` anidado es más bien una salvaguarda.
-                if (document.getElementById('total_pares_card').textContent) {
-                    currentPares = parseInt(document.getElementById('total_pares_card').textContent) || 0;
-                } else {
-                    currentPares = 0; // Default if not yet loaded
-                }
-                if (document.getElementById('total_valor_card').textContent) {
-                    currentValue = parseFloat(document.getElementById('total_valor_card').textContent.replace(/[^0-9.-]+/g,"")) || 0;
-                } else {
-                    currentValue = 0; // Default if not yet loaded
-                }
-            }
-
-
-            document.getElementById('goal_pares_display').textContent = paresGoal;
-            document.getElementById('goal_value_display').textContent = valueGoal.toLocaleString('es-CO');
-            document.getElementById('current_pares_progress').textContent = currentPares;
-            document.getElementById('current_value_progress').textContent = currentValue.toLocaleString('es-CO');
+        function updateGoalProgress() {
+            document.getElementById('goal_pares_display').textContent = dailyParesGoal;
+            document.getElementById('goal_value_display').textContent = dailyValorGoal.toLocaleString('es-CO');
+            document.getElementById('current_pares_progress').textContent = currentDayPares;
+            document.getElementById('current_value_progress').textContent = currentDayValor.toLocaleString('es-CO');
 
             const paresProgressBar = document.getElementById('pares_progress_bar');
             const valueProgressBar = document.getElementById('value_progress_bar');
 
             let paresProgress = 0;
-            if (paresGoal > 0) {
-                paresProgress = Math.min(100, (currentPares / paresGoal) * 100);
+            if (dailyParesGoal > 0) {
+                paresProgress = Math.min(100, (currentDayPares / dailyParesGoal) * 100);
             }
             paresProgressBar.style.width = `${paresProgress}%`;
             paresProgressBar.textContent = `${Math.round(paresProgress)}%`;
             updateProgressBarColor(paresProgressBar, paresProgress);
 
             let valueProgress = 0;
-            if (valueGoal > 0) {
-                valueProgress = Math.min(100, (currentValue / valueGoal) * 100);
+            if (dailyValorGoal > 0) {
+                valueProgress = Math.min(100, (currentDayValor / dailyValorGoal) * 100);
             }
             valueProgressBar.style.width = `${valueProgress}%`;
             valueProgressBar.textContent = `${Math.round(valueProgress)}%`;
@@ -626,7 +725,21 @@
             const blockAlert = document.getElementById('block_status_alert');
             const blockText = document.getElementById('block_status_text');
             const createOrderBtn = document.getElementById('create_order_btn');
-            const blockStatusCard = document.getElementById('block_status_card');
+            
+            // Obtener la tarjeta de estado de bloqueo del dashboard (o crearla si no existe)
+            const dashboardGrid = document.querySelector('.dashboard-grid');
+            let blockStatusCard = document.getElementById('block_status_card');
+            if (!blockStatusCard) {
+                blockStatusCard = document.createElement('div'); 
+                blockStatusCard.className = 'dashboard-card';
+                blockStatusCard.id = 'block_status_card';
+                blockStatusCard.innerHTML = `
+                    <i class="fas card-icon"></i>
+                    <div class="card-title">Estado del Sistema</div>
+                    <div class="card-value"></div>
+                `;
+                dashboardGrid.appendChild(blockStatusCard);
+            }
 
             const isBlocked = isGlobalManualBlock || isAutoBlockedPermanently;
 
@@ -638,14 +751,13 @@
                 blockAlert.style.color = '#721c24'; // Dark red text
                 blockAlert.querySelector('.icon').style.color = '#dc3545'; // Icon red
 
-                if (blockStatusCard) {
-                    blockStatusCard.classList.remove('not-blocked');
-                    blockStatusCard.classList.add('blocked');
-                    blockStatusCard.querySelector('.card-value').textContent = "BLOQUEADO";
-                    blockStatusCard.querySelector('.card-value').classList.add('red');
-                    blockStatusCard.querySelector('.card-icon').classList.add('fa-lock');
-                    blockStatusCard.querySelector('.card-icon').classList.remove('fa-unlock');
-                }
+                blockStatusCard.classList.remove('not-blocked');
+                blockStatusCard.classList.add('blocked');
+                blockStatusCard.querySelector('.card-value').textContent = "BLOQUEADO";
+                blockStatusCard.querySelector('.card-value').classList.add('red');
+                blockStatusCard.querySelector('.card-icon').classList.add('fa-lock');
+                blockStatusCard.querySelector('.card-icon').classList.remove('fa-unlock');
+
                 if (createOrderBtn) {
                     createOrderBtn.classList.add('disabled');
                     createOrderBtn.setAttribute('title', 'La creación de pedidos está bloqueada.');
@@ -658,15 +770,14 @@
                 blockAlert.style.color = '#155724'; // Dark green text
                 blockAlert.querySelector('.icon').style.color = '#28a745'; // Icon green
 
-                if (blockStatusCard) {
-                    blockStatusCard.classList.remove('blocked');
-                    blockStatusCard.classList.add('not-blocked');
-                    blockStatusCard.querySelector('.card-value').textContent = "OPERATIVO";
-                    blockStatusCard.querySelector('.card-value').classList.remove('red');
-                    blockStatusCard.querySelector('.card-icon').classList.remove('fa-lock');
-                    blockStatusCard.querySelector('.card-icon').classList.add('fa-unlock');
-                }
-                 if (createOrderBtn) {
+                blockStatusCard.classList.remove('blocked');
+                blockStatusCard.classList.add('not-blocked');
+                blockStatusCard.querySelector('.card-value').textContent = "OPERATIVO";
+                blockStatusCard.querySelector('.card-value').classList.remove('red');
+                blockStatusCard.querySelector('.card-icon').classList.remove('fa-lock');
+                blockStatusCard.querySelector('.card-icon').classList.add('fa-unlock');
+
+                if (createOrderBtn) {
                     createOrderBtn.classList.remove('disabled');
                     createOrderBtn.removeAttribute('title');
                 }
