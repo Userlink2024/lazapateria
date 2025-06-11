@@ -295,6 +295,34 @@
             font-size: 1.5em;
         }
 
+        /* Botón para guardar progreso diario */
+        #save_daily_progress_btn {
+            background-image: linear-gradient(135deg, #17a2b8 0%, #138496 100%); /* Azul turquesa */
+            color: white;
+            padding: 15px 30px;
+            border-radius: 30px;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 600;
+            box-shadow: 0 6px 15px rgba(23, 162, 184, 0.3);
+            transition: all 0.3s ease;
+            margin-top: 30px; /* Separación del resto */
+            margin-bottom: 30px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #save_daily_progress_btn:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 20px rgba(23, 162, 184, 0.4);
+            background-image: linear-gradient(135deg, #138496 0%, #0d6d7d 100%);
+        }
+        #save_daily_progress_btn:active {
+            transform: translateY(0) scale(1);
+            box-shadow: 0 4px 10px rgba(23, 162, 184, 0.2);
+        }
+
         /* Media Queries for Responsiveness */
         @media (max-width: 768px) {
             .container {
@@ -337,12 +365,24 @@
             .goals-section .goal-buttons {
                 flex-direction: column; /* Apilar botones en pantallas pequeñas */
             }
-            #create_order_btn {
+            #create_order_btn, #save_daily_progress_btn {
                 padding: 12px 20px;
                 font-size: 1em;
                 bottom: 20px;
                 right: 20px;
                 gap: 8px;
+            }
+            #save_daily_progress_btn {
+                position: static; /* No flotante en móvil */
+                margin-top: 20px;
+                margin-bottom: 20px;
+                width: 100%;
+                max-width: none;
+            }
+            #create_order_btn {
+                right: auto;
+                left: 50%;
+                transform: translateX(-50%);
             }
         }
     </style>
@@ -361,15 +401,15 @@
 
         <h2>Resumen de tus Ventas</h2>
         <div class="dashboard-grid">
-            <div class="dashboard-card" id="total_pares_card_container">
+            <div class="dashboard-card" id="total_pares_day_card_container">
                 <i class="fas fa-cubes card-icon"></i>
-                <div class="card-title">Pares Totales</div>
-                <div class="card-value" id="total_pares_card">0</div>
+                <div class="card-title">Pares del Día (Hoy)</div>
+                <div class="card-value" id="total_pares_day_card">0</div>
             </div>
-            <div class="dashboard-card" id="total_valor_card_container">
+            <div class="dashboard-card" id="total_valor_day_card_container">
                 <i class="fas fa-dollar-sign card-icon"></i>
-                <div class="card-title">Valor Total Vendido</div>
-                <div class="card-value" id="total_valor_card">$0</div>
+                <div class="card-title">Valor del Día (Hoy)</div>
+                <div class="card-value" id="total_valor_day_card">$0</div>
             </div>
             <div class="dashboard-card">
                 <i class="fas fa-clock card-icon"></i>
@@ -391,32 +431,81 @@
                 <div class="card-title">Pedidos Despachados</div>
                 <div class="card-value" id="dispatched_orders_card">0</div>
             </div>
+            <!-- Nuevas tarjetas para acumulado semanal -->
+            <div class="dashboard-card">
+                <i class="fas fa-calendar-week card-icon"></i>
+                <div class="card-title">Pares Acumulados (Semana)</div>
+                <div class="card-value" id="total_pares_week_card">0</div>
+            </div>
+            <div class="dashboard-card">
+                <i class="fas fa-hand-holding-usd card-icon"></i>
+                <div class="card-title">Valor Acumulado (Semana)</div>
+                <div class="card-value" id="total_valor_week_card">$0</div>
+            </div>
+            <!-- Nuevas tarjetas para acumulado mensual -->
+            <div class="dashboard-card">
+                <i class="fas fa-calendar-alt card-icon"></i>
+                <div class="card-title">Pares Acumulados (Mes)</div>
+                <div class="card-value" id="total_pares_month_card">0</div>
+            </div>
+            <div class="dashboard-card">
+                <i class="fas fa-money-bill-wave card-icon"></i>
+                <div class="card-title">Valor Acumulado (Mes)</div>
+                <div class="card-value" id="total_valor_month_card">$0</div>
+            </div>
         </div>
 
-        <h2>Mis Metas Diarias</h2>
+        <!-- Botón de guardar progreso del día -->
+        <button id="save_daily_progress_btn" onclick="saveDailyProgressSnapshot()">
+            <i class="fas fa-save"></i> Guardar Progreso del Día
+        </button>
+
+        <h2>Mis Metas</h2>
         <div class="goals-section">
+            <h3>Metas Semanales</h3>
             <div class="form-field">
-                <label for="daily_pares_goal">Meta de Pares:</label>
-                <input type="number" id="daily_pares_goal" value="0" min="0">
+                <label for="weekly_pares_goal">Meta de Pares:</label>
+                <input type="number" id="weekly_pares_goal" value="0" min="0">
             </div>
             <div class="form-field">
-                <label for="daily_value_goal">Meta de Valor ($):</label>
-                <input type="number" id="daily_value_goal" value="0" min="0">
+                <label for="weekly_value_goal">Meta de Valor ($):</label>
+                <input type="number" id="weekly_value_goal" value="0" min="0">
             </div>
+
+            <h3>Metas Mensuales</h3>
+            <div class="form-field">
+                <label for="monthly_pares_goal">Meta de Pares:</label>
+                <input type="number" id="monthly_pares_goal" value="0" min="0">
+            </div>
+            <div class="form-field">
+                <label for="monthly_value_goal">Meta de Valor ($):</label>
+                <input type="number" id="monthly_value_goal" value="0" min="0">
+            </div>
+
             <div class="goal-buttons">
-                <button onclick="saveDailyGoals()">Guardar Metas</button>
-                <button class="reset-button" onclick="resetDailyGoals()">Reiniciar Metas</button>
+                <button onclick="saveGoals()">Guardar Metas</button>
+                <button class="reset-button" onclick="resetGoals()">Reiniciar Metas</button>
             </div>
 
             <div class="goal-progress">
-                <h3>Progreso del Día</h3>
-                <p>Pares Actuales: <span id="current_pares_progress">0</span> de <span id="goal_pares_display">0</span></p>
+                <h3>Progreso Semanal</h3>
+                <p>Pares Actuales: <span id="current_pares_week_progress">0</span> de <span id="goal_pares_week_display">0</span></p>
                 <div class="progress-bar-container">
-                    <div class="progress-bar-fill" id="pares_progress_bar">0%</div>
+                    <div class="progress-bar-fill" id="pares_week_progress_bar">0%</div>
                 </div>
-                <p>Valor Actual: $<span id="current_value_progress">0</span> de $<span id="goal_value_display">0</span></p>
+                <p>Valor Actual: $<span id="current_value_week_progress">0</span> de $<span id="goal_value_week_display">0</span></p>
                 <div class="progress-bar-container">
-                    <div class="progress-bar-fill" id="value_progress_bar">0%</div>
+                    <div class="progress-bar-fill" id="value_week_progress_bar">0%</div>
+                </div>
+
+                <h3>Progreso Mensual</h3>
+                <p>Pares Actuales: <span id="current_pares_month_progress">0</span> de <span id="goal_pares_month_display">0</span></p>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="pares_month_progress_bar">0%</div>
+                </div>
+                <p>Valor Actual: $<span id="current_value_month_progress">0</span> de $<span id="goal_value_month_display">0</span></p>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="value_month_progress_bar">0%</div>
                 </div>
             </div>
         </div>
@@ -426,7 +515,7 @@
     </div>
 
     <script>
-        // Configuración de Firebase - ¡Asegúrate de que esta API Key sea segura!
+        // Firebase configuration - Ensure this API Key is secure!
         const firebaseConfig = {
             apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
             authDomain: "lazapateria-c4157.firebaseapp.com",
@@ -438,22 +527,32 @@
         const db = firebase.firestore();
 
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
-        let asesorId = null; // Guardará el 'usuario' del asesor
-        let asesorNombreCompleto = null; // Guardará el 'nombreCompleto' del asesor
+        let asesorId = null;
+        let asesorNombreCompleto = null;
 
-        // Variables de bloqueo desde Firebase
+        // Global block variables from Firebase
         let isGlobalManualBlock = false;
         let isAutoBlockedPermanently = false;
         let isAutoBlockEnabled = false;
-        let retardTimeMinutes = 20; // Default, se actualizará desde Firestore
+        let retardTimeMinutes = 20;
 
-        // Variables globales para el progreso y las metas (actualizadas por los listeners)
+        // Global variables for today's progress (from current dispatches)
         let currentDayPares = 0;
         let currentDayValor = 0;
-        let dailyParesGoal = 0;
-        let dailyValorGoal = 0;
 
-        // --- Funciones de Audio (copiadas de prueba.html para consistencia) ---
+        // Global variables for accumulated progress (from daily snapshots)
+        let accumulatedWeekPares = 0;
+        let accumulatedWeekValor = 0;
+        let accumulatedMonthPares = 0;
+        let accumulatedMonthValor = 0;
+
+        // Global variables for goals (from Firebase)
+        let weeklyParesGoal = 0;
+        let weeklyValorGoal = 0;
+        let monthlyParesGoal = 0;
+        let monthlyValorGoal = 0;
+
+        // --- Audio Functions (copied from prueba.html for consistency) ---
         let audioContext = null;
         function initAudioContext() {
             if (!audioContext) {
@@ -479,7 +578,7 @@
             }
         }
         function playTone(frequency, duration, volume, waveType = 'sine') {
-            if (!audioContext) { console.error("AudioContext no disponible."); return; }
+            if (!audioContext) { console.error("AudioContext not available."); return; }
             try {
                 const oscillator = audioContext.createOscillator();
                 const gainNode = audioContext.createGain();
@@ -490,15 +589,15 @@
                 oscillator.type = waveType;
                 oscillator.start(audioContext.currentTime);
                 oscillator.stop(audioContext.currentTime + duration);
-            } catch (e) { console.error('Error al generar el sonido:', e); }
+            } catch (e) { console.error('Error generating sound:', e); }
         }
-        // --- Fin de funciones de Audio ---
+        // --- End of Audio Functions ---
 
         window.onload = function() {
-            // Verificar si el usuario es un asesor
+            // Verify if the user is an advisor
             if (!datosUsuario || !datosUsuario.permisos || datosUsuario.permisos.toLowerCase() !== 'operador') {
-                alert("Acceso denegado. Esta página es solo para asesores. Redirigiendo...");
-                window.location.href = 'login.html'; // Redirigir a una página de login o error
+                alert("Access denied. This page is for advisors only. Redirecting...");
+                window.location.href = 'login.html'; // Redirect to a login or error page
                 return;
             }
 
@@ -507,54 +606,56 @@
             document.getElementById('welcome_message').textContent = `¡Bienvenido, ${asesorNombreCompleto}!`;
 
             const today = new Date();
-            today.setHours(0, 0, 0, 0); // Establecer a inicio del día para la comparación
-            const todayStr = today.toISOString().slice(0, 10); // Formato YYYY-MM-DD
+            const currentYear = today.getFullYear();
+            const currentMonth = (today.getMonth() + 1).toString().padStart(2, '0'); // MM
+            const currentWeek = getWeekNumber(today); // Get ISO week number
+            const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+            const currentWeekId = `${currentYear}-${currentWeek}`; // YYYY-WW
+            const currentMonthId = `${currentYear}-${currentMonth}`; // YYYY-MM
 
-            // --- Listener para las Metas Diarias del Asesor (Firestore) ---
-            const dailyGoalsRef = db.collection('users').doc(asesorId).collection('daily_goals').doc(todayStr);
-            dailyGoalsRef.onSnapshot(async docSnap => {
+            // --- Listener for Weekly Goals ---
+            const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
+            weeklyGoalsRef.onSnapshot(async docSnap => {
                 if (docSnap.exists) {
                     const data = docSnap.data();
-                    // Si la fecha guardada no coincide con hoy, significa que es un nuevo día y debemos reiniciar
-                    if (data.last_goal_set_date !== todayStr) {
-                         console.log("Detectado un nuevo día, reiniciando metas para hoy.");
-                         // Reiniciar metas en Firebase y luego actualizar la UI
-                         await dailyGoalsRef.set({
-                            pares_goal: 0,
-                            valor_goal: 0,
-                            last_goal_set_date: todayStr // Marcar con la fecha de hoy
-                         }, { merge: true }); // Usar merge para no sobrescribir otros campos si los hubiera
-
-                         dailyParesGoal = 0;
-                         dailyValorGoal = 0;
-                         document.getElementById('daily_pares_goal').value = 0;
-                         document.getElementById('daily_value_goal').value = 0;
-                         alert("Tus metas diarias han sido reiniciadas para hoy."); // Informar al usuario
-                    } else {
-                        dailyParesGoal = data.pares_goal || 0;
-                        dailyValorGoal = data.valor_goal || 0;
-                        document.getElementById('daily_pares_goal').value = dailyParesGoal;
-                        document.getElementById('daily_value_goal').value = dailyValorGoal;
-                    }
+                    weeklyParesGoal = data.pares_goal || 0;
+                    weeklyValorGoal = data.valor_goal || 0;
                 } else {
-                    // Si el documento no existe para hoy, crearlo con valores iniciales
-                    console.log("Creando documento de metas diarias para hoy.");
-                    await dailyGoalsRef.set({
-                        pares_goal: 0,
-                        valor_goal: 0,
-                        last_goal_set_date: todayStr
-                    });
-                    dailyParesGoal = 0;
-                    dailyValorGoal = 0;
-                    document.getElementById('daily_pares_goal').value = 0;
-                    document.getElementById('daily_value_goal').value = 0;
+                    // If document doesn't exist for current week, create with initial values
+                    console.log(`Creating weekly goals document for ${currentWeekId}`);
+                    await weeklyGoalsRef.set({ pares_goal: 0, valor_goal: 0 });
+                    weeklyParesGoal = 0;
+                    weeklyValorGoal = 0;
                 }
-                updateGoalProgress(); // Actualizar el progreso después de cargar/reiniciar metas
+                document.getElementById('weekly_pares_goal').value = weeklyParesGoal;
+                document.getElementById('weekly_value_goal').value = weeklyValorGoal;
+                updateGoalProgress(); // Update progress after goals are loaded
             }, error => {
-                console.error("Error al escuchar las metas diarias:", error);
+                console.error("Error listening to weekly goals:", error);
             });
 
-            // --- Listener para los Pedidos del Asesor del Día Actual (Firestore) ---
+            // --- Listener for Monthly Goals ---
+            const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
+            monthlyGoalsRef.onSnapshot(async docSnap => {
+                if (docSnap.exists) {
+                    const data = docSnap.data();
+                    monthlyParesGoal = data.pares_goal || 0;
+                    monthlyValorGoal = data.valor_goal || 0;
+                } else {
+                    // If document doesn't exist for current month, create with initial values
+                    console.log(`Creating monthly goals document for ${currentMonthId}`);
+                    await monthlyGoalsRef.set({ pares_goal: 0, valor_goal: 0 });
+                    monthlyParesGoal = 0;
+                    monthlyValorGoal = 0;
+                }
+                document.getElementById('monthly_pares_goal').value = monthlyParesGoal;
+                document.getElementById('monthly_value_goal').value = monthlyValorGoal;
+                updateGoalProgress(); // Update progress after goals are loaded
+            }, error => {
+                console.error("Error listening to monthly goals:", error);
+            });
+
+            // --- Listener for Today's Dispatches (for "Hoy" cards) ---
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
             const endOfDay = new Date();
@@ -562,16 +663,23 @@
 
             db.collection('registros')
               .where('usuario', '==', asesorId)
-              .where('fecha_hora', '>=', startOfDay) // Filtrar por fecha de hoy (inicio)
-              .where('fecha_hora', '<=', endOfDay)   // Filtrar por fecha de hoy (fin)
-              .orderBy('fecha_hora', 'asc') // Ordenar para consistencia
+              .where('fecha_hora', '>=', startOfDay)
+              .where('fecha_hora', '<=', endOfDay)
               .onSnapshot(snapshot => {
-                  updateDashboard(snapshot); // Actualizar el dashboard con los datos del snapshot
+                  updateDailySummary(snapshot); // Update "Hoy" cards
               }, error => {
-                  console.error("Error al escuchar los pedidos del asesor del día:", error);
+                  console.error("Error listening to today's dispatches:", error);
               });
 
-            // --- Listener para la Configuración Global de Bloqueo (Firestore) ---
+            // --- Listener for Daily Sales Snapshots (for weekly/monthly accumulated progress) ---
+            db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
+                .onSnapshot(snapshot => {
+                    updateAccumulatedProgress(snapshot); // Update weekly/monthly accumulated cards
+                }, error => {
+                    console.error("Error listening to daily sales snapshots:", error);
+                });
+
+            // --- Listener for Global Block Configuration ---
             db.collection('settings').doc('global_block').onSnapshot(doc => {
                 if (doc.exists) {
                     const data = doc.data();
@@ -580,64 +688,111 @@
                     isAutoBlockEnabled = data.isAutoBlockEnabled || false;
                     retardTimeMinutes = data.retardTimeMinutes !== undefined ? data.retardTimeMinutes : 20;
                 }
-                updateBlockStatusDisplay(); // Actualizar el estado de bloqueo en el dashboard
+                updateBlockStatusDisplay(); // Update block status in the dashboard
             }, error => {
-                console.error("Error al obtener la configuración de bloqueo:", error);
+                console.error("Error fetching global block configuration:", error);
             });
         };
 
-        async function saveDailyGoals() {
-            initAudioContext(); // Ensure audio context is active
-            const paresInput = parseInt(document.getElementById('daily_pares_goal').value) || 0;
-            const valorInput = parseInt(document.getElementById('daily_value_goal').value) || 0;
-            const todayStr = new Date().toISOString().slice(0, 10);
+        // --- Helper to get ISO week number ---
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return weekNo.toString().padStart(2, '0');
+        }
+
+        async function saveGoals() {
+            initAudioContext();
+            const currentYear = new Date().getFullYear();
+            const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
+            const currentWeek = getWeekNumber(new Date());
+            const currentWeekId = `${currentYear}-${currentWeek}`;
+            const currentMonthId = `${currentYear}-${currentMonth}`;
+
+            const weeklyPares = parseInt(document.getElementById('weekly_pares_goal').value) || 0;
+            const weeklyValor = parseInt(document.getElementById('weekly_value_goal').value) || 0;
+            const monthlyPares = parseInt(document.getElementById('monthly_pares_goal').value) || 0;
+            const monthlyValor = parseInt(document.getElementById('monthly_value_goal').value) || 0;
 
             try {
-                const dailyGoalsRef = db.collection('users').doc(asesorId).collection('daily_goals').doc(todayStr);
-                await dailyGoalsRef.set({
-                    pares_goal: paresInput,
-                    valor_goal: valorInput,
-                    last_goal_set_date: todayStr // Guardar la fecha de la última actualización
-                }, { merge: true }); // Usar merge para actualizar solo estos campos
-                dailyParesGoal = paresInput; // Actualizar variable global
-                dailyValorGoal = valorInput; // Actualizar variable global
-                alert("Metas diarias guardadas exitosamente.");
+                // Save weekly goals
+                const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
+                await weeklyGoalsRef.set({
+                    pares_goal: weeklyPares,
+                    valor_goal: weeklyValor
+                }, { merge: true });
+
+                // Save monthly goals
+                const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
+                await monthlyGoalsRef.set({
+                    pares_goal: monthlyPares,
+                    valor_goal: monthlyValor
+                }, { merge: true });
+
+                alert("Metas guardadas exitosamente.");
                 playConfirmationSound();
-                updateGoalProgress(); // Actualizar el progreso después de guardar
+                // Goals will be reloaded by the onSnapshot listeners automatically
             } catch (error) {
-                console.error("Error al guardar las metas diarias:", error);
-                alert("Error al guardar las metas diarias. Inténtelo de nuevo.");
+                console.error("Error saving goals:", error);
+                alert("Error al guardar las metas. Inténtelo de nuevo.");
             }
         }
 
-        async function resetDailyGoals() {
-            initAudioContext(); // Ensure audio context is active
-            if (confirm("¿Estás seguro de que quieres reiniciar tus metas diarias para hoy? Esto borrará tus metas actuales y las pondrá en 0.")) {
-                const todayStr = new Date().toISOString().slice(0, 10);
+        async function resetGoals() {
+            initAudioContext();
+            if (confirm("¿Estás seguro de que quieres reiniciar TODAS tus metas? Esto pondrá las metas semanales y mensuales en 0.")) {
+                const currentYear = new Date().getFullYear();
+                const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
+                const currentWeek = getWeekNumber(new Date());
+                const currentWeekId = `${currentYear}-${currentWeek}`;
+                const currentMonthId = `${currentYear}-${currentMonth}`;
+
                 try {
-                    const dailyGoalsRef = db.collection('users').doc(asesorId).collection('daily_goals').doc(todayStr);
-                    await dailyGoalsRef.set({
-                        pares_goal: 0,
-                        valor_goal: 0,
-                        last_goal_set_date: todayStr // Marcar la fecha de reinicio
-                    }, { merge: true });
-                    dailyParesGoal = 0; // Actualizar variable global
-                    dailyValorGoal = 0; // Actualizar variable global
-                    document.getElementById('daily_pares_goal').value = 0;
-                    document.getElementById('daily_value_goal').value = 0;
-                    alert("Metas diarias reiniciadas exitosamente.");
+                    // Reset weekly goals
+                    const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
+                    await weeklyGoalsRef.set({ pares_goal: 0, valor_goal: 0 }, { merge: true });
+
+                    // Reset monthly goals
+                    const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
+                    await monthlyGoalsRef.set({ pares_goal: 0, valor_goal: 0 }, { merge: true });
+
+                    alert("Metas reiniciadas exitosamente.");
                     playConfirmationSound();
-                    updateGoalProgress(); // Actualizar el progreso después de reiniciar
+                    // Goals will be reloaded by the onSnapshot listeners automatically
                 } catch (error) {
-                    console.error("Error al reiniciar las metas diarias:", error);
-                    alert("Error al reiniciar las metas diarias. Inténtelo de nuevo.");
+                    console.error("Error resetting goals:", error);
+                    alert("Error al reiniciar las metas. Inténtelo de nuevo.");
                 }
             }
         }
 
-        function updateDashboard(snapshot) {
-            let totalPares = 0;
-            let totalValor = 0;
+        async function saveDailyProgressSnapshot() {
+            initAudioContext();
+            const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+            const dailySnapshotRef = db.collection('users').doc(asesorId).collection('daily_sales_snapshot').doc(todayStr);
+
+            try {
+                // currentDayPares and currentDayValor are updated by the daily dispatches listener
+                await dailySnapshotRef.set({
+                    pares: currentDayPares,
+                    valor: currentDayValor,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp() // Store timestamp of save
+                }, { merge: true }); // Use merge to update if exists, create if not
+
+                alert("Progreso del día guardado exitosamente.");
+                playConfirmationSound();
+                // Accumulated progress will be reloaded by its onSnapshot listener
+            } catch (error) {
+                console.error("Error saving daily progress snapshot:", error);
+                alert("Error al guardar el progreso del día. Inténtelo de nuevo.");
+            }
+        }
+
+        function updateDailySummary(snapshot) {
+            let totalParesHoy = 0;
+            let totalValorHoy = 0;
             let pendingOrders = 0;
             let inPackagingOrders = 0;
             let dispatchedOrders = 0;
@@ -649,11 +804,9 @@
                 const registro = doc.data();
                 const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
 
-                // Sumar pares y valor total para todos los pedidos del asesor DEL DÍA ACTUAL
-                totalPares += parseInt(registro.num_pares || 0);
-                totalValor += parseFloat(registro.valor_total || 0);
+                totalParesHoy += parseInt(registro.num_pares || 0);
+                totalValorHoy += parseFloat(registro.valor_total || 0);
 
-                // Contar pedidos por estado
                 if (registro.despachado) {
                     dispatchedOrders++;
                 } else if (registro.enviadoAEmpaque) {
@@ -662,52 +815,112 @@
                     pendingOrders++;
                 }
 
-                // Verificar si está en retardo
                 const isCurrentlyRetarded = !registro.enviadoAEmpaque && !registro.despachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > retardTimeMinutes);
                 if (isCurrentlyRetarded) {
                     retardedOrders++;
                 }
             });
 
-            // Actualizar las variables globales con el progreso del día
-            currentDayPares = totalPares;
-            currentDayValor = totalValor;
+            currentDayPares = totalParesHoy;
+            currentDayValor = totalValorHoy;
 
-            document.getElementById('total_pares_card').textContent = currentDayPares;
-            document.getElementById('total_valor_card').textContent = `$${currentDayValor.toLocaleString('es-CO')}`;
+            document.getElementById('total_pares_day_card').textContent = currentDayPares;
+            document.getElementById('total_valor_day_card').textContent = `$${currentDayValor.toLocaleString('es-CO')}`;
             document.getElementById('pending_orders_card').textContent = pendingOrders;
             document.getElementById('in_packaging_orders_card').textContent = inPackagingOrders;
             document.getElementById('dispatched_orders_card').textContent = dispatchedOrders;
             document.getElementById('retarded_orders_card').textContent = retardedOrders;
 
-            // Actualizar el progreso de las metas
-            updateGoalProgress();
+            updateGoalProgress(); // Update progress bars as daily data changes
+        }
+
+        function updateAccumulatedProgress(snapshot) {
+            accumulatedWeekPares = 0;
+            accumulatedWeekValor = 0;
+            accumulatedMonthPares = 0;
+            accumulatedMonthValor = 0;
+
+            const today = new Date();
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - (today.getDay() + 6) % 7); // Monday
+            startOfWeek.setHours(0, 0, 0, 0);
+
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            startOfMonth.setHours(0, 0, 0, 0);
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const snapshotDate = new Date(doc.id); // Doc ID is YYYY-MM-DD
+                snapshotDate.setHours(0,0,0,0); // Normalize to start of day for comparison
+
+                if (snapshotDate >= startOfWeek) {
+                    accumulatedWeekPares += (data.pares || 0);
+                    accumulatedWeekValor += (data.valor || 0);
+                }
+                if (snapshotDate >= startOfMonth) {
+                    accumulatedMonthPares += (data.pares || 0);
+                    accumulatedMonthValor += (data.valor || 0);
+                }
+            });
+
+            document.getElementById('total_pares_week_card').textContent = accumulatedWeekPares;
+            document.getElementById('total_valor_week_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
+            document.getElementById('total_pares_month_card').textContent = accumulatedMonthPares;
+            document.getElementById('total_valor_month_card').textContent = `$${accumulatedMonthValor.toLocaleString('es-CO')}`;
+
+            updateGoalProgress(); // Update progress bars as accumulated data changes
         }
 
         function updateGoalProgress() {
-            document.getElementById('goal_pares_display').textContent = dailyParesGoal;
-            document.getElementById('goal_value_display').textContent = dailyValorGoal.toLocaleString('es-CO');
-            document.getElementById('current_pares_progress').textContent = currentDayPares;
-            document.getElementById('current_value_progress').textContent = currentDayValor.toLocaleString('es-CO');
+            // Weekly Progress
+            document.getElementById('goal_pares_week_display').textContent = weeklyParesGoal;
+            document.getElementById('goal_value_week_display').textContent = weeklyValorGoal.toLocaleString('es-CO');
+            document.getElementById('current_pares_week_progress').textContent = accumulatedWeekPares;
+            document.getElementById('current_value_week_progress').textContent = accumulatedWeekValor.toLocaleString('es-CO');
 
-            const paresProgressBar = document.getElementById('pares_progress_bar');
-            const valueProgressBar = document.getElementById('value_progress_bar');
+            const paresWeekProgressBar = document.getElementById('pares_week_progress_bar');
+            const valueWeekProgressBar = document.getElementById('value_week_progress_bar');
 
-            let paresProgress = 0;
-            if (dailyParesGoal > 0) {
-                paresProgress = Math.min(100, (currentDayPares / dailyParesGoal) * 100);
+            let paresWeekProgress = 0;
+            if (weeklyParesGoal > 0) {
+                paresWeekProgress = Math.min(100, (accumulatedWeekPares / weeklyParesGoal) * 100);
             }
-            paresProgressBar.style.width = `${paresProgress}%`;
-            paresProgressBar.textContent = `${Math.round(paresProgress)}%`;
-            updateProgressBarColor(paresProgressBar, paresProgress);
+            paresWeekProgressBar.style.width = `${paresWeekProgress}%`;
+            paresWeekProgressBar.textContent = `${Math.round(paresWeekProgress)}%`;
+            updateProgressBarColor(paresWeekProgressBar, paresWeekProgress);
 
-            let valueProgress = 0;
-            if (dailyValorGoal > 0) {
-                valueProgress = Math.min(100, (currentDayValor / dailyValorGoal) * 100);
+            let valueWeekProgress = 0;
+            if (weeklyValorGoal > 0) {
+                valueWeekProgress = Math.min(100, (accumulatedWeekValor / weeklyValorGoal) * 100);
             }
-            valueProgressBar.style.width = `${valueProgress}%`;
-            valueProgressBar.textContent = `${Math.round(valueProgress)}%`;
-            updateProgressBarColor(valueProgressBar, valueProgress);
+            valueWeekProgressBar.style.width = `${valueWeekProgress}%`;
+            valueWeekProgressBar.textContent = `${Math.round(valueWeekProgress)}%`;
+            updateProgressBarColor(valueWeekProgressBar, valueWeekProgress);
+
+            // Monthly Progress
+            document.getElementById('goal_pares_month_display').textContent = monthlyParesGoal;
+            document.getElementById('goal_value_month_display').textContent = monthlyValorGoal.toLocaleString('es-CO');
+            document.getElementById('current_pares_month_progress').textContent = accumulatedMonthPares;
+            document.getElementById('current_value_month_progress').textContent = accumulatedMonthValor.toLocaleString('es-CO');
+
+            const paresMonthProgressBar = document.getElementById('pares_month_progress_bar');
+            const valueMonthProgressBar = document.getElementById('value_month_progress_bar');
+
+            let paresMonthProgress = 0;
+            if (monthlyParesGoal > 0) {
+                paresMonthProgress = Math.min(100, (accumulatedMonthPares / monthlyParesGoal) * 100);
+            }
+            paresMonthProgressBar.style.width = `${paresMonthProgress}%`;
+            paresMonthProgressBar.textContent = `${Math.round(paresMonthProgress)}%`;
+            updateProgressBarColor(paresMonthProgressBar, paresMonthProgress);
+
+            let valueMonthProgress = 0;
+            if (monthlyValorGoal > 0) {
+                valueMonthProgress = Math.min(100, (accumulatedMonthValor / monthlyValorGoal) * 100);
+            }
+            valueMonthProgressBar.style.width = `${valueMonthProgress}%`;
+            valueMonthProgressBar.textContent = `${Math.round(valueMonthProgress)}%`;
+            updateProgressBarColor(valueMonthProgressBar, valueMonthProgress);
         }
 
         function updateProgressBarColor(progressBarElement, progress) {
@@ -720,13 +933,13 @@
             // If 100% or more, it remains green (default)
         }
 
-        // Función para actualizar la visualización del estado de bloqueo
+        // Function to update the block status display
         function updateBlockStatusDisplay() {
             const blockAlert = document.getElementById('block_status_alert');
             const blockText = document.getElementById('block_status_text');
             const createOrderBtn = document.getElementById('create_order_btn');
             
-            // Obtener la tarjeta de estado de bloqueo del dashboard (o crearla si no existe)
+            // Get the block status card from the dashboard (or create it if it doesn't exist)
             const dashboardGrid = document.querySelector('.dashboard-grid');
             let blockStatusCard = document.getElementById('block_status_card');
             if (!blockStatusCard) {
