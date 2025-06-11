@@ -959,12 +959,13 @@
         }
 
         function updateAccumulatedProgress(snapshot) {
-            accumulatedWeekPares = 0;
-            accumulatedWeekValor = 0;
-            accumulatedMonthPares = 0;
-            accumulatedMonthValor = 0;
+            let tempAccumulatedWeekPares = 0;
+            let tempAccumulatedWeekValor = 0;
+            let tempAccumulatedMonthPares = 0;
+            let tempAccumulatedMonthValor = 0;
 
             const today = new Date();
+            const todayStr = today.toISOString().slice(0, 10);
             const startOfWeek = new Date(today);
             startOfWeek.setDate(today.getDate() - (today.getDay() + 6) % 7); // Monday
             startOfWeek.setHours(0, 0, 0, 0);
@@ -977,15 +978,25 @@
                 const snapshotDate = new Date(doc.id); // Doc ID is YYYY-MM-DD
                 snapshotDate.setHours(0,0,0,0); // Normalize to start of day for comparison
 
-                if (snapshotDate >= startOfWeek) {
-                    accumulatedWeekPares += (data.pares || 0);
-                    accumulatedWeekValor += (data.valor || 0);
-                }
-                if (snapshotDate >= startOfMonth) {
-                    accumulatedMonthPares += (data.pares || 0);
-                    accumulatedMonthValor += (data.valor || 0);
+                // Only add historical snapshots. Today's currentDayPares/Valor will be added separately.
+                if (doc.id !== todayStr) {
+                    if (snapshotDate >= startOfWeek) {
+                        tempAccumulatedWeekPares += (data.pares || 0);
+                        tempAccumulatedWeekValor += (data.valor || 0);
+                    }
+                    if (snapshotDate >= startOfMonth) {
+                        tempAccumulatedMonthPares += (data.pares || 0);
+                        tempAccumulatedMonthValor += (data.valor || 0);
+                    }
                 }
             });
+
+            // Add today's real-time values to the accumulated totals for the current week and month
+            accumulatedWeekPares = tempAccumulatedWeekPares + currentDayPares;
+            accumulatedWeekValor = tempAccumulatedWeekValor + currentDayValor;
+            accumulatedMonthPares = tempAccumulatedMonthPares + currentDayPares;
+            accumulatedMonthValor = tempAccumulatedMonthValor + currentDayValor;
+
 
             document.getElementById('total_pares_week_card').textContent = accumulatedWeekPares;
             document.getElementById('total_valor_week_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
@@ -1025,10 +1036,6 @@
                 paresMonthProgressBar.textContent = `${Math.round(paresMonthProgress)}%`;
                 updateProgressBarColor(paresMonthProgressBar, paresMonthProgress);
             }
-            // The monthly valor goal is not set/displayed by the user, and the progress bar for it is removed.
-            // No need to update 'goal_value_month_display' or 'current_value_month_progress' from here for monthly valor.
-            // The global monthlyValorGoal is still maintained in JS for consistency with Firebase structure,
-            // but its UI display and progress bar are removed as per requirement.
         }
 
         function updateProgressBarColor(progressBarElement, progress) {
