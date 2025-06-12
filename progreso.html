@@ -374,6 +374,26 @@
             margin-top: 20px;
             justify-content: center;
         }
+        .modal-content button {
+            padding: 10px 20px;
+            font-size: 1em;
+            background-image: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 123, 255, 0.2);
+            transition: all 0.3s ease;
+            flex-grow: 1;
+            max-width: 180px;
+        }
+        .modal-content button:hover {
+            background-image: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 123, 255, 0.3);
+        }
+        .modal-content button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
+        }
         .modal-content .close {
             color: #888;
             float: right;
@@ -420,6 +440,78 @@
         #manual_save_progress_btn:active {
             transform: translateY(0);
             box-shadow: 0 2px 5px rgba(23, 162, 184, 0.2);
+        }
+
+        /* Modal for custom messages/alerts (replacement for alert/confirm) */
+        .custom-message-modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 2000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            justify-content: center;
+            align-items: center;
+        }
+
+        .custom-message-modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+            animation-name: animatetop;
+            animation-duration: 0.4s
+        }
+
+        /* Add Animation */
+        @keyframes animatetop {
+            from {top: -300px; opacity: 0}
+            to {top: 0; opacity: 1}
+        }
+
+        .custom-message-modal-content .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .custom-message-modal-content .close-btn:hover,
+        .custom-message-modal-content .close-btn:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .custom-message-modal-content h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .custom-message-modal-content p {
+            margin-bottom: 20px;
+        }
+
+        .custom-message-modal-content .modal-buttons button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        .custom-message-modal-content .modal-buttons button.cancel-btn {
+            background-color: #6c757d;
         }
 
 
@@ -574,7 +666,7 @@
                 <hr style="margin: 30px 0; border: 0; border-top: 1px solid #eee;">
                 <h3 style="text-align: center;">Acciones</h3>
                 <div style="display: flex; justify-content: center;">
-                    <button id="manual_save_progress_btn" onclick="autoSaveDailyProgress()">
+                    <button id="manual_save_progress_btn" onclick="autoSaveDailyProgress(true)">
                         <i class="fas fa-save"></i> Guardar Progreso del Día
                     </button>
                 </div>
@@ -582,8 +674,22 @@
         </div>
     </div>
 
+    <!-- Custom Message Modal (replacement for alert/confirm) -->
+    <div id="custom_message_modal" class="custom-message-modal">
+        <div class="custom-message-modal-content">
+            <span class="close-btn" onclick="cerrarModal('custom_message_modal')">&times;</span>
+            <h3 id="custom_message_title"></h3>
+            <p id="custom_message_text"></p>
+            <div class="modal-buttons" id="custom_message_buttons">
+                <!-- Buttons will be added here dynamically -->
+            </div>
+        </div>
+    </div>
+
     <script>
         // Firebase configuration - Ensure this API Key is secure!
+        // NOTE: In a real application, consider storing API keys more securely
+        // than directly in client-side HTML.
         const firebaseConfig = {
             apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
             authDomain: "lazapateria-c4157.firebaseapp.com",
@@ -661,6 +767,33 @@
         }
         // --- End of Audio Functions ---
 
+        /**
+         * Muestra un modal personalizado con un mensaje y botones opcionales.
+         * @param {string} title - El título del modal.
+         * @param {string} message - El mensaje a mostrar.
+         * @param {Array<Object>} buttons - Un array de objetos { text, className, onClick } para los botones.
+         */
+        function showCustomMessageModal(title, message, buttons = [{ text: 'OK', className: 'primary-btn', onClick: "cerrarModal('custom_message_modal')" }]) {
+            const modal = document.getElementById('custom_message_modal');
+            document.getElementById('custom_message_title').textContent = title;
+            document.getElementById('custom_message_text').textContent = message;
+            
+            const buttonsContainer = document.getElementById('custom_message_buttons');
+            buttonsContainer.innerHTML = ''; // Clear previous buttons
+
+            buttons.forEach(btnConfig => {
+                const button = document.createElement('button');
+                button.textContent = btnConfig.text;
+                button.className = btnConfig.className || '';
+                if (btnConfig.onClick) {
+                    button.setAttribute('onclick', btnConfig.onClick);
+                }
+                buttonsContainer.appendChild(button);
+            });
+
+            modal.style.display = 'flex'; // Show the modal
+        }
+
         // Helper function to show modals
         const mostrarModal = id => {
             document.getElementById(id).style.display = 'flex';
@@ -709,6 +842,10 @@
          * @returns {boolean} True if already saved today, false otherwise.
          */
         function hasDailyProgressBeenSavedToday() {
+            // No save for anonymous user
+            if (asesorId === "usuario_anonimo") {
+                return true; 
+            }
             const todayStr = new Date().toISOString().slice(0, 10);
             const lastSavedDate = localStorage.getItem(`dailyProgressSaved_${asesorId}`);
             return lastSavedDate === todayStr;
@@ -718,6 +855,10 @@
          * Marks the daily progress as saved for today in localStorage.
          */
         function markDailyProgressAsSavedToday() {
+            // No save for anonymous user
+            if (asesorId === "usuario_anonimo") {
+                return;
+            }
             const todayStr = new Date().toISOString().slice(0, 10);
             localStorage.setItem(`dailyProgressSaved_${asesorId}`, todayStr);
         }
@@ -726,12 +867,21 @@
          * Main function for automatic daily progress saving.
          * Saves currentDayPares and currentDayValor to Firebase.
          * Schedules itself for the next day.
+         * @param {boolean} isManualTrigger - True if called by user, false for auto-save.
          */
-        async function autoSaveDailyProgress() {
+        async function autoSaveDailyProgress(isManualTrigger = false) {
+            // Prevent saving for anonymous user
+            if (asesorId === "usuario_anonimo") {
+                if (isManualTrigger) {
+                    showCustomMessageModal("Información", "No se puede guardar el progreso del día para un usuario anónimo.");
+                }
+                return;
+            }
+
             const todayStr = new Date().toISOString().slice(0, 10);
             const dailySnapshotRef = db.collection('users').doc(asesorId).collection('daily_sales_snapshot').doc(todayStr);
 
-            if (!hasDailyProgressBeenSavedToday()) {
+            if (!hasDailyProgressBeenSavedToday() || isManualTrigger) {
                 console.log(`Auto-guardando progreso del día ${todayStr} para el asesor ${asesorId}.`);
                 try {
                     await dailySnapshotRef.set({
@@ -741,20 +891,29 @@
                     }, { merge: true });
                     markDailyProgressAsSavedToday();
                     console.log("Progreso del día guardado automáticamente.");
-                    alert("¡Progreso del día guardado exitosamente!"); // Alert for manual trigger feedback
+                    if (isManualTrigger) {
+                        playConfirmationSound();
+                        showCustomMessageModal("Éxito", "¡Progreso del día guardado exitosamente!"); // Feedback for manual trigger
+                    }
                 } catch (error) {
                     console.error("Error al auto-guardar el progreso del día:", error);
-                    alert("Error al guardar el progreso del día. Inténtelo de nuevo."); // Alert for manual trigger feedback
+                    if (isManualTrigger) {
+                        showCustomMessageModal("Error", "Error al guardar el progreso del día. Inténtelo de nuevo."); // Feedback for manual trigger
+                    }
                 }
             } else {
                 console.log(`Progreso del día ${todayStr} ya fue auto-guardado hoy.`);
-                alert("El progreso del día ya ha sido guardado hoy."); // Alert for manual trigger feedback
+                if (isManualTrigger) {
+                    showCustomMessageModal("Información", "El progreso del día ya ha sido guardado hoy."); // Feedback for manual trigger
+                }
             }
 
-            // Schedule for tomorrow's 6 PM
-            const timeToNextRun = getTimeUntilNextAutoSave();
-            console.log(`Próximo auto-guardado en: ${timeToNextRun / (1000 * 60 * 60)} horas.`);
-            setTimeout(autoSaveDailyProgress, timeToNextRun);
+            // Schedule for tomorrow's 6 PM only if not manually triggered
+            if (!isManualTrigger) {
+                const timeToNextRun = getTimeUntilNextAutoSave();
+                console.log(`Próximo auto-guardado en: ${timeToNextRun / (1000 * 60 * 60)} horas.`);
+                setTimeout(autoSaveDailyProgress, timeToNextRun);
+            }
         }
 
         // Centralized function to calculate and display accumulated progress
@@ -777,7 +936,7 @@
                 const snapshotDate = new Date(data.id); // Assuming data has 'id' property or doc.id
                 snapshotDate.setHours(0,0,0,0);
 
-                if (data.id !== todayStr) { // Only add historical snapshots
+                if (data.id !== todayStr) { // Only add historical snapshots (not today's data from snapshot)
                     if (snapshotDate >= startOfWeek) {
                         tempAccumulatedWeekPares += (data.pares || 0);
                         tempAccumulatedWeekValor += (data.valor || 0);
@@ -828,105 +987,128 @@
             const currentMonthId = `${currentYear}-${currentMonth}`; //YYYY-MM
 
             // --- Listener for Weekly Goals ---
-            const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
-            weeklyGoalsRef.onSnapshot(async docSnap => {
-                if (docSnap.exists) {
-                    const data = docSnap.data();
-                    weeklyParesGoal = data.pares_goal || 0; // Still keep this in data, even if not directly set
-                    weeklyValorGoal = data.valor_goal || 0;
-                } else {
-                    // If document doesn't exist for current week, create with initial values
-                    console.log(`Creating weekly goals document for ${currentWeekId}`);
-                    await weeklyGoalsRef.set({ pares_goal: 0, valor_goal: 0 });
-                    weeklyParesGoal = 0;
-                    weeklyValorGoal = 0;
-                }
-                document.getElementById('weekly_value_goal').value = weeklyValorGoal;
-                updateGoalProgress(); // Update progress after goals are loaded
-            }, error => {
-                console.error("Error listening to weekly goals:", error);
-            });
-
-            // --- Listener for Monthly Goals ---
-            const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
-            monthlyGoalsRef.onSnapshot(async docSnap => {
-                if (docSnap.exists) {
-                    const data = docSnap.data();
-                    monthlyParesGoal = data.pares_goal || 0;
-                    monthlyValorGoal = data.valor_goal || 0; // Still keep this in data, even if not directly set
-                } else {
-                    // If document doesn't exist for current month, create with initial values
-                    console.log(`Creating monthly goals document for ${currentMonthId}`);
-                    await monthlyGoalsRef.set({ pares_goal: 0, valor_goal: 0 });
-                    monthlyParesGoal = 0;
-                    monthlyValorGoal = 0;
-                }
-                document.getElementById('monthly_pares_goal').value = monthlyParesGoal;
-                updateGoalProgress(); // Update progress after goals are loaded
-            }, error => {
-                console.error("Error listening to monthly goals:", error);
-            });
-
-            // --- Listener for Today's Dispatches (for "Hoy" cards) ---
-            const startOfDay = new Date();
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date();
-            endOfDay.setHours(23, 59, 59, 999);
-
-            db.collection('registros')
-              .where('usuario', '==', asesorId)
-              .where('fecha_hora', '>=', startOfDay)
-              .where('fecha_hora', '<=', endOfDay)
-              .onSnapshot(snapshot => {
-                  updateDailySummary(snapshot); // Update "Hoy" cards and trigger accumulated updates
-              }, error => {
-                  console.error("Error listening to today's dispatches:", error);
-              });
-
-            // --- Listener for Daily Sales Snapshots (for weekly/monthly accumulated progress) ---
-            // This listener will primarily handle updates when the 6 PM auto-save happens for past days,
-            // or when a manual save from a different session/device happens.
-            // When this fires, it will trigger the _calculateAndDisplayAccumulatedProgress.
-            db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
-                .onSnapshot(snapshot => {
-                    const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    _calculateAndDisplayAccumulatedProgress(historicalData);
+            // Only attach listeners if asesorId is not anonymous
+            if (asesorId !== "usuario_anonimo") {
+                const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
+                weeklyGoalsRef.onSnapshot(async docSnap => {
+                    if (docSnap.exists) {
+                        const data = docSnap.data();
+                        weeklyParesGoal = data.pares_goal || 0; // Still keep this in data, even if not directly set
+                        weeklyValorGoal = data.valor_goal || 0;
+                    } else {
+                        // If document doesn't exist for current week, create with initial values
+                        console.log(`Creating weekly goals document for ${currentWeekId}`);
+                        await weeklyGoalsRef.set({ pares_goal: 0, valor_goal: 0 });
+                        weeklyParesGoal = 0;
+                        weeklyValorGoal = 0;
+                    }
+                    document.getElementById('weekly_value_goal').value = weeklyValorGoal;
+                    updateGoalProgress(); // Update progress after goals are loaded
                 }, error => {
-                    console.error("Error listening to daily sales snapshots:", error);
+                    console.error("Error listening to weekly goals:", error);
                 });
 
+                // --- Listener for Monthly Goals ---
+                const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
+                monthlyGoalsRef.onSnapshot(async docSnap => {
+                    if (docSnap.exists) {
+                        const data = docSnap.data();
+                        monthlyParesGoal = data.pares_goal || 0;
+                        monthlyValorGoal = data.valor_goal || 0; // Still keep this in data, even if not directly set
+                    } else {
+                        // If document doesn't exist for current month, create with initial values
+                        console.log(`Creating monthly goals document for ${currentMonthId}`);
+                        await monthlyGoalsRef.set({ pares_goal: 0, valor_goal: 0 });
+                        monthlyParesGoal = 0;
+                        monthlyValorGoal = 0;
+                    }
+                    document.getElementById('monthly_pares_goal').value = monthlyParesGoal;
+                    updateGoalProgress(); // Update progress after goals are loaded
+                }, error => {
+                    console.error("Error listening to monthly goals:", error);
+                });
 
-            // --- Listener for Global Block Configuration ---
-            db.collection('settings').doc('global_block').onSnapshot(doc => {
-                if (doc.exists) {
-                    const data = doc.data();
-                    isGlobalManualBlock = data.isBlocked || false;
-                    isAutoBlockedPermanently = data.isAutoBlockedPermanently || false;
-                    isAutoBlockEnabled = data.isAutoBlockEnabled || false;
-                    retardTimeMinutes = data.retardTimeMinutes !== undefined ? data.retardTimeMinutes : 20;
+                // --- Listener for Today's Dispatches (for "Hoy" cards) ---
+                const startOfDay = new Date();
+                startOfDay.setHours(0, 0, 0, 0);
+                const endOfDay = new Date();
+                endOfDay.setHours(23, 59, 59, 999);
+
+                db.collection('registros')
+                .where('usuario', '==', asesorId)
+                .where('fecha_hora', '>=', startOfDay)
+                .where('fecha_hora', '<=', endOfDay)
+                .onSnapshot(snapshot => {
+                    updateDailySummary(snapshot); // Update "Hoy" cards and trigger accumulated updates
+                }, error => {
+                    console.error("Error listening to today's dispatches:", error);
+                });
+
+                // --- Listener for Daily Sales Snapshots (for weekly/monthly accumulated progress) ---
+                // This listener will primarily handle updates when the 6 PM auto-save happens for past days,
+                // or when a manual save from a different session/device happens.
+                // When this fires, it will trigger the _calculateAndDisplayAccumulatedProgress.
+                db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
+                    .onSnapshot(snapshot => {
+                        const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        _calculateAndDisplayAccumulatedProgress(historicalData);
+                    }, error => {
+                        console.error("Error listening to daily sales snapshots:", error);
+                    });
+
+
+                // --- Listener for Global Block Configuration ---
+                db.collection('settings').doc('global_block').onSnapshot(doc => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        isGlobalManualBlock = data.isBlocked || false;
+                        isAutoBlockedPermanently = data.isAutoBlockedPermanently || false;
+                        isAutoBlockEnabled = data.isAutoBlockEnabled || false;
+                        retardTimeMinutes = data.retardTimeMinutes !== undefined ? data.retardTimeMinutes : 20;
+                    }
+                    updateBlockStatusDisplay(); // Update block status in the dashboard
+                }, error => {
+                    console.error("Error fetching global block configuration:", error);
+                });
+
+                // --- Schedule initial auto-save check ---
+                const timeToFirstRun = getTimeUntilNextAutoSave();
+                console.log(`Initial auto-save scheduled in: ${timeToFirstRun / (1000 * 60)} minutes.`);
+                setTimeout(autoSaveDailyProgress, timeToFirstRun);
+
+                // Also run it immediately if it's already past 6 PM and hasn't saved yet
+                const now = new Date();
+                const autoSaveTimeToday = new Date(now);
+                autoSaveTimeToday.setHours(18, 0, 0, 0);
+                if (now.getTime() >= autoSaveTimeToday.getTime() && !hasDailyProgressBeenSavedToday()) {
+                    console.log("It's already past 6 PM and no save detected for today. Running autoSaveDailyProgress immediately.");
+                    autoSaveDailyProgress();
                 }
-                updateBlockStatusDisplay(); // Update block status in the dashboard
-            }, error => {
-                console.error("Error fetching global block configuration:", error);
-            });
-
-            // --- Schedule initial auto-save check ---
-            const timeToFirstRun = getTimeUntilNextAutoSave();
-            console.log(`Initial auto-save scheduled in: ${timeToFirstRun / (1000 * 60)} minutes.`);
-            setTimeout(autoSaveDailyProgress, timeToFirstRun);
-
-            // Also run it immediately if it's already past 6 PM and hasn't saved yet
-            const now = new Date();
-            const autoSaveTimeToday = new Date(now);
-            autoSaveTimeToday.setHours(18, 0, 0, 0);
-            if (now.getTime() >= autoSaveTimeToday.getTime() && !hasDailyProgressBeenSavedToday()) {
-                console.log("It's already past 6 PM and no save detected for today. Running autoSaveDailyProgress immediately.");
-                autoSaveDailyProgress();
+            } else {
+                console.log("No Firebase listeners or auto-save scheduled for anonymous user.");
+                // Ensure dashboard shows 0s for anonymous user
+                document.getElementById('total_pares_day_card').textContent = 0;
+                document.getElementById('total_valor_day_card').textContent = '$0';
+                document.getElementById('pending_orders_card').textContent = 0;
+                document.getElementById('in_packaging_orders_card').textContent = 0;
+                document.getElementById('dispatched_orders_card').textContent = 0;
+                document.getElementById('retarded_orders_card').textContent = 0;
+                document.getElementById('total_pares_week_card').textContent = 0;
+                document.getElementById('total_valor_week_card').textContent = '$0';
+                document.getElementById('total_pares_month_card').textContent = 0;
+                document.getElementById('total_valor_month_card').textContent = '$0';
+                updateGoalProgress(); // Update progress bars for anonymous user (will be 0)
             }
         };
 
         async function saveWeeklyGoals() {
             initAudioContext();
+            // Prevent saving for anonymous user
+            if (asesorId === "usuario_anonimo") {
+                showCustomMessageModal("Error", "No puedes guardar metas como usuario anónimo.");
+                return;
+            }
+
             const currentYear = new Date().getFullYear();
             const currentWeek = getWeekNumber(new Date());
             const currentWeekId = `${currentYear}-${currentWeek}`;
@@ -939,38 +1121,62 @@
                     valor_goal: weeklyValor
                 }, { merge: true });
 
-                alert("Meta semanal guardada exitosamente.");
+                showCustomMessageModal("Éxito", "Meta semanal guardada exitosamente.");
                 playConfirmationSound();
                 // Goals will be reloaded by the onSnapshot listeners automatically
             } catch (error) {
                 console.error("Error saving weekly goals:", error);
-                alert("Error al guardar la meta semanal. Inténtelo de nuevo.");
+                showCustomMessageModal("Error", "Error al guardar la meta semanal. Inténtelo de nuevo.");
             }
         }
 
         async function resetWeeklyGoals() {
             initAudioContext();
-            if (confirm("¿Estás seguro de que quieres reiniciar tu meta semanal? Esto pondrá la meta semanal en 0.")) {
-                const currentYear = new Date().getFullYear();
-                const currentWeek = getWeekNumber(new Date());
-                const currentWeekId = `${currentYear}-${currentWeek}`;
-
-                try {
-                    const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
-                    await weeklyGoalsRef.set({ valor_goal: 0 }, { merge: true }); // Only reset valor_goal
-
-                    alert("Meta semanal reiniciada exitosamente.");
-                    playConfirmationSound();
-                    // Goals will be reloaded by the onSnapshot listeners automatically
-                } catch (error) {
-                    console.error("Error resetting weekly goals:", error);
-                    alert("Error al reiniciar la meta semanal. Inténtelo de nuevo.");
-                }
+            // Prevent resetting for anonymous user
+            if (asesorId === "usuario_anonimo") {
+                showCustomMessageModal("Error", "No puedes reiniciar metas como usuario anónimo.");
+                return;
             }
+
+            showCustomMessageModal("Confirmación", "¿Estás seguro de que quieres reiniciar tu meta semanal? Esto pondrá la meta semanal en 0.", [
+                {
+                    text: 'Sí, Reiniciar',
+                    className: 'primary-btn',
+                    onClick: async () => {
+                        cerrarModal('custom_message_modal'); // Close the confirmation modal
+                        const currentYear = new Date().getFullYear();
+                        const currentWeek = getWeekNumber(new Date());
+                        const currentWeekId = `${currentYear}-${currentWeek}`;
+
+                        try {
+                            const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
+                            await weeklyGoalsRef.set({ valor_goal: 0 }, { merge: true }); // Only reset valor_goal
+
+                            showCustomMessageModal("Éxito", "Meta semanal reiniciada exitosamente.");
+                            playConfirmationSound();
+                            // Goals will be reloaded by the onSnapshot listeners automatically
+                        } catch (error) {
+                            console.error("Error resetting weekly goals:", error);
+                            showCustomMessageModal("Error", "Error al reiniciar la meta semanal. Inténtelo de nuevo.");
+                        }
+                    }
+                },
+                {
+                    text: 'Cancelar',
+                    className: 'cancel-btn',
+                    onClick: "cerrarModal('custom_message_modal')"
+                }
+            ]);
         }
 
         async function saveMonthlyGoals() {
             initAudioContext();
+            // Prevent saving for anonymous user
+            if (asesorId === "usuario_anonimo") {
+                showCustomMessageModal("Error", "No puedes guardar metas como usuario anónimo.");
+                return;
+            }
+
             const currentYear = new Date().getFullYear();
             const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
             const currentMonthId = `${currentYear}-${currentMonth}`;
@@ -983,36 +1189,53 @@
                     pares_goal: monthlyPares
                 }, { merge: true });
 
-                alert("Meta mensual guardada exitosamente.");
+                showCustomMessageModal("Éxito", "Meta mensual guardada exitosamente.");
                 playConfirmationSound();
                 // Goals will be reloaded by the onSnapshot listeners automatically
             } catch (error) {
                 console.error("Error saving monthly goals:", error);
-                alert("Error al guardar la meta mensual. Inténtelo de nuevo.");
+                showCustomMessageModal("Error", "Error al guardar la meta mensual. Inténtelo de nuevo.");
             }
         }
 
         async function resetMonthlyGoals() {
             initAudioContext();
-            if (confirm("¿Estás seguro de que quieres reiniciar tu meta mensual? Esto pondrá la meta mensual en 0.")) {
-                const currentYear = new Date().getFullYear();
-                const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
-                const currentMonthId = `${currentYear}-${currentMonth}`;
-
-                try {
-                    const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
-                    await monthlyGoalsRef.set({ pares_goal: 0 }, { merge: true }); // Only reset pares_goal
-
-                    alert("Meta mensual reiniciada exitosamente.");
-                    playConfirmationSound();
-                    // Goals will be reloaded by the onSnapshot listeners automatically
-                } catch (error) {
-                    console.error("Error resetting monthly goals:", error);
-                    alert("Error al reiniciar la meta mensual. Inténtelo de nuevo.");
-                }
+            // Prevent resetting for anonymous user
+            if (asesorId === "usuario_anonimo") {
+                showCustomMessageModal("Error", "No puedes reiniciar metas como usuario anónimo.");
+                return;
             }
-        }
 
+            showCustomMessageModal("Confirmación", "¿Estás seguro de que quieres reiniciar tu meta mensual? Esto pondrá la meta mensual en 0.", [
+                {
+                    text: 'Sí, Reiniciar',
+                    className: 'primary-btn',
+                    onClick: async () => {
+                        cerrarModal('custom_message_modal'); // Close the confirmation modal
+                        const currentYear = new Date().getFullYear();
+                        const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
+                        const currentMonthId = `${currentYear}-${currentMonth}`;
+
+                        try {
+                            const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
+                            await monthlyGoalsRef.set({ pares_goal: 0 }, { merge: true }); // Only reset pares_goal
+
+                            showCustomMessageModal("Éxito", "Meta mensual reiniciada exitosamente.");
+                            playConfirmationSound();
+                            // Goals will be reloaded by the onSnapshot listeners automatically
+                        } catch (error) {
+                            console.error("Error resetting monthly goals:", error);
+                            showCustomMessageModal("Error", "Error al reiniciar la meta mensual. Inténtelo de nuevo.");
+                        }
+                    }
+                },
+                {
+                    text: 'Cancelar',
+                    className: 'cancel-btn',
+                    onClick: "cerrarModal('custom_message_modal')"
+                }
+            ]);
+        }
 
         function updateDailySummary(snapshot) {
             let totalParesHoy = 0;
@@ -1056,66 +1279,24 @@
             document.getElementById('retarded_orders_card').textContent = retardedOrders;
 
             // Trigger re-calculation and display of accumulated progress to include today's real-time sales
-            db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
-                .get() // Get all historical snapshots
-                .then(snapshot => {
-                    const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    _calculateAndDisplayAccumulatedProgress(historicalData); // Pass historical data to the central function
-                })
-                .catch(error => {
-                    console.error("Error fetching historical snapshots for real-time daily update:", error);
-                });
+            // Only fetch if asesorId is not anonymous
+            if (asesorId !== "usuario_anonimo") {
+                db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
+                    .get() // Get all historical snapshots
+                    .then(snapshot => {
+                        const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        _calculateAndDisplayAccumulatedProgress(historicalData); // Pass historical data to the central function
+                    })
+                    .catch(error => {
+                        console.error("Error fetching historical snapshots for real-time daily update:", error);
+                    });
+            } else {
+                _calculateAndDisplayAccumulatedProgress([]); // For anonymous user, treat historical data as empty
+            }
 
             updateGoalProgress(); // This will be called again by _calculateAndDisplayAccumulatedProgress, but keeping here for direct impact on goal displays if needed.
         }
 
-        // Renamed and centralized function to calculate and display accumulated progress
-        // This function is now called from both the daily_sales_snapshot listener AND updateDailySummary
-        function _calculateAndDisplayAccumulatedProgress(historicalSnapshotsData) {
-            let tempAccumulatedWeekPares = 0;
-            let tempAccumulatedWeekValor = 0;
-            let tempAccumulatedMonthPares = 0;
-            let tempAccumulatedMonthValor = 0;
-
-            const today = new Date();
-            const todayStr = today.toISOString().slice(0, 10);
-            const startOfWeek = new Date(today);
-            startOfWeek.setDate(today.getDate() - (today.getDay() + 6) % 7); // Monday
-            startOfWeek.setHours(0, 0, 0, 0);
-
-            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-            startOfMonth.setHours(0, 0, 0, 0);
-
-            historicalSnapshotsData.forEach(data => { // Iterate through the data provided (can be from onSnapshot or get)
-                const snapshotDate = new Date(data.id); // Assuming data has 'id' property or doc.id
-                snapshotDate.setHours(0,0,0,0);
-
-                if (data.id !== todayStr) { // Only add historical snapshots (not today's data from snapshot)
-                    if (snapshotDate >= startOfWeek) {
-                        tempAccumulatedWeekPares += (data.pares || 0);
-                        tempAccumulatedWeekValor += (data.valor || 0);
-                    }
-                    if (snapshotDate >= startOfMonth) {
-                        tempAccumulatedMonthPares += (data.pares || 0);
-                        tempAccumulatedMonthValor += (data.valor || 0);
-                    }
-                }
-            });
-
-            // Add today's real-time values (currentDayPares, currentDayValor)
-            // to the accumulated totals for the current week and month.
-            accumulatedWeekPares = tempAccumulatedWeekPares + currentDayPares;
-            accumulatedWeekValor = tempAccumulatedWeekValor + currentDayValor;
-            accumulatedMonthPares = tempAccumulatedMonthPares + currentDayPares;
-            accumulatedMonthValor = tempAccumulatedMonthValor + currentDayValor;
-
-            document.getElementById('total_pares_week_card').textContent = accumulatedWeekPares;
-            document.getElementById('total_valor_week_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
-            document.getElementById('total_pares_month_card').textContent = accumulatedMonthPares;
-            document.getElementById('total_valor_month_card').textContent = `$${accumulatedMonthValor.toLocaleString('es-CO')}`;
-
-            updateGoalProgress(); // Update progress bars with newly calculated accumulated values
-        }
 
         function updateGoalProgress() {
             // Weekly Progress - Only Valor
