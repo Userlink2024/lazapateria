@@ -991,6 +991,7 @@
             // Only attach listeners if asesorId is not anonymous
             if (asesorId !== "usuario_anonimo") {
                 const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
+                console.log(`Escuchando metas semanales en: users/${asesorId}/goals/weekly_${currentWeekId}`); // Nuevo log
                 weeklyGoalsRef.onSnapshot(async docSnap => {
                     if (docSnap.exists) {
                         const data = docSnap.data();
@@ -998,7 +999,7 @@
                         weeklyValorGoal = data.valor_goal || 0;
                     } else {
                         // If document doesn't exist for current week, create with initial values
-                        console.log(`Creating weekly goals document for ${currentWeekId}`);
+                        console.log(`Creando documento de metas semanales para ${currentWeekId}`); // Nuevo log
                         await weeklyGoalsRef.set({ pares_goal: 0, valor_goal: 0 });
                         weeklyParesGoal = 0;
                         weeklyValorGoal = 0;
@@ -1006,11 +1007,12 @@
                     document.getElementById('weekly_value_goal').value = weeklyValorGoal;
                     updateGoalProgress(); // Update progress after goals are loaded
                 }, error => {
-                    console.error("Error listening to weekly goals:", error);
+                    console.error("Error al escuchar metas semanales:", error);
                 });
 
                 // --- Listener for Monthly Goals ---
                 const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
+                console.log(`Escuchando metas mensuales en: users/${asesorId}/goals/monthly_${currentMonthId}`); // Nuevo log
                 monthlyGoalsRef.onSnapshot(async docSnap => {
                     if (docSnap.exists) {
                         const data = docSnap.data();
@@ -1018,7 +1020,7 @@
                         monthlyValorGoal = data.valor_goal || 0; // Still keep this in data, even if not directly set
                     } else {
                         // If document doesn't exist for current month, create with initial values
-                        console.log(`Creating monthly goals document for ${currentMonthId}`);
+                        console.log(`Creando documento de metas mensuales para ${currentMonthId}`); // Nuevo log
                         await monthlyGoalsRef.set({ pares_goal: 0, valor_goal: 0 });
                         monthlyParesGoal = 0;
                         monthlyValorGoal = 0;
@@ -1026,7 +1028,7 @@
                     document.getElementById('monthly_pares_goal').value = monthlyParesGoal;
                     updateGoalProgress(); // Update progress after goals are loaded
                 }, error => {
-                    console.error("Error listening to monthly goals:", error);
+                    console.error("Error al escuchar metas mensuales:", error);
                 });
 
                 // --- Listener for Today's Dispatches (for "Hoy" cards) ---
@@ -1042,7 +1044,7 @@
                 .onSnapshot(snapshot => {
                     updateDailySummary(snapshot); // Update "Hoy" cards and trigger accumulated updates
                 }, error => {
-                    console.error("Error listening to today's dispatches:", error);
+                    console.error("Error al escuchar los despachos de hoy:", error);
                 });
 
                 // --- Listener for Daily Sales Snapshots (for weekly/monthly accumulated progress) ---
@@ -1054,7 +1056,7 @@
                         const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         _calculateAndDisplayAccumulatedProgress(historicalData);
                     }, error => {
-                        console.error("Error listening to daily sales snapshots:", error);
+                        console.error("Error al escuchar snapshots de ventas diarias:", error);
                     });
 
 
@@ -1069,12 +1071,12 @@
                     }
                     updateBlockStatusDisplay(); // Update block status in the dashboard
                 }, error => {
-                    console.error("Error fetching global block configuration:", error);
+                    console.error("Error al obtener la configuración de bloqueo global:", error);
                 });
 
                 // --- Schedule initial auto-save check ---
                 const timeToFirstRun = getTimeUntilNextAutoSave();
-                console.log(`Initial auto-save scheduled in: ${timeToFirstRun / (1000 * 60)} minutes.`);
+                console.log(`Próximo auto-guardado programado en: ${timeToFirstRun / (1000 * 60)} minutos.`);
                 setTimeout(autoSaveDailyProgress, timeToFirstRun);
 
                 // Also run it immediately if it's already past 6 PM and hasn't saved yet
@@ -1082,11 +1084,11 @@
                 const autoSaveTimeToday = new Date(now);
                 autoSaveTimeToday.setHours(18, 0, 0, 0);
                 if (now.getTime() >= autoSaveTimeToday.getTime() && !hasDailyProgressBeenSavedToday()) {
-                    console.log("It's already past 6 PM and no save detected for today. Running autoSaveDailyProgress immediately.");
+                    console.log("Ya pasaron las 6 PM y no se detectó guardado para hoy. Ejecutando autoSaveDailyProgress inmediatamente.");
                     autoSaveDailyProgress();
                 }
             } else {
-                console.log("No Firebase listeners or auto-save scheduled for anonymous user.");
+                console.log("No hay listeners de Firebase o auto-guardado programado para usuario anónimo.");
                 // Ensure dashboard shows 0s for anonymous user
                 document.getElementById('total_pares_day_card').textContent = 0;
                 document.getElementById('total_valor_day_card').textContent = '$0';
@@ -1118,6 +1120,7 @@
 
             try {
                 const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
+                console.log(`Intentando guardar meta semanal en: users/${asesorId}/goals/weekly_${currentWeekId} con valor: ${weeklyValor}`); // Nuevo log
                 await weeklyGoalsRef.set({
                     valor_goal: weeklyValor
                 }, { merge: true });
@@ -1126,7 +1129,7 @@
                 playConfirmationSound();
                 // Goals will be reloaded by the onSnapshot listeners automatically
             } catch (error) {
-                console.error("Error saving weekly goals:", error);
+                console.error("Error al guardar la meta semanal:", error); // Log de error
                 showCustomMessageModal("Error", "Error al guardar la meta semanal. Inténtelo de nuevo.");
             }
         }
@@ -1151,13 +1154,15 @@
 
                         try {
                             const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
+                            console.log(`Intentando reiniciar meta semanal en: users/${asesorId}/goals/weekly_${currentWeekId}`); // Nuevo log
                             await weeklyGoalsRef.set({ valor_goal: 0 }, { merge: true }); // Only reset valor_goal
+                            console.log("Meta semanal reiniciada exitosamente en Firebase."); // Nuevo log de éxito
 
                             showCustomMessageModal("Éxito", "Meta semanal reiniciada exitosamente.");
                             playConfirmationSound();
                             // Goals will be reloaded by the onSnapshot listeners automatically
                         } catch (error) {
-                            console.error("Error resetting weekly goals:", error);
+                            console.error("Error al reiniciar la meta semanal:", error); // Log de error
                             showCustomMessageModal("Error", "Error al reiniciar la meta semanal. Inténtelo de nuevo.");
                         }
                     }
@@ -1186,6 +1191,7 @@
 
             try {
                 const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
+                console.log(`Intentando guardar meta mensual en: users/${asesorId}/goals/monthly_${currentMonthId} con valor: ${monthlyPares}`); // Nuevo log
                 await monthlyGoalsRef.set({
                     pares_goal: monthlyPares
                 }, { merge: true });
@@ -1194,7 +1200,7 @@
                 playConfirmationSound();
                 // Goals will be reloaded by the onSnapshot listeners automatically
             } catch (error) {
-                console.error("Error saving monthly goals:", error);
+                console.error("Error al guardar la meta mensual:", error); // Log de error
                 showCustomMessageModal("Error", "Error al guardar la meta mensual. Inténtelo de nuevo.");
             }
         }
@@ -1219,13 +1225,15 @@
 
                         try {
                             const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
+                            console.log(`Intentando reiniciar meta mensual en: users/${asesorId}/goals/monthly_${currentMonthId}`); // Nuevo log
                             await monthlyGoalsRef.set({ pares_goal: 0 }, { merge: true }); // Only reset pares_goal
+                            console.log("Meta mensual reiniciada exitosamente en Firebase."); // Nuevo log de éxito
 
                             showCustomMessageModal("Éxito", "Meta mensual reiniciada exitosamente.");
                             playConfirmationSound();
                             // Goals will be reloaded by the onSnapshot listeners automatically
                         } catch (error) {
-                            console.error("Error resetting monthly goals:", error);
+                            console.error("Error al reiniciar la meta mensual:", error); // Log de error
                             showCustomMessageModal("Error", "Error al reiniciar la meta mensual. Inténtelo de nuevo.");
                         }
                     }
@@ -1289,7 +1297,7 @@
                         _calculateAndDisplayAccumulatedProgress(historicalData); // Pass historical data to the central function
                     })
                     .catch(error => {
-                        console.error("Error fetching historical snapshots for real-time daily update:", error);
+                        console.error("Error al obtener snapshots históricos para la actualización diaria en tiempo real:", error);
                     });
             } else {
                 _calculateAndDisplayAccumulatedProgress([]); // For anonymous user, treat historical data as empty
