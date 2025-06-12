@@ -933,20 +933,30 @@
             const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             startOfMonth.setHours(0, 0, 0, 0);
 
+            console.log(`--- Calculando Progreso Acumulado ---`);
+            console.log(`Fecha Actual (Local): ${today.toLocaleString()}`);
+            console.log(`Inicio de Semana (Local): ${startOfWeek.toLocaleString()} (ISO Week: ${getWeekNumber(today)})`);
+            console.log(`Inicio de Mes (Local): ${startOfMonth.toLocaleString()}`);
+            console.log(`Datos Históricos (Snapshots): ${historicalSnapshotsData.length} documentos`);
+
             historicalSnapshotsData.forEach(data => { // Iterate through the data provided (can be from onSnapshot or get)
                 const snapshotDate = new Date(data.id); // Assuming data has 'id' property or doc.id
-                snapshotDate.setHours(0,0,0,0);
+                snapshotDate.setHours(0,0,0,0); // Normaliza la hora para comparación
 
-                if (data.id !== todayStr) { // Only add historical snapshots (not today's data from snapshot)
-                    if (snapshotDate >= startOfWeek) {
-                        tempAccumulatedWeekPares += (data.pares || 0);
-                        tempAccumulatedWeekValor += (data.valor || 0);
-                    }
-                    if (snapshotDate >= startOfMonth) {
-                        tempAccumulatedMonthPares += (data.pares || 0);
-                        tempAccumulatedMonthValor += (data.valor || 0);
-                    }
+                let includeInWeek = false;
+                let includeInMonth = false;
+
+                if (snapshotDate >= startOfWeek) {
+                    tempAccumulatedWeekPares += (data.pares || 0);
+                    tempAccumulatedWeekValor += (data.valor || 0);
+                    includeInWeek = true;
                 }
+                if (snapshotDate >= startOfMonth) {
+                    tempAccumulatedMonthPares += (data.pares || 0);
+                    tempAccumulatedMonthValor += (data.valor || 0);
+                    includeInMonth = true;
+                }
+                console.log(`  - Snapshot: ${data.id} (Pares: ${data.pares}, Valor: ${data.valor}) -> Incluido en Semana: ${includeInWeek}, Incluido en Mes: ${includeInMonth}`);
             });
 
             // Add today's real-time values (currentDayPares, currentDayValor)
@@ -955,6 +965,13 @@
             accumulatedWeekValor = tempAccumulatedWeekValor + currentDayValor;
             accumulatedMonthPares = tempAccumulatedMonthPares + currentDayPares;
             accumulatedMonthValor = tempAccumulatedMonthValor + currentDayValor;
+
+            console.log(`Pares del Día (Tiempo Real): ${currentDayPares}`);
+            console.log(`Valor del Día (Tiempo Real): ${currentDayValor}`);
+            console.log(`Total Acumulado Semana (Calculado): Pares: ${accumulatedWeekPares}, Valor: ${accumulatedWeekValor}`);
+            console.log(`Total Acumulado Mes (Calculado): Pares: ${accumulatedMonthPares}, Valor: ${accumulatedMonthValor}`);
+            console.log(`-----------------------------------`);
+
 
             document.getElementById('total_pares_week_card').textContent = accumulatedWeekPares;
             document.getElementById('total_valor_week_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
