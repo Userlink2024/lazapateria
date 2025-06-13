@@ -326,7 +326,7 @@
 
     <script>
         const LOGIN_PASSWORD = "2025"; // Contraseña para acceder al dashboard
-        const RETARD_MINUTES = 20; // Default retard time in minutes (same as generar_pedidos.html)
+        const SESSION_DURATION_MS = 3 * 60 * 1000; // 3 minutos en milisegundos
 
         // Firebase Configuration (Same as generar_pedidos.html)
         const firebaseConfig = {
@@ -340,11 +340,14 @@
         const db = firebase.firestore();
         const transportadorasCollection = db.collection('transportadoras');
         const registrosCollection = db.collection('registros');
-        const globalSettingsRef = db.collection('settings').doc('global_block'); // To get retard time
-
-        let retardTimeMinutes = RETARD_MINUTES; // Local variable for retard time
+        const globalSettingsRef = db.collection('settings').doc('global_block'); // To get block status and retard time
 
         let dashboardListenerUnsubscribe = null; // Listener for real-time updates on dashboard data
+        let sessionCheckInterval = null; // Interval for session expiration and block check
+
+        // Global variables to store current block status from Firestore listener
+        let isGlobalManualBlock = false;
+        let isAutoBlockedPermanently = false;
 
         // --- UI Elements ---
         const loginScreen = document.getElementById('login-screen');
@@ -354,26 +357,101 @@
         const transportadoraSelect = document.getElementById('transportadora_select');
         const despachosDespachadosAsesorDiv = document.getElementById('despachos_despachados_asesor');
         const totalPaquetesPendientesSpan = document.getElementById('total_paquetes_pendientes');
-        const pedidosPendientesAsesorDiv = document.getElementById('pedidos_pendientes_asesor'); // New: for pending by asesor
+        const pedidosPendientesAsesorDiv = document.getElementById('pedidos_pendientes_asesor');
         const loadingSpinner = document.getElementById('loading_spinner');
         const noDataMessage = document.getElementById('no_data_message');
-
 
         // --- Functions ---
 
         /**
-         * Checks the entered password and grants access to the dashboard if correct.
+         * Logs the user out, clears session data, and shows the login screen.
+         * @param {string} message - Message to display on the login screen.
          */
-        function checkPassword() {
+        function logoutUser(message) {
+            localStorage.removeItem('lastLoginTime'); // Clear session timestamp
+            if (sessionCheckInterval) {
+                clearInterval(sessionCheckInterval); // Stop session check
+                sessionCheckInterval = null;
+            }
+            if (dashboardListenerUnsubscribe) {
+                dashboardListenerUnsubscribe(); // Detach dashboard data listener
+                dashboardListenerUnsubscribe = null;
+            }
+
+            dashboardContent.style.display = 'none';
+            loginScreen.style.display = 'flex';
+            loginError.textContent = message;
+            passwordInput.value = ''; // Clear password field
+            console.log("User logged out:", message);
+        }
+
+        /**
+         * Checks the entered password and grants access to the dashboard if correct.
+         * Also checks for global block status from Firestore.
+         */
+        async function checkPassword() {
             if (passwordInput.value === LOGIN_PASSWORD) {
+                try {
+                    // Check global block status directly from Firestore for the most up-to-date info
+                    const doc = await globalSettingsRef.get();
+                    if (doc.exists) {
+                        const settings = doc.data();
+                        isGlobalManualBlock = settings.isBlocked || false; // Manual global block
+                        isAutoBlockedPermanently = settings.isAutoBlockedPermanently || false; // Auto block triggered
+
+                        if (isGlobalManualBlock || isAutoBlockedPermanently) {
+                            logoutUser('El sistema de pedidos está actualmente bloqueado y no se puede acceder al dashboard.');
+                            return;
+                        }
+                    } else {
+                        // If global settings document doesn't exist, it means it's not blocked
+                        isGlobalManualBlock = false;
+                        isAutoBlockedPermanently = false;
+                    }
+                } catch (error) {
+                    console.error("Error al verificar el estado de bloqueo:", error);
+                    logoutUser('Error al verificar el estado de bloqueo. Inténtelo de nuevo.');
+                    return;
+                }
+
+                // If not blocked and password is correct, proceed to dashboard
+                localStorage.setItem('lastLoginTime', Date.now()); // Store login time
                 loginScreen.style.display = 'none';
                 dashboardContent.style.display = 'block';
                 loadTransportadorasAndDashboard();
+
+                // Start periodic session and block status check
+                if (sessionCheckInterval) {
+                    clearInterval(sessionCheckInterval);
+                }
+                sessionCheckInterval = setInterval(checkSessionAndBlockStatus, 10 * 1000); // Check every 10 seconds
+
             } else {
                 loginError.textContent = 'Contraseña incorrecta. Inténtalo de nuevo.';
                 passwordInput.value = ''; // Clear password input
             }
         }
+
+        /**
+         * Checks for session expiration and current global block status.
+         * If session expired or system is blocked, logs out the user.
+         */
+        function checkSessionAndBlockStatus() {
+            const lastLoginTime = localStorage.getItem('lastLoginTime');
+            const currentTime = Date.now();
+
+            // Check session expiration
+            if (!lastLoginTime || (currentTime - parseInt(lastLoginTime) > SESSION_DURATION_MS)) {
+                logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.');
+                return; // Stop further checks if session expired
+            }
+
+            // Check real-time global block status
+            if (isGlobalManualBlock || isAutoBlockedPermanently) {
+                logoutUser('El sistema de pedidos ha sido bloqueado. No se puede acceder al dashboard.');
+            }
+        }
+
 
         /**
          * Loads the list of transportadoras into the dropdown and then loads dashboard data.
@@ -420,21 +498,6 @@
                 pedidosPendientesAsesorDiv.innerHTML = '<p class="no-data-message">Seleccione una transportadora para ver los pedidos pendientes.</p>';
                 hideLoadingSpinner();
                 return;
-            }
-
-            // Fetch retard time from global settings
-            try {
-                const globalSettingsSnap = await globalSettingsRef.get();
-                if (globalSettingsSnap.exists && globalSettingsSnap.data().retardTimeMinutes !== undefined) {
-                    retardTimeMinutes = globalSettingsSnap.data().retardTimeMinutes;
-                    console.log(`Retard time fetched from settings: ${retardTimeMinutes} minutes.`);
-                } else {
-                    retardTimeMinutes = RETARD_MINUTES; // Fallback to default
-                    console.log(`Retard time not found in settings, using default: ${retardTimeMinutes} minutes.`);
-                }
-            } catch (error) {
-                console.error("Error fetching global settings for retard time:", error);
-                retardTimeMinutes = RETARD_MINUTES; // Fallback to default on error
             }
 
             // Set up real-time listener for records filtered by selected transportadora
@@ -512,7 +575,7 @@
         }
 
         /**
-         * Renders the "Despachos Despachados por Asesor" section.
+         * Renders the "Pedidos Despachados" section.
          * @param {Object} data - Aggregated data of dispatched items by asesor.
          * @param {number} totalDispatchedPackages - Total dispatched packages for the selected transportadora.
          */
@@ -521,7 +584,7 @@
             const asesores = Object.keys(data).sort(); // Sort by asesor name
 
             if (asesores.length === 0 && totalDispatchedPackages === 0) {
-                html += '<p class="no-data-message">No hay despachos DESPACHADOS para esta transportadora.</p>';
+                html += '<p class="no-data-message">No hay pedidos despachados para esta transportadora.</p>';
             } else {
                 asesores.forEach(asesor => {
                     html += `
@@ -579,21 +642,50 @@
 
         // --- Event Listeners and Initial Load ---
         document.addEventListener('DOMContentLoaded', () => {
-            // Check if already authenticated (e.g., from a previous session using local storage or similar)
-            // For simplicity, this dashboard only uses the password for direct access, no session persistence.
-            // If the user wants session persistence, a more robust authentication system is needed.
             passwordInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     checkPassword();
                 }
             });
 
-            // Initial load of transportadoras and dashboard data
-            // This will be called only after successful login
-        });
+            // Start listening to global settings immediately to catch block changes
+            globalSettingsRef.onSnapshot(doc => {
+                if (doc.exists) {
+                    const settings = doc.data();
+                    isGlobalManualBlock = settings.isBlocked || false;
+                    isAutoBlockedPermanently = settings.isAutoBlockedPermanently || false;
+                    console.log("Global block status updated:", isGlobalManualBlock, isAutoBlockedPermanently);
+                    // Check immediately if user should be logged out due to block
+                    checkSessionAndBlockStatus();
+                } else {
+                    // Default to unblocked if document doesn't exist
+                    isGlobalManualBlock = false;
+                    isAutoBlockedPermanently = false;
+                    checkSessionAndBlockStatus(); // Re-check
+                }
+            }, error => {
+                console.error("Error al escuchar cambios en global_block:", error);
+                // In case of error fetching settings, assume unblocked or handle appropriately
+                isGlobalManualBlock = false;
+                isAutoBlockedPermanently = false;
+                checkSessionAndBlockStatus(); // Re-check
+            });
 
-        // Optional: If you want to automatically check for password on load if saved in local storage (not recommended for simple password)
-        // For this simple dashboard, we force password entry each time.
+            // On initial load, check if a session exists (e.g., if page was refreshed within 3 min)
+            // and if not blocked, show dashboard. Otherwise, show login.
+            const lastLoginTime = localStorage.getItem('lastLoginTime');
+            if (lastLoginTime && (Date.now() - parseInt(lastLoginTime)) < SESSION_DURATION_MS) {
+                // Attempt to load dashboard if session is still valid, then real-time check will take over
+                dashboardContent.style.display = 'block';
+                loginScreen.style.display = 'none';
+                loadTransportadorasAndDashboard();
+                if (!sessionCheckInterval) { // Ensure interval is started if not already
+                    sessionCheckInterval = setInterval(checkSessionAndBlockStatus, 10 * 1000);
+                }
+            } else {
+                logoutUser('Por favor, ingrese su contraseña.');
+            }
+        });
     </script>
 </body>
 </html>
