@@ -271,6 +271,113 @@
                 padding: 50px;
             }
         }
+
+        /* Generic Alert Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 450px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            position: relative;
+            transform: translateY(0);
+            animation: slideInFromTop 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+            max-height: 90vh;
+            overflow-y: auto;
+            text-align: center; /* Center content within modal */
+        }
+
+        @keyframes slideInFromTop {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-content h2 {
+            color: #dc3545; /* Red for alerts */
+            margin-bottom: 20px;
+            border-bottom: none; /* No border for modal title */
+            padding-bottom: 0;
+            font-size: 1.5em;
+        }
+
+        .modal-content p {
+            font-size: 1.1em;
+            margin-bottom: 25px;
+            line-height: 1.4;
+        }
+
+        .modal-content button {
+            background-image: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            width: 150px; /* Specific width for modal buttons */
+            margin: 0 auto; /* Center button */
+        }
+        .modal-content button:hover {
+            background-image: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+        }
+        .modal-content .close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 30px;
+            color: #888;
+            cursor: pointer;
+        }
+        .modal-content .close:hover {
+            color: #333;
+        }
+
+        /* Generic Confirm Modal Styles (added from previous version) */
+        #generic_confirm_modal .modal-content {
+            max-width: 450px;
+            padding: 30px;
+        }
+
+        #generic_confirm_modal .modal-content button {
+            width: 120px; /* Adjust button width */
+            margin: 0 10px; /* Spacing between buttons */
+            display: inline-block; /* Allow buttons to be side-by-side */
+        }
+
+        #generic_confirm_modal button[onclick*="genericConfirmProceed"] {
+            background-image: linear-gradient(135deg, #28a745 0%, #218838 100%); /* Green for Proceed */
+        }
+        #generic_confirm_modal button[onclick*="genericConfirmProceed"]:hover {
+            background-image: linear-gradient(135deg, #218838 0%, #1e7030 100%);
+        }
+
+        #generic_confirm_modal button[onclick*="genericConfirmCancel"] {
+            background-image: linear-gradient(135deg, #dc3545 0%, #c82333 100%); /* Red for Cancel */
+        }
+        #generic_confirm_modal button[onclick*="genericConfirmCancel"]:hover {
+            background-image: linear-gradient(135deg, #c82333 0%, #bb2d3b 100%);
+        }
+
+        #generic_confirm_modal .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 15px; /* Spacing between buttons */
+            margin-top: 20px;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -294,7 +401,7 @@
 
         <div class="form-field">
             <label for="transportadora_select">Seleccionar Transportadora:</label>
-            <select id="transportadora_select" onchange="loadDashboardData()">
+            <select id="transportadora_select" onchange="handleTransportadoraChange()">
                 <option value="">Cargando transportadoras...</option>
             </select>
         </div>
@@ -324,9 +431,33 @@
         </div>
     </div>
 
+    <!-- Generic Alert Modal -->
+    <div id="generic_alert_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('generic_alert_modal')">&times;</span>
+            <h2 id="generic_alert_title">Alerta</h2>
+            <p id="generic_alert_message"></p>
+            <button type="button" onclick="cerrarModal('generic_alert_modal')">Aceptar</button>
+        </div>
+    </div>
+
+    <!-- Generic Confirm Modal (from previous version, ensuring it's present) -->
+    <div id="generic_confirm_modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="genericConfirmCancel()"></span>
+            <h2 id="generic_confirm_title">Confirmar Acción</h2>
+            <p id="generic_confirm_message"></p>
+            <div class="button-group">
+                <button type="button" onclick="genericConfirmProceed()">Sí</button>
+                <button type="button" onclick="genericConfirmCancel()">No</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const LOGIN_PASSWORD = "2025"; // Contraseña para acceder al dashboard
         const SESSION_DURATION_MS = 3 * 60 * 1000; // 3 minutos en milisegundos
+        const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutos en milisegundos para bloqueo por cambio de transportadora
 
         // Firebase Configuration (Same as generar_pedidos.html)
         const firebaseConfig = {
@@ -361,14 +492,55 @@
         const loadingSpinner = document.getElementById('loading_spinner');
         const noDataMessage = document.getElementById('no_data_message');
 
-        // --- Functions ---
+        // --- Generic Alert Modal Functions ---
+        function showAlert(message, title = "Alerta") {
+            document.getElementById('generic_alert_title').textContent = title;
+            document.getElementById('generic_alert_message').textContent = message;
+            document.getElementById('generic_alert_modal').style.display = 'flex';
+        }
+
+        function cerrarModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        // --- Generic Confirm Modal Functions ---
+        let confirmCallback = null;
+        let cancelCallback = null;
+        let originalTransportadoraSelection = ''; // To store the transportadora before a potential change
+
+        function showConfirm(message, onConfirm, onCancel, title = "Confirmar Acción") {
+            document.getElementById('generic_confirm_title').textContent = title;
+            document.getElementById('generic_confirm_message').textContent = message;
+            confirmCallback = onConfirm;
+            cancelCallback = onCancel;
+            document.getElementById('generic_confirm_modal').style.display = 'flex';
+        }
+
+        function genericConfirmProceed() {
+            if (confirmCallback) {
+                confirmCallback();
+            }
+            cerrarModal('generic_confirm_modal');
+        }
+
+        function genericConfirmCancel() {
+            if (cancelCallback) {
+                cancelCallback();
+            }
+            cerrarModal('generic_confirm_modal');
+            // Revert the dropdown selection if the user cancels
+            transportadoraSelect.value = originalTransportadoraSelection;
+        }
 
         /**
          * Logs the user out, clears session data, and shows the login screen.
+         * Does NOT clear lockoutEndTime if active.
          * @param {string} message - Message to display on the login screen.
          */
         function logoutUser(message) {
             localStorage.removeItem('lastLoginTime'); // Clear session timestamp
+            localStorage.removeItem('currentSelectedTransportadora'); // Clear the locked transportadora selection
+
             if (sessionCheckInterval) {
                 clearInterval(sessionCheckInterval); // Stop session check
                 sessionCheckInterval = null;
@@ -387,9 +559,23 @@
 
         /**
          * Checks the entered password and grants access to the dashboard if correct.
-         * Also checks for global block status from Firestore.
+         * Also checks for global block status from Firestore and internal lockout.
          */
         async function checkPassword() {
+            const dashboardLockoutEndTime = localStorage.getItem('dashboardLockoutEndTime');
+            const currentTime = Date.now();
+
+            if (dashboardLockoutEndTime && currentTime < parseInt(dashboardLockoutEndTime)) {
+                // User is actively locked out, show generic message without time
+                loginError.textContent = `Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`;
+                passwordInput.value = '';
+                return; // Prevent login if actively locked out
+            } else if (dashboardLockoutEndTime && currentTime >= parseInt(dashboardLockoutEndTime)) {
+                // Lockout expired, clear it
+                localStorage.removeItem('dashboardLockoutEndTime');
+                console.log("Dashboard lockout expired and cleared.");
+            }
+
             if (passwordInput.value === LOGIN_PASSWORD) {
                 try {
                     // Check global block status directly from Firestore for the most up-to-date info
@@ -416,6 +602,7 @@
 
                 // If not blocked and password is correct, proceed to dashboard
                 localStorage.setItem('lastLoginTime', Date.now()); // Store login time
+                
                 loginScreen.style.display = 'none';
                 dashboardContent.style.display = 'block';
                 loadTransportadorasAndDashboard();
@@ -439,14 +626,27 @@
         function checkSessionAndBlockStatus() {
             const lastLoginTime = localStorage.getItem('lastLoginTime');
             const currentTime = Date.now();
+            const dashboardLockoutEndTime = localStorage.getItem('dashboardLockoutEndTime');
 
-            // Check session expiration
-            if (!lastLoginTime || (currentTime - parseInt(lastLoginTime) > SESSION_DURATION_MS)) {
-                logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.');
-                return; // Stop further checks if session expired
+            // --- Check for internal dashboard lockout first ---
+            if (dashboardLockoutEndTime && currentTime < parseInt(dashboardLockoutEndTime)) {
+                logoutUser(`Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`);
+                return; // Critical: If locked, stop here.
+            } else if (dashboardLockoutEndTime && currentTime >= parseInt(dashboardLockoutEndTime)) {
+                // Lockout expired, clear it
+                localStorage.removeItem('dashboardLockoutEndTime');
+                console.log("Dashboard lockout expired and cleared.");
             }
 
-            // Check real-time global block status
+            // --- Check session expiration ---
+            if (!lastLoginTime || (currentTime - parseInt(lastLoginTime) > SESSION_DURATION_MS)) {
+                logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.');
+                return;
+            }
+
+            // --- Check real-time global block status from main app ---
+            // This is handled by the globalSettingsRef.onSnapshot listener
+            // which updates `isGlobalManualBlock` and `isAutoBlockedPermanently`.
             if (isGlobalManualBlock || isAutoBlockedPermanently) {
                 logoutUser('El sistema de pedidos ha sido bloqueado. No se puede acceder al dashboard.');
             }
@@ -468,7 +668,17 @@
                     option.textContent = data.name;
                     transportadoraSelect.appendChild(option);
                 });
-                loadDashboardData(); // Load data after transportadoras are loaded
+
+                // Set initial transportadora from localStorage if exists
+                const storedTransportadora = localStorage.getItem('currentSelectedTransportadora');
+                if (storedTransportadora && Array.from(transportadoraSelect.options).some(option => option.value === storedTransportadora)) {
+                    transportadoraSelect.value = storedTransportadora;
+                }
+                // Store the current selection as the "original" to compare against
+                originalTransportadoraSelection = transportadoraSelect.value;
+
+                // Call loadDashboardDataInternal explicitly, not via onchange yet
+                loadDashboardDataInternal(); 
             } catch (error) {
                 console.error("Error cargando transportadoras:", error);
                 transportadoraSelect.innerHTML = '<option value="">Error cargando transportadoras</option>';
@@ -477,10 +687,68 @@
         }
 
         /**
-         * Loads and displays dashboard data based on the selected transportadora.
-         * Sets up a real-time listener for 'registros' collection.
+         * Handles the change event for the transportadora select dropdown.
+         * Implements the warning and lockout logic.
          */
-        async function loadDashboardData() {
+        function handleTransportadoraChange() {
+            const newSelectedTransportadora = transportadoraSelect.value;
+            const currentSelectedTransportadora = localStorage.getItem('currentSelectedTransportadora');
+            const currentTime = Date.now();
+
+            // Scenario 1: No transportadora was selected yet, and user selected one
+            if (!currentSelectedTransportadora && newSelectedTransportadora) {
+                localStorage.setItem('currentSelectedTransportadora', newSelectedTransportadora);
+                originalTransportadoraSelection = newSelectedTransportadora; // Lock it in as the original
+                loadDashboardDataInternal();
+                return; // Exit after first valid selection
+            }
+            
+            // Scenario 2: User is trying to deselect (go back to empty option) or switch after a selection was locked
+            // This is the "violation" check.
+            if (newSelectedTransportadora === '' && currentSelectedTransportadora !== '') {
+                // User deselected after a transportadora was already locked
+                showConfirm(
+                    '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar deseleccionar la transportadora es una violación de las políticas de uso de la aplicación y resultará en un bloqueo inmediato y el reporte al administrador. ¿Desea continuar con esta acción?',
+                    () => { // User confirmed (Sí)
+                        localStorage.setItem('dashboardLockoutEndTime', currentTime + LOCKOUT_DURATION_MS);
+                        logoutUser('Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.');
+                    },
+                    () => { // User cancelled (No) - genericConfirmCancel already handles reverting dropdown
+                        // No specific action needed here as genericConfirmCancel handles UI revert.
+                    },
+                    'Violación de Derechos'
+                );
+                return; // Exit after showing confirmation
+            } else if (currentSelectedTransportadora && newSelectedTransportadora !== currentSelectedTransportadora) {
+                 // User tried to switch to a different transportadora
+                showConfirm(
+                    '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar cambiar a otra transportadora es una violación de las políticas de uso de la aplicación y resultará en un bloqueo inmediato y el reporte al administrador. ¿Desea continuar con esta acción?',
+                    () => { // User confirmed (Sí)
+                        localStorage.setItem('dashboardLockoutEndTime', currentTime + LOCKOUT_DURATION_MS);
+                        logoutUser('Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.');
+                    },
+                    () => { // User cancelled (No) - genericConfirmCancel already handles reverting dropdown
+                        // No specific action needed here as genericConfirmCancel handles UI revert.
+                    },
+                    'Violación de Derechos'
+                );
+                return; // Exit after showing confirmation
+            }
+
+            // Scenario 3: User re-selected the SAME transportadora (not a violation)
+            if (newSelectedTransportadora === currentSelectedTransportadora) {
+                loadDashboardDataInternal();
+            }
+            // If we reach here and no special action was taken (e.g. initial load or no change needed to current locked value)
+            // loadDashboardDataInternal() will be called through the initial setup or re-selection.
+        }
+
+
+        /**
+         * Internal function to load dashboard data without additional lockout checks,
+         * called after transportadora selection is confirmed or on initial load.
+         */
+        async function loadDashboardDataInternal() {
             showLoadingSpinner();
             noDataMessage.style.display = 'none';
 
@@ -490,7 +758,7 @@
             }
 
             const selectedTransportadora = transportadoraSelect.value;
-            console.log("Selected Transportadora:", selectedTransportadora);
+            console.log("Selected Transportadora for data load:", selectedTransportadora);
 
             if (!selectedTransportadora) {
                 despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">Seleccione una transportadora para ver el resumen de despachos.</p>';
@@ -674,8 +942,14 @@
             // On initial load, check if a session exists (e.g., if page was refreshed within 3 min)
             // and if not blocked, show dashboard. Otherwise, show login.
             const lastLoginTime = localStorage.getItem('lastLoginTime');
-            if (lastLoginTime && (Date.now() - parseInt(lastLoginTime)) < SESSION_DURATION_MS) {
-                // Attempt to load dashboard if session is still valid, then real-time check will take over
+            const dashboardLockoutEndTime = localStorage.getItem('dashboardLockoutEndTime');
+            const currentTime = Date.now();
+
+            if (dashboardLockoutEndTime && currentTime < parseInt(dashboardLockoutEndTime)) {
+                // If there's an active lockout from trying to switch transportadoras
+                logoutUser(`Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`);
+            } else if (lastLoginTime && (currentTime - parseInt(lastLoginTime)) < SESSION_DURATION_MS) {
+                // If session is still valid and not explicitly locked out by transportadora switch
                 dashboardContent.style.display = 'block';
                 loginScreen.style.display = 'none';
                 loadTransportadorasAndDashboard();
@@ -683,6 +957,7 @@
                     sessionCheckInterval = setInterval(checkSessionAndBlockStatus, 10 * 1000);
                 }
             } else {
+                // Session expired or no session, show login
                 logoutUser('Por favor, ingrese su contraseña.');
             }
         });
