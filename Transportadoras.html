@@ -201,6 +201,7 @@
 
         .summary-item {
             display: flex;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
             justify-content: space-between;
             align-items: center;
             padding: 8px 0;
@@ -223,6 +224,14 @@
         .summary-item span.red-value {
             color: #dc3545;
         }
+        .summary-item div {
+            margin-right: 15px; /* Spacing between "Despachos" and "Paquetes" */
+            min-width: 100px; /* Ensure columns don't get too narrow */
+        }
+        .summary-item div:last-child {
+            margin-right: 0;
+        }
+
 
         .global-summary {
             text-align: center;
@@ -526,11 +535,6 @@
             </select>
         </div>
 
-        <!-- This message is now removed as filtering by user is no longer active for non-admins -->
-        <!-- <p id="user_specific_data_message" style="text-align: center; color: #555; font-style: italic; margin-bottom: 15px; display: none;">
-            Nota: Los datos mostrados corresponden a los despachos generados por tu usuario.
-        </p> -->
-
         <div class="loading-spinner" id="loading_spinner"></div>
         <div id="no_data_message" class="no-data-message" style="display:none;">
             <p>No hay datos disponibles para la transportadora seleccionada o con los filtros actuales.</p>
@@ -547,7 +551,6 @@
             <div class="dashboard-section">
                 <h3>Pedidos Pendientes por Despachar</h3>
                 <div id="pedidos_pendientes_global">
-                    <p class="global-summary">Total Paquetes Pendientes: <span id="total_paquetes_pendientes" class="red-value">0</span></p>
                     <div id="pedidos_pendientes_asesor">
                         <p class="no-data-message">Seleccione una transportadora para ver los pedidos pendientes.</p>
                     </div>
@@ -628,15 +631,12 @@
         const loginError = document.getElementById('login-error');
         const transportadoraSelect = document.getElementById('transportadora_select');
         const despachosDespachadosAsesorDiv = document.getElementById('despachos_despachados_asesor');
-        const totalPaquetesPendientesSpan = document.getElementById('total_paquetes_pendientes');
         const pedidosPendientesAsesorDiv = document.getElementById('pedidos_pendientes_asesor');
         const loadingSpinner = document.getElementById('loading_spinner');
         const noDataMessage = document.getElementById('no_data_message');
         const adminGearIcon = document.getElementById('admin_gear_icon');
         const activeUsersListDiv = document.getElementById('active_users_list');
         const userManagementErrorP = document.getElementById('user_management_error');
-        // REMOVED: Element for user-specific data message
-        // const userSpecificDataMessage = document.getElementById('user_specific_data_message');
 
 
         // --- Funciones de Modal de Alerta Genérico ---
@@ -710,28 +710,44 @@
 
         /**
          * Cierra la sesión del usuario, borra los datos de la sesión y muestra la pantalla de inicio de sesión.
-         * También elimina la sesión activa de Firestore.
+         * También gestiona el bloqueo persistente de la sesión en Firestore si es una violación.
+         * @param {string} message - El mensaje a mostrar al usuario.
+         * @param {boolean} isViolation - True si el logout es por una violación de política, false de lo contrario.
          */
-        async function logoutUser(message) {
-            console.log("Intentando cerrar sesión del usuario..."); // Debug log
+        async function logoutUser(message, isViolation = false) {
+            console.log(`Intentando cerrar sesión del usuario. ¿Es violación? ${isViolation}`); // Debug log
             const currentUserId = localStorage.getItem('user_id');
 
             if (currentUserId) {
                 try {
                     const sessionRef = activeSessionsCollection.doc(currentUserId);
-                    await sessionRef.delete();
-                    console.log(`Sesión activa para el usuario ${currentUserId} eliminada de Firestore.`); // Debug log
+                    if (isViolation) {
+                        // En caso de violación, actualizamos el documento para bloquear al usuario
+                        // y limpiar la transportadora seleccionada, pero no eliminamos el documento.
+                        await sessionRef.update({
+                            isBlocked: true,
+                            selectedTransportadora: '', // Limpiar la transportadora seleccionada
+                            lastActivity: firebase.firestore.FieldValue.serverTimestamp() // Actualizar la actividad
+                        });
+                        console.log(`Sesión de usuario ${currentUserId} marcada como BLOQUEADA en Firestore por violación.`); // Debug log
+                    } else {
+                        // Para logout normal o expulsión por admin, eliminamos el documento de sesión.
+                        await sessionRef.delete();
+                        console.log(`Sesión activa para el usuario ${currentUserId} eliminada de Firestore.`); // Debug log
+                    }
                 } catch (error) {
-                    console.error("Error al eliminar la sesión activa de Firestore:", error); // Debug log
+                    console.error("Error al manejar la sesión activa de Firestore durante el cierre de sesión:", error); // Debug log
                 }
             }
 
+            // Limpiar datos de localStorage independientemente del tipo de logout
             localStorage.removeItem('lastLoginTime');
             localStorage.removeItem('currentSelectedTransportadora');
             localStorage.removeItem('user_id');
             localStorage.removeItem('datosUsuario');
-            localStorage.removeItem('currentSessionIP'); // Eliminar también la IP guardada
+            localStorage.removeItem('currentSessionIP');
 
+            // Limpiar intervalos y listeners de Firebase
             if (sessionCheckInterval) {
                 clearInterval(sessionCheckInterval);
                 sessionCheckInterval = null;
@@ -741,17 +757,19 @@
                 dashboardListenerUnsubscribe = null;
             }
 
+            // Actualizar UI
             dashboardContent.style.display = 'none';
             loginScreen.style.display = 'flex';
             loginError.textContent = message;
-            passwordInput.value = '';
+            passwordInput.value = ''; // Limpiar campo de contraseña
             console.log("Usuario cerró sesión:", message); // Debug log
-            adminGearIcon.style.display = 'none'; // Ensure gear icon is hidden on logout
+            adminGearIcon.style.display = 'none'; // Asegurar que el icono de tuerca se oculte al cerrar sesión
         }
 
         /**
          * Verifica la contraseña ingresada y concede acceso al dashboard.
          * Asigna el rol (operador o administrador) y registra la sesión activa en Firestore con IP.
+         * Implementa la lógica de bloqueo persistente por violación de políticas.
          */
         async function checkPassword() {
             console.log("checkPassword() function called."); // Debug log: Function entry point
@@ -762,11 +780,11 @@
             if (dashboardLockoutEndTime && currentTime < parseInt(dashboardLockoutEndTime)) {
                 loginError.textContent = `Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`;
                 passwordInput.value = '';
-                console.log("checkPassword: Acceso bloqueado por lockout."); // Debug log
+                console.log("checkPassword: Acceso bloqueado por lockout en localStorage."); // Debug log
                 return;
             } else if (dashboardLockoutEndTime && currentTime >= parseInt(dashboardLockoutEndTime)) {
                 localStorage.removeItem('dashboardLockoutEndTime');
-                console.log("checkPassword: Bloqueo del dashboard expirado y borrado."); // Debug log
+                console.log("checkPassword: Bloqueo del dashboard expirado y borrado de localStorage."); // Debug log
             }
 
             let currentIp = await getSimulatedPublicIP();
@@ -775,7 +793,7 @@
             let userName;
             let simulatedUserId;
 
-            console.log(`checkPassword: Contraseña ingresada: ${enteredPassword}`); // Debug log: Display entered password (be careful with sensitive info in production)
+            console.log(`checkPassword: Contraseña ingresada: [***ENCRIPTADA***]`); // Debug log (avoid logging sensitive info)
 
             // Lógica para asignar roles y IDs de usuario basados en las contraseñas
             if (enteredPassword === ADMIN_PASSWORD) {
@@ -809,34 +827,38 @@
                 console.log(`checkPassword: Intentando obtener documento de sesión para userId: ${simulatedUserId}`); // Debug log
                 const sessionRef = activeSessionsCollection.doc(simulatedUserId);
                 const userSessionDoc = await sessionRef.get();
+                let firestoreSelectedTransportadora = ''; // Almacenará la transportadora si ya está en Firestore
+                let firestoreIsBlocked = false; // Almacenará el estado de bloqueo desde Firestore
 
                 if (userSessionDoc.exists) {
                     const sessionData = userSessionDoc.data();
-                    if (sessionData.isBlocked) {
+                    firestoreIsBlocked = sessionData.isBlocked || false;
+                    firestoreSelectedTransportadora = sessionData.selectedTransportadora || '';
+
+                    // PRIORIDAD 1: Verificar si el usuario está bloqueado de forma persistente en Firestore
+                    if (firestoreIsBlocked) {
                         logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte.');
-                        console.log("checkPassword: Usuario bloqueado por administrador en Firestore."); // Debug log
-                        return;
+                        console.log("checkPassword: Usuario bloqueado por administrador en Firestore (isBlocked es true)."); // Debug log
+                        return; // Bloqueo definitivo
                     }
 
-                    // CRITICAL CHANGE: If an active session exists AND it has a selected transportadora,
-                    // prevent new login. This means a user cannot log in from a new browser/tab
-                    // if they are already actively using a transportadora in another session.
-                    if (sessionData.selectedTransportadora && sessionData.selectedTransportadora !== '') {
-                        logoutUser(`Ya tienes una sesión activa asociada a la transportadora "${sessionData.selectedTransportadora}". Cierra esa sesión para poder acceder con una transportadora diferente.`);
-                        console.log(`checkPassword: Intento de inicio de sesión bloqueado: Usuario ${simulatedUserId} ya tiene una sesión activa con transportadora: ${sessionData.selectedTransportadora}`); // Debug log
-                        return;
+                    // PRIORIDAD 2: Para usuarios no administradores, si ya tienen una transportadora seleccionada en Firestore
+                    // esto significa que ya hay una sesión activa vinculada a una transportadora.
+                    // Si intenta iniciar sesión de nuevo, es una violación de política (multisesión).
+                    if (userRole.toLowerCase() !== 'administrador' && firestoreSelectedTransportadora !== '') {
+                        logoutUser(`Ya tienes una sesión activa asociada a la transportadora "${firestoreSelectedTransportadora}". Cierra esa sesión para poder acceder con una transportadora diferente.`, true); // Trigger violation logout (sets isBlocked: true)
+                        console.log(`checkPassword: Intento de inicio de sesión bloqueado: Usuario ${simulatedUserId} ya tiene una sesión activa con transportadora: ${firestoreSelectedTransportadora}. Marcando como bloqueado.`); // Debug log
+                        return; // Bloqueo definitivo
                     }
                 }
 
-                console.log("checkPassword: Intentando obtener configuración global de bloqueo."); // Debug log
-                const doc = await globalSettingsRef.get();
-                console.log(`checkPassword: Documento de configuración global existe: ${doc.exists}`); // Debug log
-
-                if (doc.exists) {
-                    const settings = doc.data();
+                // Verificar bloqueo global del sistema
+                const globalDoc = await globalSettingsRef.get();
+                if (globalDoc.exists) {
+                    const settings = globalDoc.data();
                     isGlobalManualBlock = settings.isBlocked || false;
                     isAutoBlockedPermanently = settings.isAutoBlockedPermanently || false;
-                    console.log(`checkPassword: Bloqueo global manual: ${isGlobalManualBlock}, Bloqueo automático permanente: ${isAutoBlockedPermanently}`); // Debug log
+                    console.log("checkPassword: Estado de bloqueo global actualizado desde Firestore:", isGlobalManualBlock, isAutoBlockedPermanently); // Debug log
 
                     if (isGlobalManualBlock || isAutoBlockedPermanently) {
                         logoutUser('El sistema de pedidos está actualmente bloqueado y no se puede acceder al dashboard.');
@@ -849,19 +871,19 @@
                     console.log("checkPassword: Documento de configuración global no encontrado, asumiendo desbloqueado."); // Debug log
                 }
 
-                // If we reach here, either no session exists, or the existing session
-                // has no selected transportadora (meaning it's a fresh login or a session where
-                // transportadora hasn't been chosen yet).
-                // Update/create the session, ensuring selectedTransportadora is initially empty.
+                // Si llegamos aquí, el usuario no está bloqueado y no hay violación de sesión activa con transportadora.
+                // Actualizar/crear el documento de sesión.
+                // `selectedTransportadora` se mantendrá si ya tenía un valor (para admin o si era una sesión pre-selección para no-admin).
+                // `isBlocked` debe ser false en este punto (ya que pasaron la verificación de bloqueo).
                 await sessionRef.set({
                     userId: simulatedUserId,
                     username: userName,
                     lastActivity: firebase.firestore.FieldValue.serverTimestamp(),
                     ipAddress: currentIp,
-                    selectedTransportadora: '', // Remains empty until chosen via handleTransportadoraChange
-                    isBlocked: false
+                    selectedTransportadora: firestoreSelectedTransportadora, // Preservar si ya está establecido, de lo contrario será ''
+                    isBlocked: false // Asegurarse de que no esté bloqueado si llegó aquí
                 }, { merge: true });
-                console.log("checkPassword: Sesión activa registrada/actualizada en Firestore (selectedTransportadora inicializada a vacío)."); // Debug log
+                console.log("checkPassword: Sesión activa registrada/actualizada en Firestore (selectedTransportadora y isBlocked preservados)."); // Debug log
 
                 localStorage.setItem('lastLoginTime', currentTime);
                 console.log("checkPassword: lastLoginTime guardado en localStorage."); // Debug log
@@ -888,7 +910,7 @@
 
             } catch (error) {
                 console.error("Error durante el inicio de sesión o la creación de la sesión:", error); // Debug log: Catch all errors in login flow
-                logoutUser('Error al acceder. Inténtelo de nuevo.');
+                logoutUser('Error al acceder. Inténtelo de nuevo.'); // Logout sin isViolation si es un error inesperado
                 return;
             }
         }
@@ -901,7 +923,6 @@
             const currentTime = Date.now();
             const dashboardLockoutEndTime = localStorage.getItem('dashboardLockoutEndTime');
             const currentUserId = localStorage.getItem('user_id');
-            const currentSessionIP_LS = localStorage.getItem('currentSessionIP'); // IP desde localStorage
             const currentSelectedTransportadora_LS = localStorage.getItem('currentSelectedTransportadora'); // Transportadora desde localStorage
             
             const userDatos = JSON.parse(localStorage.getItem('datosUsuario'));
@@ -910,20 +931,20 @@
             console.log("checkSessionAndBlockStatus: Ejecutando verificación de sesión."); // Debug log
             console.log("checkSessionAndBlockStatus: Rol de usuario actual (desde localStorage):", userRole); // Debug log
 
-            // 1. Verificar el bloqueo interno del dashboard
+            // 1. Verificar el bloqueo interno del dashboard (desde localStorage)
             if (dashboardLockoutEndTime && currentTime < parseInt(dashboardLockoutEndTime)) {
-                logoutUser(`Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`);
-                console.log("checkSessionAndBlockStatus: Bloqueo de dashboard activo."); // Debug log
+                logoutUser(`Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`, true); // Considerar esto una violación persistente
+                console.log("checkSessionAndBlockStatus: Bloqueo de dashboard activo (localStorage)."); // Debug log
                 return;
             } else if (dashboardLockoutEndTime && currentTime >= parseInt(dashboardLockoutEndTime)) {
                 localStorage.removeItem('dashboardLockoutEndTime');
-                console.log("checkSessionAndBlockStatus: Bloqueo del dashboard expirado y borrado."); // Debug log
+                console.log("checkSessionAndBlockStatus: Bloqueo del dashboard expirado y borrado de localStorage."); // Debug log
             }
 
-            // 2. Verificar la expiración de la sesión
+            // 2. Verificar la expiración de la sesión (desde localStorage)
             if (!lastLoginTime || (currentTime - parseInt(lastLoginTime) > SESSION_DURATION_MS)) {
-                logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.');
-                console.log("checkSessionAndBlockStatus: Sesión expirada."); // Debug log
+                logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.'); // Logout normal
+                console.log("checkSessionAndBlockStatus: Sesión expirada (localStorage)."); // Debug log
                 return;
             }
 
@@ -935,7 +956,7 @@
                     const sessionDoc = await sessionRef.get();
 
                     if (!sessionDoc.exists) {
-                        logoutUser('Su sesión ha sido terminada por un administrador.');
+                        logoutUser('Su sesión ha sido terminada por un administrador.'); // Admin kick - normal logout
                         console.log("checkSessionAndBlockStatus: Sesión no existe en Firestore, terminada por admin."); // Debug log
                         return;
                     }
@@ -944,27 +965,35 @@
                     console.log("checkSessionAndBlockStatus: Datos de sesión de Firestore:", sessionData); // Debug log
                     const fetchedIp = await getSimulatedPublicIP(); // Obtener la IP actual para comparación
 
+                    // Verificar si el usuario está bloqueado en Firestore (bloqueo persistente)
                     if (sessionData.isBlocked) {
-                        logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte.');
-                        console.log("checkSessionAndBlockStatus: Usuario bloqueado por administrador en Firestore."); // Debug log
+                        logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte.'); // Already blocked - normal logout from current context
+                        console.log("checkSessionAndBlockStatus: Usuario bloqueado por administrador en Firestore (isBlocked es true)."); // Debug log
                         return;
                     }
 
                     // 3. Verificar consistencia de IP
                     if (sessionData.ipAddress && fetchedIp !== '0.0.0.0 (Simulado)' && sessionData.ipAddress !== fetchedIp) {
-                        logoutUser('Se ha detectado un cambio de IP o acceso desde otra ubicación. Sesión terminada.');
-                        console.log(`checkSessionAndBlockStatus: Cambio de IP detectado. IP de sesión: ${sessionData.ipAddress}, IP actual: ${fetchedIp}`); // Debug log
+                        logoutUser('Se ha detectado un cambio de IP o acceso desde otra ubicación. Sesión terminada.', true); // IP change is a violation persistente
+                        console.log(`checkSessionAndBlockStatus: Cambio de IP detectado. IP de sesión: ${sessionData.ipAddress}, IP actual: ${fetchedIp}. Marcando como bloqueado.`); // Debug log
                         return;
                     }
 
-                    // 4. Verificar consistencia de Transportadora (si ya se seleccionó una)
-                    if (currentSelectedTransportadora_LS && sessionData.selectedTransportadora && 
+                    // 4. Verificar consistencia de Transportadora (si ya se seleccionó una en Firestore y es diferente en localStorage)
+                    // Esto cubre casos donde se manipula localStorage o se intenta multisesión.
+                    if (sessionData.selectedTransportadora && currentSelectedTransportadora_LS && 
                         currentSelectedTransportadora_LS !== sessionData.selectedTransportadora) {
-                        localStorage.setItem('dashboardLockoutEndTime', currentTime + LOCKOUT_DURATION_MS); // Bloquear por violación
-                        logoutUser('Violación de políticas: Intento de acceso a múltiples transportadoras simultáneamente. Su acceso ha sido bloqueado.');
-                        console.log(`checkSessionAndBlockStatus: Intento de acceso a múltiples transportadoras detectado. Transportadora de sesión: ${sessionData.selectedTransportadora}, Transportadora en LS: ${currentSelectedTransportadora_LS}`); // Debug log
+                        localStorage.setItem('dashboardLockoutEndTime', currentTime + LOCKOUT_DURATION_MS); // Bloquear temporalmente en localStorage
+                        logoutUser('Violación de políticas: Intento de acceso a múltiples transportadoras simultáneamente. Su acceso ha sido bloqueado.', true); // Violation logout persistente
+                        console.log(`checkSessionAndBlockStatus: Intento de acceso a múltiples transportadoras detectado. Transportadora de sesión (Firestore): ${sessionData.selectedTransportadora}, Transportadora en LS: ${currentSelectedTransportadora_LS}. Marcando como bloqueado.`); // Debug log
                         return;
+                    } else if (sessionData.selectedTransportadora && !currentSelectedTransportadora_LS) {
+                        // Si Firestore tiene una transportadora seleccionada pero localStorage no, actualizar localStorage
+                        localStorage.setItem('currentSelectedTransportadora', sessionData.selectedTransportadora);
+                        originalTransportadoraSelection = sessionData.selectedTransportadora;
+                        console.log("checkSessionAndBlockStatus: Sincronizando localStorage con transportadora de Firestore."); // Debug log
                     }
+
 
                     console.log("checkSessionAndBlockStatus: Actualizando lastActivity en Firestore."); // Debug log
                     await sessionRef.update({
@@ -973,14 +1002,14 @@
                     });
                 } catch (error) {
                     console.error("Error al verificar el estado de la sesión activa:", error); // Debug log
-                    logoutUser('Error de verificación de sesión. Por favor, ingrese de nuevo.');
+                    logoutUser('Error de verificación de sesión. Por favor, ingrese de nuevo.'); // Logout normal por error
                     return;
                 }
             }
 
             // 5. Verificar el estado de bloqueo global en tiempo real
             if (isGlobalManualBlock || isAutoBlockedPermanently) {
-                logoutUser('El sistema de pedidos ha sido bloqueado. No se puede acceder al dashboard.');
+                logoutUser('El sistema de pedidos ha sido bloqueado. No se puede acceder al dashboard.'); // Global block - normal logout
                 console.log("checkSessionAndBlockStatus: Bloqueo global activo."); // Debug log
                 return;
             }
@@ -1013,14 +1042,29 @@
                     transportadoraSelect.appendChild(option);
                 });
 
-                const storedTransportadora = localStorage.getItem('currentSelectedTransportadora');
-                if (storedTransportadora && Array.from(transportadoraSelect.options).some(option => option.value === storedTransportadora)) {
-                    transportadoraSelect.value = storedTransportadora;
-                    console.log(`loadTransportadorasAndDashboard: Transportadora almacenada en localStorage: ${storedTransportadora}`); // Debug log
-                } else {
-                    console.log("loadTransportadorasAndDashboard: No hay transportadora almacenada en localStorage o no válida."); // Debug log
+                // En la carga del dashboard, leer el valor de la transportadora desde Firestore para asegurar consistencia
+                const currentUserId = localStorage.getItem('user_id');
+                let firestoreTransportadora = '';
+                if (currentUserId) {
+                    const sessionDoc = await activeSessionsCollection.doc(currentUserId).get();
+                    if (sessionDoc.exists) {
+                        firestoreTransportadora = sessionDoc.data().selectedTransportadora || '';
+                    }
                 }
-                originalTransportadoraSelection = transportadoraSelect.value;
+
+                if (firestoreTransportadora && Array.from(transportadoraSelect.options).some(option => option.value === firestoreTransportadora)) {
+                    transportadoraSelect.value = firestoreTransportadora;
+                    localStorage.setItem('currentSelectedTransportadora', firestoreTransportadora); // Sincronizar localStorage
+                    console.log(`loadTransportadorasAndDashboard: Transportadora cargada desde Firestore: ${firestoreTransportadora}`); // Debug log
+                } else if (localStorage.getItem('currentSelectedTransportadora') && Array.from(transportadoraSelect.options).some(option => option.value === localStorage.getItem('currentSelectedTransportadora'))) {
+                    // Fallback a localStorage si Firestore no tiene un valor o si el usuario es nuevo
+                    // Esto también asegura que el admin pueda mantener su selección después de una recarga.
+                    transportadoraSelect.value = localStorage.getItem('currentSelectedTransportadora');
+                    console.log(`loadTransportadorasAndDashboard: Transportadora cargada desde localStorage: ${localStorage.getItem('currentSelectedTransportadora')}`); // Debug log
+                } else {
+                    console.log("loadTransportadorasAndDashboard: No hay transportadora almacenada o válida para cargar."); // Debug log
+                }
+                originalTransportadoraSelection = transportadoraSelect.value; // Establecer el valor original al cargar
 
                 loadDashboardDataInternal(); 
             } catch (error) {
@@ -1037,68 +1081,103 @@
         function handleTransportadoraChange() {
             console.log("handleTransportadoraChange() called."); // Debug log
             const newSelectedTransportadora = transportadoraSelect.value;
-            const currentSelectedTransportadora = localStorage.getItem('currentSelectedTransportadora');
             const currentTime = Date.now();
             const currentUserId = localStorage.getItem('user_id');
             const userDatos = JSON.parse(localStorage.getItem('datosUsuario'));
             const userRole = userDatos?.permisos;
 
-            console.log(`handleTransportadoraChange: Nueva transportadora: ${newSelectedTransportadora}, Actual almacenada: ${currentSelectedTransportadora}`); // Debug log
+            console.log(`handleTransportadoraChange: Nueva transportadora seleccionada: ${newSelectedTransportadora}`); // Debug log
 
-            // The admin can always change the selected transporter without triggering a policy violation.
-            // Other users (operators) can only select a transportadora once.
+            // Admin can always change the selected transporter without triggering a policy violation.
             if (userRole.toLowerCase() === 'administrador') {
                 localStorage.setItem('currentSelectedTransportadora', newSelectedTransportadora);
-                originalTransportadoraSelection = newSelectedTransportadora; // Lock it in as the original
-                // Also update in Firestore's active session
+                originalTransportadoraSelection = newSelectedTransportadora;
+                // Update Firestore session with the new transportadora for admin
                 if (currentUserId) {
                     activeSessionsCollection.doc(currentUserId).update({ selectedTransportadora: newSelectedTransportadora })
-                        .then(() => console.log("handleTransportadoraChange: Transportadora seleccionada actualizada en Firestore (admin cambió).")) // Debug log
-                        .catch(e => console.error("handleTransportadoraChange: Error actualizando transportadora en Firestore (admin cambio):", e)); // Debug log
+                        .then(() => console.log("handleTransportadoraChange: Transportadora seleccionada actualizada en Firestore (admin cambió)."))
+                        .catch(e => console.error("handleTransportadoraChange: Error actualizando transportadora en Firestore (admin cambio):", e));
                 }
                 loadDashboardDataInternal();
                 return;
             }
             
             // For non-admin users:
-            // Scenario 1: No transportadora was selected yet, and user selected one
-            if (!currentSelectedTransportadora && newSelectedTransportadora) {
-                localStorage.setItem('currentSelectedTransportadora', newSelectedTransportadora);
-                originalTransportadoraSelection = newSelectedTransportadora; // Lock it in as the original
-                // Also update in Firestore's active session
-                if (currentUserId) {
-                    activeSessionsCollection.doc(currentUserId).update({ selectedTransportadora: newSelectedTransportadora })
-                        .then(() => console.log("handleTransportadoraChange: Transportadora seleccionada actualizada en Firestore (primera selección).")) // Debug log
-                        .catch(e => console.error("handleTransportadoraChange: Error actualizando transportadora en Firestore (primera selección):", e)); // Debug log
-                }
-                loadDashboardDataInternal();
-                return;
-            }
-            
-            // Scenario 2: User is trying to deselect (go back to empty option) or switch after a selection was locked
-            if ((newSelectedTransportadora === '' && currentSelectedTransportadora !== '') || 
-                (currentSelectedTransportadora && newSelectedTransportadora !== currentSelectedTransportadora)) {
-                console.log("handleTransportadoraChange: Violación detectada o intento de deselección/cambio."); // Debug log
-                showConfirm(
-                    '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar cambiar o deseleccionar la transportadora es una violación de las políticas de uso de la aplicación y resultará en un bloqueo inmediato y el reporte al administrador. ¿Desea continuar con esta acción?',
-                    () => { // User confirmed (Sí)
-                        localStorage.setItem('dashboardLockoutEndTime', currentTime + LOCKOUT_DURATION_MS);
-                        logoutUser('Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.');
-                        console.log("handleTransportadoraChange: Usuario confirmó violación, aplicando bloqueo."); // Debug log
-                    },
-                    () => { // User cancelled (No) - genericConfirmCancel already handles reverting dropdown
-                        console.log("handleTransportadoraChange: Usuario canceló acción de violación."); // Debug log
-                    },
-                    'Violación de Derechos'
-                );
-                return;
-            }
+            // Fetch current selected transportadora directly from Firestore for the most accurate check.
+            activeSessionsCollection.doc(currentUserId).get().then(doc => {
+                const sessionData = doc.data();
+                const firestoreSelectedTransportadora = sessionData.selectedTransportadora || '';
+                console.log(`handleTransportadoraChange: Transportadora en Firestore: ${firestoreSelectedTransportadora}, Transportadora en localStorage: ${localStorage.getItem('currentSelectedTransportadora')}`); // Debug log
 
-            // Scenario 3: User re-selected the SAME transportadora (not a violation)
-            if (newSelectedTransportadora === currentSelectedTransportadora) {
-                console.log("handleTransportadoraChange: Misma transportadora re-seleccionada. Recargando datos."); // Debug log
-                loadDashboardDataInternal();
-            }
+                if (!firestoreSelectedTransportadora && newSelectedTransportadora) {
+                    // First time selecting a transportadora for this non-admin session
+                    localStorage.setItem('currentSelectedTransportadora', newSelectedTransportadora);
+                    originalTransportadoraSelection = newSelectedTransportadora;
+                    // Update Firestore session
+                    activeSessionsCollection.doc(currentUserId).update({ selectedTransportadora: newSelectedTransportadora })
+                        .then(() => console.log("handleTransportadoraChange: Transportadora seleccionada actualizada en Firestore (primera selección)."))
+                        .catch(e => console.error("handleTransportadoraChange: Error actualizando transportadora en Firestore (primera selección):", e));
+                    loadDashboardDataInternal();
+                } else if (firestoreSelectedTransportadora && newSelectedTransportadora !== firestoreSelectedTransportadora) {
+                    // Violation: Trying to change or deselect an already selected transportadora
+                    console.log("handleTransportadoraChange: Violación detectada o intento de deselección/cambio."); // Debug log
+                    showConfirm(
+                        '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar cambiar o deseleccionar la transportadora es una violación de las políticas de uso de la aplicación y resultará en un bloqueo inmediato y el reporte al administrador. ¿Desea continuar con esta acción?',
+                        () => { // User confirmed (Sí)
+                            localStorage.setItem('dashboardLockoutEndTime', currentTime + LOCKOUT_DURATION_MS);
+                            logoutUser('Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.', true); // Pass true for violation
+                            console.log("handleTransportadoraChange: Usuario confirmó violación, aplicando bloqueo persistente."); // Debug log
+                        },
+                        () => { // User cancelled (No)
+                            console.log("handleTransportadoraChange: Usuario canceló acción de violación. Revertiendo selección."); // Debug log
+                            transportadoraSelect.value = firestoreSelectedTransportadora; // Revert to Firestore value
+                            originalTransportadoraSelection = firestoreSelectedTransportadora; // Sync original selection
+                        },
+                        'Violación de Derechos'
+                    );
+                } else if (newSelectedTransportadora === firestoreSelectedTransportadora) {
+                    // User re-selected the SAME transportadora (not a violation)
+                    console.log("handleTransportadoraChange: Misma transportadora re-seleccionada. Recargando datos."); // Debug log
+                    loadDashboardDataInternal();
+                } else if (!newSelectedTransportadora && firestoreSelectedTransportadora) {
+                    // User deselected transportadora after it was set
+                     console.log("handleTransportadoraChange: Intento de deseleccionar transportadora."); // Debug log
+                     showConfirm(
+                        '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar cambiar o deseleccionar la transportadora es una violación de las políticas de uso de la aplicación y resultará en un bloqueo inmediato y el reporte al administrador. ¿Desea continuar con esta acción?',
+                        () => { // User confirmed (Sí)
+                            localStorage.setItem('dashboardLockoutEndTime', currentTime + LOCKOUT_DURATION_MS);
+                            logoutUser('Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.', true); // Pass true for violation
+                            console.log("handleTransportadoraChange: Usuario confirmó deselección, aplicando bloqueo persistente."); // Debug log
+                        },
+                        () => { // User cancelled (No)
+                            console.log("handleTransportadoraChange: Usuario canceló deselección. Revertiendo selección."); // Debug log
+                            transportadoraSelect.value = firestoreSelectedTransportadora; // Revert to Firestore value
+                            originalTransportadoraSelection = firestoreSelectedTransportadora; // Sync original selection
+                        },
+                        'Violación de Derechos'
+                    );
+                }
+            }).catch(error => {
+                console.error("Error fetching session data in handleTransportadoraChange:", error); // Debug log
+                // Fallback to local storage value if Firestore fetch fails for some reason,
+                // and proceed with the violation logic if a change is detected.
+                const currentSelectedTransportadora_LS = localStorage.getItem('currentSelectedTransportadora');
+                if (currentSelectedTransportadora_LS && newSelectedTransportadora !== currentSelectedTransportadora_LS) {
+                     showConfirm(
+                        '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar cambiar o deseleccionar la transportadora es una violación de las políticas de uso de la aplicación y resultará en un bloqueo inmediato y el reporte al administrador. ¿Desea continuar con esta acción?',
+                        () => { // User confirmed (Sí)
+                            localStorage.setItem('dashboardLockoutEndTime', currentTime + LOCKOUT_DURATION_MS);
+                            logoutUser('Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.', true); // Pass true for violation
+                        },
+                        () => { // User cancelled (No)
+                            transportadoraSelect.value = originalTransportadoraSelection;
+                        },
+                        'Violación de Derechos'
+                    );
+                } else {
+                    loadDashboardDataInternal(); // If no violation and Firestore fetch failed, still try to load data
+                }
+            });
         }
 
 
@@ -1127,7 +1206,6 @@
 
             if (!selectedTransportadora) {
                 despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">Seleccione una transportadora para ver el resumen de despachos.</p>';
-                totalPaquetesPendientesSpan.textContent = '0';
                 pedidosPendientesAsesorDiv.innerHTML = '<p class="no-data-message">Seleccione una transportadora para ver los pedidos pendientes.</p>';
                 hideLoadingSpinner();
                 console.log("loadDashboardDataInternal: No hay transportadora seleccionada, mostrando mensajes de no datos."); // Debug log
@@ -1137,7 +1215,7 @@
             // The query now always retrieves all records for the selected transportadora, regardless of user role.
             let query = registrosCollection.where('transportadora', '==', selectedTransportadora);
 
-            console.log(`loadDashboardDataInternal: Mostrando todos los despachos para la transportadora ${selectedTransportadora} (sin filtro de usuario).`);
+            console.log(`loadDashboardDataInternal: Mostrando todos los despachos para la transportadora ${selectedTransportadora} (sin filtro de usuario).`); // Debug log
 
 
             dashboardListenerUnsubscribe = query.onSnapshot(snapshot => {
@@ -1147,7 +1225,6 @@
             }, error => {
                 console.error("loadDashboardDataInternal: Error al escuchar los datos del dashboard:", error); // Debug log
                 despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">Error al cargar los datos.</p>';
-                totalPaquetesPendientesSpan.textContent = 'Error';
                 pedidosPendientesAsesorDiv.innerHTML = '<p class="no-data-message"></p>';
                 hideLoadingSpinner();
             });
@@ -1161,13 +1238,14 @@
             let despachadosPorAsesor = {};
             let pendientesPorAsesor = {};
             let totalPaquetesDespachados = 0;
+            let totalDespachosDespachados = 0; // New counter for total dispatches
             let totalPaquetesPendientes = 0;
+            let totalDespachosPendientes = 0; // New counter for total pending dispatches
             const now = new Date(); // Not used for filtering, just for potential future time-based logic
 
             if (docs.length === 0) {
                 showNoDataMessage();
                 despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">No hay pedidos despachados para esta transportadora.</p>';
-                totalPaquetesPendientesSpan.textContent = '0';
                 pedidosPendientesAsesorDiv.innerHTML = '<p class="no-data-message">No hay pedidos pendientes para esta transportadora.</p>';
                 console.log("processDashboardData: No hay documentos, mostrando mensaje de no datos."); // Debug log
                 return;
@@ -1175,34 +1253,33 @@
 
             docs.forEach(doc => {
                 const data = doc.data();
-                console.log("Processing document:", doc.id, data); // NEW: Detailed log for each document
+                console.log("Processing document:", doc.id, data); // Detailed log for each document
                 const asesor = data.asesor || 'Desconocido';
                 // Ensure num_pares is treated as a number, defaulting to 0 if invalid
                 const numPares = parseInt(data.num_pares) || 0; 
                 const despachado = data.despachado === true;
-                const enviadoAEmpaque = data.enviadoAEmpaque === true;
-                // const fechaHoraCreacion = data.fecha_hora ? data.fecha_hora.toDate() : null; // Not used in current rendering, but kept for context
 
                 if (despachado) {
                     if (!despachadosPorAsesor[asesor]) {
-                        despachadosPorAsesor[asesor] = { paquetes: 0 };
+                        despachadosPorAsesor[asesor] = { paquetes: 0, despachos: 0 }; // Initialize despachos count
                     }
                     despachadosPorAsesor[asesor].paquetes += numPares;
+                    despachadosPorAsesor[asesor].despachos += 1; // Increment dispatch count
                     totalPaquetesDespachados += numPares;
+                    totalDespachosDespachados += 1; // Increment total dispatch count
                 } else {
-                    // A package is pending if it's not dispatched.
-                    // The 'enviadoAEmpaque' flag doesn't change its "pending dispatch" status for this dashboard.
                     totalPaquetesPendientes += numPares;
+                    totalDespachosPendientes += 1; // Increment total pending dispatch count
                     if (!pendientesPorAsesor[asesor]) {
-                        pendientesPorAsesor[asesor] = { paquetes: 0 };
+                        pendientesPorAsesor[asesor] = { paquetes: 0, despachos: 0 }; // Initialize despachos count
                     }
                     pendientesPorAsesor[asesor].paquetes += numPares;
+                    pendientesPorAsesor[asesor].despachos += 1; // Increment dispatch count
                 }
             });
 
-            renderDespachosDespachados(despachadosPorAsesor, totalPaquetesDespachados);
-            renderPedidosPendientes(pendientesPorAsesor);
-            totalPaquetesPendientesSpan.textContent = totalPaquetesPendientes;
+            renderDespachosDespachados(despachadosPorAsesor, totalPaquetesDespachados, totalDespachosDespachados);
+            renderPedidosPendientes(pendientesPorAsesor, totalDespachosPendientes);
 
             if (Object.keys(despachadosPorAsesor).length > 0 || totalPaquetesPendientes > 0) {
                 noDataMessage.style.display = 'none';
@@ -1215,9 +1292,12 @@
 
         /**
          * Renderiza la sección "Pedidos Despachados".
+         * Ahora incluye el total de despachos además del total de paquetes.
          */
-        function renderDespachosDespachados(data, totalDispatchedPackages) {
-            let html = `<p class="global-summary">Total Paquetes Despachados: <span class="green-value">${totalDispatchedPackages}</span></p>`;
+        function renderDespachosDespachados(data, totalDispatchedPackages, totalDispatches) {
+            let html = `
+                <p class="global-summary">Total Paquetes Despachados: <span class="green-value">${totalDispatchedPackages}</span></p>
+            `;
             const asesores = Object.keys(data).sort();
 
             if (asesores.length === 0 && totalDispatchedPackages === 0) {
@@ -1226,8 +1306,8 @@
                 asesores.forEach(asesor => {
                     html += `
                         <div class="summary-item">
-                            <span><strong>Asesor:</strong> ${asesor}</span>
-                            <span>Paquetes: <span class="value green-value">${data[asesor].paquetes}</span></span>
+                            <div><strong>Asesor:</strong> ${asesor}</div>
+                            <div>Despachos: <span class="value green-value">${data[asesor].despachos}</span></div>
                         </div>
                     `;
                 });
@@ -1237,19 +1317,22 @@
 
         /**
          * Renderiza la sección "Pedidos Pendientes por Despachar" por asesor.
+         * Ahora incluye el total de despachos pendientes además del total de paquetes.
          */
-        function renderPedidosPendientes(data) {
-            let html = '';
+        function renderPedidosPendientes(data, totalPendingDispatches) {
+            let html = `
+                <p class="global-summary">Total Despachos Pendientes: <span class="red-value">${totalPendingDispatches}</span></p>
+            `;
             const asesores = Object.keys(data).sort();
 
             if (asesores.length === 0) {
-                html = '<p class="no-data-message">No hay pedidos pendientes para esta transportadora.</p>';
+                html += '<p class="no-data-message">No hay pedidos pendientes para esta transportadora.</p>';
             } else {
                 asesores.forEach(asesor => {
                     html += `
                         <div class="summary-item">
-                            <span><strong>Asesor:</strong> ${asesor}</span>
-                            <span>Paquetes: <span class="value red-value">${data[asesor].paquetes}</span></span>
+                            <div><strong>Asesor:</strong> ${asesor}</div>
+                            <div>Despachos: <span class="value red-value">${data[asesor].despachos}</span></div>
                         </div>
                     `;
                 });
@@ -1260,7 +1343,6 @@
         function showLoadingSpinner() {
             loadingSpinner.style.display = 'block';
             despachosDespachadosAsesorDiv.innerHTML = '';
-            totalPaquetesPendientesSpan.textContent = 'Cargando...';
             pedidosPendientesAsesorDiv.innerHTML = '';
             noDataMessage.style.display = 'none';
         }
@@ -1273,7 +1355,6 @@
             noDataMessage.style.display = 'block';
             despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">No hay datos disponibles para la transportadora seleccionada.</p>';
             pedidosPendientesAsesorDiv.innerHTML = '';
-            totalPaquetesPendientesSpan.textContent = '0';
         }
 
         // --- Funciones de Gestión de Usuarios (NUEVO) ---
@@ -1300,10 +1381,10 @@
                     }
 
                     let html = '';
-                    const now = Date.now();
+                    // Recorrer los documentos para construir la lista
                     snapshot.forEach(doc => {
                         const user = doc.data();
-                        const userId = doc.id;
+                        const userId = doc.id; // ID del documento es el userId
                         const lastActivityDate = user.lastActivity ? user.lastActivity.toDate() : null;
                         const isBlocked = user.isBlocked || false;
                         const className = isBlocked ? 'user-item blocked' : 'user-item';
@@ -1329,7 +1410,7 @@
                         `;
                     });
                     activeUsersListDiv.innerHTML = html;
-                    if (!html) {
+                    if (!html) { // Si no se generó HTML (ej. todos los usuarios filtrados), mostrar mensaje de no activos
                         activeUsersListDiv.innerHTML = '<p>No hay usuarios activos en este momento.</p>';
                     }
                     console.log("loadActiveUsers: Usuarios activos cargados y renderizados."); // Debug log
@@ -1342,10 +1423,12 @@
 
         /**
          * Expulsa a un usuario eliminando su sesión activa de Firestore.
+         * Esta función no bloquea el usuario de forma persistente a menos que se use `toggleUserBlock` después.
          */
         function kickUser(userId) {
             showConfirm(`¿Está seguro de que desea sacar a ${userId} del sistema? Esto terminará su sesión.`, async () => {
                 try {
+                    // Para sacar un usuario, simplemente eliminamos su sesión activa de Firestore.
                     await activeSessionsCollection.doc(userId).delete();
                     console.log(`Usuario ${userId} expulsado.`); // Debug log
                     userManagementErrorP.textContent = `Usuario ${userId} sacado del sistema.`;
@@ -1358,13 +1441,18 @@
         }
 
         /**
-         * Bloquea o desbloquea a un usuario actualizando su estado en Firestore.
+         * Bloquea o desbloquea a un usuario actualizando su estado `isBlocked` en Firestore.
          */
         function toggleUserBlock(userId, blockStatus) {
             const actionText = blockStatus ? 'bloquear' : 'desbloquear';
             showConfirm(`¿Está seguro de que desea ${actionText} a ${userId}?`, async () => {
                 try {
-                    await activeSessionsCollection.doc(userId).update({ isBlocked: blockStatus });
+                    // Actualizamos el campo isBlocked en su documento de sesión.
+                    // Si se bloquea, también limpiamos la transportadora seleccionada para forzar una nueva selección.
+                    await activeSessionsCollection.doc(userId).update({ 
+                        isBlocked: blockStatus,
+                        ...(blockStatus && { selectedTransportadora: '' }) // Si se bloquea, limpiar la transportadora
+                    });
                     console.log(`Estado de bloqueo del usuario ${userId} establecido en ${blockStatus}.`); // Debug log
                     userManagementErrorP.textContent = `Usuario ${userId} ${blockStatus ? 'bloqueado' : 'desbloqueado'} correctamente.`;
                     setTimeout(() => userManagementErrorP.textContent = '', 3000);
@@ -1389,16 +1477,16 @@
 
             // Leer datos del usuario desde localStorage para determinar el rol al cargar la página
             const storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
-            console.log("DOMContentLoaded: datosUsuario del localStorage:", storedDatosUsuario);
+            console.log("DOMContentLoaded: datosUsuario del localStorage:", storedDatosUsuario); // Debug log
             
             // Determinar si la tuerca debe mostrarse basándose en el rol del usuario de localStorage
             // Esto es importante para recargas de página o navegación, donde ya hay una sesión activa.
             if (storedDatosUsuario && storedDatosUsuario.permisos && storedDatosUsuario.permisos.toLowerCase() === 'administrador') {
                 adminGearIcon.style.display = 'block';
-                console.log("DOMContentLoaded: Rol detectado ADMINISTRADOR (desde localStorage). Tuerca DEBERÍA ser visible.");
+                console.log("DOMContentLoaded: Rol detectado ADMINISTRADOR (desde localStorage). Tuerca DEBERÍA ser visible."); // Debug log
             } else {
                 adminGearIcon.style.display = 'none';
-                console.log("DOMContentLoaded: Rol detectado NO ADMINISTRADOR (desde localStorage). Tuerca DEBERÍA estar oculta.");
+                console.log("DOMContentLoaded: Rol detectado NO ADMINISTRADOR (desde localStorage). Tuerca DEBERÍA estar oculta."); // Debug log
             }
             
             // Listener para la configuración global de bloqueo
@@ -1407,16 +1495,16 @@
                     const settings = doc.data();
                     isGlobalManualBlock = settings.isBlocked || false;
                     isAutoBlockedPermanently = settings.isAutoBlockedPermanently || false;
-                    console.log("globalSettingsRef.onSnapshot: Estado de bloqueo global actualizado:", isGlobalManualBlock, isAutoBlockedPermanently);
+                    console.log("globalSettingsRef.onSnapshot: Estado de bloqueo global actualizado:", isGlobalManualBlock, isAutoBlockedPermanently); // Debug log
                     checkSessionAndBlockStatus();
                 } else {
                     isGlobalManualBlock = false;
                     isAutoBlockedPermanently = false;
-                    console.log("globalSettingsRef.onSnapshot: Documento de configuración global no existe, asumiendo desbloqueado.");
+                    console.log("globalSettingsRef.onSnapshot: Documento de configuración global no existe, asumiendo desbloqueado."); // Debug log
                     checkSessionAndBlockStatus();
                 }
             }, error => {
-                console.error("Error al escuchar cambios en global_block:", error);
+                console.error("Error al escuchar cambios en global_block:", error); // Debug log
                 isGlobalManualBlock = false;
                 isAutoBlockedPermanently = false;
                 checkSessionAndBlockStatus();
@@ -1428,10 +1516,10 @@
             const currentTime = Date.now();
 
             if (dashboardLockoutEndTime && currentTime < parseInt(dashboardLockoutEndTime)) {
-                console.log("DOMContentLoaded: Bloqueo de dashboard activo.");
-                logoutUser(`Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`);
+                console.log("DOMContentLoaded: Bloqueo de dashboard activo."); // Debug log
+                logoutUser(`Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`, true); // Considerar esto una violación persistente
             } else if (lastLoginTime && (currentTime - parseInt(lastLoginTime)) < SESSION_DURATION_MS) {
-                console.log("DOMContentLoaded: Sesión válida detectada.");
+                console.log("DOMContentLoaded: Sesión válida detectada."); // Debug log
                 dashboardContent.style.display = 'block';
                 loginScreen.style.display = 'none';
                 loadTransportadorasAndDashboard();
@@ -1442,21 +1530,21 @@
                 const userDatos = JSON.parse(localStorage.getItem('datosUsuario'));
                 if (userDatos && userDatos.permisos && userDatos.permisos.toLowerCase() === 'administrador') {
                     adminGearIcon.style.display = 'block';
-                    console.log("DOMContentLoaded (después de sesión válida): Rol ADMINISTRADOR. Tuerca DEBERÍA ser visible.");
+                    console.log("DOMContentLoaded (después de sesión válida): Rol ADMINISTRADOR. Tuerca DEBERÍA ser visible."); // Debug log
                 } else {
                     adminGearIcon.style.display = 'none';
-                    console.log("DOMContentLoaded (después de sesión válida): Rol NO ADMINISTRADOR. Tuerca DEBERÍA estar oculta.");
+                    console.log("DOMContentLoaded (después de sesión válida): Rol NO ADMINISTRADOR. Tuerca DEBERÍA estar oculta."); // Debug log
                 }
 
             } else {
-                console.log("DOMContentLoaded: No hay sesión válida, mostrando pantalla de inicio de sesión.");
-                logoutUser('Por favor, ingrese su contraseña.');
+                console.log("DOMContentLoaded: No hay sesión válida, mostrando pantalla de inicio de sesión."); // Debug log
+                logoutUser('Por favor, ingrese su contraseña.'); // Normal logout
             }
         });
 
         // Listener de eventos para abrir el modal de gestión de usuarios
         adminGearIcon.addEventListener('click', () => {
-            console.log("adminGearIcon clicked: Abriendo modal de gestión de usuarios.");
+            console.log("adminGearIcon clicked: Abriendo modal de gestión de usuarios."); // Debug log
             mostrarModal('user_management_modal');
             loadActiveUsers(); // Cargar usuarios cuando se abre el modal
         });
