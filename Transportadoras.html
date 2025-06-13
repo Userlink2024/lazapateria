@@ -602,6 +602,7 @@
         const registrosCollection = db.collection('registros');
         const globalSettingsRef = db.collection('settings').doc('global_block'); // Para obtener estado de bloqueo y tiempo de retardo
         const activeSessionsCollection = db.collection('active_sessions'); // NUEVO: Para sesiones de usuario activas
+        const usersCollection = db.collection('users'); // NUEVO: Para perfiles de usuario y roles
 
         let dashboardListenerUnsubscribe = null; // Listener para actualizaciones en tiempo real de datos del dashboard
         let sessionCheckInterval = null; // Intervalo para expiración de sesión y verificación de bloqueo
@@ -756,19 +757,35 @@
 
             if (passwordInput.value === LOGIN_PASSWORD) {
                 let currentIp = await getSimulatedPublicIP();
-                let simulatedUserId = `user_${btoa(passwordInput.value).slice(0, 10)}`; // ID simple basado en la contraseña, para demostración
+                // Generar un ID de usuario simulado basado en la contraseña.
+                // En un sistema real, este ID vendría de Firebase Authentication (auth.currentUser.uid)
+                let simulatedUserId = `user_${btoa(passwordInput.value).slice(0, 10)}`; 
 
-                // Para una aplicación real, 'datosUsuario' provendría de un sistema de autenticación (ej. Firebase Auth)
-                // Para este ejemplo, si la contraseña es "2025", asumiremos que es un "administrador".
-                // De lo contrario, es un "operador".
-                let userRole = 'operador';
+                let userRole = 'operador'; // Rol por defecto
                 let userName = 'Operador';
-                if (passwordInput.value === "2025") {
-                    userRole = 'administrador';
-                    userName = 'Administrador';
+
+                try {
+                    // Intentar obtener los datos del usuario de la colección 'users' en Firestore
+                    const userDocRef = usersCollection.doc(simulatedUserId);
+                    const userDoc = await userDocRef.get();
+
+                    if (userDoc.exists) {
+                        const userData = userDoc.data();
+                        userRole = userData.permisos || 'operador'; // Obtener el rol de Firestore, por defecto 'operador'
+                        userName = userData.username || 'Usuario'; // Obtener el nombre de usuario de Firestore
+                        console.log(`Rol y nombre obtenidos de Firestore para ${simulatedUserId}: Rol=${userRole}, Nombre=${userName}`);
+                    } else {
+                        console.warn(`No se encontró un documento de usuario en Firestore para ID: ${simulatedUserId}. Asignando rol por defecto 'operador'.`);
+                        // Opcional: si el usuario no existe en 'users', podrías crear uno básico aquí,
+                        // pero para la gestión de roles, es mejor que existan previamente.
+                    }
+
+                } catch (firestoreError) {
+                    console.error("Error al obtener datos de usuario de Firestore:", firestoreError);
+                    // En caso de error, mantener el rol y nombre por defecto.
                 }
 
-                // Almacenar datos de usuario simplificados en localStorage para esta demostración
+                // Almacenar datos de usuario (incluido el rol de Firestore) en localStorage
                 const datosUsuario = {
                     usuario: simulatedUserId, // Usar el ID simulado como 'usuario'
                     nombreCompleto: userName,
