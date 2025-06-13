@@ -1130,7 +1130,12 @@
                 <div class="form-field">
                     <label>Bodeguero(s):</label>
                     <div id="bodeguero_checkbox_container" class="bodeguero-checkbox-container">
-                        </div>
+                    </div>
+                </div>
+                <!-- MOVED: NUEVO CHECKBOX: Enviar de inmediato a empaque - Movido aquí -->
+                <div class="form-field control-container">
+                    <input type="checkbox" id="enviar_inmediato_empaque">
+                    <label for="enviar_inmediato_empaque">Enviar de inmediato a empaque</label>
                 </div>
                 <div class="form-field">
                     <label>Observaciones:</label>
@@ -1139,11 +1144,6 @@
                 <div class="form-field">
                     <label>Saldo a Favor:</label>
                     <input type="number" id="saldo_a_favor" name="saldo_a_favor" value="0" required>
-                </div>
-                <!-- NUEVO CHECKBOX: Enviar de inmediato a empaque -->
-                <div class="form-field control-container">
-                    <input type="checkbox" id="enviar_inmediato_empaque">
-                    <label for="enviar_inmediato_empaque">Enviar de inmediato a empaque</label>
                 </div>
                 <input type="submit" value="Agregar Pedido" id="agregar_pedido_btn">
             </form>
@@ -1244,7 +1244,12 @@
                 <div class="form-field">
                     <label>Bodeguero(s):</label>
                     <div id="modificar_bodeguero_checkbox_container" class="bodeguero-checkbox-container">
-                        </div>
+                    </div>
+                </div>
+                <!-- MOVED: Checkbox para enviar de inmediato a empaque en el modal de modificar -->
+                <div class="form-field control-container">
+                    <input type="checkbox" id="modificar_enviar_inmediato_empaque" onchange="toggleEnviadoAEmpaqueModificar(this, currentModifyingOrderId)">
+                    <label for="modificar_enviar_inmediato_empaque">Enviar de inmediato a empaque</label>
                 </div>
                 <div class="form-field">
                     <label>Observaciones:</label>
@@ -1467,23 +1472,30 @@
         // Referencia al documento de configuración global en Firestore
         const globalSettingsRef = db.collection('settings').doc('global_block');
         const transportadorasCollection = db.collection('transportadoras'); // NUEVA COLECCIÓN PARA TRANSPORTADORAS
+        const usuariosCollection = db.collection('usuarios'); // Colección de usuarios para verificar asesores
 
         let productos = [], abonos = [], valorTotal = 0;
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
         console.log("Datos del usuario al inicio:", datosUsuario);
 
-        if (!datosUsuario || !datosUsuario.permisos) {
-            // Reemplazado alert con showAlert
+        // Bloque de verificación inicial de datos de usuario antes de cualquier otra cosa
+        if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
             showAlert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, inicie sesión de nuevo.");
-            datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
+            datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' }; // Fallback para evitar errores
             console.error("Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
-            window.location.href = 'https://userlink2024.github.io/lazapateria/index.html'; // Redirigir aquí
+            // Redirige inmediatamente si los datos son críticos. Deja un breve retraso para que el usuario lea la alerta.
+            setTimeout(() => {
+                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+            }, 3000);
+            // Detener la ejecución del script aquí si no hay datos de usuario válidos
+            throw new Error("No hay datos de usuario válidos.");
         }
 
         let pedidosListenerUnsubscribe = null;
         let scrollPosPedidos = 0;
         let isInitialLoadPedidos = true;
         let currentDispatchFilter = 'all'; // 'all', 'despachados', 'noDespachados', 'retardos'
+        let currentModifyingOrderId = null; // Variable para guardar el ID del pedido que se está modificando
 
         // Global variables to store original products and abonos for comparison
         let originalProductsForModification = [];
@@ -2126,7 +2138,8 @@
                     <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                     <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
                     <p>Bodeguero(s): ${bodeguerosEncargados}</p>
-                    <p>Hora: ${horaFormateada}</p>
+                    <!-- Checkbox Enviado a Empaque: visible para todos en la pestaña "Todos", pero no en esta vista simplificada -->
+                    <div class="control-container control-container-empaque" style="display: none;"></div>
                     <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
                 `;
             } else { // currentDispatchFilter === 'all' (o por defecto si no hay filtro activo)
@@ -2144,14 +2157,14 @@
                     <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                     <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
                     <p>Bodeguero(s): ${bodeguerosEncargados}</p> <!-- La línea de bodegueros se mantiene aquí -->
-                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
-                    <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                     <!-- Checkbox Enviado a Empaque: visible para todos en la pestaña "Todos" -->
                     <div class="control-container control-container-empaque" style="display: ${currentDispatchFilter === 'all' ? 'flex' : 'none'};">
                         <input type="checkbox" id="enviado_empaque_${docId}" ${enviadoAEmpaque ? 'checked' : ''} onchange="toggleEnviadoAEmpaque('${docId}', this.checked)" ${enviadoAEmpaque || estaDespachado ? 'disabled' : ''}>
                         <label for="enviado_empaque_${docId}">Enviado a Empaque</label>
                         ${enviadoAEmpaqueTime}
                     </div>
+                    <p>Observaciones: ${registro.observaciones || 'N/A'}</p>
+                    <p>Saldo a Favor: $${(parseFloat(registro.saldo_a_favor) || 0).toLocaleString('es-CO')}</p>
                 `;
             }
 
@@ -2295,9 +2308,9 @@
                         console.log("Modified record:", docId);
                         const existingElement = existingRecordElements.get(docId);
                         if (existingElement) {
-                            // If the element's position might change due to sorting, re-insert it.
-                            // Otherwise, just update its content. For simplicity and to avoid flicker,
-                            // we'll replace the element, which is a common pattern.
+                            // If the element's position might change due to sorting, re- Con el nuevo código, la posición de los elementos
+                            // en el DOM no debería cambiar, ya que se usan solo para filtrar y mostrar/ocultar.
+                            // Si se necesita un orden estricto, la re-creación del elemento o una re-inserción más inteligente sería necesaria.
                             updateExistingRecordElement(existingElement, registro, currentDocIndex);
                         }
                     } else if (change.type === 'removed') {
@@ -2521,6 +2534,40 @@
             }
         }
 
+        async function toggleEnviadoAEmpaqueModificar(checkboxElement, docId) {
+            initAudioContext(); // Initialize audio context on user interaction
+
+            // Este checkbox solo se puede marcar, no desmarcar
+            if (!checkboxElement.checked) {
+                checkboxElement.checked = true; // Keep it checked if tried to uncheck
+                showAlert("Este checkbox no se puede desmarcar una vez activado.");
+                return;
+            }
+
+            try {
+                // Fetch current state to check if already dispatched
+                const docRef = db.collection('registros').doc(docId);
+                const docSnap = await docRef.get();
+                if (docSnap.exists && docSnap.data().despachado === true) {
+                    showAlert("Este pedido ya está despachado y no se puede modificar el estado de 'Enviado a Empaque'.");
+                    checkboxElement.checked = true; // Revert to checked state if already dispatched
+                    return;
+                }
+
+                // Only update to true if it's being marked and not already dispatched
+                await db.collection('registros').doc(docId).update({
+                    enviadoAEmpaque: true,
+                    enviadoAEmpaqueTimestamp: firebase.firestore.Timestamp.fromDate(new Date())
+                });
+                playConfirmationSound();
+                console.log(`Pedido ${docId} marcado como "Enviado a Empaque" desde el modal de modificación.`);
+            } catch (error) {
+                console.error("Error al actualizar el estado de 'Enviado a Empaque' desde el modal de modificación:", error);
+                showAlert("Error al cambiar el estado de 'Enviado a Empaque' desde el modal de modificación.");
+                checkboxElement.checked = false; // Revert state if error
+            }
+        }
+
 
         function mostrarResumenAsesores(resumen) {
             let resumenHTML = '<h3>Resumen de Asesores</h3><div>';
@@ -2567,7 +2614,7 @@
                     "Observaciones": registro.observaciones,
                     "Saldo a Favor": registro.saldo_a_favor,
                     "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
-                    "Bodeguero(s)": (registro.bodegueros_encargados || []).join(', '), // Add bodegueros to export
+                    "Bodeguero(s)": (registro.bodegueros_encargados || []).join(', '), // Add bodegueros
                     "Bloqueado": registro.bloqueadoPor || 'No bloqueado', // Changed to show name or "No bloqueado"
                     "Despachado": registro.despachadoPor || 'No verificado' // Changed to show name or "No verificado"
                     // NOTA: Los campos de retardo no se exportan según el requisito
@@ -2596,6 +2643,8 @@
                     return;
                 }
 
+                currentModifyingOrderId = id; // Set the current modifying order ID
+
                 originalProductsForModification = JSON.parse(JSON.stringify(registro.productos || []));
                 originalAbonosForModification = JSON.parse(JSON.stringify(registro.abonos || []));
 
@@ -2610,6 +2659,13 @@
                 renderModificarProductos(registro.productos || []);
                 renderModificarAbonos(registro.abonos || []);
                 populateBodegueroCheckboxes(registro.bodegueros_encargados || [], 'modificar_bodeguero_checkbox_container'); // Populate bodeguero checkboxes for modification
+
+                // Set the "Enviar de inmediato a empaque" checkbox state in the modification modal
+                const modificarEnviarEmpaqueCheckbox = document.getElementById('modificar_enviar_inmediato_empaque');
+                modificarEnviarEmpaqueCheckbox.checked = registro.enviadoAEmpaque === true;
+                // Disable if already checked or if the order is already dispatched
+                modificarEnviarEmpaqueCheckbox.disabled = (registro.enviadoAEmpaque === true || registro.despachado === true);
+
 
                 actualizarValorTotalModificar();
 
@@ -2766,6 +2822,8 @@
             // Get selected bodegueros from checkboxes in modification modal
             const bodeguerosActualizados = Array.from(document.querySelectorAll('#modificar_bodeguero_checkbox_container input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
             const transportadoraActualizada = document.getElementById('modificar_transportadora_select').value;
+            // Get the state of the "Enviar de inmediato a empaque" checkbox in the modification modal
+            const modificarEnviarEmpaque = document.getElementById('modificar_enviar_inmediato_empaque').checked;
 
 
             const datosActualizados = {
@@ -2777,7 +2835,10 @@
                 productos: productosActualizados,
                 abonos: abonosActualizados,
                 bodegueros_encargados: bodeguerosActualizados, // Save updated bodegueros
-                transportadora: transportadoraActualizada // Save updated transportadora
+                transportadora: transportadoraActualizada, // Save updated transportadora
+                enviadoAEmpaque: modificarEnviarEmpaque, // Save updated state
+                // Only update timestamp if it was marked as true, and it wasn't already recorded
+                enviadoAEmpaqueTimestamp: modificarEnviarEmpaque ? (docSnap.data().enviadoAEmpaqueTimestamp || firebase.firestore.Timestamp.fromDate(new Date())) : null
             };
 
             const productsChanged = JSON.stringify(originalProductsForModification) !== JSON.stringify(productosActualizados);
@@ -3188,22 +3249,78 @@
             }
         }
 
+        // NEW function to fetch valid asesores (Operador and Bodeguero names)
+        async function fetchValidAsesores() {
+            try {
+                // Fetch users with 'Operador' permission
+                const operadoresSnapshot = await usuariosCollection.where('permisos', '==', 'Operador').get();
+                // Fetch users with 'Bodeguero' permission
+                const bodeguerosSnapshot = await usuariosCollection.where('permisos', '==', 'Bodeguero').get();
+
+                const validAsesores = new Set(); // Use a Set to store unique names
+                operadoresSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.nombreCompleto) {
+                        validAsesores.add(data.nombreCompleto);
+                    }
+                });
+                bodeguerosSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.nombreCompleto) {
+                        validAsesores.add(data.nombreCompleto);
+                    }
+                });
+                return Array.from(validAsesores); // Convert Set to Array
+            } catch (error) {
+                console.error("Error fetching valid asesores:", error);
+                showAlert("Error al verificar los asesores. Redirigiendo...");
+                setTimeout(() => {
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                }, 3000);
+                return []; // Return empty array to prevent further issues
+            }
+        }
+
+
         window.onload = async function() {
+            // Asegúrate de que datosUsuario está definido y tiene las propiedades necesarias
+            // antes de cualquier operación que dependa de él.
+            // Este chequeo inicial es crucial y redirige si falla.
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
-                showAlert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente."); // Reemplazado alert
-                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>";
-                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html'; // Redirigir aquí
-                return;
+                showAlert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
+                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>"; // Mostrar un mensaje de error
+                setTimeout(() => {
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/index.html'; // Redirigir a la página de inicio
+                }, 3000); // Dar tiempo para que el usuario lea la alerta
+                return; // Detener la ejecución adicional del script
             }
             console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
 
+            // NUEVO: Verificar si el asesor actual es válido
+            const validAsesores = await fetchValidAsesores();
+            const currentAsesorName = datosUsuario.nombreCompleto;
+
+            // Si el usuario NO es un administrador Y su nombre no está en la lista de asesores válidos
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador' && !validAsesores.includes(currentAsesorName)) {
+                showAlert(`Error: El asesor "${currentAsesorName}" no está registrado o no tiene los permisos adecuados. Redirigiendo.`);
+                setTimeout(() => {
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                }, 3000); // Redirigir después de 3 segundos
+                return; // Detener la ejecución adicional del script
+            }
+
+
             // Ajustar visibilidad del icono de la tuerca y opciones de exportación/resumen
-            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+            // Y ahora también el botón de "Transportadoras"
+            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            if (!isAdministrator) {
                 document.getElementById('exportar').style.display = 'none';
                 document.getElementById('resumen_asesores').style.display = 'none';
                 document.getElementById('gear_icon').style.display = 'none';
+                document.getElementById('abrir_filtrar_transportadoras_btn').style.display = 'none'; // Hide Transportadoras button
             } else {
                 document.getElementById('gear_icon').style.display = 'inline-block';
+                document.getElementById('abrir_filtrar_transportadoras_btn').style.display = 'inline-block'; // Ensure it's visible for admin
             }
 
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
@@ -3504,6 +3621,8 @@
             const blockOverlay = document.getElementById('block_overlay');
             const autoBlockCheckbox = document.getElementById('auto_block_checkbox');
             const globalManualBlockCheckbox = document.getElementById('global_manual_block_checkbox');
+            const filterTransportadorasBtn = document.getElementById('abrir_filtrar_transportadoras_btn');
+
 
             const shouldBeBlocked = isGlobalManualBlock || isAutoBlockedPermanently; // Use the persistent auto block flag
             const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
@@ -3523,10 +3642,10 @@
                 verPedidosInlineBtn.title = "";
             }
 
-            // The "Transportadoras" button should also always be enabled regardless of block status
-            const filterTransportadorasBtn = document.getElementById('abrir_filtrar_transportadoras_btn');
+            // The "Transportadoras" button should only be visible for administrators
             if (filterTransportadorasBtn) {
-                filterTransportadorasBtn.disabled = false;
+                filterTransportadorasBtn.style.display = isAdministrator ? 'inline-block' : 'none'; // Only show for admin
+                filterTransportadorasBtn.disabled = false; // Always enabled if visible
                 filterTransportadorasBtn.title = "";
             }
 
