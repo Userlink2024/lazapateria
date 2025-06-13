@@ -2341,21 +2341,11 @@
                 if (nuevoEstadoDespachado) {
                     updateData.despachado = true;
                     updateData.despachadoPor = datosUsuario.nombreCompleto;
-                    // Si se despacha, también se considera "Enviado a Empaque"
-                    // Solo actualizamos el timestamp si aún no ha sido marcado como enviado a empaque
-                    const docRef = db.collection('registros').doc(id);
-                    const docSnap = await docRef.get();
-                    if (docSnap.exists && docSnap.data().enviadoAEmpaque !== true) {
-                        updateData.enviadoAEmpaque = true;
-                        updateData.enviadoAEmpaqueTimestamp = firebase.firestore.Timestamp.fromDate(new Date());
-                    } else if (docSnap.exists && docSnap.data().enviadoAEmpaque === true && !docSnap.data().enviadoAEmpaqueTimestamp) {
-                         // Si por alguna razón está marcado como enviadoAEmpaque pero sin timestamp, lo establecemos ahora
-                         updateData.enviadoAEmpaqueTimestamp = firebase.firestore.Timestamp.fromDate(new Date());
-                    }
+                    // Lógica anterior de actualización de 'enviadoAEmpaque' y 'enviadoAEmpaqueTimestamp' eliminada
+                    // para preservar la lógica de negocio existente.
                 } else {
                     updateData.despachado = false;
                     updateData.despachadoPor = ''; // Clear the field when undispatched
-                    // No se toca enviadoAEmpaque aquí, ya que el despachado no "desenvía" a empaque.
                 }
                 await db.collection('registros').doc(id).update(updateData);
                 playConfirmationSound(); // Play sound on checkbox click
@@ -2785,14 +2775,13 @@
 
                     // Actualizar la hora configurada en el modal de opciones de bloqueo (en formato de 12 horas)
                     const formattedTimeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
-                    const formattedTime = new Date(1, 1, 1, blockHourToUse, blockMinuteToUse).toLocaleTimeString('es-CO', formattedTimeOptions);
+                    const formattedTime = new Date(1, 1, 1, customBlockHour, customBlockMinute).toLocaleTimeString('es-CO', formattedTimeOptions);
                     document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
 
                 } else { // Si el auto-bloqueo no está habilitado por el admin
                     countdownElement.textContent = "Bloqueo automático deshabilitado por el administrador.";
                     countdownElement.style.backgroundColor = '#f8d7da'; /* Light red */
-                    countdownElement.style.borderColor = '#dc3545'; /* Red */
-                     document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: N/A (Deshabilitado)`;
+                    document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: N/A (Deshabilitado)`;
                 }
             }
         }
