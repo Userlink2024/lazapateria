@@ -632,7 +632,6 @@
         const userManagementErrorP = document.getElementById('user_management_error');
 
         // --- Funciones de Modal de Alerta Genérico ---
-        // ADDED: Function to display a modal
         function mostrarModal(id) {
             document.getElementById(id).style.display = 'flex';
             console.log(`Modal ${id} shown.`); // Debug log
@@ -800,13 +799,25 @@
 
             try {
                 console.log(`checkPassword: Intentando obtener documento de sesión para userId: ${simulatedUserId}`); // Debug log
-                const userSessionDoc = await activeSessionsCollection.doc(simulatedUserId).get();
-                console.log(`checkPassword: Documento de sesión existe: ${userSessionDoc.exists}`); // Debug log
+                const sessionRef = activeSessionsCollection.doc(simulatedUserId);
+                const userSessionDoc = await sessionRef.get();
 
-                if (userSessionDoc.exists && userSessionDoc.data().isBlocked) {
-                    logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte.');
-                    console.log("checkPassword: Usuario bloqueado por administrador."); // Debug log
-                    return;
+                if (userSessionDoc.exists) {
+                    const sessionData = userSessionDoc.data();
+                    if (sessionData.isBlocked) {
+                        logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte.');
+                        console.log("checkPassword: Usuario bloqueado por administrador en Firestore."); // Debug log
+                        return;
+                    }
+
+                    // CRITICAL CHANGE: If an active session exists AND it has a selected transportadora,
+                    // prevent new login. This means a user cannot log in from a new browser/tab
+                    // if they are already actively using a transportadora in another session.
+                    if (sessionData.selectedTransportadora && sessionData.selectedTransportadora !== '') {
+                        logoutUser(`Ya tienes una sesión activa asociada a la transportadora "${sessionData.selectedTransportadora}". Cierra esa sesión para poder acceder con una transportadora diferente.`);
+                        console.log(`checkPassword: Intento de inicio de sesión bloqueado: Usuario ${simulatedUserId} ya tiene una sesión activa con transportadora: ${sessionData.selectedTransportadora}`); // Debug log
+                        return;
+                    }
                 }
 
                 console.log("checkPassword: Intentando obtener configuración global de bloqueo."); // Debug log
@@ -830,16 +841,19 @@
                     console.log("checkPassword: Documento de configuración global no encontrado, asumiendo desbloqueado."); // Debug log
                 }
 
-                console.log(`checkPassword: Intentando registrar/actualizar sesión activa en Firestore para userId: ${simulatedUserId}`); // Debug log
-                await activeSessionsCollection.doc(simulatedUserId).set({
+                // If we reach here, either no session exists, or the existing session
+                // has no selected transportadora (meaning it's a fresh login or a session where
+                // transportadora hasn't been chosen yet).
+                // Update/create the session, ensuring selectedTransportadora is initially empty.
+                await sessionRef.set({
                     userId: simulatedUserId,
                     username: userName,
                     lastActivity: firebase.firestore.FieldValue.serverTimestamp(),
                     ipAddress: currentIp,
-                    selectedTransportadora: '', // Inicialmente vacía
+                    selectedTransportadora: '', // Remains empty until chosen via handleTransportadoraChange
                     isBlocked: false
                 }, { merge: true });
-                console.log("checkPassword: Sesión activa registrada en Firestore."); // Debug log
+                console.log("checkPassword: Sesión activa registrada/actualizada en Firestore (selectedTransportadora inicializada a vacío)."); // Debug log
 
                 localStorage.setItem('lastLoginTime', currentTime);
                 console.log("checkPassword: lastLoginTime guardado en localStorage."); // Debug log
