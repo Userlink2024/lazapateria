@@ -1472,17 +1472,23 @@
         // Referencia al documento de configuración global en Firestore
         const globalSettingsRef = db.collection('settings').doc('global_block');
         const transportadorasCollection = db.collection('transportadoras'); // NUEVA COLECCIÓN PARA TRANSPORTADORAS
+        const usuariosCollection = db.collection('usuarios'); // Colección de usuarios para verificar asesores
 
         let productos = [], abonos = [], valorTotal = 0;
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
         console.log("Datos del usuario al inicio:", datosUsuario);
 
-        if (!datosUsuario || !datosUsuario.permisos) {
-            // Reemplazado alert con showAlert
+        // Bloque de verificación inicial de datos de usuario antes de cualquier otra cosa
+        if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
             showAlert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, inicie sesión de nuevo.");
-            datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' };
+            datosUsuario = { permisos: 'operador', nombreCompleto: 'Usuario Invitado', usuario: 'invitado' }; // Fallback para evitar errores
             console.error("Faltan datos de usuario. Usando valores predeterminados:", datosUsuario);
-            window.location.href = 'https://userlink2024.github.io/lazapateria/index.html'; // Redirigir aquí
+            // Redirige inmediatamente si los datos son críticos. Deja un breve retraso para que el usuario lea la alerta.
+            setTimeout(() => {
+                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+            }, 3000);
+            // Detener la ejecución del script aquí si no hay datos de usuario válidos
+            throw new Error("No hay datos de usuario válidos.");
         }
 
         let pedidosListenerUnsubscribe = null;
@@ -2302,9 +2308,9 @@
                         console.log("Modified record:", docId);
                         const existingElement = existingRecordElements.get(docId);
                         if (existingElement) {
-                            // If the element's position might change due to sorting, re-insert it.
-                            // Otherwise, just update its content. For simplicity and to avoid flicker,
-                            // we'll replace the element, which is a common pattern.
+                            // If the element's position might change due to sorting, re- Con el nuevo código, la posición de los elementos
+                            // en el DOM no debería cambiar, ya que se usan solo para filtrar y mostrar/ocultar.
+                            // Si se necesita un orden estricto, la re-creación del elemento o una re-inserción más inteligente sería necesaria.
                             updateExistingRecordElement(existingElement, registro, currentDocIndex);
                         }
                     } else if (change.type === 'removed') {
@@ -2608,7 +2614,7 @@
                     "Observaciones": registro.observaciones,
                     "Saldo a Favor": registro.saldo_a_favor,
                     "Abonos": (registro.abonos || []).map(a => `${a.fecha || ''} - $${a.monto || 0}`).join('; '),
-                    "Bodeguero(s)": (registro.bodegueros_encargados || []).join(', '), // Add bodegueros to export
+                    "Bodeguero(s)": (registro.bodegueros_encargados || []).join(', '), // Add bodegueros
                     "Bloqueado": registro.bloqueadoPor || 'No bloqueado', // Changed to show name or "No bloqueado"
                     "Despachado": registro.despachadoPor || 'No verificado' // Changed to show name or "No verificado"
                     // NOTA: Los campos de retardo no se exportan según el requisito
@@ -2786,8 +2792,11 @@
         async function guardarCambios(event, id) {
             event.preventDefault();
 
+            // Declare docSnap here so it's accessible throughout the function
+            let docSnap = null;
+
             try {
-                const docSnap = await db.collection('registros').doc(id).get();
+                docSnap = await db.collection('registros').doc(id).get();
                 if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
                     showAlert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios."); // Reemplazado alert
                     cerrarModal('modal_modificar');
@@ -2832,7 +2841,8 @@
                 transportadora: transportadoraActualizada, // Save updated transportadora
                 enviadoAEmpaque: modificarEnviarEmpaque, // Save updated state
                 // Only update timestamp if it was marked as true, and it wasn't already recorded
-                enviadoAEmpaqueTimestamp: modificarEnviarEmpaque ? (docSnap.data().enviadoAEmpaqueTimestamp || firebase.firestore.Timestamp.fromDate(new Date())) : null
+                // Ensure docSnap is not null before accessing its data
+                enviadoAEmpaqueTimestamp: modificarEnviarEmpaque ? (docSnap && docSnap.data().enviadoAEmpaqueTimestamp || firebase.firestore.Timestamp.fromDate(new Date())) : null
             };
 
             const productsChanged = JSON.stringify(originalProductsForModification) !== JSON.stringify(productosActualizados);
@@ -3243,14 +3253,66 @@
             }
         }
 
+        // NEW function to fetch valid asesores (Operador and Bodeguero names)
+        async function fetchValidAsesores() {
+            try {
+                // Fetch users with 'Operador' permission
+                const operadoresSnapshot = await usuariosCollection.where('permisos', '==', 'Operador').get();
+                // Fetch users with 'Bodeguero' permission
+                const bodeguerosSnapshot = await usuariosCollection.where('permisos', '==', 'Bodeguero').get();
+
+                const validAsesores = new Set(); // Use a Set to store unique names
+                operadoresSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.nombreCompleto) {
+                        validAsesores.add(data.nombreCompleto);
+                    }
+                });
+                bodeguerosSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.nombreCompleto) {
+                        validAsesores.add(data.nombreCompleto);
+                    }
+                });
+                return Array.from(validAsesores); // Convert Set to Array
+            } catch (error) {
+                console.error("Error fetching valid asesores:", error);
+                showAlert("Error al verificar los asesores. Redirigiendo...");
+                setTimeout(() => {
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                }, 3000);
+                return []; // Return empty array to prevent further issues
+            }
+        }
+
+
         window.onload = async function() {
+            // Asegúrate de que datosUsuario está definido y tiene las propiedades necesarias
+            // antes de cualquier operación que dependa de él.
+            // Este chequeo inicial es crucial y redirige si falla.
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto) {
-                showAlert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente."); // Reemplazado alert
-                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>";
-                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html'; // Redirigir aquí
-                return;
+                showAlert("Error: No se han podido cargar los datos de usuario. Por favor, recargue la página o inicie sesión nuevamente.");
+                document.body.innerHTML = "<h1>Error crítico: Faltan datos de usuario.</h1>"; // Mostrar un mensaje de error
+                setTimeout(() => {
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/index.html'; // Redirigir a la página de inicio
+                }, 3000); // Dar tiempo para que el usuario lea la alerta
+                return; // Detener la ejecución adicional del script
             }
             console.log("Página cargada. Rol del usuario:", datosUsuario.permisos);
+
+            // NUEVO: Verificar si el asesor actual es válido
+            const validAsesores = await fetchValidAsesores();
+            const currentAsesorName = datosUsuario.nombreCompleto;
+
+            // Si el usuario NO es un administrador Y su nombre no está en la lista de asesores válidos
+            if (datosUsuario.permisos.toLowerCase() !== 'administrador' && !validAsesores.includes(currentAsesorName)) {
+                showAlert(`Error: El asesor "${currentAsesorName}" no está registrado o no tiene los permisos adecuados. Redirigiendo.`);
+                setTimeout(() => {
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                }, 3000); // Redirigir después de 3 segundos
+                return; // Detener la ejecución adicional del script
+            }
+
 
             // Ajustar visibilidad del icono de la tuerca y opciones de exportación/resumen
             // Y ahora también el botón de "Transportadoras"
