@@ -1391,6 +1391,9 @@
         let currentDispatchFilter = 'all'; // 'all', 'despachados', 'noDespachados', 'retardos'
         let currentCarrierFilter = ''; // New: stores the currently selected carrier for filtering
 
+        // Global variable to store all fetched records data for efficient filtering and updates
+        let allCurrentRecordsData = new Map(); // Stores docId -> registro data
+
         // Global variables to store original products and abonos for comparison
         let originalProductsForModification = [];
         let originalAbonosForModification = [];
@@ -1753,6 +1756,14 @@
                     if (valorTotalRawElement) {
                         valorTotalFiltrado += parseFloat(valorTotalRawElement.innerText || 0);
                     }
+
+                    // CRITICAL FIX: Ensure buttons are updated when a record becomes visible by filter
+                    const docId = recordElement.dataset.id;
+                    const registroData = allCurrentRecordsData.get(docId); // Get data from cache
+                    if (registroData) {
+                        updateRecordStatusAndButtons(docId, registroData);
+                    }
+
                 } else {
                     recordElement.style.display = 'none';
                 }
@@ -1836,7 +1847,7 @@
                 bloquearCheckbox.closest('.control-container').style.display = (datosUsuario.permisos.toLowerCase() === 'administrador' && currentDispatchFilter === 'all') ? 'flex' : 'none';
                 bloquearCheckbox.checked = estaBloqueado;
             }
-            // Visibilidad para "Marcar como Despachado" (Solo para administradores en pestañas "Despachados" o "No Despachados")
+            // Visibilidad para "Marcar como Despachado" (Solo para administradores en pestañas "Despachados" o "No Despachados" o "Retardos")
             if (despachadoCheckbox) {
                 despachadoCheckbox.closest('.control-container-despachado').style.display = (datosUsuario.permisos.toLowerCase() === 'administrador' && (currentDispatchFilter === 'despachados' || currentDispatchFilter === 'noDespachados' || currentDispatchFilter === 'retardos')) ? 'flex' : 'none';
                 despachadoCheckbox.checked = estaDespachado;
@@ -2099,6 +2110,8 @@
             const newRecordElement = createRecordElement(existingElement.dataset.id, updatedRegistro, index);
             existingElement.parentNode.replaceChild(newRecordElement, existingElement);
             // After replacing, make sure the status is correctly displayed for the new element
+            // This call is important because createRecordElement only sets initial style,
+            // and updateRecordStatusAndButtons applies current filter-based visibility
             updateRecordStatusAndButtons(existingElement.dataset.id, updatedRegistro);
         }
 
@@ -2146,22 +2159,7 @@
                     scrollPosPedidos = listaPedidosContainer.scrollTop;
                 }
 
-                // Keep track of current records in the DOM to efficiently update/remove
-                const existingRecordElements = new Map();
-                listaPedidosContainer.querySelectorAll('.record').forEach(el => {
-                    existingRecordElements.set(el.dataset.id, el);
-                });
-
-                // Clear the container if it's the initial load or if the snapshot is empty after filtering
-                if (isInitialLoadPedidos || snapshot.empty) {
-                    listaPedidosContainer.innerHTML = '';
-                    if (snapshot.empty && isUserFilteredRole) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos asignados a este usuario o no se encontraron pedidos con los filtros actuales.</p>';
-                    } else if (snapshot.empty) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
-                    }
-                }
-
+                // Process changes and update local data cache (allCurrentRecordsData)
                 snapshot.docChanges().forEach(change => {
                     const doc = change.doc;
                     const registro = doc.data();
@@ -2170,34 +2168,35 @@
 
                     if (change.type === 'added') {
                         console.log("Added record:", docId);
+                        allCurrentRecordsData.set(docId, registro); // Add to cache
                         const newRecordElement = createRecordElement(docId, registro, currentDocIndex);
-                        // Insert the new element at the correct sorted position
                         const nextElement = listaPedidosContainer.children[currentDocIndex];
                         if (nextElement) {
                             listaPedidosContainer.insertBefore(newRecordElement, nextElement);
                         } else {
                             listaPedidosContainer.appendChild(newRecordElement);
                         }
-                        updateRecordStatusAndButtons(docId, registro); // Apply initial status
+                        // No need to call updateRecordStatusAndButtons here, as filtrarYBuscarPedidos will re-evaluate for all visible elements.
                     } else if (change.type === 'modified') {
                         console.log("Modified record:", docId);
-                        const existingElement = existingRecordElements.get(docId);
+                        allCurrentRecordsData.set(docId, registro); // Update cache
+                        const existingElement = document.querySelector(`.record[data-id="${docId}"]`); // Get the existing element
                         if (existingElement) {
-                            // If the element's position might change due to sorting, re-insert it.
-                            // Otherwise, just update its content. For simplicity and to avoid flicker,
-                            // we'll replace the element, which is a common pattern.
+                            // Re-create and replace the element to ensure all internal HTML is updated
                             updateExistingRecordElement(existingElement, registro, currentDocIndex);
                         }
                     } else if (change.type === 'removed') {
                         console.log("Removed record:", docId);
-                        const existingElement = existingRecordElements.get(docId);
+                        allCurrentRecordsData.delete(docId); // Remove from cache
+                        const existingElement = document.querySelector(`.record[data-id="${docId}"]`);
                         if (existingElement) {
                             existingElement.remove();
                         }
                     }
                 });
 
-                // After processing changes, re-run filter to ensure correct visibility and counts
+                // After all DOM additions/modifications/removals based on snapshot,
+                // re-run the filter which will also update the button visibilities based on current filter state.
                 filtrarYBuscarPedidos();
                 // After filtering and updating, check for retarded dispatches
                 checkForRetardedDispatches(showRetardoAlert); // Pass the flag from the initial call
@@ -2208,8 +2207,8 @@
                 let asesores = new Set();
                 let transportadoras = new Set(); // New: Collect unique transportadoras
                 let resumenAsesores = {};
-                snapshot.forEach(doc => {
-                    const registro = doc.data();
+                // Iterate through the `allCurrentRecordsData` Map for comprehensive data
+                allCurrentRecordsData.forEach(registro => {
                     if(registro.asesor) asesores.add(registro.asesor);
                     if(registro.transportadora) transportadoras.add(registro.transportadora); // New: Add transportadora to set
                     if (datosUsuario.permisos.toLowerCase() === 'administrador') {
@@ -2222,6 +2221,7 @@
                         }
                     }
                 });
+
 
                 if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                     mostrarResumenAsesores(resumenAsesores);
@@ -2983,7 +2983,7 @@
 
                 await carriersCollectionRef.doc(carrierId).update({ name: newName });
                 playConfirmationSound();
-                nameInput.dataset.originalName = newName; // Update original name
+                nameInput.dataset.original-name = newName; // Update original name
                 nameInput.classList.remove('edited'); // Remove edited class
                 errorDisplay.textContent = 'Transportadora actualizada exitosamente.';
                 setTimeout(() => errorDisplay.textContent = '', 3000);
