@@ -526,6 +526,11 @@
             </select>
         </div>
 
+        <!-- This message is now removed as filtering by user is no longer active for non-admins -->
+        <!-- <p id="user_specific_data_message" style="text-align: center; color: #555; font-style: italic; margin-bottom: 15px; display: none;">
+            Nota: Los datos mostrados corresponden a los despachos generados por tu usuario.
+        </p> -->
+
         <div class="loading-spinner" id="loading_spinner"></div>
         <div id="no_data_message" class="no-data-message" style="display:none;">
             <p>No hay datos disponibles para la transportadora seleccionada o con los filtros actuales.</p>
@@ -630,6 +635,9 @@
         const adminGearIcon = document.getElementById('admin_gear_icon');
         const activeUsersListDiv = document.getElementById('active_users_list');
         const userManagementErrorP = document.getElementById('user_management_error');
+        // REMOVED: Element for user-specific data message
+        // const userSpecificDataMessage = document.getElementById('user_specific_data_message');
+
 
         // --- Funciones de Modal de Alerta Genérico ---
         function mostrarModal(id) {
@@ -1032,9 +1040,27 @@
             const currentSelectedTransportadora = localStorage.getItem('currentSelectedTransportadora');
             const currentTime = Date.now();
             const currentUserId = localStorage.getItem('user_id');
+            const userDatos = JSON.parse(localStorage.getItem('datosUsuario'));
+            const userRole = userDatos?.permisos;
 
             console.log(`handleTransportadoraChange: Nueva transportadora: ${newSelectedTransportadora}, Actual almacenada: ${currentSelectedTransportadora}`); // Debug log
 
+            // The admin can always change the selected transporter without triggering a policy violation.
+            // Other users (operators) can only select a transportadora once.
+            if (userRole.toLowerCase() === 'administrador') {
+                localStorage.setItem('currentSelectedTransportadora', newSelectedTransportadora);
+                originalTransportadoraSelection = newSelectedTransportadora; // Lock it in as the original
+                // Also update in Firestore's active session
+                if (currentUserId) {
+                    activeSessionsCollection.doc(currentUserId).update({ selectedTransportadora: newSelectedTransportadora })
+                        .then(() => console.log("handleTransportadoraChange: Transportadora seleccionada actualizada en Firestore (admin cambió).")) // Debug log
+                        .catch(e => console.error("handleTransportadoraChange: Error actualizando transportadora en Firestore (admin cambio):", e)); // Debug log
+                }
+                loadDashboardDataInternal();
+                return;
+            }
+            
+            // For non-admin users:
             // Scenario 1: No transportadora was selected yet, and user selected one
             if (!currentSelectedTransportadora && newSelectedTransportadora) {
                 localStorage.setItem('currentSelectedTransportadora', newSelectedTransportadora);
@@ -1092,6 +1118,13 @@
             const selectedTransportadora = transportadoraSelect.value;
             console.log("loadDashboardDataInternal: Transportadora seleccionada para la carga de datos:", selectedTransportadora); // Debug log
 
+            // The user role is retrieved but not used for filtering the data anymore.
+            const userDatos = JSON.parse(localStorage.getItem('datosUsuario'));
+            const userRole = userDatos?.permisos;
+            // The currentUserId is still used for session management, but not for data filtering here.
+            const currentUserId = userDatos?.usuario; 
+
+
             if (!selectedTransportadora) {
                 despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">Seleccione una transportadora para ver el resumen de despachos.</p>';
                 totalPaquetesPendientesSpan.textContent = '0';
@@ -1101,19 +1134,23 @@
                 return;
             }
 
-            dashboardListenerUnsubscribe = registrosCollection
-                .where('transportadora', '==', selectedTransportadora)
-                .onSnapshot(snapshot => {
-                    console.log("loadDashboardDataInternal: Registros actualizados para la transportadora seleccionada:", selectedTransportadora); // Debug log
-                    processDashboardData(snapshot.docs);
-                    hideLoadingSpinner();
-                }, error => {
-                    console.error("loadDashboardDataInternal: Error al escuchar los datos del dashboard:", error); // Debug log
-                    despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">Error al cargar los datos.</p>';
-                    totalPaquetesPendientesSpan.textContent = 'Error';
-                    pedidosPendientesAsesorDiv.innerHTML = '<p class="no-data-message"></p>';
-                    hideLoadingSpinner();
-                });
+            // The query now always retrieves all records for the selected transportadora, regardless of user role.
+            let query = registrosCollection.where('transportadora', '==', selectedTransportadora);
+
+            console.log(`loadDashboardDataInternal: Mostrando todos los despachos para la transportadora ${selectedTransportadora} (sin filtro de usuario).`);
+
+
+            dashboardListenerUnsubscribe = query.onSnapshot(snapshot => {
+                console.log(`loadDashboardDataInternal: Registros actualizados para la transportadora seleccionada: ${selectedTransportadora}. Documentos recibidos: ${snapshot.size}`); // Debug log
+                processDashboardData(snapshot.docs);
+                hideLoadingSpinner();
+            }, error => {
+                console.error("loadDashboardDataInternal: Error al escuchar los datos del dashboard:", error); // Debug log
+                despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">Error al cargar los datos.</p>';
+                totalPaquetesPendientesSpan.textContent = 'Error';
+                pedidosPendientesAsesorDiv.innerHTML = '<p class="no-data-message"></p>';
+                hideLoadingSpinner();
+            });
         }
 
         /**
@@ -1125,11 +1162,11 @@
             let pendientesPorAsesor = {};
             let totalPaquetesDespachados = 0;
             let totalPaquetesPendientes = 0;
-            const now = new Date();
+            const now = new Date(); // Not used for filtering, just for potential future time-based logic
 
             if (docs.length === 0) {
                 showNoDataMessage();
-                despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">No hay despachos para esta transportadora.</p>';
+                despachosDespachadosAsesorDiv.innerHTML = '<p class="no-data-message">No hay pedidos despachados para esta transportadora.</p>';
                 totalPaquetesPendientesSpan.textContent = '0';
                 pedidosPendientesAsesorDiv.innerHTML = '<p class="no-data-message">No hay pedidos pendientes para esta transportadora.</p>';
                 console.log("processDashboardData: No hay documentos, mostrando mensaje de no datos."); // Debug log
@@ -1138,11 +1175,13 @@
 
             docs.forEach(doc => {
                 const data = doc.data();
+                console.log("Processing document:", doc.id, data); // NEW: Detailed log for each document
                 const asesor = data.asesor || 'Desconocido';
-                const numPares = parseInt(data.num_pares || 0);
+                // Ensure num_pares is treated as a number, defaulting to 0 if invalid
+                const numPares = parseInt(data.num_pares) || 0; 
                 const despachado = data.despachado === true;
                 const enviadoAEmpaque = data.enviadoAEmpaque === true;
-                const fechaHoraCreacion = data.fecha_hora ? data.fecha_hora.toDate() : null;
+                // const fechaHoraCreacion = data.fecha_hora ? data.fecha_hora.toDate() : null; // Not used in current rendering, but kept for context
 
                 if (despachado) {
                     if (!despachadosPorAsesor[asesor]) {
@@ -1151,14 +1190,13 @@
                     despachadosPorAsesor[asesor].paquetes += numPares;
                     totalPaquetesDespachados += numPares;
                 } else {
-                    const isPending = !despachado && !enviadoAEmpaque;
-                    if (isPending) {
-                        totalPaquetesPendientes += numPares;
-                        if (!pendientesPorAsesor[asesor]) {
-                            pendientesPorAsesor[asesor] = { paquetes: 0 };
-                        }
-                        pendientesPorAsesor[asesor].paquetes += numPares;
+                    // A package is pending if it's not dispatched.
+                    // The 'enviadoAEmpaque' flag doesn't change its "pending dispatch" status for this dashboard.
+                    totalPaquetesPendientes += numPares;
+                    if (!pendientesPorAsesor[asesor]) {
+                        pendientesPorAsesor[asesor] = { paquetes: 0 };
                     }
+                    pendientesPorAsesor[asesor].paquetes += numPares;
                 }
             });
 
@@ -1351,16 +1389,16 @@
 
             // Leer datos del usuario desde localStorage para determinar el rol al cargar la página
             const storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
-            console.log("DOMContentLoaded: datosUsuario del localStorage:", storedDatosUsuario); // Debug log
+            console.log("DOMContentLoaded: datosUsuario del localStorage:", storedDatosUsuario);
             
             // Determinar si la tuerca debe mostrarse basándose en el rol del usuario de localStorage
             // Esto es importante para recargas de página o navegación, donde ya hay una sesión activa.
             if (storedDatosUsuario && storedDatosUsuario.permisos && storedDatosUsuario.permisos.toLowerCase() === 'administrador') {
                 adminGearIcon.style.display = 'block';
-                console.log("DOMContentLoaded: Rol detectado ADMINISTRADOR (desde localStorage). Tuerca DEBERÍA ser visible."); // Debug log
+                console.log("DOMContentLoaded: Rol detectado ADMINISTRADOR (desde localStorage). Tuerca DEBERÍA ser visible.");
             } else {
                 adminGearIcon.style.display = 'none';
-                console.log("DOMContentLoaded: Rol detectado NO ADMINISTRADOR (desde localStorage). Tuerca DEBERÍA estar oculta."); // Debug log
+                console.log("DOMContentLoaded: Rol detectado NO ADMINISTRADOR (desde localStorage). Tuerca DEBERÍA estar oculta.");
             }
             
             // Listener para la configuración global de bloqueo
@@ -1369,16 +1407,16 @@
                     const settings = doc.data();
                     isGlobalManualBlock = settings.isBlocked || false;
                     isAutoBlockedPermanently = settings.isAutoBlockedPermanently || false;
-                    console.log("globalSettingsRef.onSnapshot: Estado de bloqueo global actualizado:", isGlobalManualBlock, isAutoBlockedPermanently); // Debug log
+                    console.log("globalSettingsRef.onSnapshot: Estado de bloqueo global actualizado:", isGlobalManualBlock, isAutoBlockedPermanently);
                     checkSessionAndBlockStatus();
                 } else {
                     isGlobalManualBlock = false;
                     isAutoBlockedPermanently = false;
-                    console.log("globalSettingsRef.onSnapshot: Documento de configuración global no existe, asumiendo desbloqueado."); // Debug log
+                    console.log("globalSettingsRef.onSnapshot: Documento de configuración global no existe, asumiendo desbloqueado.");
                     checkSessionAndBlockStatus();
                 }
             }, error => {
-                console.error("Error al escuchar cambios en global_block:", error); // Debug log
+                console.error("Error al escuchar cambios en global_block:", error);
                 isGlobalManualBlock = false;
                 isAutoBlockedPermanently = false;
                 checkSessionAndBlockStatus();
@@ -1390,10 +1428,10 @@
             const currentTime = Date.now();
 
             if (dashboardLockoutEndTime && currentTime < parseInt(dashboardLockoutEndTime)) {
-                console.log("DOMContentLoaded: Bloqueo de dashboard activo."); // Debug log
+                console.log("DOMContentLoaded: Bloqueo de dashboard activo.");
                 logoutUser(`Su acceso ha sido bloqueado debido a una violación de las políticas de uso. Por favor, contacte al administrador para revisar su situación.`);
             } else if (lastLoginTime && (currentTime - parseInt(lastLoginTime)) < SESSION_DURATION_MS) {
-                console.log("DOMContentLoaded: Sesión válida detectada."); // Debug log
+                console.log("DOMContentLoaded: Sesión válida detectada.");
                 dashboardContent.style.display = 'block';
                 loginScreen.style.display = 'none';
                 loadTransportadorasAndDashboard();
@@ -1404,21 +1442,21 @@
                 const userDatos = JSON.parse(localStorage.getItem('datosUsuario'));
                 if (userDatos && userDatos.permisos && userDatos.permisos.toLowerCase() === 'administrador') {
                     adminGearIcon.style.display = 'block';
-                    console.log("DOMContentLoaded (después de sesión válida): Rol ADMINISTRADOR. Tuerca DEBERÍA ser visible."); // Debug log
+                    console.log("DOMContentLoaded (después de sesión válida): Rol ADMINISTRADOR. Tuerca DEBERÍA ser visible.");
                 } else {
                     adminGearIcon.style.display = 'none';
-                    console.log("DOMContentLoaded (después de sesión válida): Rol NO ADMINISTRADOR. Tuerca DEBERÍA estar oculta."); // Debug log
+                    console.log("DOMContentLoaded (después de sesión válida): Rol NO ADMINISTRADOR. Tuerca DEBERÍA estar oculta.");
                 }
 
             } else {
-                console.log("DOMContentLoaded: No hay sesión válida, mostrando pantalla de inicio de sesión."); // Debug log
+                console.log("DOMContentLoaded: No hay sesión válida, mostrando pantalla de inicio de sesión.");
                 logoutUser('Por favor, ingrese su contraseña.');
             }
         });
 
         // Listener de eventos para abrir el modal de gestión de usuarios
         adminGearIcon.addEventListener('click', () => {
-            console.log("adminGearIcon clicked: Abriendo modal de gestión de usuarios."); // Debug log
+            console.log("adminGearIcon clicked: Abriendo modal de gestión de usuarios.");
             mostrarModal('user_management_modal');
             loadActiveUsers(); // Cargar usuarios cuando se abre el modal
         });
