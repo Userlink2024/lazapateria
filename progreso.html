@@ -452,7 +452,7 @@
             left: 0;
             top: 0;
             width: 100%; /* Full width */
-            height: 100%; /* Full height */
+            height: 100%;
             overflow: auto; /* Enable scroll if needed */
             background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
             justify-content: center;
@@ -831,14 +831,18 @@
         function getTimeUntilNextAutoSave() {
             const now = new Date();
             const autoSaveTime = new Date(now);
-            autoSaveTime.setHours(18, 0, 0, 0); // 6:00 PM local time
+            autoSaveTime.setHours(18, 0, 0, 0); // 6:00 PM local time (18:00)
 
             if (now.getTime() > autoSaveTime.getTime()) {
                 // If it's already past 6 PM today, schedule for tomorrow
                 autoSaveTime.setDate(autoSaveTime.getDate() + 1);
+                console.log(`getTimeUntilNextAutoSave: Ya pasaron las 6 PM hoy. Programando para mañana a las 6 PM.`);
+            } else {
+                console.log(`getTimeUntilNextAutoSave: Programando para hoy a las 6 PM.`);
             }
-
-            return autoSaveTime.getTime() - now.getTime();
+            const timeDiff = autoSaveTime.getTime() - now.getTime();
+            console.log(`getTimeUntilNextAutoSave: Tiempo restante hasta el próximo guardado (ms): ${timeDiff}`);
+            return timeDiff;
         }
 
         /**
@@ -849,11 +853,18 @@
         function hasDailyProgressBeenSavedToday() {
             // No save for anonymous user
             if (asesorId === "usuario_anonimo") {
+                console.log("hasDailyProgressBeenSavedToday: Skipped check for anonymous user (always returns true for anon).");
                 return true; 
             }
             const todayStr = new Date().toISOString().slice(0, 10);
             const lastSavedDate = localStorage.getItem(`dailyProgressSaved_${asesorId}`);
-            return lastSavedDate === todayStr;
+            
+            if (lastSavedDate === todayStr) {
+                console.log(`hasDailyProgressBeenSavedToday: Progress already marked as saved for today (${todayStr}).`);
+                return true;
+            }
+            console.log(`hasDailyProgressBeenSavedToday: Progress NOT marked as saved for today. Last saved: "${lastSavedDate}", Today: "${todayStr}".`);
+            return false;
         }
 
         /**
@@ -862,10 +873,12 @@
         function markDailyProgressAsSavedToday() {
             // No save for anonymous user
             if (asesorId === "usuario_anonimo") {
+                console.log("markDailyProgressAsSavedToday: Skipped for anonymous user.");
                 return;
             }
             const todayStr = new Date().toISOString().slice(0, 10);
             localStorage.setItem(`dailyProgressSaved_${asesorId}`, todayStr);
+            console.log(`markDailyProgressAsSavedToday: Progress marked as saved for today (${todayStr}).`);
         }
 
         /**
@@ -880,6 +893,7 @@
                 if (isManualTrigger) {
                     showCustomMessageModal("Información", "No se puede guardar el progreso del día para un usuario anónimo.");
                 }
+                console.log("autoSaveDailyProgress: Saving skipped for anonymous user.");
                 return;
             }
 
@@ -887,27 +901,27 @@
             const dailySnapshotRef = db.collection('users').doc(asesorId).collection('daily_sales_snapshot').doc(todayStr);
 
             if (!hasDailyProgressBeenSavedToday() || isManualTrigger) {
-                console.log(`Auto-guardando progreso del día ${todayStr} para el asesor ${asesorId}.`);
+                console.log(`autoSaveDailyProgress: Intentando guardar progreso del día ${todayStr} para el asesor ${asesorId}. isManualTrigger: ${isManualTrigger}.`);
                 try {
                     await dailySnapshotRef.set({
                         pares: currentDayPares,
                         valor: currentDayValor,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
-                    markDailyProgressAsSavedToday();
-                    console.log("Progreso del día guardado automáticamente.");
+                    markDailyProgressAsSavedToday(); // Mark as saved AFTER successful Firebase write
+                    console.log("autoSaveDailyProgress: Progreso del día guardado exitosamente en Firebase y marcado como guardado localmente.");
                     if (isManualTrigger) {
                         playConfirmationSound();
                         showCustomMessageModal("Éxito", "¡Progreso del día guardado exitosamente!"); // Feedback for manual trigger
                     }
                 } catch (error) {
-                    console.error("Error al auto-guardar el progreso del día:", error);
+                    console.error("autoSaveDailyProgress: Error al auto-guardar el progreso del día:", error);
                     if (isManualTrigger) {
                         showCustomMessageModal("Error", "Error al guardar el progreso del día. Inténtelo de nuevo."); // Feedback for manual trigger
                     }
                 }
             } else {
-                console.log(`Progreso del día ${todayStr} ya fue auto-guardado hoy.`);
+                console.log(`autoSaveDailyProgress: Progreso del día ${todayStr} ya fue auto-guardado hoy (guardado automático omitido).`); // Clearer log
                 if (isManualTrigger) {
                     showCustomMessageModal("Información", "El progreso del día ya ha sido guardado hoy."); // Feedback for manual trigger
                 }
@@ -916,7 +930,7 @@
             // Schedule for tomorrow's 6 PM only if not manually triggered
             if (!isManualTrigger) {
                 const timeToNextRun = getTimeUntilNextAutoSave();
-                console.log(`Próximo auto-guardado en: ${timeToNextRun / (1000 * 60 * 60)} horas.`);
+                console.log(`autoSaveDailyProgress: Próximo auto-guardado programado en: ${timeToNextRun / (1000 * 60 * 60)} horas.`);
                 setTimeout(autoSaveDailyProgress, timeToNextRun);
             }
         }
@@ -1103,7 +1117,7 @@
 
                 // --- Schedule initial auto-save check ---
                 const timeToFirstRun = getTimeUntilNextAutoSave();
-                console.log(`Próximo auto-guardado programado en: ${timeToFirstRun / (1000 * 60)} minutos.`);
+                console.log(`Scheduler: Próximo auto-guardado programado para ejecutar en: ${timeToFirstRun / (1000 * 60)} minutos.`);
                 setTimeout(autoSaveDailyProgress, timeToFirstRun);
 
                 // Also run it immediately if it's already past 6 PM and hasn't saved yet
@@ -1111,7 +1125,7 @@
                 const autoSaveTimeToday = new Date(now);
                 autoSaveTimeToday.setHours(18, 0, 0, 0);
                 if (now.getTime() >= autoSaveTimeToday.getTime() && !hasDailyProgressBeenSavedToday()) {
-                    console.log("Ya pasaron las 6 PM y no se detectó guardado para hoy. Ejecutando autoSaveDailyProgress inmediatamente.");
+                    console.log("Scheduler: Ya pasaron las 6 PM y no se detectó guardado para hoy. Ejecutando autoSaveDailyProgress inmediatamente.");
                     autoSaveDailyProgress();
                 }
             } else {
