@@ -2792,8 +2792,11 @@
         async function guardarCambios(event, id) {
             event.preventDefault();
 
+            // Declare docSnap here so it's accessible throughout the function
+            let docSnap = null;
+
             try {
-                const docSnap = await db.collection('registros').doc(id).get();
+                docSnap = await db.collection('registros').doc(id).get();
                 if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
                     showAlert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios."); // Reemplazado alert
                     cerrarModal('modal_modificar');
@@ -2838,7 +2841,8 @@
                 transportadora: transportadoraActualizada, // Save updated transportadora
                 enviadoAEmpaque: modificarEnviarEmpaque, // Save updated state
                 // Only update timestamp if it was marked as true, and it wasn't already recorded
-                enviadoAEmpaqueTimestamp: modificarEnviarEmpaque ? (docSnap.data().enviadoAEmpaqueTimestamp || firebase.firestore.Timestamp.fromDate(new Date())) : null
+                // Ensure docSnap is not null before accessing its data
+                enviadoAEmpaqueTimestamp: modificarEnviarEmpaque ? (docSnap && docSnap.data().enviadoAEmpaqueTimestamp || firebase.firestore.Timestamp.fromDate(new Date())) : null
             };
 
             const productsChanged = JSON.stringify(originalProductsForModification) !== JSON.stringify(productosActualizados);
