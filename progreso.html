@@ -944,6 +944,7 @@
 
             const today = new Date();
             today.setHours(0, 0, 0, 0); // Normalize today to start of day
+            const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
 
             const startOfWeek = new Date(today);
             startOfWeek.setDate(today.getDate() - (today.getDay() + 6) % 7); // Monday of current week
@@ -959,9 +960,16 @@
             console.log(`Número de Snapshots Históricos a Procesar: ${historicalSnapshotsData.length}`);
 
             historicalSnapshotsData.forEach(data => {
-                // Ensure data.id is a string like 'YYYY-MM-DD'
                 const snapshotDate = new Date(data.id);
                 snapshotDate.setHours(0, 0, 0, 0); // Normalize snapshot date to start of day
+
+                // IMPORTANT: Exclude today's snapshot from the historical data sum
+                // as today's data will be added separately from currentDayPares/Valor.
+                // This prevents double-counting the current day's progress.
+                if (data.id === todayStr) {
+                    console.log(`  - Saltando el snapshot de hoy (${data.id}) de la suma histórica.`);
+                    return; // Skip this iteration if it's today's snapshot
+                }
 
                 let includedInWeek = false;
                 let includedInMonth = false;
@@ -983,8 +991,8 @@
                 console.log(`    -> Comparación Mes (>= ${startOfMonth.toLocaleString()}): ${snapshotDate.getTime() >= startOfMonth.getTime()} (Incluido en Mes: ${includedInMonth})`);
             });
 
-            // Add today's real-time values (which come from 'registros' collection, not 'daily_sales_snapshot' yet)
-            // These values are for the *current day* and should always be included in the current week/month.
+            // Always add today's real-time values (which come from 'registros' collection)
+            // This ensures today's current progress is always reflected accurately and only once.
             accumulatedWeekPares = tempAccumulatedWeekPares + currentDayPares;
             accumulatedWeekValor = tempAccumulatedWeekValor + currentDayValor;
             accumulatedMonthPares = tempAccumulatedMonthPares + currentDayPares;
