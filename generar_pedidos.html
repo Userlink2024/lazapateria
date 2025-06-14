@@ -2051,7 +2051,7 @@
                     if (retardoIndicatorContainer) { // Check if container exists before updating
                         retardoIndicatorContainer.style.display = 'flex';
                         retardoIndicatorContainer.innerHTML = `
-                            <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></span>
+                            <span class="exclamation-icon"><i class="fas fa-exclamation-triangle"></i></i></span>
                             <span>En retardo ${timeOverdueText}</span>
                         `;
                     }
@@ -2819,7 +2819,12 @@
 
             try {
                 docSnap = await db.collection('registros').doc(id).get();
-                if (docSnap.exists && datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
+                if (!docSnap.exists) {
+                    showAlert("El pedido que intenta modificar no existe.");
+                    cerrarModal('modal_modificar');
+                    return;
+                }
+                if (datosUsuario.permisos.toLowerCase() === 'operador' && (docSnap.data().bloqueado === true || docSnap.data().despachado === true)) {
                     showAlert("Este pedido está bloqueado o despachado y no se pueden guardar los cambios."); // Reemplazado alert
                     cerrarModal('modal_modificar');
                     return;
@@ -2850,6 +2855,9 @@
             // Get the state of the "Enviar de inmediato a empaque" checkbox in the modification modal
             const modificarEnviarEmpaque = document.getElementById('modificar_enviar_inmediato_empaque').checked;
 
+            // Get original values from the retrieved document data
+            const originalPares = docSnap.data().num_pares || 0;
+            const originalValor = docSnap.data().valor_total || 0;
 
             const datosActualizados = {
                 cliente: ref('modificar_cliente'),
@@ -2868,11 +2876,33 @@
             };
 
             const productsChanged = JSON.stringify(originalProductsForModification) !== JSON.stringify(productosActualizados);
+            const paresChanged = datosActualizados.num_pares !== originalPares;
+            const valorChanged = datosActualizados.valor_total !== originalValor;
+
 
             try {
                 await db.collection('registros').doc(id).update(datosActualizados);
                 showAlert("Pedido modificado exitosamente."); // Reemplazado alert
                 cerrarModal('modal_modificar');
+
+                // --- INICIO: Lógica para actualizar daily_sales_snapshot al modificar ---
+                const today = new Date();
+                const todayStr = today.toISOString().slice(0, 10);
+                const userId = datosUsuario.usuario;
+
+                if (userId && (paresChanged || valorChanged)) {
+                    const paresDiff = datosActualizados.num_pares - originalPares;
+                    const valorDiff = datosActualizados.valor_total - originalValor;
+
+                    const dailySnapshotRef = db.collection('users').doc(userId).collection('daily_sales_snapshot').doc(todayStr);
+                    await dailySnapshotRef.set({
+                        pares: firebase.firestore.FieldValue.increment(paresDiff),
+                        valor: firebase.firestore.FieldValue.increment(valorDiff),
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    console.log(`Progreso diario para ${userId} en ${todayStr} actualizado por modificación: Pares ${paresDiff}, Valor $${valorDiff}`);
+                }
+                // --- FIN: Lógica para actualizar daily_sales_snapshot al modificar ---
 
                 if (productsChanged) {
                     showWarningModal();
@@ -2899,6 +2929,7 @@
         async function eliminarPedido(id) {
             console.log("Eliminando pedido:", id);
 
+            let registroParaEliminar = null; // Store the record data here
             try {
                 const docRef = db.collection('registros').doc(id);
                 const docSnap = await docRef.get();
@@ -2906,8 +2937,8 @@
                     showAlert("El pedido que intenta eliminar no existe."); // Reemplazado alert
                     return;
                 }
-                const registro = docSnap.data();
-                if (datosUsuario.permisos.toLowerCase() === 'operador' && (registro.bloqueado === true || registro.despachado === true)) {
+                registroParaEliminar = docSnap.data(); // Get the data before deletion
+                if (datosUsuario.permisos.toLowerCase() === 'operador' && (registroParaEliminar.bloqueado === true || registroParaEliminar.despachado === true)) {
                     showAlert("Este pedido está bloqueado o despachado y no puede ser eliminado."); // Reemplazado alert
                     return;
                 }
@@ -2922,6 +2953,27 @@
                 try {
                     await db.collection('registros').doc(id).delete();
                     showAlert("Pedido eliminado correctamente."); // Reemplazado alert
+
+                    // --- INICIO: Lógica para actualizar daily_sales_snapshot al eliminar ---
+                    const today = new Date();
+                    const todayStr = today.toISOString().slice(0, 10);
+                    const userId = datosUsuario.usuario;
+
+                    // Decrementar los pares y el valor total del pedido eliminado
+                    const paresEliminados = parseInt(registroParaEliminar.num_pares || 0);
+                    const valorEliminado = parseFloat(registroParaEliminar.valor_total || 0);
+
+                    if (userId && (paresEliminados > 0 || valorEliminado > 0)) {
+                        const dailySnapshotRef = db.collection('users').doc(userId).collection('daily_sales_snapshot').doc(todayStr);
+                        await dailySnapshotRef.set({
+                            pares: firebase.firestore.FieldValue.increment(-paresEliminados),
+                            valor: firebase.firestore.FieldValue.increment(-valorEliminado),
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp() // Actualizar timestamp para reflejar el último cambio
+                        }, { merge: true });
+                        console.log(`Progreso diario para ${userId} en ${todayStr} actualizado por eliminación: Pares -${paresEliminados}, Valor -$${valorEliminado}`);
+                    }
+                    // --- FIN: Lógica para actualizar daily_sales_snapshot al eliminar ---
+
                 } catch (error) {
                     console.error("Error al eliminar el pedido:", error);
                     showAlert("Hubo un error al eliminar el pedido. Inténtelo de nuevo."); // Reemplazado alert
@@ -3576,7 +3628,7 @@
          */
         async function checkTimeBlock() { // Added async keyword
             const now = new Date();
-            const todayDate = now.toISOString().slice(0, 10); // FormatoYYYY-MM-DD
+            const todayDate = now.toISOString().slice(0, 10); // Formato YYYY-MM-DD
             const currentHour = now.getHours();
             const currentMinute = now.getMinutes();
 
@@ -3977,13 +4029,52 @@
                                 return;
                             }
 
+                            // --- INICIO: Lógica para decrementar daily_sales_snapshot al eliminar despachos ---
+                            const today = new Date();
+                            const todayStr = today.toISOString().slice(0, 10);
+                            const userId = datosUsuario.usuario; // Assuming current user is the one performing deletion
+
+                            // Fetch the current daily snapshot value BEFORE applying decrements
+                            let currentDailyPares = 0;
+                            let currentDailyValor = 0;
+                            const dailySnapshotRef = db.collection('users').doc(userId).collection('daily_sales_snapshot').doc(todayStr);
+                            const dailySnapshotDoc = await dailySnapshotRef.get();
+                            if (dailySnapshotDoc.exists) {
+                                const data = dailySnapshotDoc.data();
+                                currentDailyPares = data.pares || 0;
+                                currentDailyValor = data.valor || 0;
+                            }
+
+                            let totalParesDeleted = 0;
+                            let totalValorDeleted = 0;
+                            // --- FIN: Lógica para decrementar daily_sales_snapshot al eliminar despachos ---
+
                             querySnapshot.forEach(doc => {
+                                const registro = doc.data(); // Get data from the document to be deleted
+                                totalParesDeleted += parseInt(registro.num_pares || 0);
+                                totalValorDeleted += parseFloat(registro.valor_total || 0);
                                 batch.delete(doc.ref);
                                 deletedCount++;
                             });
 
                             await batch.commit();
                             playConfirmationSound();
+
+                            // --- INICIO: Aplicar decremento al daily_sales_snapshot DESPUÉS del commit del batch ---
+                            if (userId && (totalParesDeleted > 0 || totalValorDeleted > 0)) {
+                                // Ensure the values don't go below zero
+                                const newPares = Math.max(0, currentDailyPares - totalParesDeleted);
+                                const newValor = Math.max(0, currentDailyValor - totalValorDeleted);
+
+                                await dailySnapshotRef.set({
+                                    pares: newPares,
+                                    valor: newValor,
+                                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                                }, { merge: true });
+                                console.log(`Progreso diario para ${userId} en ${todayStr} actualizado por eliminación masiva: Pares -${totalParesDeleted}, Valor -$${totalValorDeleted}`);
+                            }
+                            // --- FIN: Aplicar decremento al daily_sales_snapshot ---
+
                             const deleteDispatchesErrorDisplay = document.getElementById('delete_dispatches_error');
                             if (deleteDispatchesErrorDisplay) {
                                 deleteDispatchesErrorDisplay.textContent = `Se eliminaron ${deletedCount} pedidos despachados correctamente.`;
