@@ -824,22 +824,21 @@
         }
 
         /**
-         * Calculates the time until the next 8:30 AM local time.
-         * If it's already past 8:30 AM, calculates until 8:30 AM tomorrow.
-         * @returns {number} Milliseconds until next 8:30 AM.
+         * Calculates the time until the next 6:00 PM local time.
+         * If it's already past 6 PM, calculates until 6 PM tomorrow.
+         * @returns {number} Milliseconds until next 6 PM.
          */
         function getTimeUntilNextAutoSave() {
             const now = new Date();
             const autoSaveTime = new Date(now);
-            // AQUI ENCUENTRO PARA CAMBIAR LA HORA
-            autoSaveTime.setHours(8, 40, 0, 0); // 8:30 AM local time (08:30)
+            autoSaveTime.setHours(18, 0, 0, 0); // 6:00 PM local time (18:00)
 
             if (now.getTime() > autoSaveTime.getTime()) {
-                // If it's already past 8:30 AM today, schedule for tomorrow
+                // If it's already past 6 PM today, schedule for tomorrow
                 autoSaveTime.setDate(autoSaveTime.getDate() + 1);
-                console.log(`getTimeUntilNextAutoSave: Ya pasaron las 8:30 AM hoy. Programando para mañana a las 8:30 AM.`);
+                console.log(`getTimeUntilNextAutoSave: Ya pasaron las 6 PM hoy. Programando para mañana a las 6 PM.`);
             } else {
-                console.log(`getTimeUntilNextAutoSave: Programando para hoy a las 8:30 AM.`);
+                console.log(`getTimeUntilNextAutoSave: Programando para hoy a las 6 PM.`);
             }
             const timeDiff = autoSaveTime.getTime() - now.getTime();
             console.log(`getTimeUntilNextAutoSave: Tiempo restante hasta el próximo guardado (ms): ${timeDiff}`);
@@ -928,7 +927,7 @@
                 }
             }
 
-            // Schedule for tomorrow's 8:30 AM only if not manually triggered
+            // Schedule for tomorrow's 6 PM only if not manually triggered
             if (!isManualTrigger) {
                 const timeToNextRun = getTimeUntilNextAutoSave();
                 console.log(`autoSaveDailyProgress: Próximo auto-guardado programado en: ${timeToNextRun / (1000 * 60 * 60)} horas.`);
@@ -1090,13 +1089,44 @@
                 });
 
                 // --- Listener for Daily Sales Snapshots (for weekly/monthly accumulated progress) ---
-                // This listener will primarily handle updates when the 8:30 AM auto-save happens for past days,
+                // This listener will primarily handle updates when the 6 PM auto-save happens for past days,
                 // or when a manual save from a different session/device happens.
                 // When this fires, it will trigger the _calculateAndDisplayAccumulatedProgress.
                 db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
-                    .onSnapshot(snapshot => {
-                        const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        _calculateAndDisplayAccumulatedProgress(historicalData); // Pass historical data to the central function
+                    .onSnapshot(async (snapshot) => { // Made async to use await for batch
+                        const historicalData = [];
+                        const batch = db.batch();
+                        let documentsToDeleteCount = 0;
+
+                        snapshot.forEach(doc => {
+                            const data = doc.data();
+                            // Check if 'pares' and 'valor' are 0 or undefined/null
+                            const pares = data.pares || 0;
+                            const valor = data.valor || 0;
+
+                            if (pares === 0 && valor === 0) {
+                                console.log(`Detected document for deletion (pares=0, valor=0): ${doc.id}`);
+                                batch.delete(doc.ref);
+                                documentsToDeleteCount++;
+                            } else {
+                                historicalData.push({ id: doc.id, ...data });
+                            }
+                        });
+
+                        if (documentsToDeleteCount > 0) {
+                            try {
+                                await batch.commit();
+                                console.log(`Successfully deleted ${documentsToDeleteCount} documents with 0 pares and 0 valor.`);
+                                showCustomMessageModal("Limpieza de datos", `Se eliminaron ${documentsToDeleteCount} registros de progreso diario con valores de pares y valor en cero.`);
+                            } catch (error) {
+                                console.error("Error deleting documents with 0 pares and 0 valor:", error);
+                                showCustomMessageModal("Error", "Hubo un error al eliminar registros de progreso diario con valores en cero.");
+                            }
+                        } else {
+                            console.log("No documents with 0 pares and 0 valor found for deletion.");
+                        }
+
+                        _calculateAndDisplayAccumulatedProgress(historicalData);
                     }, error => {
                         console.error("Error al escuchar snapshots de ventas diarias:", error);
                     });
@@ -1121,13 +1151,12 @@
                 console.log(`Scheduler: Próximo auto-guardado programado para ejecutar en: ${timeToFirstRun / (1000 * 60)} minutos.`);
                 setTimeout(autoSaveDailyProgress, timeToFirstRun);
 
-                // Also run it immediately if it's already past 8:30 AM and hasn't saved yet
+                // Also run it immediately if it's already past 6 PM and hasn't saved yet
                 const now = new Date();
                 const autoSaveTimeToday = new Date(now);
-                // AQUI ENCUENTRO PARA CAMBIAR LA HORA
-                autoSaveTimeToday.setHours(8, 30, 0, 0); // 8:30 AM local time (08:30)
+                autoSaveTimeToday.setHours(18, 0, 0, 0);
                 if (now.getTime() >= autoSaveTimeToday.getTime() && !hasDailyProgressBeenSavedToday()) {
-                    console.log("Scheduler: Ya pasaron las 8:30 AM y no se detectó guardado para hoy. Ejecutando autoSaveDailyProgress inmediatamente.");
+                    console.log("Scheduler: Ya pasaron las 6 PM y no se detectó guardado para hoy. Ejecutando autoSaveDailyProgress inmediatamente.");
                     autoSaveDailyProgress();
                 }
             } else {
@@ -1139,10 +1168,10 @@
                 document.getElementById('in_packaging_orders_card').textContent = 0;
                 document.getElementById('dispatched_orders_card').textContent = 0;
                 document.getElementById('retarded_orders_card').textContent = 0;
-                document.getElementById('total_pares_week_card').textContent = 0; // Se mantiene, pero no se mostrará
+                // REMOVED: document.getElementById('total_pares_week_card').textContent = 0; 
                 document.getElementById('total_valor_week_card').textContent = '$0';
                 document.getElementById('total_pares_month_card').textContent = 0;
-                document.getElementById('total_valor_month_card').textContent = '$0'; // Se mantiene, pero no se mostrará
+                // REMOVED: document.getElementById('total_valor_month_card').textContent = '$0'; 
                 updateGoalProgress(); // Update progress bars for anonymous user (will be 0)
             }
         };
