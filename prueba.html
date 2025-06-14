@@ -1779,6 +1779,28 @@
                 try {
                     await db.collection('registros').add(datos);
                     console.log("Datos guardados en Firebase:", datos);
+
+                    // --- INICIO DE LA NUEVA LÓGICA PARA GUARDAR EL PROGRESO DIARIO ---
+                    const today = new Date();
+                    const todayStr = today.toISOString().slice(0, 10); // Formato YYYY-MM-DD
+                    const userId = datosUsuario.usuario; // Obtener el ID del usuario actual
+
+                    // Obtener los pares y el valor total del pedido que acaba de ser guardado
+                    const currentDispatchPares = parseInt(datos.num_pares || 0);
+                    const currentDispatchValor = parseFloat(datos.valor_total || 0);
+
+                    // Solo actualizar si hay un userId válido y pares o valor para sumar
+                    if (userId && (currentDispatchPares > 0 || currentDispatchValor > 0)) {
+                        const dailySnapshotRef = db.collection('users').doc(userId).collection('daily_sales_snapshot').doc(todayStr);
+                        await dailySnapshotRef.set({
+                            pares: firebase.firestore.FieldValue.increment(currentDispatchPares),
+                            valor: firebase.firestore.FieldValue.increment(currentDispatchValor),
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp() // Para registrar cuándo fue la última actualización
+                        }, { merge: true }); // Usar merge para crear el documento si no existe, o actualizarlo
+                        console.log(`Progreso diario para ${userId} en ${todayStr} actualizado: Pares +${currentDispatchPares}, Valor +$${currentDispatchValor}`);
+                    }
+                    // --- FIN DE LA NUEVA LÓGICA ---
+
                     showAlert("Pedido agregado exitosamente!"); // Reemplazado alert
                     // Después de agregar un pedido, verificar si hay pedidos en retardo
                     checkForRetardedDispatches(true); // Pasar true para indicar que se debe mostrar el modal si hay retardos
@@ -4092,7 +4114,7 @@
                 if (retardoAlertContent) {
                     retardoAlertContent.innerHTML = `
                         <i class="fas fa-exclamation-triangle"></i>
-                        <span>¡Advertencia! Hay uno o más despachos \"En retardo\" que son tuyos. Por favor, revise la sección \"Ver Pedidos\".</span>
+                        <span>¡Advertencia! Hay uno o más despachos \\"En retardo\\" que son tuyos. Por favor, revise la sección \\"Ver Pedidos\\".</span>
                         <span class=\"close\" onclick=\"cerrarModal('retardo_alert_modal')\">&times;</span>
                     `;
                 }
