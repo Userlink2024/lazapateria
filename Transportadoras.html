@@ -694,7 +694,7 @@
     <script>
         const LOGIN_PASSWORD = "2025"; // Contraseña para acceder al dashboard (operador estándar)
         const ADMIN_PASSWORD = "upm1022"; // Contraseña para que el usuario sea reconocido como administrador
-        const SESSION_DURATION_MS = 480 * 60 * 1000; // 480 minutos en milisegundos
+        const SESSION_DURATION_MS = 480 * 60 * 1000; // 480 minutos en milisegundos (8 horas)
         const LOCKOUT_DURATION_MS = 10 * 60 * 1000; // 10 minutos en milisegundos para bloqueo por cambio de transportadora
         const ACTIVE_SESSION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos para considerar una sesión activa en la lista
 
@@ -826,7 +826,7 @@
         async function logoutUser(message, isViolation = false, clearLocalData = true) {
             console.log(`Intentando cerrar sesión del usuario. ¿Es violación? ${isViolation}, ¿Limpiar datos locales? ${clearLocalData}`); // Debug log
             const currentUserId = localStorage.getItem('user_id'); // Get user_id from localStorage for potential admin unblock
-            const userDatos = JSON.parse(sessionStorage.getItem('datosUsuario') || '{}'); // Check sessionStorage for operator data
+            const userDatos = JSON.parse(localStorage.getItem('datosUsuario') || '{}'); // Always check localStorage now
             const isOperatorSession = userDatos.permisos === 'operador';
 
             if (currentUserId) {
@@ -839,38 +839,24 @@
                             lastActivity: firebase.firestore.FieldValue.serverTimestamp() // Actualizar la actividad
                         });
                         console.log(`Sesión de usuario ${currentUserId} marcada como BLOQUEADA en Firestore por violación (NO operador).`); // Debug log
-                    } else if (isOperatorSession) { // For operator violations or normal logout
-                        // For operators, just delete the ephemeral session document.
+                    } else { // For operator violations or normal logout or admin kick
+                        // For all sessions now, delete the ephemeral/persistent session document on logout.
+                        // The 'isBlocked' status will remain in Firestore and prevent re-login if set to true.
                         await sessionRef.delete();
-                        console.log(`Sesión activa efímera para el usuario ${currentUserId} eliminada de Firestore.`); // Debug log
-                    } else { // For non-operator normal logout or admin kick
-                         await sessionRef.delete();
-                         console.log(`Sesión activa para el usuario ${currentUserId} eliminada de Firestore (NO operador normal logout).`); // Debug log
+                        console.log(`Sesión activa para el usuario ${currentUserId} eliminada de Firestore.`); // Debug log
                     }
                 } catch (error) {
                     console.error("Error al manejar la sesión activa de Firestore durante el cierre de sesión:", error); // Debug log
                 }
             }
 
-            // Clear data from localStorage or sessionStorage based on session type
-            if (isOperatorSession) {
-                sessionStorage.removeItem('lastLoginTime');
-                sessionStorage.removeItem('currentSelectedTransportadora');
-                sessionStorage.removeItem('user_id'); // Note: This might still be in localStorage for unblock modal
-                sessionStorage.removeItem('datosUsuario');
-                sessionStorage.removeItem('currentSessionIP');
-                // For operators, ensure localStorage user_id is cleared only if it's not the admin's explicit intent
-                if (clearLocalData) {
-                    localStorage.removeItem('user_id');
-                }
-            } else { // Admin session
-                if (clearLocalData) {
-                    localStorage.removeItem('lastLoginTime');
-                    localStorage.removeItem('currentSelectedTransportadora');
-                    localStorage.removeItem('user_id');
-                    localStorage.removeItem('datosUsuario');
-                    localStorage.removeItem('currentSessionIP');
-                }
+            // Always clear data from localStorage
+            if (clearLocalData) {
+                localStorage.removeItem('lastLoginTime');
+                localStorage.removeItem('currentSelectedTransportadora');
+                localStorage.removeItem('user_id');
+                localStorage.removeItem('datosUsuario');
+                localStorage.removeItem('currentSessionIP');
             }
             passwordInput.value = ''; // Always clear password input
 
@@ -951,7 +937,7 @@
             let userRole;
             let userName;
             let simulatedUserId;
-            let storageMechanism; // localStorage or sessionStorage
+            let storageMechanism = localStorage; // All session data will now be stored in localStorage
 
             console.log(`checkPassword: Contraseña ingresada: [***ENCRIPTADA***]`); // Debug log (evitar registrar información sensible)
 
@@ -960,14 +946,14 @@
                 userRole = 'administrador';
                 userName = 'Administrador Principal';
                 simulatedUserId = `admin_${btoa(enteredPassword).slice(0, 10)}`; // ID único para admin
-                storageMechanism = localStorage;
                 console.log("checkPassword: Contraseña de ADMINISTRADOR reconocida."); // Debug log
             } else if (enteredPassword === LOGIN_PASSWORD) {
                 userRole = 'operador';
                 userName = 'Operador Estándar';
-                simulatedUserId = crypto.randomUUID(); // New ephemeral ID for each operator login
-                storageMechanism = sessionStorage; // Store operator session in sessionStorage
-                console.log("checkPassword: Contraseña de OPERADOR reconocida. Generando ID efímero."); // Debug log
+                // For operators, we still generate a new UUID on successful login to track individual operator sessions
+                // but this ID will now persist in localStorage with their session data.
+                simulatedUserId = crypto.randomUUID(); 
+                console.log("checkPassword: Contraseña de OPERADOR reconocida. Generando ID persistente."); // Debug log
             } else {
                 loginError.textContent = 'Contraseña incorrecta. Inténtalo de nuevo.';
                 passwordInput.value = '';
@@ -975,26 +961,25 @@
                 return; // Salir si la contraseña no coincide con ninguna
             }
 
-            // Always store user_id in localStorage for the unblock modal to function correctly across tabs/reloads if they were blocked
-            // This 'user_id' is mainly for the admin to target for unblocking.
+            // Always store user_id in localStorage for all roles.
             localStorage.setItem('user_id', simulatedUserId); 
 
-            // Store user data in the chosen storage mechanism (localStorage for admin, sessionStorage for operator)
+            // Store user data in localStorage for all roles.
             const datosUsuario = {
                 usuario: simulatedUserId,
                 nombreCompleto: userName,
                 permisos: userRole
             };
-            storageMechanism.setItem('datosUsuario', JSON.stringify(datosUsuario));
-            storageMechanism.setItem('lastLoginTime', currentTime);
+            localStorage.setItem('datosUsuario', JSON.stringify(datosUsuario));
+            localStorage.setItem('lastLoginTime', currentTime);
             
-            // Only store IP for administrators in storage
+            // Only store IP for administrators in localStorage
             if (userRole === 'administrador') {
-                storageMechanism.setItem('currentSessionIP', currentIp); 
+                localStorage.setItem('currentSessionIP', currentIp); 
             } else {
-                storageMechanism.removeItem('currentSessionIP'); // Ensure it's not present for operators
+                localStorage.removeItem('currentSessionIP'); // Ensure it's not present for operators
             }
-            console.log("checkPassword: datosUsuario guardados en", storageMechanism === localStorage ? "localStorage" : "sessionStorage", ":", datosUsuario); // Debug log
+            console.log("checkPassword: datosUsuario guardados en localStorage:", datosUsuario); // Debug log
 
             try {
                 console.log(`checkPassword: Intentando obtener documento de sesión para userId: ${simulatedUserId}`); // Debug log
@@ -1009,7 +994,6 @@
                     firestoreSelectedTransportadora = sessionData.selectedTransportadora || '';
 
                     // PRIORIDAD 1: Verificar si el usuario está bloqueado de forma persistente en Firestore
-                    // This block applies to ANY user_id found blocked in Firestore, regardless if it's ephemeral or persistent.
                     if (firestoreIsBlocked) {
                         loginError.textContent = ''; // Limpiar cualquier mensaje de error de login anterior
                         unblockErrorP.textContent = ''; // Limpiar errores del modal de desbloqueo
@@ -1021,21 +1005,15 @@
                     }
 
                     // PRIORIDAD 2: Para usuarios no administradores (operadores), si ya tienen una transportadora seleccionada en Firestore
-                    // esto significa que ya hay una sesión activa vinculada a una transportadora.
-                    // Si intenta iniciar sesión de nuevo con la *misma ID efímera* (que no debería ocurrir a menos que haya un problema), o si la sesión de Firestore es para un operador y ya tiene una transportadora seleccionada,
-                    // es una violación de política (multisesión o re-intento de sesión con transportadora ya asignada).
-                    // For operators, this just results in a new ephemeral session, so this check is primarily for admins managing fixed operator IDs or if the ephemeral ID is reused.
+                    // y la ID del usuario es la misma (lo que ahora puede pasar con localStorage).
                     if (userRole.toLowerCase() !== 'administrador' && firestoreSelectedTransportadora !== '') {
-                        // For operators, attempting to re-login to an ephemeral session that already has a transporter set means
-                        // their previous ephemeral session should be deleted, and they start a fresh one.
-                        await sessionRef.delete(); // Delete the old ephemeral session
-                        simulatedUserId = crypto.randomUUID(); // Generate a NEW ephemeral ID
-                        localStorage.setItem('user_id', simulatedUserId); // Update user_id in localStorage
-                        datosUsuario.usuario = simulatedUserId; // Update datosUsuario with new ID
-                        storageMechanism.setItem('datosUsuario', JSON.stringify(datosUsuario)); // Update sessionStorage
-                        console.log(`checkPassword: Operador intentó iniciar sesión con transportadora ya activa. Nueva ID efímera generada: ${simulatedUserId}.`);
-                        // Continue to login with the new ephemeral ID
-                        firestoreSelectedTransportadora = ''; // No transporter selected for new session
+                        // If an operator tries to log in and their existing persistent session (in Firestore)
+                        // already has a selected transportadora, it's a violation.
+                        // We will log them out, and their session will be 'kicked' (deleted from Firestore session),
+                        // but because they are blocked by policy, they will get the lockout message.
+                        logoutUser('Violación de políticas: Ya tiene una transportadora asignada en su sesión anterior. Su acceso ha sido bloqueado.', true, false); // No clear local data, let the unblock modal handle it.
+                        console.log(`checkPassword: Operador intentó iniciar sesión con transportadora ya activa en Firestore.`);
+                        return;
                     }
                 }
 
@@ -1059,7 +1037,7 @@
                 }
 
                 // Si llegamos aquí, el usuario no está bloqueado y no hay violación de sesión activa con transportadora
-                // (o si era operador, se generó una nueva sesión efímera).
+                // (o si era operador, se permitió continuar si no tenía una transportadora asignada).
                 // Actualizar/crear el documento de sesión.
                 const sessionUpdateData = {
                     userId: simulatedUserId,
@@ -1071,7 +1049,9 @@
                     sessionUpdateData.ipAddress = currentIp; // Only track IP for admin
                     sessionUpdateData.selectedTransportadora = firestoreSelectedTransportadora; // Preserve for admin
                 } else {
-                    sessionUpdateData.selectedTransportadora = ''; // Operators start with no selected transporter in Firestore
+                    // For operators, if they had a previous session, this will clear their transportadora,
+                    // allowing them to select a new one for this new session.
+                    sessionUpdateData.selectedTransportadora = ''; 
                     sessionUpdateData.ipAddress = ''; // No IP tracked for operators
                 }
 
@@ -1109,24 +1089,14 @@
          * Verifica la expiración de la sesión, el estado de bloqueo global, y la consistencia de IP/transportadora.
          */
         async function checkSessionAndBlockStatus() {
-            const currentUserId = localStorage.getItem('user_id'); // Main ID from localStorage
-            let storageMechanism = sessionStorage; // Assume operator by default
-            let storedDatosUsuario = JSON.parse(sessionStorage.getItem('datosUsuario') || '{}');
+            const currentUserId = localStorage.getItem('user_id'); // Always get from localStorage
+            let storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || '{}'); // Always check localStorage
             let userRole = storedDatosUsuario.permisos;
-
-            // If no user data in sessionStorage, try localStorage (for admin or previously logged in user)
-            if (!userRole) {
-                storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
-                userRole = storedDatosUsuario.permisos;
-                if (userRole === 'administrador') {
-                    storageMechanism = localStorage;
-                }
-            }
-
-            const lastLoginTime = storageMechanism.getItem('lastLoginTime');
+            
+            const lastLoginTime = localStorage.getItem('lastLoginTime'); // Always get from localStorage
             const currentTime = Date.now();
             const dashboardLockoutEndTime = localStorage.getItem('dashboardLockoutEndTime'); // Always check global lockout
-            const currentSelectedTransportadora_LS = storageMechanism.getItem('currentSelectedTransportadora'); // Transportadora desde el storage apropiado
+            const currentSelectedTransportadora_LS = localStorage.getItem('currentSelectedTransportadora'); // Always get from localStorage
             
             console.log("checkSessionAndBlockStatus: Ejecutando verificación de sesión."); // Debug log
             console.log("checkSessionAndBlockStatus: Rol de usuario actual:", userRole, "ID:", currentUserId); // Debug log
@@ -1141,7 +1111,7 @@
                 console.log("checkSessionAndBlockStatus: Bloqueo del dashboard expirado y borrado de localStorage."); // Debug log
             }
 
-            // 2. Verificar la expiración de la sesión (desde el storage apropiado)
+            // 2. Verificar la expiración de la sesión (desde localStorage)
             if (!lastLoginTime || (currentTime - parseInt(lastLoginTime) > SESSION_DURATION_MS)) {
                 logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.'); // Logout normal
                 console.log("checkSessionAndBlockStatus: Sesión expirada."); // Debug log
@@ -1186,15 +1156,15 @@
                             console.log(`checkSessionAndBlockStatus: Intento de acceso a múltiples transportadoras detectado. Transportadora de sesión (Firestore): ${sessionData.selectedTransportadora}, Transportadora en LS: ${currentSelectedTransportadora_LS}. Marcando como bloqueado.`); // Debug log
                             return;
                         } else if (sessionData.selectedTransportadora && !currentSelectedTransportadora_LS) {
-                            storageMechanism.setItem('currentSelectedTransportadora', sessionData.selectedTransportadora);
+                            localStorage.setItem('currentSelectedTransportadora', sessionData.selectedTransportadora);
                             originalTransportadoraSelection = sessionData.selectedTransportadora;
                             console.log("checkSessionAndBlockStatus: Sincronizando localStorage (admin) con transportadora de Firestore."); // Debug log
                         }
-                    } else { // For Operator: Sync selected transporter from Firestore to sessionStorage if it exists
+                    } else { // For Operator: Sync selected transporter from Firestore to localStorage if it exists
                         if (sessionData.selectedTransportadora && sessionData.selectedTransportadora !== currentSelectedTransportadora_LS) {
-                             storageMechanism.setItem('currentSelectedTransportadora', sessionData.selectedTransportadora);
+                             localStorage.setItem('currentSelectedTransportadora', sessionData.selectedTransportadora);
                              originalTransportadoraSelection = sessionData.selectedTransportadora;
-                             console.log("checkSessionAndBlockStatus: Sincronizando sessionStorage (operador) con transportadora de Firestore."); // Debug log
+                             console.log("checkSessionAndBlockStatus: Sincronizando localStorage (operador) con transportadora de Firestore."); // Debug log
                         }
                     }
 
@@ -1245,19 +1215,10 @@
                     transportadoraSelect.appendChild(option);
                 });
 
-                // Get current user data to determine storage mechanism
-                let storageMechanism = sessionStorage; // Assume operator by default
-                let storedDatosUsuario = JSON.parse(sessionStorage.getItem('datosUsuario') || '{}');
+                // Get current user data to determine storage mechanism (always localStorage now)
+                let storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
                 let userRole = storedDatosUsuario.permisos;
-
-                if (!userRole) { // If not in sessionStorage, check localStorage for admin
-                    storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
-                    userRole = storedDatosUsuario.permisos;
-                    if (userRole === 'administrador') {
-                        storageMechanism = localStorage;
-                    }
-                }
-
+                
                 const currentUserId = localStorage.getItem('user_id'); // Always get from localStorage for consistency
                 let firestoreTransportadora = '';
                 if (currentUserId) {
@@ -1269,12 +1230,12 @@
 
                 if (firestoreTransportadora && Array.from(transportadoraSelect.options).some(option => option.value === firestoreTransportadora)) {
                     transportadoraSelect.value = firestoreTransportadora;
-                    storageMechanism.setItem('currentSelectedTransportadora', firestoreTransportadora); // Sincronizar con el storage apropiado
+                    localStorage.setItem('currentSelectedTransportadora', firestoreTransportadora); // Sincronizar con localStorage
                     console.log(`loadTransportadorasAndDashboard: Transportadora cargada desde Firestore: ${firestoreTransportadora}`); // Debug log
-                } else if (storageMechanism.getItem('currentSelectedTransportadora') && Array.from(transportadoraSelect.options).some(option => option.value === storageMechanism.getItem('currentSelectedTransportadora'))) {
-                    // Fallback a localStorage/sessionStorage si Firestore no tiene un valor o si el usuario es nuevo
-                    transportadoraSelect.value = storageMechanism.getItem('currentSelectedTransportadora');
-                    console.log(`loadTransportadorasAndDashboard: Transportadora cargada desde ${storageMechanism === localStorage ? 'localStorage' : 'sessionStorage'}: ${storageMechanism.getItem('currentSelectedTransportadora')}`); // Debug log
+                } else if (localStorage.getItem('currentSelectedTransportadora') && Array.from(transportadoraSelect.options).some(option => option.value === localStorage.getItem('currentSelectedTransportadora'))) {
+                    // Fallback a localStorage si Firestore no tiene un valor o si el usuario es nuevo
+                    transportadoraSelect.value = localStorage.getItem('currentSelectedTransportadora');
+                    console.log(`loadTransportadorasAndDashboard: Transportadora cargada desde localStorage: ${localStorage.getItem('currentSelectedTransportadora')}`); // Debug log
                 } else {
                     console.log("loadTransportadorasAndDashboard: No hay transportadora almacenada o válida para cargar."); // Debug log
                 }
@@ -1297,24 +1258,14 @@
             const newSelectedTransportadora = transportadoraSelect.value;
             const currentTime = Date.now();
             const currentUserId = localStorage.getItem('user_id'); // Get user_id from localStorage
-            let storageMechanism = sessionStorage; // Assume operator by default
-            let userDatos = JSON.parse(sessionStorage.getItem('datosUsuario') || '{}');
+            let userDatos = JSON.parse(localStorage.getItem('datosUsuario') || '{}'); // Always get from localStorage
             let userRole = userDatos.permisos;
-
-            // If no user data in sessionStorage, try localStorage (for admin)
-            if (!userRole) {
-                userDatos = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
-                userRole = userDatos.permisos;
-                if (userRole === 'administrador') {
-                    storageMechanism = localStorage;
-                }
-            }
-
+            
             console.log(`handleTransportadoraChange: Nueva transportadora seleccionada: ${newSelectedTransportadora}`); // Debug log
 
             // Admin can always change the selected transporter without triggering a policy violation.
             if (userRole.toLowerCase() === 'administrador') {
-                storageMechanism.setItem('currentSelectedTransportadora', newSelectedTransportadora);
+                localStorage.setItem('currentSelectedTransportadora', newSelectedTransportadora);
                 originalTransportadoraSelection = newSelectedTransportadora;
                 // Update Firestore session with the new transportadora for admin
                 if (currentUserId) {
@@ -1331,14 +1282,14 @@
             activeSessionsCollection.doc(currentUserId).get().then(doc => {
                 const sessionData = doc.data();
                 const firestoreSelectedTransportadora = sessionData.selectedTransportadora || '';
-                console.log(`handleTransportadoraChange: Transportadora en Firestore: ${firestoreSelectedTransportadora}, Transportadora en ${storageMechanism === localStorage ? 'localStorage' : 'sessionStorage'}: ${storageMechanism.getItem('currentSelectedTransportadora')}`); // Debug log
+                console.log(`handleTransportadoraChange: Transportadora en Firestore: ${firestoreSelectedTransportadora}, Transportadora en localStorage: ${localStorage.getItem('currentSelectedTransportadora')}`); // Debug log
 
                 // Scenario 1: First time selecting a transportadora for this non-admin session
                 if (!firestoreSelectedTransportadora && newSelectedTransportadora) {
                     showConfirm(
                         `¿Está seguro de que desea seleccionar "${newSelectedTransportadora}"? Una vez seleccionada, solo podrá ver los datos de esta transportadora durante su sesión. Intentar cambiarla resultará en el cierre de su sesión.`,
                         () => { // User confirmed (Sí)
-                            storageMechanism.setItem('currentSelectedTransportadora', newSelectedTransportadora);
+                            localStorage.setItem('currentSelectedTransportadora', newSelectedTransportadora);
                             originalTransportadoraSelection = newSelectedTransportadora;
                             // Update Firestore session
                             activeSessionsCollection.doc(currentUserId).update({ selectedTransportadora: newSelectedTransportadora })
@@ -1380,7 +1331,7 @@
             }).catch(error => {
                 console.error("Error fetching session data in handleTransportadoraChange:", error); // Debug log
                 // Fallback to storage value if Firestore fetch fails for some reason
-                const currentSelectedTransportadora_from_storage = storageMechanism.getItem('currentSelectedTransportadora');
+                const currentSelectedTransportadora_from_storage = localStorage.getItem('currentSelectedTransportadora');
                 if (currentSelectedTransportadora_from_storage && newSelectedTransportadora !== currentSelectedTransportadora_from_storage && userRole.toLowerCase() !== 'administrador') {
                      showConfirm(
                         '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar cambiar o deseleccionar la transportadora resultará en el CIERRE INMEDIATO de su sesión. ¿Desea continuar con esta acción?',
@@ -1415,11 +1366,8 @@
             const selectedTransportadora = transportadoraSelect.value;
             console.log("loadDashboardDataInternal: Transportadora seleccionada para la carga de datos:", selectedTransportadora); // Debug log
 
-            // The user role is retrieved from the appropriate storage
-            let userDatos = JSON.parse(sessionStorage.getItem('datosUsuario') || '{}');
-            if (!userDatos.permisos) {
-                userDatos = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
-            }
+            // The user role is retrieved from localStorage (always localStorage now)
+            let userDatos = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
             const currentUserId = userDatos?.usuario; 
 
 
@@ -1675,7 +1623,8 @@
                     console.log(`Estado de bloqueo del usuario ${userId} establecido en ${blockStatus}.`); // Debug log
                     userManagementErrorP.textContent = `Usuario ${userId} ${blockStatus ? 'bloqueado' : 'desbloqueado'} correctamente.`;
                     setTimeout(() => userManagementErrorP.textContent = '', 3000);
-                } catch (error) {
+                }
+                catch (error) {
                     console.error(`Error al ${actionText} usuario:`, error); // Debug log
                     userManagementErrorP.textContent = `Error al ${actionText} a ${userId}.`;
                 }
@@ -1694,17 +1643,11 @@
                 }
             });
 
-            // Leer datos del usuario desde sessionStorage (prioridad para operadores)
-            let storedDatosUsuario = JSON.parse(sessionStorage.getItem('datosUsuario') || '{}');
+            // Leer datos del usuario siempre desde localStorage ahora
+            let storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
             let userRole = storedDatosUsuario.permisos;
-
-            // Si no se encontró en sessionStorage, intentar con localStorage (para administradores)
-            if (!userRole) {
-                storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
-                userRole = storedDatosUsuario.permisos;
-            }
             
-            console.log("DOMContentLoaded: datosUsuario del storage:", storedDatosUsuario); // Debug log
+            console.log("DOMContentLoaded: datosUsuario del storage (localStorage):", storedDatosUsuario); // Debug log
             
             // Determinar si la tuerca debe mostrarse basándose en el rol del usuario
             if (storedDatosUsuario && userRole && userRole.toLowerCase() === 'administrador') {
@@ -1737,14 +1680,8 @@
             });
 
             // En la carga inicial, verificar si existe una sesión válida
-            let lastLoginTime = sessionStorage.getItem('lastLoginTime');
-            let currentUserId = sessionStorage.getItem('user_id');
-
-            // Si no hay datos en sessionStorage, intentar con localStorage (para admins)
-            if (!lastLoginTime || !currentUserId) {
-                lastLoginTime = localStorage.getItem('lastLoginTime');
-                currentUserId = localStorage.getItem('user_id');
-            }
+            let lastLoginTime = localStorage.getItem('lastLoginTime'); // Siempre desde localStorage
+            let currentUserId = localStorage.getItem('user_id'); // Siempre desde localStorage
 
 
             const dashboardLockoutEndTime = localStorage.getItem('dashboardLockoutEndTime');
