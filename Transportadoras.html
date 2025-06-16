@@ -669,7 +669,7 @@
                 <p>Cargando usuarios activos...</p>
             </div>
             <!-- Nuevo botón para cerrar sesión del administrador -->
-            <button type="button" onclick="logoutUser('Sesión de administrador cerrada.', false, true); cerrarModal('user_management_modal');" style="margin-top: 20px;">Cerrar Sesión (Admin)</button>
+            <button type="button" onclick="logoutUser('Sesión de administrador cerrada.', false); cerrarModal('user_management_modal');" style="margin-top: 20px;">Cerrar Sesión (Admin)</button>
         </div>
     </div>
 
@@ -821,46 +821,68 @@
          * También gestiona el bloqueo persistente de la sesión en Firestore si es una violación.
          * @param {string} message - El mensaje a mostrar al usuario.
          * @param {boolean} isViolation - True si el logout es por una violación de política, false de lo contrario.
-         * @param {boolean} clearLocalData - True para limpiar localStorage (defecto), false para mantener user_id para reintentos de bloqueo.
          */
-        async function logoutUser(message, isViolation = false, clearLocalData = true) {
-            console.log(`Intentando cerrar sesión del usuario. ¿Es violación? ${isViolation}, ¿Limpiar datos locales? ${clearLocalData}`); // Debug log
-            const currentUserId = localStorage.getItem('user_id'); // Get user_id from localStorage for potential admin unblock
-            const userDatos = JSON.parse(localStorage.getItem('datosUsuario') || '{}'); // Always check localStorage now
+        async function logoutUser(message, isViolation = false) { 
+            console.log(`Intentando cerrar sesión del usuario. ¿Es violación? ${isViolation}`);
+            const currentUserId = localStorage.getItem('user_id'); 
 
             if (currentUserId) {
                 try {
                     const sessionRef = activeSessionsCollection.doc(currentUserId);
-                    if (isViolation) { // If it's a violation, block the user persistently in Firestore
-                        const blockedUntilTime = Date.now() + LOCKOUT_DURATION_MS; // Calculate block end time
+                    if (isViolation) { // Case: Policy Violation (e.g., operator changed transporter, admin IP changed)
+                        const blockedUntilTime = Date.now() + LOCKOUT_DURATION_MS; 
                         await sessionRef.update({
                             isBlocked: true,
-                            blockedUntil: blockedUntilTime, // Store the timestamp when the block expires
+                            blockedUntil: blockedUntilTime, 
                             selectedTransportadora: '', // Clear selected transportadora on block
-                            lastActivity: firebase.firestore.FieldValue.serverTimestamp() // Update activity
+                            lastActivity: firebase.firestore.FieldValue.serverTimestamp() 
                         });
-                        console.log(`Sesión de usuario ${currentUserId} marcada como BLOQUEADA en Firestore por violación hasta ${new Date(blockedUntilTime).toLocaleString()}.`); // Debug log
-                    } else { // If it's a normal logout (not a violation), delete the session document from Firestore
+                        console.log(`Sesión de usuario ${currentUserId} marcada como BLOQUEADA en Firestore por violación hasta ${new Date(blockedUntilTime).toLocaleString()}.`);
+                        // For violations, *do not* clear the persistent_operator_id/user_id from localStorage.
+                        // This ensures the same ID is used on next login attempt to enforce the block.
+                        localStorage.removeItem('lastLoginTime');
+                        localStorage.removeItem('currentSelectedTransportadora');
+                        localStorage.removeItem('datosUsuario'); // Only clear transient user data, not the ID
+                        localStorage.removeItem('currentSessionIP');
+                        localStorage.removeItem('dashboardLockoutEndTime'); // Clear this as it's no longer the primary blocking mechanism for violations
+                    } else { // Case: Normal Logout, Admin Kick, or Session Expiration
+                        // Delete the session document from Firestore for a clean logout
                         await sessionRef.delete();
-                        console.log(`Sesión activa para el usuario ${currentUserId} eliminada de Firestore (cierre normal/admin kick).`); // Debug log
+                        console.log(`Sesión activa para el usuario ${currentUserId} eliminada de Firestore (cierre normal/admin kick).`);
+                        // Clear ALL local storage data, including the persistent operator ID
+                        localStorage.removeItem('persistent_operator_id'); // Clear the persistent ID for operators
+                        localStorage.removeItem('user_id'); // Clear the currently active user ID
+                        localStorage.removeItem('lastLoginTime');
+                        localStorage.removeItem('currentSelectedTransportadora');
+                        localStorage.removeItem('datosUsuario');
+                        localStorage.removeItem('currentSessionIP');
+                        localStorage.removeItem('dashboardLockoutEndTime');
                     }
                 } catch (error) {
-                    console.error("Error al manejar la sesión activa de Firestore durante el cierre de sesión:", error); // Debug log
+                    console.error("Error al manejar la sesión activa de Firestore durante el cierre de sesión:", error);
+                    // Even if Firestore update/delete fails, proceed with local logout actions
+                    // Attempt to clear as much as possible locally to prevent unexpected states
+                    localStorage.removeItem('persistent_operator_id'); 
+                    localStorage.removeItem('user_id');
+                    localStorage.removeItem('lastLoginTime');
+                    localStorage.removeItem('currentSelectedTransportadora');
+                    localStorage.removeItem('datosUsuario');
+                    localStorage.removeItem('currentSessionIP');
+                    localStorage.removeItem('dashboardLockoutEndTime');
                 }
+            } else {
+                 // If currentUserId is null (e.g., during initial load or after previous errors), ensure all is cleared
+                 localStorage.removeItem('persistent_operator_id'); 
+                 localStorage.removeItem('user_id');
+                 localStorage.removeItem('lastLoginTime');
+                 localStorage.removeItem('currentSelectedTransportadora');
+                 localStorage.removeItem('datosUsuario');
+                 localStorage.removeItem('currentSessionIP');
+                 localStorage.removeItem('dashboardLockoutEndTime');
             }
 
-            // Always clear data from localStorage
-            if (clearLocalData) {
-                localStorage.removeItem('lastLoginTime');
-                localStorage.removeItem('currentSelectedTransportadora');
-                localStorage.removeItem('user_id');
-                localStorage.removeItem('datosUsuario');
-                localStorage.removeItem('currentSessionIP');
-                localStorage.removeItem('dashboardLockoutEndTime'); // Clear this as it's no longer the primary blocking mechanism for violations
-            }
-            passwordInput.value = ''; // Always clear password input
+            passwordInput.value = '';
 
-            // Limpiar intervalos y listeners de Firebase
             if (sessionCheckInterval) {
                 clearInterval(sessionCheckInterval);
                 sessionCheckInterval = null;
@@ -870,12 +892,11 @@
                 dashboardListenerUnsubscribe = null;
             }
 
-            // Actualizar UI
             dashboardContent.style.display = 'none';
             loginScreen.style.display = 'flex';
             loginError.textContent = message;
-            adminGearIcon.style.display = 'none'; // Asegurar que el icono de tuerca se oculte al cerrar sesión
-            console.log("Usuario cerró sesión:", message); // Debug log
+            adminGearIcon.style.display = 'none';
+            console.log("Usuario cerró sesión:", message);
         }
 
         /**
@@ -921,9 +942,6 @@
 
             const currentTime = Date.now(); // Get current time here for consistent use within the function
 
-            // Eliminamos la verificación local de dashboardLockoutEndTime de aquí,
-            // el bloqueo persistente se maneja a través de Firestore.
-
             let currentIp = await getSimulatedPublicIP();
             let enteredPassword = passwordInput.value;
             let userRole;
@@ -941,10 +959,16 @@
             } else if (enteredPassword === LOGIN_PASSWORD) {
                 userRole = 'operador';
                 userName = 'Operador Estándar';
-                // For operators, we still generate a new UUID on successful login to track individual operator sessions
-                // but this ID will now persist in localStorage with their session data.
-                simulatedUserId = crypto.randomUUID(); 
-                console.log("checkPassword: Contraseña de OPERADOR reconocida. Generando ID persistente."); // Debug log
+                // Check if a persistent ID already exists for this operator on this device
+                let persistentOperatorId = localStorage.getItem('persistent_operator_id');
+                if (!persistentOperatorId) {
+                    persistentOperatorId = crypto.randomUUID();
+                    localStorage.setItem('persistent_operator_id', persistentOperatorId);
+                    console.log("checkPassword: Nueva ID de operador persistente generada y guardada."); // Debug log
+                } else {
+                    console.log("checkPassword: Usando ID de operador persistente existente."); // Debug log
+                }
+                simulatedUserId = persistentOperatorId; // Use the persistent ID for the operator
             } else {
                 loginError.textContent = 'Contraseña incorrecta. Inténtalo de nuevo.';
                 passwordInput.value = '';
@@ -1017,7 +1041,7 @@
                         // already has a selected transportadora, it's a violation.
                         // We will log them out, and their session will be 'kicked' (deleted from Firestore session),
                         // but because they are blocked by policy, they will get the lockout message.
-                        logoutUser('Violación de políticas: Ya tiene una transportadora asignada en su sesión anterior. Su acceso ha sido bloqueado.', true, false); // True for violation, false to keep user_id for unblock modal
+                        logoutUser('Violación de políticas: Ya tiene una transportadora asignada en su sesión anterior. Su acceso ha sido bloqueado.', true); // True for violation
                         console.log(`checkPassword: Operador intentó iniciar sesión con transportadora ya activa en Firestore, marcando como bloqueado.`); // Debug log
                         return;
                     }
@@ -1032,7 +1056,7 @@
                     console.log("checkPassword: Estado de bloqueo global actualizado desde Firestore:", isGlobalManualBlock, isAutoBlockedPermanently); // Debug log
 
                     if (isGlobalManualBlock || isAutoBlockedPermanently) {
-                        logoutUser('El sistema de pedidos está actualmente bloqueado y no se puede acceder al dashboard.');
+                        logoutUser('El sistema de pedidos está actualmente bloqueado y no se puede acceder al dashboard.', false);
                         console.log("checkPassword: Sistema bloqueado globalmente."); // Debug log
                         return;
                     }
@@ -1087,7 +1111,7 @@
 
             } catch (error) {
                 console.error("Error durante el inicio de sesión o la creación de la sesión:", error); // Debug log: Catch all errors in login flow
-                logoutUser('Error al acceder. Inténtelo de nuevo.'); // Logout sin isViolation si es un error inesperado
+                logoutUser('Error al acceder. Inténtelo de nuevo.', false); // Logout sin isViolation si es un error inesperado
                 return;
             }
         }
@@ -1107,12 +1131,9 @@
             console.log("checkSessionAndBlockStatus: Ejecutando verificación de sesión."); // Debug log
             console.log("checkSessionAndBlockStatus: Rol de usuario actual:", userRole, "ID:", currentUserId); // Debug log
 
-            // Eliminamos la verificación de dashboardLockoutEndTime de aquí,
-            // el bloqueo persistente se maneja a través de Firestore.
-
             // 1. Verificar la expiración de la sesión (desde localStorage)
             if (!lastLoginTime || (currentTime - parseInt(lastLoginTime) > SESSION_DURATION_MS)) {
-                logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.'); // Logout normal
+                logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.', false); // Logout normal
                 console.log("checkSessionAndBlockStatus: Sesión expirada."); // Debug log
                 return;
             }
@@ -1125,7 +1146,7 @@
                     const sessionDoc = await sessionRef.get();
 
                     if (!sessionDoc.exists) {
-                        logoutUser('Su sesión ha sido terminada por un administrador.'); // Admin kick - normal logout
+                        logoutUser('Su sesión ha sido terminada por un administrador.', false); // Admin kick - normal logout
                         console.log("checkSessionAndBlockStatus: Sesión no existe en Firestore, terminada por admin."); // Debug log
                         return;
                     }
@@ -1147,7 +1168,7 @@
                             // Continue as if not blocked, but the session still needs to be valid
                         } else {
                             // User is blocked and block time has not expired or is permanent
-                            logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte o espere el tiempo de bloqueo.', false, false); // Already blocked - no need to set isBlocked again
+                            logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte o espere el tiempo de bloqueo.', false); // Already blocked - no need to set isBlocked again
                             console.log("checkSessionAndBlockStatus: Usuario bloqueado por administrador en Firestore (isBlocked es true)."); // Debug log
                             return;
                         }
@@ -1157,13 +1178,13 @@
                     if (userRole === 'administrador') {
                         const fetchedIp = await getSimulatedPublicIP(); // Obtener la IP actual para comparación
                         if (sessionData.ipAddress && fetchedIp !== '0.0.0.0 (Simulado)' && sessionData.ipAddress !== fetchedIp) {
-                            logoutUser('Se ha detectado un cambio de IP o acceso desde otra ubicación. Sesión terminada.', true, false); // IP change is a violation, now leads to persistent block
+                            logoutUser('Se ha detectado un cambio de IP o acceso desde otra ubicación. Sesión terminada.', true); // IP change is a violation, now leads to persistent block
                             console.log(`checkSessionAndBlockStatus: Cambio de IP detectado. IP de sesión: ${sessionData.ipAddress}, IP actual: ${fetchedIp}. Marcando como bloqueado.`); // Debug log
                             return;
                         }
                         if (sessionData.selectedTransportadora && currentSelectedTransportadora_LS && 
                             currentSelectedTransportadora_LS !== sessionData.selectedTransportadora) {
-                            logoutUser('Violación de políticas: Intento de acceso a múltiples transportadoras simultáneamente. Su acceso ha sido bloqueado.', true, false); // Transportadora change is a violation, now leads to persistent block
+                            logoutUser('Violación de políticas: Intento de acceso a múltiples transportadoras simultáneamente. Su acceso ha sido bloqueado.', true); // Transportadora change is a violation, now leads to persistent block
                             console.log(`checkSessionAndBlockStatus: Intento de acceso a múltiples transportadoras detectado. Transportadora de sesión (Firestore): ${sessionData.selectedTransportadora}, Transportadora en LS: ${currentSelectedTransportadora_LS}. Marcando como bloqueado.`); // Debug log
                             return;
                         } else if (sessionData.selectedTransportadora && !currentSelectedTransportadora_LS) {
@@ -1186,14 +1207,14 @@
                     });
                 } catch (error) {
                     console.error("Error al verificar el estado de la sesión activa:", error); // Debug log
-                    logoutUser('Error de verificación de sesión. Por favor, ingrese de nuevo.'); // Logout normal por error
+                    logoutUser('Error de verificación de sesión. Por favor, ingrese de nuevo.', false); // Logout normal por error
                     return;
                 }
             }
 
             // 5. Verificar el estado de bloqueo global en tiempo real
             if (isGlobalManualBlock || isAutoBlockedPermanently) {
-                logoutUser('El sistema de pedidos ha sido bloqueado. No se puede acceder al dashboard.'); // Global block - normal logout
+                logoutUser('El sistema de pedidos ha sido bloqueado. No se puede acceder al dashboard.', false); // Global block - normal logout
                 console.log("checkSessionAndBlockStatus: Bloqueo global activo."); // Debug log
                 return;
             }
@@ -1321,7 +1342,7 @@
                         '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar cambiar o deseleccionar la transportadora resultará en el CIERRE INMEDIATO Y BLOQUEO de su sesión. ¿Desea continuar con esta acción?',
                         () => { // User confirmed (Sí)
                             // For operators, changing the transporter now results in a persistent block via logoutUser.
-                            logoutUser('Ha intentado cambiar la transportadora en la sesión. Por seguridad, su sesión ha sido cerrada y su cuenta bloqueada.', true, true); // True for violation, true to clear ephemeral data
+                            logoutUser('Ha intentado cambiar la transportadora en la sesión. Por seguridad, su sesión ha sido cerrada y su cuenta bloqueada.', true); // True for violation
                             console.log("handleTransportadoraChange: Operador confirmó acción de cambio, cerrando sesión y bloqueando."); // Debug log
                         },
                         () => { // User cancelled (No)
@@ -1345,7 +1366,7 @@
                      showConfirm(
                         '¡Advertencia! Al seleccionar una transportadora, solo podrá ver los datos de esa transportadora durante su sesión activa. Intentar cambiar o deseleccionar la transportadora resultará en el CIERRE INMEDIATO Y BLOQUEO de su sesión. ¿Desea continuar con esta acción?',
                         () => { 
-                            logoutUser('Ha intentado cambiar la transportadora en la sesión. Por seguridad, su sesión ha sido cerrada y su cuenta bloqueada.', true, true); 
+                            logoutUser('Ha intentado cambiar la transportadora en la sesión. Por seguridad, su sesión ha sido cerrada y su cuenta bloqueada.', true); 
                         },
                         () => { 
                             transportadoraSelect.value = originalTransportadoraSelection;
@@ -1712,17 +1733,13 @@
             // Se maneja a través de Firestore (isBlocked, blockedUntil) en checkPassword y checkSessionAndBlockStatus.
 
             if (lastLoginTime && currentUserId && (currentTime - parseInt(lastLoginTime)) < SESSION_DURATION_MS) {
-                console.log("DOMContentLoaded: Sesión válida detectada."); // Debug log
-                dashboardContent.style.display = 'block';
-                loginScreen.style.display = 'none';
-                loadTransportadorasAndDashboard();
-                if (!sessionCheckInterval) {
-                    sessionCheckInterval = setInterval(checkSessionAndBlockStatus, 10 * 1000);
-                }
-
+                console.log("DOMContentLoaded: Sesión válida detectada localmente, intentando verificación completa."); // Debug log
+                // Llamamos a checkPassword directamente, que manejará la verificación de bloqueo en Firestore
+                // y concederá el acceso o mostrará el modal de desbloqueo.
+                checkPassword(); 
             } else {
-                console.log("DOMContentLoaded: No hay sesión válida, mostrando pantalla de inicio de sesión."); // Debug log
-                logoutUser('Por favor, ingrese su contraseña.', false, true); // Normal logout, clear all local data
+                console.log("DOMContentLoaded: No hay sesión válida o ha expirado, mostrando pantalla de inicio de sesión."); // Debug log
+                logoutUser('Por favor, ingrese su contraseña.', false); // Cierre de sesión normal, limpiará todos los datos de localStorage
             }
         });
 
