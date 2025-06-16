@@ -1678,69 +1678,116 @@
 
 
         // --- Event Listeners y Carga Inicial ---
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log("DOMContentLoaded: Página cargada."); // Debug log
+        document.addEventListener('DOMContentLoaded', async () => { // Make DOMContentLoaded async
+            console.log("DOMContentLoaded: Página cargada.");
 
             passwordInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
-                    console.log("Enter key pressed in password input."); // Debug log
+                    console.log("Enter key pressed in password input.");
                     checkPassword();
                 }
             });
 
-            // Leer datos del usuario siempre desde localStorage ahora
             let storedDatosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
             let userRole = storedDatosUsuario.permisos;
             
-            console.log("DOMContentLoaded: datosUsuario del storage (localStorage):", storedDatosUsuario); // Debug log
+            console.log("DOMContentLoaded: datosUsuario del storage (localStorage):", storedDatosUsuario);
             
-            // Determinar si la tuerca debe mostrarse basándose en el rol del usuario
             if (storedDatosUsuario && userRole && userRole.toLowerCase() === 'administrador') {
                 adminGearIcon.style.display = 'block';
-                console.log("DOMContentLoaded: Rol detectado ADMINISTRADOR. Tuerca DEBERÍA ser visible."); // Debug log
+                console.log("DOMContentLoaded: Rol detectado ADMINISTRADOR. Tuerca DEBERÍA ser visible.");
             } else {
                 adminGearIcon.style.display = 'none';
-                console.log("DOMContentLoaded: Rol NO ADMINISTRADOR. Tuerca DEBERÍA estar oculta."); // Debug log
+                console.log("DOMContentLoaded: Rol NO ADMINISTRADOR. Tuerca DEBERÍA estar oculta.");
             }
             
-            // Listener para la configuración global de bloqueo
             globalSettingsRef.onSnapshot(doc => {
                 if (doc.exists) {
                     const settings = doc.data();
                     isGlobalManualBlock = settings.isBlocked || false;
                     isAutoBlockedPermanently = settings.isAutoBlockedPermanently || false;
-                    console.log("globalSettingsRef.onSnapshot: Estado de bloqueo global actualizado:", isGlobalManualBlock, isAutoBlockedPermanently); // Debug log
+                    console.log("globalSettingsRef.onSnapshot: Estado de bloqueo global actualizado:", isGlobalManualBlock, isAutoBlockedPermanently);
                     checkSessionAndBlockStatus();
                 } else {
                     isGlobalManualBlock = false;
                     isAutoBlockedPermanently = false;
-                    console.log("globalSettingsRef.onSnapshot: Documento de configuración global no existe, asumiendo desbloqueado."); // Debug log
+                    console.log("globalSettingsRef.onSnapshot: Documento de configuración global no existe, asumiendo desbloqueado.");
                     checkSessionAndBlockStatus();
                 }
             }, error => {
-                console.error("Error al escuchar cambios en global_block:", error); // Debug log
+                console.error("Error al escuchar cambios en global_block:", error);
                 isGlobalManualBlock = false;
                 isAutoBlockedPermanently = false;
                 checkSessionAndBlockStatus();
             });
 
-            // En la carga inicial, verificar si existe una sesión válida
-            let lastLoginTime = localStorage.getItem('lastLoginTime'); // Siempre desde localStorage
-            let currentUserId = localStorage.getItem('user_id'); // Siempre desde localStorage
-            const currentTime = Date.now(); // Get current time for DOMContentLoaded
+            // *** CRITICAL CHANGE START ***
+            let currentUserId = localStorage.getItem('user_id'); // This will hold either admin ID or persistent_operator_id
+            const currentTime = Date.now();
 
-            // La lógica de bloqueo por violación ya no depende directamente de dashboardLockoutEndTime en localStorage aquí.
-            // Se maneja a través de Firestore (isBlocked, blockedUntil) en checkPassword y checkSessionAndBlockStatus.
+            if (currentUserId) { // If there's any user ID in localStorage, check its session state
+                try {
+                    const sessionRef = activeSessionsCollection.doc(currentUserId);
+                    const userSessionDoc = await sessionRef.get();
 
-            if (lastLoginTime && currentUserId && (currentTime - parseInt(lastLoginTime)) < SESSION_DURATION_MS) {
-                console.log("DOMContentLoaded: Sesión válida detectada localmente, intentando verificación completa."); // Debug log
-                // Llamamos a checkPassword directamente, que manejará la verificación de bloqueo en Firestore
-                // y concederá el acceso o mostrará el modal de desbloqueo.
-                checkPassword(); 
+                    if (userSessionDoc.exists) {
+                        const sessionData = userSessionDoc.data();
+                        const firestoreIsBlocked = sessionData.isBlocked || false;
+                        const blockedUntil = sessionData.blockedUntil || 0;
+                        const lastLoginTime = localStorage.getItem('lastLoginTime'); // Get lastLoginTime for session expiry check
+
+                        if (firestoreIsBlocked) {
+                            if (blockedUntil > 0 && currentTime >= blockedUntil) {
+                                // Block time has expired, automatically unblock in Firestore
+                                await sessionRef.update({
+                                    isBlocked: false,
+                                    blockedUntil: null,
+                                    selectedTransportadora: ''
+                                });
+                                console.log(`DOMContentLoaded: Usuario ${currentUserId} desbloqueado automáticamente (tiempo expirado en carga inicial).`);
+                                // Now, try to proceed with login (call checkPassword)
+                                checkPassword();
+                            } else {
+                                // User is blocked and block time has NOT expired. Show blocked modal.
+                                loginScreen.style.display = 'flex';
+                                dashboardContent.style.display = 'none';
+                                passwordInput.value = '';
+                                loginError.textContent = ''; // Clear any previous login error
+                                unblockErrorP.textContent = ''; // Clear any previous unblock error
+                                mostrarModal('unblock_user_modal');
+                                document.getElementById('unblock_modal_title').textContent = 'Usuario Bloqueado';
+                                document.getElementById('unblock_message').textContent = `Su usuario (${currentUserId}) está bloqueado por una violación de políticas. ` +
+                                    (blockedUntil > 0 ? `Podrá intentar de nuevo después de ${new Date(blockedUntil).toLocaleString('es-CO')}. ` : '') +
+                                    `Contacte al administrador si cree que es un error o para desbloqueo manual.`;
+                                console.log("DOMContentLoaded: Usuario persistentemente bloqueado, mostrando modal de desbloqueo.");
+                            }
+                        } else {
+                            // User is NOT blocked in Firestore. Proceed with regular session validation.
+                            if (lastLoginTime && (currentTime - parseInt(lastLoginTime)) < SESSION_DURATION_MS) {
+                                console.log("DOMContentLoaded: Sesión válida detectada localmente y no bloqueada en Firestore. Verificando...");
+                                checkPassword(); // Calls checkPassword, which will do full validation and display dashboard
+                            } else {
+                                // Session expired locally, and not blocked in Firestore. Normal logout.
+                                console.log("DOMContentLoaded: Sesión expirada localmente, no bloqueada en Firestore. Cerrando sesión.");
+                                logoutUser('Su sesión ha expirado. Por favor, ingrese la contraseña de nuevo.', false);
+                            }
+                        }
+                    } else {
+                        // User ID existed in localStorage, but no corresponding session doc in Firestore.
+                        // This might happen if session doc was deleted by admin or a cleanup process.
+                        console.log("DOMContentLoaded: User ID en localStorage pero sesión no existe en Firestore. Cerrando sesión local.");
+                        logoutUser('Por favor, ingrese su contraseña.', false); // Clean up local storage
+                    }
+                } catch (error) {
+                    console.error("DOMContentLoaded: Error al verificar sesión de Firestore en la carga inicial:", error);
+                    logoutUser('Error al cargar la sesión. Por favor, intente de nuevo.', false); // Handle error by logging out normally
+                }
             } else {
-                console.log("DOMContentLoaded: No hay sesión válida o ha expirado, mostrando pantalla de inicio de sesión."); // Debug log
-                logoutUser('Por favor, ingrese su contraseña.', false); // Cierre de sesión normal, limpiará todos los datos de localStorage
+                // No user ID found in localStorage, show login screen.
+                console.log("DOMContentLoaded: No hay user_id en localStorage. Mostrando pantalla de login.");
+                logoutUser('Por favor, ingrese su contraseña.', false); // Clean up any remaining local data
             }
+            // *** CRITICAL CHANGE END ***
         });
 
         // Listener de eventos para abrir el modal de gestión de usuarios
