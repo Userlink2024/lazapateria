@@ -775,6 +775,25 @@
         // --- End of Audio Functions ---
 
         /**
+         * Parses a string into a float, handling Spanish number format (comma as decimal separator).
+         * @param {string|number} value - The value to parse.
+         * @returns {number} The parsed float number, or 0 if parsing fails.
+         */
+        function parseSpanishFloat(value) {
+            if (typeof value === 'number') {
+                return value;
+            }
+            if (typeof value === 'string') {
+                // Replace dots (thousand separators) with empty string, then replace comma (decimal separator) with dot
+                const cleanedValue = value.replace(/\./g, '').replace(/,/g, '.');
+                const parsed = parseFloat(cleanedValue);
+                // console.log(`parseSpanishFloat: Original: "${value}", Limpio: "${cleanedValue}", Parseado: ${parsed}`); // Debugging log
+                return isNaN(parsed) ? 0 : parsed; // Return 0 if parsing results in NaN
+            }
+            return 0;
+        }
+
+        /**
          * Muestra un modal personalizado con un mensaje y botones opcionales.
          * @param {string} title - El título del modal.
          * @param {string} message - El mensaje a mostrar.
@@ -980,12 +999,12 @@
                 // Compare normalized dates
                 if (snapshotDate.getTime() >= startOfWeek.getTime()) {
                     tempAccumulatedWeekPares += (data.pares || 0);
-                    tempAccumulatedWeekValor += (parseFloat(data.valor) || 0); // Ensure valor is parsed as float
+                    tempAccumulatedWeekValor += (parseSpanishFloat(data.valor) || 0); // Modificado para usar parseSpanishFloat
                     includedInWeek = true;
                 }
                 if (snapshotDate.getTime() >= startOfMonth.getTime()) {
                     tempAccumulatedMonthPares += (data.pares || 0);
-                    tempAccumulatedMonthValor += (parseFloat(data.valor) || 0); // Ensure valor is parsed as float
+                    tempAccumulatedMonthValor += (parseSpanishFloat(data.valor) || 0); // Modificado para usar parseSpanishFloat
                     includedInMonth = true;
                 }
                 console.log(`  - Procesando Snapshot: ${data.id} (Pares: ${data.pares}, Valor: ${data.valor})`);
@@ -1161,7 +1180,7 @@
                 // --- Schedule initial auto-save check ---
                 const timeToFirstRun = getTimeUntilNextAutoSave();
                 console.log(`Scheduler: Próximo auto-guardado programado para ejecutar en: ${timeToFirstRun / (1000 * 60)} minutos.`);
-                setTimeout(autoSaveDailyProgress, timeToNextRun);
+                setTimeout(autoSaveDailyProgress, timeToFirstRun);
 
                 // Also run it immediately if it's already past 6 PM and hasn't saved yet
                 const now = new Date();
@@ -1414,7 +1433,7 @@
                 const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
 
                 totalParesHoy += parseInt(registro.num_pares || 0);
-                totalValorHoy += parseFloat(registro.valor_total || 0);
+                totalValorHoy += parseSpanishFloat(registro.valor_total || 0); // Modificado para usar parseSpanishFloat
 
                 if (registro.despachado) {
                     dispatchedOrders++;
