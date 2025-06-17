@@ -592,30 +592,33 @@
                 <div class="card-title">Pedidos Despachados</div>
                 <div class="card-value" id="dispatched_orders_card">0</div>
             </div>
-            <!-- REMOVED: Pares Acumulados (Semana)
+            <!-- REMOVIDO: Pares Acumulados (Semana) -->
+            <!--
             <div class="dashboard-card">
                 <i class="fas fa-calendar-week card-icon"></i>
                 <div class="card-title">Pares Acumulados (Semana)</div>
                 <div class="card-value" id="total_pares_week_card">0</div>
             </div>
             -->
+            <!-- REMOVIDO: Valor Acumulado (Semana) -->
+            <!--
             <div class="dashboard-card">
                 <i class="fas fa-hand-holding-usd card-icon"></i>
                 <div class="card-title">Valor Acumulado (Semana)</div>
                 <div class="card-value" id="total_valor_week_card">$0</div>
             </div>
+            -->
             <div class="dashboard-card">
                 <i class="fas fa-calendar-alt card-icon"></i>
                 <div class="card-title">Pares Acumulados (Mes)</div>
                 <div class="card-value" id="total_pares_month_card">0</div>
             </div>
-            <!-- REMOVED: Valor Acumulado (Mes)
+            <!-- CAMBIADO: Valor Acumulado (Mes) a (Semana) -->
             <div class="dashboard-card">
                 <i class="fas fa-money-bill-wave card-icon"></i>
-                <div class="card-title">Valor Acumulado (Mes)</div>
-                <div class="card-value" id="total_valor_month_card">$0</div>
+                <div class="card-title">Valor Acumulado (Semana)</div> <!-- Título cambiado -->
+                <div class="card-value" id="total_valor_month_card">$0</div> <!-- ID se mantiene, valor mostrará el semanal -->
             </div>
-            -->
         </div>
 
         <!-- Goals Section (Content moved to modal) -->
@@ -719,7 +722,7 @@
         let currentDayValor = 0;
 
         // Global variables for accumulated progress (from daily snapshots)
-        let accumulatedWeekPares = 0;
+        let accumulatedWeekPares = 0; 
         let accumulatedWeekValor = 0;
         let accumulatedMonthPares = 0;
         let accumulatedMonthValor = 0;
@@ -938,13 +941,13 @@
         // Centralized function to calculate and display accumulated progress
         function _calculateAndDisplayAccumulatedProgress(historicalSnapshotsData) {
             let tempAccumulatedWeekPares = 0;
-            let tempAccumulatedWeekValor = 0;
+            let tempAccumulatedWeekValor = 0; 
             let tempAccumulatedMonthPares = 0;
-            let tempAccumulatedMonthValor = 0;
+            let tempAccumulatedMonthValor = 0; 
 
             const today = new Date();
             today.setHours(0, 0, 0, 0); // Normalize today to start of day
-            const todayStr = today.toISOString().slice(0, 10); // YYYY-MM-DD
+            const todayStr = today.toISOString().slice(0, 10); //YYYY-MM-DD
 
             const startOfWeek = new Date(today);
             startOfWeek.setDate(today.getDate() - (today.getDay() + 6) % 7); // Monday of current week
@@ -960,8 +963,12 @@
             console.log(`Número de Snapshots Históricos a Procesar: ${historicalSnapshotsData.length}`);
 
             historicalSnapshotsData.forEach(data => {
-                const snapshotDate = new Date(data.id);
-                snapshotDate.setHours(0, 0, 0, 0); // Normalize snapshot date to start of day
+                // MODIFICACIÓN CLAVE AQUÍ: Parsear la fecha del snapshot para asegurar que se interprete en hora local
+                const parts = data.id.split('-');
+                const snapshotDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                snapshotDate.setHours(0, 0, 0, 0); // Asegurarse de que sea el inicio del día local
+                
+                console.log(`  - Original Snapshot ID: ${data.id}, Parsed Snapshot Date (Local): ${snapshotDate.toLocaleString()}`); // LOG para depuración
 
                 // IMPORTANT: Exclude today's snapshot from the historical data sum
                 // as today's data will be added separately from currentDayPares/Valor.
@@ -977,12 +984,14 @@
                 // Compare normalized dates
                 if (snapshotDate.getTime() >= startOfWeek.getTime()) {
                     tempAccumulatedWeekPares += (data.pares || 0);
-                    tempAccumulatedWeekValor += (data.valor || 0);
+                    tempAccumulatedWeekValor += (parseFloat(data.valor) || 0); // Usando parseFloat
+                    console.log(`    -> Agregando a Semana: ${data.valor} (Valor Acumulado Semanal temporal: ${tempAccumulatedWeekValor})`); // LOG
                     includedInWeek = true;
                 }
                 if (snapshotDate.getTime() >= startOfMonth.getTime()) {
                     tempAccumulatedMonthPares += (data.pares || 0);
-                    tempAccumulatedMonthValor += (data.valor || 0);
+                    tempAccumulatedMonthValor += (parseFloat(data.valor) || 0); // Usando parseFloat
+                    console.log(`    -> Agregando a Mes: ${data.valor} (Valor Acumulado Mensual temporal: ${tempAccumulatedMonthValor})`); // LOG
                     includedInMonth = true;
                 }
                 console.log(`  - Procesando Snapshot: ${data.id} (Pares: ${data.pares}, Valor: ${data.valor})`);
@@ -994,9 +1003,9 @@
             // Always add today's real-time values (which come from 'registros' collection)
             // This ensures today's current progress is always reflected accurately and only once.
             accumulatedWeekPares = tempAccumulatedWeekPares + currentDayPares;
-            accumulatedWeekValor = tempAccumulatedWeekValor + currentDayValor;
+            accumulatedWeekValor = tempAccumulatedWeekValor + currentDayValor; 
             accumulatedMonthPares = tempAccumulatedMonthPares + currentDayPares;
-            accumulatedMonthValor = tempAccumulatedMonthValor + currentDayValor;
+            accumulatedMonthValor = tempAccumulatedMonthValor + currentDayValor; 
 
             console.log(`Pares del Día (Tiempo Real - de Registros de Hoy): ${currentDayPares}`);
             console.log(`Valor del Día (Tiempo Real - de Registros de Hoy): ${currentDayValor}`);
@@ -1004,11 +1013,12 @@
             console.log(`Total Acumulado Mes (Calculado): Pares: ${accumulatedMonthPares}, Valor: ${accumulatedMonthValor}`);
             console.log(`-----------------------------------`);
 
-
-            // REMOVED: document.getElementById('total_pares_week_card').textContent = accumulatedWeekPares;
-            document.getElementById('total_valor_week_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
+            // Se eliminaron las actualizaciones de las tarjetas de Pares y Valor Semanal del dashboard en la versión anterior.
+            // document.getElementById('total_pares_week_card').textContent = accumulatedWeekPares;
+            // document.getElementById('total_valor_week_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
+            
             document.getElementById('total_pares_month_card').textContent = accumulatedMonthPares;
-            // REMOVED: document.getElementById('total_valor_month_card').textContent = `$${accumulatedMonthValor.toLocaleString('es-CO')}`;
+            document.getElementById('total_valor_month_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`; // **CAMBIO AQUÍ: Ahora muestra el valor semanal**
 
             updateGoalProgress(); // Update progress bars with newly calculated accumulated values
         }
@@ -1044,7 +1054,7 @@
                 weeklyGoalsRef.onSnapshot(async docSnap => {
                     if (docSnap.exists) {
                         const data = docSnap.data();
-                        weeklyParesGoal = data.pares_goal || 0; // Still keep this in data, even if not directly set
+                        weeklyParesGoal = data.pares_goal || 0; 
                         weeklyValorGoal = data.valor_goal || 0;
                     } else {
                         // If document doesn't exist for current week, create with initial values
@@ -1066,7 +1076,7 @@
                     if (docSnap.exists) {
                         const data = docSnap.data();
                         monthlyParesGoal = data.pares_goal || 0;
-                        monthlyValorGoal = data.valor_goal || 0; // Still keep this in data, even if not directly set
+                        monthlyValorGoal = data.valor_goal || 0; 
                     } else {
                         // If document doesn't exist for current month, create with initial values
                         console.log(`Creando documento de metas mensuales para ${currentMonthId}`); // Nuevo log
@@ -1176,10 +1186,12 @@
                 document.getElementById('in_packaging_orders_card').textContent = 0;
                 document.getElementById('dispatched_orders_card').textContent = 0;
                 document.getElementById('retarded_orders_card').textContent = 0;
-                // REMOVED: document.getElementById('total_pares_week_card').textContent = 0; 
-                document.getElementById('total_valor_week_card').textContent = '$0';
+                
+                // Se removieron las referencias a las tarjetas de Pares y Valor Semanal aquí también
+                // document.getElementById('total_pares_week_card').textContent = 0; 
+                // document.getElementById('total_valor_week_card').textContent = '$0';
                 document.getElementById('total_pares_month_card').textContent = 0;
-                // REMOVED: document.getElementById('total_valor_month_card').textContent = '$0'; 
+                document.getElementById('total_valor_month_card').textContent = '$0'; // También ajustado para usuario anónimo
                 updateGoalProgress(); // Update progress bars for anonymous user (will be 0)
             }
         };
@@ -1196,7 +1208,7 @@
             const currentWeek = getWeekNumber(new Date());
             const currentWeekId = `${currentYear}-${currentWeek}`;
 
-            const weeklyValor = parseInt(document.getElementById('weekly_value_goal').value) || 0;
+            const weeklyValor = parseFloat(document.getElementById('weekly_value_goal').value) || 0; // Usando parseFloat
 
             try {
                 const weeklyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`weekly_${currentWeekId}`);
@@ -1261,7 +1273,7 @@
                                 // Only include documents within the current week (from Monday to Sunday)
                                 if (docDate.getTime() >= startOfWeek.getTime() && docDate.getTime() <= endOfWeek.getTime()) {
                                      console.log(`  - Reseteando snapshot diario: ${doc.id}`);
-                                    batch.update(doc.ref, { pares: 0, valor: 0 }); // Update only pares and valor
+                                    batch.update(doc.ref, { pares: 0, valor: 0 }); // Update both pares and valor to 0
                                     resetsCount++;
                                 }
                             });
@@ -1326,7 +1338,7 @@
                 return;
             }
 
-            showCustomMessageModal("Confirmación", "¿Estás seguro de que quieres reiniciar tu meta mensual? Esto pondrá la meta mensual en 0 Y también reseteará el progreso acumulado de Pares y Valor para el mes actual.", [
+            showCustomMessageModal("Confirmación", "¿Estás seguro de que quieres reiniciar tu meta mensual? Esto pondrá la meta de pares mensual en 0 y reseteará el valor acumulado para el mes actual, pero los pares acumulados se mantendrán.", [
                 {
                     text: 'Sí, Reiniciar',
                     className: 'primary-btn',
@@ -1339,7 +1351,7 @@
 
                         try {
                             const monthlyGoalsRef = db.collection('users').doc(asesorId).collection('goals').doc(`monthly_${currentMonthId}`);
-                            await monthlyGoalsRef.set({ pares_goal: 0 }, { merge: true }); // Reset the monthly PARES goal
+                            await monthlyGoalsRef.set({ pares_goal: 0 }, { merge: true }); // Reset the monthly PARES goal to 0
 
                             // --- Reset accumulated progress for the current month in daily_sales_snapshot ---
                             const startOfMonth = new Date(currentYear, currentMonth, 1);
@@ -1363,21 +1375,21 @@
 
                                 // Only include documents within the current month
                                 if (docDate.getTime() >= startOfMonth.getTime() && docDate.getTime() <= endOfMonth.getTime()) {
-                                    console.log(`  - Reseteando snapshot diario: ${doc.id}`);
-                                    batch.update(doc.ref, { pares: 0, valor: 0 }); // Update only pares and valor
+                                    console.log(`  - Reseteando el valor del snapshot diario: ${doc.id}`);
+                                    batch.update(doc.ref, { valor: 0 }); // Only update valor to 0, pares remain untouched
                                     resetsCount++;
                                 }
                             });
 
                             if (resetsCount > 0) {
                                 await batch.commit();
-                                console.log(`Completado: ${resetsCount} documentos diarios de ventas reseteados para el mes actual.`);
+                                console.log(`Completado: ${resetsCount} documentos diarios de ventas (solo valor) reseteados para el mes actual.`);
                             } else {
                                 console.log("No se encontraron documentos diarios de ventas para resetear en el mes actual.");
                             }
                             // --- End of Reset accumulated progress ---
 
-                            showCustomMessageModal("Éxito", "Meta mensual y progreso del mes reiniciados exitosamente.");
+                            showCustomMessageModal("Éxito", "Meta mensual y valor acumulado del mes reiniciados exitosamente. Los pares acumulados se mantuvieron.");
                             playConfirmationSound();
                         } catch (error) {
                             console.error("Error al reiniciar la meta mensual o progreso acumulado:", error);
@@ -1408,7 +1420,8 @@
                 const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
 
                 totalParesHoy += parseInt(registro.num_pares || 0);
-                totalValorHoy += parseFloat(registro.valor_total || 0);
+                console.log(`updateDailySummary: Registro - valor_total: ${registro.valor_total}, parseado: ${parseFloat(registro.valor_total || 0)}`); // LOG
+                totalValorHoy += parseFloat(registro.valor_total || 0); // Usando parseFloat
 
                 if (registro.despachado) {
                     dispatchedOrders++;
@@ -1426,6 +1439,7 @@
 
             currentDayPares = totalParesHoy;
             currentDayValor = totalValorHoy;
+            console.log(`updateDailySummary: Total Pares Hoy: ${currentDayPares}, Total Valor Hoy: ${currentDayValor}`); // LOG
 
             document.getElementById('total_pares_day_card').textContent = currentDayPares;
             document.getElementById('total_valor_day_card').textContent = `$${currentDayValor.toLocaleString('es-CO')}`;
@@ -1458,6 +1472,7 @@
             // Weekly Progress - Only Valor
             document.getElementById('goal_value_week_display').textContent = weeklyValorGoal.toLocaleString('es-CO');
             document.getElementById('current_value_week_progress').textContent = accumulatedWeekValor.toLocaleString('es-CO');
+            console.log(`updateGoalProgress: Meta Semanal Valor: ${weeklyValorGoal}, Valor Acumulado Semanal: ${accumulatedWeekValor}`); // LOG
 
             const valueWeekProgressBar = document.getElementById('value_week_progress_bar');
             let valueWeekProgress = 0;
@@ -1473,6 +1488,7 @@
             // Monthly Progress - Only Pares
             document.getElementById('goal_pares_month_display').textContent = monthlyParesGoal;
             document.getElementById('current_pares_month_progress').textContent = accumulatedMonthPares;
+            console.log(`updateGoalProgress: Meta Mensual Pares: ${monthlyParesGoal}, Pares Acumulados Mensual: ${accumulatedMonthPares}`); // LOG
 
             const paresMonthProgressBar = document.getElementById('pares_month_progress_bar');
             let paresMonthProgress = 0;
