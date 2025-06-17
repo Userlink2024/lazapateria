@@ -863,9 +863,9 @@
             localStorage.removeItem('currentSessionIP');
             localStorage.removeItem('dashboardLockoutEndTime'); 
 
-            // Si es un cierre de sesión completo O una violación, limpiar persistent_operator_id y user_id de localStorage.
-            // Esto asegura que restoreSession no intente restaurar una sesión que el usuario ya debería ver como terminada/bloqueada.
-            if (shouldClearPersistentId || isViolation) {
+            // **MODIFICACIÓN CLAVE**: SOLO limpiar el ID persistente si se pide un logout COMPLETO.
+            // NO limpiar el ID persistente si es una VIOLACIÓN, para que restoreSession pueda detectarlo.
+            if (shouldClearPersistentId) { // ONLY clear persistent ID if explicitly requested (e.g., admin logout)
                 localStorage.removeItem('persistent_operator_id');
                 localStorage.removeItem('user_id');
             }
@@ -1272,7 +1272,8 @@
                         } else {
                             // El usuario está bloqueado y el tiempo de bloqueo no ha expirado o es permanente
                             console.log(`checkSessionAndBlockStatus: Usuario ${currentUserId} aún bloqueado. Forzando logout y mostrando modal de desbloqueo.`);
-                            logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte o espere el tiempo de bloqueo.', false, false); // Ya bloqueado - NO limpiar ID persistente, para que restoreSession lo detecte.
+                            // **MODIFICACIÓN CLAVE**: No limpiar user_id aquí. logoutUser ya no lo limpia para `isViolation=false`.
+                            logoutUser('Su usuario ha sido bloqueado por un administrador. Contacte al soporte o espere el tiempo de bloqueo.', false, false); 
                             // Después de llamar a logoutUser, la lógica de restoreSession en DOMContentLoaded se encargará de mostrar el modal.
                             return;
                         }
