@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificador de Consignaciones</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #374151;
+        }
+    </style>
+</head>
+<body class="p-8 md:p-12 lg:p-16">
+    <div class="max-w-4xl mx-auto bg-white p-6 md:p-10 rounded-3xl shadow-xl border border-gray-200">
+        <h1 class="text-3xl md:text-4xl font-bold text-center mb-6 text-indigo-700">Verificador de Consignaciones</h1>
+        <p class="text-center text-gray-600 mb-8">
+            Carga tus archivos de Excel para verificar si los valores y la cantidad de consignaciones de un formato coinciden con los del otro.
+        </p>
+
+        <!-- Contenedor principal de carga de archivos -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <!-- Sección para cargar el Formato 1 -->
+            <div class="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                <h2 class="text-xl font-semibold mb-4 text-gray-800">1. Cargar Formato 1</h2>
+                <div class="mb-4">
+                    <label class="block text-gray-700 mb-2">Selecciona un archivo Excel (Formato 1)</label>
+                    <input type="file" id="formato1Input" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-xl file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-indigo-50 file:text-indigo-700
+                        hover:file:bg-indigo-100 cursor-pointer"
+                    />
+                </div>
+                <p id="status1" class="text-sm text-gray-500 italic">No se ha cargado ningún archivo.</p>
+            </div>
+
+            <!-- Sección para cargar el Formato 2 -->
+            <div class="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                <h2 class="text-xl font-semibold mb-4 text-gray-800">2. Cargar Formato 2</h2>
+                <div class="mb-4">
+                    <label class="block text-gray-700 mb-2">Selecciona uno o más archivos (Formato 2)</label>
+                    <input type="file" id="formato2Input" accept=".xlsx, .xls" multiple class="block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-xl file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-indigo-50 file:text-indigo-700
+                        hover:file:bg-indigo-100 cursor-pointer"
+                    />
+                </div>
+                <button id="addFilesBtn" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-xl hover:bg-indigo-700 transition-colors duration-200 font-semibold shadow-md">
+                    Agregar Archivos
+                </button>
+                <p id="status2" class="text-sm text-gray-500 italic mt-2">No se han agregado archivos.</p>
+            </div>
+        </div>
+        
+        <!-- Botón de verificación y resultados -->
+        <div class="flex flex-col items-center">
+            <button id="verifyBtn" class="bg-green-600 text-white py-3 px-8 rounded-full hover:bg-green-700 transition-colors duration-200 font-bold text-lg shadow-lg mb-6">
+                Verificar Todo
+            </button>
+            
+            <div id="resultsContainer" class="w-full bg-gray-100 p-6 rounded-2xl border border-gray-200 hidden">
+                <h3 class="text-2xl font-bold text-center mb-4 text-gray-800">Resultados de la Verificación</h3>
+                <div id="resultsDisplay" class="bg-white p-4 rounded-xl border border-gray-300 overflow-auto max-h-96 text-sm text-gray-700">
+                    <pre></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal para mensajes -->
+        <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center">
+                <p id="modalMessage" class="text-gray-800 text-lg mb-4"></p>
+                <button id="modalCloseBtn" class="bg-indigo-600 text-white py-2 px-6 rounded-full hover:bg-indigo-700 font-semibold">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Librería XLSX para leer archivos de Excel -->
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+
+    <script>
+        // Variables para almacenar los datos de los archivos
+        let datosFormato1 = [];
+        let datosFormato2 = [];
+
+        // Referencias a los elementos del DOM
+        const formato1Input = document.getElementById('formato1Input');
+        const formato2Input = document.getElementById('formato2Input');
+        const addFilesBtn = document.getElementById('addFilesBtn');
+        const verifyBtn = document.getElementById('verifyBtn');
+        const status1 = document.getElementById('status1');
+        const status2 = document.getElementById('status2');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultsDisplay = document.getElementById('resultsDisplay');
+        const modal = document.getElementById('modal');
+        const modalMessage = document.getElementById('modalMessage');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+        // Función para mostrar un mensaje modal
+        const showModal = (message) => {
+            modalMessage.textContent = message;
+            modal.style.display = 'flex';
+        };
+
+        // Cerrar el modal
+        modalCloseBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+
+        // Evento para cargar el archivo del Formato 1
+        formato1Input.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                datosFormato1 = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+                showModal('Archivo de Formato 1 cargado correctamente.');
+                status1.textContent = `Archivo cargado: ${file.name}`;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Evento para agregar archivos al Formato 2
+        addFilesBtn.addEventListener('click', () => {
+            const files = formato2Input.files;
+            if (files.length === 0) {
+                showModal('Por favor, selecciona al menos un archivo para agregar.');
+                return;
+            }
+
+            let filesProcessed = 0;
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+                    datosFormato2 = datosFormato2.concat(jsonData);
+                    filesProcessed++;
+                    if (filesProcessed === files.length) {
+                        showModal(`${files.length} archivo(s) del Formato 2 agregado(s).`);
+                        status2.textContent = `Archivos agregados: ${datosFormato2.length} filas en total.`;
+                        formato2Input.value = ''; // Limpiar el input de archivos
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        // Evento para el botón de verificación
+        verifyBtn.addEventListener('click', () => {
+            if (datosFormato1.length === 0 || datosFormato2.length === 0) {
+                showModal('Por favor, carga ambos formatos para poder verificar.');
+                return;
+            }
+
+            // Normalizar y contar valores para el Formato 1
+            const conteoFormato1 = {};
+            datosFormato1.forEach((row, index) => {
+                if (index === 0) return; // Ignorar la fila de encabezados
+                const valorString = row[1]; // Columna B (VALOR)
+                if (valorString) {
+                    const valorNumerico = parseFloat(String(valorString).replace(/[^0-9.]/g, ''));
+                    if (!isNaN(valorNumerico)) {
+                        conteoFormato1[valorNumerico] = (conteoFormato1[valorNumerico] || 0) + 1;
+                    }
+                }
+            });
+
+            // Normalizar y contar valores para el Formato 2
+            const conteoFormato2 = {};
+            datosFormato2.forEach((row, index) => {
+                if (index === 0) return; // Ignorar la fila de encabezados
+                const valorString = row[3]; // Columna D (Valor)
+                if (valorString) {
+                    const valorNumerico = parseFloat(String(valorString).replace(/[^0-9.]/g, ''));
+                    if (!isNaN(valorNumerico)) {
+                        conteoFormato2[valorNumerico] = (conteoFormato2[valorNumerico] || 0) + 1;
+                    }
+                }
+            });
+
+            // Comparar los conteos
+            let resultadosTexto = '';
+            let todoOk = true;
+            const valoresFormato1 = Object.keys(conteoFormato1).map(Number).sort((a, b) => a - b);
+            const valoresFormato2 = Object.keys(conteoFormato2).map(Number).sort((a, b) => a - b);
+            const todosLosValores = new Set([...valoresFormato1, ...valoresFormato2]);
+
+            todosLosValores.forEach(valor => {
+                const count1 = conteoFormato1[valor] || 0;
+                const count2 = conteoFormato2[valor] || 0;
+                const valorFormato = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor);
+                if (count1 !== count2) {
+                    resultadosTexto += `❌ Discrepancia encontrada para ${valorFormato}:\n`;
+                    resultadosTexto += `   - Formato 1: ${count1} ocurrencias\n`;
+                    resultadosTexto += `   - Formato 2: ${count2} ocurrencias\n\n`;
+                    todoOk = false;
+                } else {
+                    resultadosTexto += `✅ Coincidencia para ${valorFormato}: ${count1} ocurrencias.\n`;
+                }
+            });
+            
+            if (Object.keys(conteoFormato1).length === 0 && Object.keys(conteoFormato2).length === 0) {
+                resultadosTexto = 'No se encontraron valores numéricos para verificar en los archivos.';
+                todoOk = false;
+            }
+
+            if (todoOk) {
+                resultsDisplay.querySelector('pre').textContent = '✅ ¡Verificación exitosa! Todas las cantidades de valores coinciden.';
+            } else {
+                resultsDisplay.querySelector('pre').textContent = resultadosTexto;
+            }
+
+            resultsContainer.classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>
