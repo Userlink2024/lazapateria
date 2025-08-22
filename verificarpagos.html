@@ -203,11 +203,10 @@
                 showModal('Por favor, carga ambos formatos para poder verificar. Deben tener al menos una fila de datos además del encabezado.');
                 return;
             }
-
+            
             // Normalizar y almacenar detalles de cada valor para el Sistema JCB
             const conteoDetallado1 = {};
-            datosFormato1.forEach((row, index) => {
-                if (index === 0) return; // Ignorar la fila de encabezados
+            datosFormato1.slice(1).forEach(row => {
                 const valorString = row[1]; // Columna B (VALOR)
                 if (valorString) {
                     const valorNumerico = parseFloat(String(valorString).replace(/[^0-9.]/g, ''));
@@ -221,10 +220,19 @@
                 }
             });
 
+            // --- NUEVO: Filtrado de datos de la Cuenta del proveedor
+            const filteredDatosFormato2 = datosFormato2.slice(1).filter(row => {
+                const descripcion = String(row[1] || '').toUpperCase();
+                const valor = parseFloat(String(row[3] || '').replace(/[^0-9.-]/g, ''));
+                
+                // Excluir filas con 'ABONO' en la descripción o con valores negativos
+                return !(descripcion.includes('ABONO')) && !(valor < 0);
+            });
+            const filteredRowsCount = datosFormato2.length - 1 - filteredDatosFormato2.length;
+
             // Normalizar y almacenar detalles de cada valor para la Cuenta del proveedor
             const conteoDetallado2 = {};
-            datosFormato2.forEach((row, index) => {
-                if (index === 0) return; // Ignorar la fila de encabezados
+            filteredDatosFormato2.forEach(row => {
                 const valorString = row[3]; // Columna D (Valor)
                 if (valorString) {
                     const valorNumerico = parseFloat(String(valorString).replace(/[^0-9.]/g, ''));
@@ -248,6 +256,10 @@
             const valoresFormato1 = Object.keys(conteoDetallado1).map(Number).sort((a, b) => a - b);
             const valoresFormato2 = Object.keys(conteoDetallado2).map(Number).sort((a, b) => a - b);
             const todosLosValores = new Set([...valoresFormato1, ...valoresFormato2]);
+            
+            if (filteredRowsCount > 0) {
+                textoParaMostrar += `✅ Se filtraron ${filteredRowsCount} fila(s) de la Cuenta del proveedor (filas con 'ABONO' o valores negativos).\n\n`;
+            }
 
             todosLosValores.forEach(valor => {
                 const entries1 = conteoDetallado1[valor] || [];
