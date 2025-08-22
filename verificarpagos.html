@@ -340,7 +340,7 @@
             
             const wb = XLSX.utils.book_new();
 
-            // Definir los estilos con colores
+            // Definir los estilos con colores en formato RGB de 6 dígitos
             const redHeaderStyle = {
                 fill: { fgColor: { rgb: "FFDDDD" } },
                 font: { bold: true }
@@ -350,40 +350,83 @@
                 font: { bold: true }
             };
             const yellowStyle = {
-                fill: { fgColor: { rgb: "FFFFCC" } },
+                fill: { fgColor: { rgb: "FFFF00" } },
                 font: { bold: true }
             };
 
             // Recorrer cada discrepancia y estructurarla en una nueva hoja
             discrepanciasData.forEach((discrepancy, index) => {
                 const sheetName = `Discrepancia ${index + 1}`;
-                const data = [
-                    ['DISCREPANCIA ENCONTRADA'],
-                    ['Valor', 'Cantidad Sistema JCB', 'Cantidad Cuenta del proveedor'],
-                    [discrepancy.valorFormato, discrepancy.count1, discrepancy.count2],
-                    [], // Espacio
-                    ['Detalles Sistema JCB:', 'Fecha', 'Observación'],
-                    ...discrepancy.entries1.map(entry => ['', entry.fecha, entry.observacion]),
-                    [], // Espacio
-                    ['Detalles Cuenta del proveedor:', 'Fecha', 'Descripción', 'Referencia'],
-                    ...discrepancy.entries2.map(entry => ['', entry.fecha, entry.descripcion, entry.referencia])
-                ];
+                const ws = {}; // Crear una hoja de cálculo vacía
+                let currentRow = 0;
 
-                const ws = XLSX.utils.aoa_to_sheet(data);
+                // Función auxiliar para escribir celdas con estilo
+                const writeCell = (row, col, value, style) => {
+                    const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+                    const cell = { v: value };
+                    if (typeof value === 'number') {
+                        cell.t = 'n';
+                    } else if (typeof value === 'string') {
+                        cell.t = 's';
+                    }
+                    if (style) {
+                        cell.s = style;
+                    }
+                    ws[cellRef] = cell;
+                };
 
-                // Aplicar estilos y fusiones a la hoja
-                ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+                // Fila 1: Encabezado de la discrepancia con estilo rojo y fusión de celdas
+                writeCell(currentRow, 0, 'DISCREPANCIA ENCONTRADA', redHeaderStyle);
+                const merges = [{ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 4 } }];
+                ws['!merges'] = merges;
+                currentRow++;
+
+                // Fila 2: Encabezados de la tabla
+                writeCell(currentRow, 0, 'Valor');
+                writeCell(currentRow, 1, 'Cantidad Sistema JCB');
+                writeCell(currentRow, 2, 'Cantidad Cuenta del proveedor');
+                currentRow++;
                 
-                // Celdas a las que se les aplica estilo
-                const cellA1 = XLSX.utils.encode_cell({ r: 0, c: 0 });
-                const cellA3 = XLSX.utils.encode_cell({ r: 2, c: 0 });
-                const cellB3 = XLSX.utils.encode_cell({ r: 2, c: 1 });
-                const cellC3 = XLSX.utils.encode_cell({ r: 2, c: 2 });
+                // Fila 3: Datos de la discrepancia con estilos verde y amarillo
+                writeCell(currentRow, 0, discrepancy.valorFormato, greenStyle);
+                writeCell(currentRow, 1, discrepancy.count1, yellowStyle);
+                writeCell(currentRow, 2, discrepancy.count2, yellowStyle);
+                currentRow++;
 
-                if (ws[cellA1]) ws[cellA1].s = redHeaderStyle;
-                if (ws[cellA3]) ws[cellA3].s = greenStyle;
-                if (ws[cellB3]) ws[cellB3].s = yellowStyle;
-                if (ws[cellC3]) ws[cellC3].s = yellowStyle;
+                currentRow++; // Espacio
+
+                // Fila 5: Encabezado de detalles JCB
+                writeCell(currentRow, 0, 'Detalles Sistema JCB:');
+                writeCell(currentRow, 1, 'Fecha');
+                writeCell(currentRow, 2, 'Observación');
+                currentRow++;
+                
+                // Detalles de JCB
+                discrepancy.entries1.forEach(entry => {
+                    writeCell(currentRow, 1, entry.fecha);
+                    writeCell(currentRow, 2, entry.observacion);
+                    currentRow++;
+                });
+
+                currentRow++; // Espacio
+
+                // Fila N: Encabezado de detalles del proveedor
+                writeCell(currentRow, 0, 'Detalles Cuenta del proveedor:');
+                writeCell(currentRow, 1, 'Fecha');
+                writeCell(currentRow, 2, 'Descripción');
+                    writeCell(currentRow, 3, 'Referencia');
+                currentRow++;
+                
+                // Detalles del proveedor
+                discrepancy.entries2.forEach(entry => {
+                    writeCell(currentRow, 1, entry.fecha);
+                    writeCell(currentRow, 2, entry.descripcion);
+                    writeCell(currentRow, 3, entry.referencia);
+                    currentRow++;
+                });
+
+                // Definir el rango de la hoja de cálculo
+                ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: currentRow, c: 4 } });
 
                 // Agregar la hoja al libro de trabajo
                 XLSX.utils.book_append_sheet(wb, ws, sheetName);
