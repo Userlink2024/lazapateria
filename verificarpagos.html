@@ -220,7 +220,7 @@
                 }
             });
 
-            // --- NUEVO: Filtrado de datos de la Cuenta del proveedor
+            // Filtrado de datos de la Cuenta del proveedor
             const filteredDatosFormato2 = datosFormato2.slice(1).filter(row => {
                 const descripcion = String(row[1] || '').toUpperCase();
                 const valor = parseFloat(String(row[3] || '').replace(/[^0-9.-]/g, ''));
@@ -337,41 +337,57 @@
                 showModal('No hay discrepancias para descargar en Excel.');
                 return;
             }
-
-            const excelData = [];
             
-            // Recorrer cada discrepancia y estructurarla para el archivo de Excel
-            discrepanciasData.forEach((discrepancy, index) => {
-                // Agregar un espacio entre discrepancias
-                if (index > 0) {
-                    excelData.push([]);
-                    excelData.push([]);
-                }
-                
-                // Encabezado de la discrepancia
-                excelData.push(['DISCREPANCIA ENCONTRADA', '', '', '', '']);
-                excelData.push(['Valor', 'Cantidad Sistema JCB', 'Cantidad Cuenta del proveedor']);
-                excelData.push([discrepancy.valorFormato, discrepancy.count1, discrepancy.count2]);
-                excelData.push([]); // Espacio
-
-                // Detalles del Sistema JCB
-                excelData.push(['Detalles Sistema JCB:', 'Fecha', 'Observación']);
-                discrepancy.entries1.forEach(entry => {
-                    excelData.push(['', '', entry.fecha, entry.observacion]);
-                });
-                excelData.push([]); // Espacio
-
-                // Detalles de la Cuenta del proveedor
-                excelData.push(['Detalles Cuenta del proveedor:', 'Fecha', 'Descripción', 'Referencia']);
-                discrepancy.entries2.forEach(entry => {
-                    excelData.push(['', '', entry.fecha, entry.descripcion, entry.referencia]);
-                });
-            });
-
-            // Crear el libro y la hoja de trabajo
-            const ws = XLSX.utils.aoa_to_sheet(excelData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Discrepancias");
+
+            // Definir los estilos con colores
+            const redHeaderStyle = {
+                fill: { fgColor: { rgb: "FFDDDD" } },
+                font: { bold: true }
+            };
+            const greenStyle = {
+                fill: { fgColor: { rgb: "CCEECC" } },
+                font: { bold: true }
+            };
+            const yellowStyle = {
+                fill: { fgColor: { rgb: "FFFFCC" } },
+                font: { bold: true }
+            };
+
+            // Recorrer cada discrepancia y estructurarla en una nueva hoja
+            discrepanciasData.forEach((discrepancy, index) => {
+                const sheetName = `Discrepancia ${index + 1}`;
+                const data = [
+                    ['DISCREPANCIA ENCONTRADA'],
+                    ['Valor', 'Cantidad Sistema JCB', 'Cantidad Cuenta del proveedor'],
+                    [discrepancy.valorFormato, discrepancy.count1, discrepancy.count2],
+                    [], // Espacio
+                    ['Detalles Sistema JCB:', 'Fecha', 'Observación'],
+                    ...discrepancy.entries1.map(entry => ['', entry.fecha, entry.observacion]),
+                    [], // Espacio
+                    ['Detalles Cuenta del proveedor:', 'Fecha', 'Descripción', 'Referencia'],
+                    ...discrepancy.entries2.map(entry => ['', entry.fecha, entry.descripcion, entry.referencia])
+                ];
+
+                const ws = XLSX.utils.aoa_to_sheet(data);
+
+                // Aplicar estilos y fusiones a la hoja
+                ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+                
+                // Celdas a las que se les aplica estilo
+                const cellA1 = XLSX.utils.encode_cell({ r: 0, c: 0 });
+                const cellA3 = XLSX.utils.encode_cell({ r: 2, c: 0 });
+                const cellB3 = XLSX.utils.encode_cell({ r: 2, c: 1 });
+                const cellC3 = XLSX.utils.encode_cell({ r: 2, c: 2 });
+
+                if (ws[cellA1]) ws[cellA1].s = redHeaderStyle;
+                if (ws[cellA3]) ws[cellA3].s = greenStyle;
+                if (ws[cellB3]) ws[cellB3].s = yellowStyle;
+                if (ws[cellC3]) ws[cellC3].s = yellowStyle;
+
+                // Agregar la hoja al libro de trabajo
+                XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            });
             
             // Descargar el archivo
             XLSX.writeFile(wb, 'discrepancias.xlsx');
