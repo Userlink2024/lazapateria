@@ -70,10 +70,15 @@
                 <div id="resultsDisplay" class="bg-white p-4 rounded-xl border border-gray-300 overflow-auto max-h-96 text-sm text-gray-700">
                     <pre></pre>
                 </div>
-                <!-- Nuevo botón de descarga que solo aparece cuando hay discrepancias -->
-                <button id="downloadBtn" class="bg-red-600 text-white py-2 px-6 rounded-full hover:bg-red-700 font-semibold mt-4 hidden">
-                    Descargar Discrepancias
-                </button>
+                <!-- Botones de descarga que solo aparecen cuando hay discrepancias -->
+                <div id="downloadButtons" class="flex justify-center space-x-4 mt-4 hidden">
+                    <button id="downloadBtn" class="bg-red-600 text-white py-2 px-6 rounded-full hover:bg-red-700 font-semibold">
+                        Descargar Discrepancias (TXT)
+                    </button>
+                    <button id="downloadExcelBtn" class="bg-green-600 text-white py-2 px-6 rounded-full hover:bg-green-700 font-semibold">
+                        Descargar en Excel
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -93,9 +98,10 @@
         // Variables para almacenar los datos de los archivos
         let datosFormato1 = [];
         let datosFormato2 = [];
-        // Variables para guardar los textos de resultados
+        // Variables para guardar los textos de resultados y los datos estructurados de discrepancias
         let textoParaMostrar = '';
         let textoParaDescargar = '';
+        let discrepanciasData = [];
 
         // Referencias a los elementos del DOM
         const formato1Input = document.getElementById('formato1Input');
@@ -106,7 +112,9 @@
         const status2 = document.getElementById('status2');
         const resultsContainer = document.getElementById('resultsContainer');
         const resultsDisplay = document.getElementById('resultsDisplay');
+        const downloadButtonsContainer = document.getElementById('downloadButtons');
         const downloadBtn = document.getElementById('downloadBtn');
+        const downloadExcelBtn = document.getElementById('downloadExcelBtn');
         const modal = document.getElementById('modal');
         const modalMessage = document.getElementById('modalMessage');
         const modalCloseBtn = document.getElementById('modalCloseBtn');
@@ -235,6 +243,7 @@
             // Comparar los conteos y los detalles
             textoParaMostrar = '';
             textoParaDescargar = '';
+            discrepanciasData = [];
             let todoOk = true;
             const valoresFormato1 = Object.keys(conteoDetallado1).map(Number).sort((a, b) => a - b);
             const valoresFormato2 = Object.keys(conteoDetallado2).map(Number).sort((a, b) => a - b);
@@ -258,6 +267,14 @@
                     
                     textoParaMostrar += discrepanciaMsg;
                     textoParaDescargar += discrepanciaMsg;
+                    discrepanciasData.push({
+                        valor,
+                        valorFormato,
+                        count1,
+                        count2,
+                        entries1,
+                        entries2
+                    });
                     todoOk = false;
                 } else {
                     textoParaMostrar += `✅ Coincidencia para ${valorFormato}: ${count1} ocurrencias.\n`;
@@ -271,16 +288,16 @@
 
             if (todoOk) {
                 resultsDisplay.querySelector('pre').textContent = '✅ ¡Verificación exitosa! Todas las cantidades de valores coinciden.';
-                downloadBtn.classList.add('hidden'); // Ocultar el botón si no hay discrepancias
+                downloadButtonsContainer.classList.add('hidden'); // Ocultar el contenedor de botones si no hay discrepancias
             } else {
                 resultsDisplay.querySelector('pre').textContent = textoParaMostrar;
-                downloadBtn.classList.remove('hidden'); // Mostrar el botón
+                downloadButtonsContainer.classList.remove('hidden'); // Mostrar el contenedor
             }
 
             resultsContainer.classList.remove('hidden');
         });
 
-        // Evento para el botón de descarga
+        // Evento para el botón de descarga TXT
         downloadBtn.addEventListener('click', () => {
             if (textoParaDescargar.trim() === '') {
                 showModal('No hay discrepancias para descargar.');
@@ -300,6 +317,54 @@
             
             URL.revokeObjectURL(url);
             showModal('Archivo de discrepancias descargado exitosamente.');
+        });
+
+        // Evento para el nuevo botón de descarga Excel
+        downloadExcelBtn.addEventListener('click', () => {
+            if (discrepanciasData.length === 0) {
+                showModal('No hay discrepancias para descargar en Excel.');
+                return;
+            }
+
+            const excelData = [];
+            
+            // Recorrer cada discrepancia y estructurarla para el archivo de Excel
+            discrepanciasData.forEach((discrepancy, index) => {
+                // Agregar un espacio entre discrepancias
+                if (index > 0) {
+                    excelData.push([]);
+                    excelData.push([]);
+                }
+                
+                // Encabezado de la discrepancia
+                excelData.push(['DISCREPANCIA ENCONTRADA', '', '', '', '']);
+                excelData.push(['Valor', 'Cantidad Sistema JCB', 'Cantidad Cuenta del proveedor']);
+                excelData.push([discrepancy.valorFormato, discrepancy.count1, discrepancy.count2]);
+                excelData.push([]); // Espacio
+
+                // Detalles del Sistema JCB
+                excelData.push(['Detalles Sistema JCB:', 'Fecha', 'Observación']);
+                discrepancy.entries1.forEach(entry => {
+                    excelData.push(['', '', entry.fecha, entry.observacion]);
+                });
+                excelData.push([]); // Espacio
+
+                // Detalles de la Cuenta del proveedor
+                excelData.push(['Detalles Cuenta del proveedor:', 'Fecha', 'Descripción', 'Referencia']);
+                discrepancy.entries2.forEach(entry => {
+                    excelData.push(['', '', entry.fecha, entry.descripcion, entry.referencia]);
+                });
+            });
+
+            // Crear el libro y la hoja de trabajo
+            const ws = XLSX.utils.aoa_to_sheet(excelData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Discrepancias");
+            
+            // Descargar el archivo
+            XLSX.writeFile(wb, 'discrepancias.xlsx');
+            
+            showModal('Archivo de discrepancias en Excel descargado exitosamente.');
         });
     </script>
 </body>
