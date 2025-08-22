@@ -114,6 +114,19 @@
             modal.style.display = 'none';
         });
 
+        // Función para convertir el formato de fecha de Excel a JavaScript
+        const excelDateToJSDate = (excelDate) => {
+            if (typeof excelDate === 'number') {
+                const date = new Date(Date.UTC(1899, 11, 31)); // Fecha base de Excel
+                date.setDate(date.getDate() + excelDate);
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                return `${day}/${month}/${year}`;
+            }
+            return excelDate;
+        };
+
         // Evento para cargar el archivo del Formato 1
         formato1Input.addEventListener('change', (event) => {
             const file = event.target.files[0];
@@ -121,12 +134,16 @@
 
             const reader = new FileReader();
             reader.onload = (e) => {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                datosFormato1 = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
-                showModal('Archivo de Formato 1 cargado correctamente.');
-                status1.textContent = `Archivo cargado: ${file.name}`;
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    datosFormato1 = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+                    showModal('Archivo de Formato 1 cargado correctamente.');
+                    status1.textContent = `Archivo cargado: ${file.name}`;
+                } catch (error) {
+                    showModal('Hubo un error al leer el archivo. Asegúrate de que sea un archivo de Excel válido.');
+                }
             };
             reader.readAsArrayBuffer(file);
         });
@@ -144,16 +161,20 @@
                 const file = files[i];
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheetName = workbook.SheetNames[0];
-                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
-                    datosFormato2 = datosFormato2.concat(jsonData);
-                    filesProcessed++;
-                    if (filesProcessed === files.length) {
-                        showModal(`${files.length} archivo(s) del Formato 2 agregado(s).`);
-                        status2.textContent = `Archivos agregados: ${datosFormato2.length} filas en total.`;
-                        formato2Input.value = ''; // Limpiar el input de archivos
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const sheetName = workbook.SheetNames[0];
+                        const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+                        datosFormato2 = datosFormato2.concat(jsonData);
+                        filesProcessed++;
+                        if (filesProcessed === files.length) {
+                            showModal(`${files.length} archivo(s) del Formato 2 agregado(s).`);
+                            status2.textContent = `Archivos agregados: ${datosFormato2.length} filas en total.`;
+                            formato2Input.value = ''; // Limpiar el input de archivos
+                        }
+                    } catch (error) {
+                        showModal(`Hubo un error al leer el archivo ${file.name}. Asegúrate de que sea un archivo de Excel válido.`);
                     }
                 };
                 reader.readAsArrayBuffer(file);
@@ -162,59 +183,81 @@
 
         // Evento para el botón de verificación
         verifyBtn.addEventListener('click', () => {
-            if (datosFormato1.length === 0 || datosFormato2.length === 0) {
-                showModal('Por favor, carga ambos formatos para poder verificar.');
+            if (datosFormato1.length < 2 || datosFormato2.length < 2) {
+                showModal('Por favor, carga ambos formatos para poder verificar. Deben tener al menos una fila de datos además del encabezado.');
                 return;
             }
 
-            // Normalizar y contar valores para el Formato 1
-            const conteoFormato1 = {};
+            // Normalizar y almacenar detalles de cada valor para el Formato 1
+            const conteoDetallado1 = {};
             datosFormato1.forEach((row, index) => {
                 if (index === 0) return; // Ignorar la fila de encabezados
                 const valorString = row[1]; // Columna B (VALOR)
                 if (valorString) {
                     const valorNumerico = parseFloat(String(valorString).replace(/[^0-9.]/g, ''));
                     if (!isNaN(valorNumerico)) {
-                        conteoFormato1[valorNumerico] = (conteoFormato1[valorNumerico] || 0) + 1;
+                        if (!conteoDetallado1[valorNumerico]) {
+                            conteoDetallado1[valorNumerico] = [];
+                        }
+                        const fecha = excelDateToJSDate(row[0]);
+                        conteoDetallado1[valorNumerico].push({ fecha: fecha, observacion: row[2] });
                     }
                 }
             });
 
-            // Normalizar y contar valores para el Formato 2
-            const conteoFormato2 = {};
+            // Normalizar y almacenar detalles de cada valor para el Formato 2
+            const conteoDetallado2 = {};
             datosFormato2.forEach((row, index) => {
                 if (index === 0) return; // Ignorar la fila de encabezados
                 const valorString = row[3]; // Columna D (Valor)
                 if (valorString) {
                     const valorNumerico = parseFloat(String(valorString).replace(/[^0-9.]/g, ''));
                     if (!isNaN(valorNumerico)) {
-                        conteoFormato2[valorNumerico] = (conteoFormato2[valorNumerico] || 0) + 1;
+                        if (!conteoDetallado2[valorNumerico]) {
+                            conteoDetallado2[valorNumerico] = [];
+                        }
+                        const fecha = excelDateToJSDate(row[0]);
+                        const descripcion = row[1];
+                        const referencia = row[2];
+                        conteoDetallado2[valorNumerico].push({ fecha: fecha, descripcion: descripcion, referencia: referencia });
                     }
                 }
             });
 
-            // Comparar los conteos
+            // Comparar los conteos y los detalles
             let resultadosTexto = '';
             let todoOk = true;
-            const valoresFormato1 = Object.keys(conteoFormato1).map(Number).sort((a, b) => a - b);
-            const valoresFormato2 = Object.keys(conteoFormato2).map(Number).sort((a, b) => a - b);
+            const valoresFormato1 = Object.keys(conteoDetallado1).map(Number).sort((a, b) => a - b);
+            const valoresFormato2 = Object.keys(conteoDetallado2).map(Number).sort((a, b) => a - b);
             const todosLosValores = new Set([...valoresFormato1, ...valoresFormato2]);
 
             todosLosValores.forEach(valor => {
-                const count1 = conteoFormato1[valor] || 0;
-                const count2 = conteoFormato2[valor] || 0;
+                const entries1 = conteoDetallado1[valor] || [];
+                const entries2 = conteoDetallado2[valor] || [];
+                const count1 = entries1.length;
+                const count2 = entries2.length;
                 const valorFormato = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor);
+                
                 if (count1 !== count2) {
                     resultadosTexto += `❌ Discrepancia encontrada para ${valorFormato}:\n`;
-                    resultadosTexto += `   - Formato 1: ${count1} ocurrencias\n`;
-                    resultadosTexto += `   - Formato 2: ${count2} ocurrencias\n\n`;
+                    resultadosTexto += `   - Cantidad en Formato 1: ${count1}\n`;
+                    resultadosTexto += `   - Cantidad en Formato 2: ${count2}\n`;
+                    resultadosTexto += `   Detalles del Formato 1:\n`;
+                    entries1.forEach(entry => {
+                        resultadosTexto += `     - Fecha: ${entry.fecha}, Observación: ${entry.observacion}\n`;
+                    });
+                    resultadosTexto += `   Detalles del Formato 2:\n`;
+                    entries2.forEach(entry => {
+                        resultadosTexto += `     - Fecha: ${entry.fecha}, Descripción: ${entry.descripcion}, Referencia: ${entry.referencia}\n`;
+                    });
+                    resultadosTexto += '\n';
                     todoOk = false;
                 } else {
                     resultadosTexto += `✅ Coincidencia para ${valorFormato}: ${count1} ocurrencias.\n`;
                 }
             });
             
-            if (Object.keys(conteoFormato1).length === 0 && Object.keys(conteoFormato2).length === 0) {
+            if (Object.keys(conteoDetallado1).length === 0 && Object.keys(conteoDetallado2).length === 0) {
                 resultadosTexto = 'No se encontraron valores numéricos para verificar en los archivos.';
                 todoOk = false;
             }
