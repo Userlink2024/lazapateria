@@ -93,8 +93,9 @@
         // Variables para almacenar los datos de los archivos
         let datosFormato1 = [];
         let datosFormato2 = [];
-        // Variable para guardar el texto de las discrepancias
-        let discrepanciasTexto = '';
+        // Variables para guardar los textos de resultados
+        let textoParaMostrar = '';
+        let textoParaDescargar = '';
 
         // Referencias a los elementos del DOM
         const formato1Input = document.getElementById('formato1Input');
@@ -232,7 +233,8 @@
             });
 
             // Comparar los conteos y los detalles
-            discrepanciasTexto = '';
+            textoParaMostrar = '';
+            textoParaDescargar = '';
             let todoOk = true;
             const valoresFormato1 = Object.keys(conteoDetallado1).map(Number).sort((a, b) => a - b);
             const valoresFormato2 = Object.keys(conteoDetallado2).map(Number).sort((a, b) => a - b);
@@ -246,26 +248,24 @@
                 const valorFormato = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor);
                 
                 if (count1 !== count2) {
-                    discrepanciasTexto += `❌ Discrepancia encontrada para ${valorFormato}:\n`;
-                    discrepanciasTexto += `   - Cantidad en Formato 1: ${count1}\n`;
-                    discrepanciasTexto += `   - Cantidad en Formato 2: ${count2}\n`;
-                    discrepanciasTexto += `   Detalles del Formato 1:\n`;
-                    entries1.forEach(entry => {
-                        discrepanciasTexto += `     - Fecha: ${entry.fecha}, Observación: ${entry.observacion}\n`;
-                    });
-                    discrepanciasTexto += `   Detalles del Formato 2:\n`;
-                    entries2.forEach(entry => {
-                        discrepanciasTexto += `     - Fecha: ${entry.fecha}, Descripción: ${entry.descripcion}, Referencia: ${entry.referencia}\n`;
-                    });
-                    discrepanciasTexto += '\n';
+                    const discrepanciaMsg = `❌ Discrepancia encontrada para ${valorFormato}:\n` +
+                                            `   - Cantidad en Formato 1: ${count1}\n` +
+                                            `   - Cantidad en Formato 2: ${count2}\n` +
+                                            `   Detalles del Formato 1:\n` +
+                                            entries1.map(entry => `     - Fecha: ${entry.fecha}, Observación: ${entry.observacion}`).join('\n') + '\n' +
+                                            `   Detalles del Formato 2:\n` +
+                                            entries2.map(entry => `     - Fecha: ${entry.fecha}, Descripción: ${entry.descripcion}, Referencia: ${entry.referencia}`).join('\n') + '\n\n';
+                    
+                    textoParaMostrar += discrepanciaMsg;
+                    textoParaDescargar += discrepanciaMsg;
                     todoOk = false;
                 } else {
-                    discrepanciasTexto += `✅ Coincidencia para ${valorFormato}: ${count1} ocurrencias.\n`;
+                    textoParaMostrar += `✅ Coincidencia para ${valorFormato}: ${count1} ocurrencias.\n`;
                 }
             });
             
             if (Object.keys(conteoDetallado1).length === 0 && Object.keys(conteoDetallado2).length === 0) {
-                discrepanciasTexto = 'No se encontraron valores numéricos para verificar en los archivos.';
+                textoParaMostrar = 'No se encontraron valores numéricos para verificar en los archivos.';
                 todoOk = false;
             }
 
@@ -273,7 +273,7 @@
                 resultsDisplay.querySelector('pre').textContent = '✅ ¡Verificación exitosa! Todas las cantidades de valores coinciden.';
                 downloadBtn.classList.add('hidden'); // Ocultar el botón si no hay discrepancias
             } else {
-                resultsDisplay.querySelector('pre').textContent = discrepanciasTexto;
+                resultsDisplay.querySelector('pre').textContent = textoParaMostrar;
                 downloadBtn.classList.remove('hidden'); // Mostrar el botón
             }
 
@@ -282,13 +282,12 @@
 
         // Evento para el botón de descarga
         downloadBtn.addEventListener('click', () => {
-            // Verificar si hay texto de discrepancias para descargar
-            if (discrepanciasTexto.trim() === '') {
+            if (textoParaDescargar.trim() === '') {
                 showModal('No hay discrepancias para descargar.');
                 return;
             }
 
-            const blob = new Blob([discrepanciasTexto], { type: 'text/plain;charset=utf-8' });
+            const blob = new Blob([textoParaDescargar], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             
             const link = document.createElement('a');
