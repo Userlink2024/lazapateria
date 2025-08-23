@@ -209,7 +209,8 @@
             transform: translateY(0);
         }
         .modal-content h3 {
-            color: #0056b3; /* Color de título original de inter.txt */
+            color: #0056b3;
+            /* Color de título original de inter.txt */
             margin-top: 0;
             margin-bottom: 20px;
             text-align: center;
@@ -221,7 +222,8 @@
             color: #333;
         }
         .modal-content p strong {
-            color: #0056b3; /* Color de título original de inter.txt */
+            color: #0056b3;
+            /* Color de título original de inter.txt */
         }
         .modal-close-btn {
             position: absolute;
@@ -233,7 +235,8 @@
             cursor: pointer;
             color: #888;
             transition: color 0.3s ease;
-            width: auto; /* Anular el 100% de width para este botón */
+            width: auto;
+            /* Anular el 100% de width para este botón */
             padding: 0;
             margin: 0;
         }
@@ -297,7 +300,6 @@
             appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
             measurementId: "G-HVG7615JEE"
         };
-
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const collectionGuias = db.collection('guias_interrapidissimo'); // Referencia a la colección de guías
@@ -312,7 +314,6 @@
             setupFilterModalListeners(); // NUEVO: Configura los listeners para los filtros del modal
             cargarGuias(); // Carga las guías al iniciar
         };
-
         /**
          * Configura el event listener para el checkbox PENDIENTE.
          */
@@ -335,7 +336,7 @@
             if (numeroGuiaInput && pendienteCheck) {
                 numeroGuiaInput.disabled = pendienteCheck.checked;
                 if (pendienteCheck.checked) {
-                    numeroGuiaInput.value = ''; // Vacía el campo si está pendiente
+                    numeroGuiaInput.value = '';
                 }
             }
         }
@@ -372,7 +373,6 @@
         function verificarRolParaExportar() {
             // Usa la variable global datosUsuario
             const exportarExcelBtn = document.getElementById('exportarExcelBtn');
-
             if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
                 exportarExcelBtn.style.display = 'block';
             } else {
@@ -398,7 +398,6 @@
                 return;
             }
 
-            // Validación específica para el número de guía y el checkbox PENDIENTE
             if (!pendienteCheck.checked && !numeroGuia) {
                 errorMessageElement.textContent = 'El campo "Número de Guía" no puede estar vacío a menos que el check "PENDIENTE" esté activo.';
                 showMessageModal('Error de Validación', 'El campo "Número de Guía" no puede estar vacío a menos que el check "PENDIENTE" esté activo.', 'error');
@@ -410,12 +409,12 @@
                 fecha: fecha,
                 nombreCliente: nombreCliente,
                 valorMercancia: parseFloat(valorMercancia),
-                numeroGuia: pendienteCheck.checked ? '' : numeroGuia, // Guarda vacío si PENDIENTE está marcado
-                pendiente: pendienteCheck.checked, // Guarda el estado del checkbox PENDIENTE
+                numeroGuia: pendienteCheck.checked ? '' : numeroGuia,
+                pendiente: pendienteCheck.checked,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                verificado: false, // Campo de verificación por defecto
-                novedad: false, // Campo de novedad por defecto
-                anulado: false // NUEVO: Campo de anulado por defecto
+                verificado: false,
+                novedad: false,
+                anulado: false
             };
 
             try {
@@ -432,8 +431,7 @@
                 }
                 document.getElementById('generarGuiaForm').reset();
                 cargarUsuarioLogueado();
-                toggleNumeroGuiaInput(); // Restablece el estado del campo y checkbox
-                // No es necesario llamar a cargarGuias() aquí, onSnapshot lo hará
+                toggleNumeroGuiaInput();
             } catch (error) {
                 console.error("Error al guardar/actualizar la guía: ", error);
                 errorMessageElement.textContent = `Error al ${guiaAEditarId ? 'actualizar' : 'guardar'} la guía de Inter Rapidisimo. Inténtalo de nuevo.`;
@@ -441,31 +439,57 @@
             }
         }
 
-        async function exportarGuiasExcel() {
+        async function exportarGuiasExcel(filter = 'all') {
             try {
                 const querySnapshot = await collectionGuias.get();
                 const data = [];
+                const headers = ['numeroGuia', 'nombreCliente', 'usuario', 'valorMercancia', 'timestamp', 'fecha', 'verificado', 'anulado', 'novedad', 'pendiente'];
                 querySnapshot.forEach(doc => {
-                    data.push(doc.data());
+                    const guia = doc.data();
+                    if (filter === 'all' || 
+                        (filter === 'pendiente' && guia.pendiente) ||
+                        (filter === 'verificado' && guia.verificado) ||
+                        (filter === 'anulado' && guia.anulado) ||
+                        (filter === 'novedad' && guia.novedad)
+                    ) {
+                        const formattedGuia = {};
+                        headers.forEach(header => {
+                            if (header === 'timestamp' && guia[header]) {
+                                formattedGuia[header] = guia[header].toDate().toLocaleString();
+                            } else {
+                                formattedGuia[header] = guia[header] !== undefined ? guia[header] : '';
+                            }
+                        });
+                        data.push(formattedGuia);
+                    }
                 });
-
                 if (data.length > 0) {
                     const workbook = XLSX.utils.book_new();
-                    const worksheet = XLSX.utils.json_to_sheet(data);
+                    const worksheet = XLSX.utils.json_to_sheet(data, { header: headers });
                     XLSX.utils.book_append_sheet(workbook, worksheet, 'Guias Inter Rapidisimo');
                     XLSX.writeFile(workbook, 'guias_interrapidissimo.xlsx');
                 } else {
-                    showMessageModal('Información', 'No hay guías de Inter Rapidisimo para exportar.', 'info');
+                    showMessageModal('Información', 'No hay guías de Inter Rapidisimo para exportar con el filtro seleccionado.', 'info');
                 }
             } catch (error) {
                 console.error("Error al exportar guías a Excel: ", error);
                 showMessageModal('Error', 'Error al exportar guías a Excel.', 'error');
             }
         }
+        
+        function showExportModal() {
+            const exportModal = document.getElementById('exportModal');
+            exportModal.classList.add('active');
+        }
+
+        function closeExportModal() {
+            const exportModal = document.getElementById('exportModal');
+            exportModal.classList.remove('active');
+        }
+
 
         function mostrarModuloGuias() {
             document.getElementById('guiasModulo').style.display = 'block';
-            // No es necesario llamar a cargarGuias() aquí, onSnapshot ya está activo
         }
 
         /**
@@ -479,7 +503,7 @@
 
             // Configura el listener en tiempo real
             collectionGuias.orderBy('timestamp', 'desc').onSnapshot(snapshot => {
-                guiasInterrapidissimo = []; // Limpia el array antes de cargar los nuevos datos
+                guiasInterrapidissimo = [];
                 const asesoresUnicos = new Set();
 
                 snapshot.forEach(doc => {
@@ -493,7 +517,7 @@
 
                 // Actualiza el filtro de asesor
                 const filtroAsesorSelect = document.getElementById('filtroAsesor');
-                const currentSelectedAsesor = filtroAsesorSelect.value; // Guarda la selección actual
+                const currentSelectedAsesor = filtroAsesorSelect.value;
                 filtroAsesorSelect.innerHTML = '<option value="">Todos los Asesores</option>';
                 asesoresUnicos.forEach(asesor => {
                     const option = document.createElement('option');
@@ -501,7 +525,6 @@
                     option.textContent = asesor;
                     filtroAsesorSelect.appendChild(option);
                 });
-                // Restaura la selección si el asesor sigue existiendo
                 if (asesoresUnicos.has(currentSelectedAsesor)) {
                     filtroAsesorSelect.value = currentSelectedAsesor;
                 }
@@ -520,14 +543,10 @@
 
             const filtroBusqueda = document.getElementById('buscadorGuias').value.toLowerCase();
             const filtroAsesor = document.getElementById('filtroAsesor').value;
-
-            // Obtener el estado de los checkboxes de filtro del modal
             const filtroPendiente = document.getElementById('pendienteFilter').checked;
             const filtroVerificado = document.getElementById('verificadoFilter').checked;
             const filtroAnulado = document.getElementById('anuladoFilter').checked;
             const filtroNovedad = document.getElementById('novedadFilter').checked;
-
-
             const guiasFiltradas = guias.filter(guia => {
                 const coincideBusqueda = Object.values(guia).some(valor => {
                     if (typeof valor === 'string' || typeof valor === 'number') {
@@ -538,12 +557,10 @@
 
                 const coincideAsesor = filtroAsesor === "" || (guia.usuario && guia.usuario === filtroAsesor);
 
-                // Aplicar los filtros de estado
                 const coincidePendiente = !filtroPendiente || guia.pendiente === true;
                 const coincideVerificado = !filtroVerificado || guia.verificado === true;
                 const coincideAnulado = !filtroAnulado || guia.anulado === true;
                 const coincideNovedad = !filtroNovedad || guia.novedad === true;
-
 
                 return coincideBusqueda && coincideAsesor && coincidePendiente && coincideVerificado && coincideAnulado && coincideNovedad;
             });
@@ -562,11 +579,8 @@
                 const disableActions = isOperador && (isVerificado || isNovedad || isAnulado);
 
                 const listItem = document.createElement('li');
-                // Construye los atributos `disabled` y `onclick` condicionalmente
                 const editButtonAttrs = `${disableActions ? 'disabled' : ''} ${disableActions ? '' : `onclick="cargarDatosParaEdicion('${guia.id}')"`}`;
                 const deleteButtonAttrs = `${disableActions ? 'disabled' : ''} ${disableActions ? '' : `onclick="showConfirmModal('Confirmar Eliminación', '¿Estás seguro de que deseas eliminar esta guía?', () => eliminarGuia('${guia.id}'))"`}`;
-
-
                 listItem.innerHTML = `
                     <div><strong>Número de Guía:</strong> ${guia.numeroGuia || (guia.pendiente ? 'PENDIENTE' : 'N/A')}</div>
                     <div><strong>Nombre del Cliente:</strong> ${guia.nombreCliente}</div>
@@ -575,37 +589,20 @@
                     <div><strong>Usuario (Asesor):</strong> ${guia.usuario}</div>
                     <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 5px;">
                         ${guia.pendiente ? '<div><strong>Estado:</strong> PENDIENTE</div>' : ''}
-
                         ${isAdministrador ? `
                             <label style="margin-bottom: 0; font-weight: normal;">
-                                <input type="checkbox"
-                                       id="verificado-${guia.id}"
-                                       ${guia.verificado ? 'checked' : ''}
-                                       onchange="toggleVerificado('${guia.id}', this.checked)"
-                                       style="margin-right: 5px; width: auto;"
-                                > Verificado
+                                <input type="checkbox" id="verificado-${guia.id}" ${guia.verificado ? 'checked' : ''} onchange="toggleVerificado('${guia.id}', this.checked)" style="margin-right: 5px; width: auto;"> Verificado
                             </label>
                             <label style="margin-bottom: 0; font-weight: normal;">
-                                <input type="checkbox"
-                                       id="novedad-${guia.id}"
-                                       ${guia.novedad ? 'checked' : ''}
-                                       onchange="toggleNovedad('${guia.id}', this.checked)"
-                                       style="margin-right: 5px; width: auto;"
-                                > Novedad
+                                <input type="checkbox" id="novedad-${guia.id}" ${guia.novedad ? 'checked' : ''} onchange="toggleNovedad('${guia.id}', this.checked)" style="margin-right: 5px; width: auto;"> Novedad
                             </label>
                         ` : `
                             ${isVerificado ? '<div><strong>Verificado:</strong> Sí</div>' : ''}
                             ${isNovedad ? '<div><strong>Novedad:</strong> Sí</div>' : ''}
                         `}
-
                         ${isAdministrador || isOperador ? `
                             <label style="margin-bottom: 0; font-weight: normal;">
-                                <input type="checkbox"
-                                       id="anulado-${guia.id}"
-                                       ${guia.anulado ? 'checked' : ''}
-                                       onchange="toggleAnulado('${guia.id}', this.checked)"
-                                       style="margin-right: 5px; width: auto;"
-                                > Anulado
+                                <input type="checkbox" id="anulado-${guia.id}" ${guia.anulado ? 'checked' : ''} onchange="toggleAnulado('${guia.id}', this.checked)" style="margin-right: 5px; width: auto;"> Anulado
                             </label>
                         ` : (isAnulado ? '<div><strong>Anulado:</strong> Sí</div>' : '')}
                     </div>
@@ -623,31 +620,26 @@
             try {
                 await collectionGuias.doc(guiaId).update({ verificado: isChecked });
                 showMessageModal('Éxito', `Guía ${isChecked ? 'verificada' : 'desverificada'} exitosamente.`, 'success');
-                // La recarga se maneja por el onSnapshot
             } catch (error) {
                 console.error("Error al actualizar el estado de verificación: ", error);
                 showMessageModal('Error', 'Error al actualizar el estado de verificación.', 'error');
             }
         }
 
-        // Función para alternar el estado de novedad
         async function toggleNovedad(guiaId, isChecked) {
             try {
                 await collectionGuias.doc(guiaId).update({ novedad: isChecked });
                 showMessageModal('Éxito', `Guía ${isChecked ? 'marcada con novedad' : 'sin novedad'} exitosamente.`, 'success');
-                // La recarga se maneja por el onSnapshot
             } catch (error) {
                 console.error("Error al actualizar el estado de novedad: ", error);
                 showMessageModal('Error', 'Error al actualizar el estado de novedad.', 'error');
             }
         }
 
-        // Función para alternar el estado de anulado
         async function toggleAnulado(guiaId, isChecked) {
             try {
                 await collectionGuias.doc(guiaId).update({ anulado: isChecked });
                 showMessageModal('Éxito', `Guía ${isChecked ? 'marcada como anulada' : 'desmarcada como anulada'} exitosamente.`, 'success');
-                // La recarga se maneja por el onSnapshot
             } catch (error) {
                 console.error("Error al actualizar el estado de anulado: ", error);
                 showMessageModal('Error', 'Error al actualizar el estado de anulado.', 'error');
@@ -657,32 +649,28 @@
         function cargarDatosParaEdicion(guiaId) {
             console.log("Cargando datos para edición con ID:", guiaId);
             const guiaParaEditar = guiasInterrapidissimo.find(guia => guia.id === guiaId);
-
             if (guiaParaEditar) {
                 const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
                 const isVerificado = guiaParaEditar.verificado === true;
                 const isNovedad = guiaParaEditar.novedad === true;
                 const isAnulado = guiaParaEditar.anulado === true;
-
                 if (isOperador && (isVerificado || isNovedad || isAnulado)) {
                     showMessageModal('Acción Restringida', 'No puedes editar guías verificadas, con novedad o anuladas como Operador.', 'info');
                     return;
                 }
-
                 console.log("Guía encontrada para editar:", guiaParaEditar);
                 document.getElementById('usuarioLogueado').value = guiaParaEditar.usuario;
                 document.getElementById('fechaGuia').value = guiaParaEditar.fecha;
                 document.getElementById('nombreCliente').value = guiaParaEditar.nombreCliente;
                 document.getElementById('valorMercancia').value = guiaParaEditar.valorMercancia;
                 document.getElementById('numeroGuia').value = guiaParaEditar.numeroGuia;
-                document.getElementById('pendienteCheck').checked = guiaParaEditar.pendiente || false; // Setear el estado del checkbox
-                toggleNumeroGuiaInput(); // Ajustar el campo de número de guía al cargar para edición
-
+                document.getElementById('pendienteCheck').checked = guiaParaEditar.pendiente || false;
+                toggleNumeroGuiaInput();
                 guiaAEditarId = guiaId;
                 const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
                 guardarBtn.textContent = 'Actualizar Guía';
-                document.getElementById('guiasModulo').style.display = 'none'; // Ocultar la lista
-                document.querySelector('.container:first-child').style.display = 'block'; // Mostrar el formulario
+                document.getElementById('guiasModulo').style.display = 'none';
+                document.querySelector('.container:first-child').style.display = 'block';
             } else {
                 console.error("No se encontró la guía con ID:", guiaId);
                 showMessageModal('Error', 'No se pudo cargar la guía para editar.', 'error');
@@ -695,16 +683,13 @@
             const isVerificado = guiaAEliminar && guiaAEliminar.verificado === true;
             const isNovedad = guiaAEliminar && guiaAEliminar.novedad === true;
             const isAnulado = guiaAEliminar && guiaAEliminar.anulado === true;
-
             if (isOperador && (isVerificado || isNovedad || isAnulado)) {
                 showMessageModal('Acción Restringida', 'No puedes eliminar guías verificadas, con novedad o anuladas como Operador.', 'info');
                 return;
             }
-
             try {
                 await collectionGuias.doc(id).delete();
                 showMessageModal('Éxito', 'Guía eliminada exitosamente.', 'success');
-                // La recarga se maneja por el onSnapshot
             }
             catch (error) {
                 console.error("Error al eliminar la guía: ", error);
@@ -721,6 +706,12 @@
          */
         function mostrarFiltrosModal() {
             const filterModal = document.getElementById('filterModal');
+            const deleteBtn = document.getElementById('deleteMultipleBtn');
+            if (datosUsuario && datosUsuario.permisos.toLowerCase() === 'administrador') {
+                deleteBtn.style.display = 'block';
+            } else {
+                deleteBtn.style.display = 'none';
+            }
             filterModal.classList.add('active');
         }
 
@@ -746,11 +737,9 @@
 
             messageModalTitle.textContent = title;
             messageModalBody.textContent = message;
-
-            // Opcional: Cambiar estilos según el tipo de mensaje
-            messageModalTitle.style.color = ''; // Reset color
+            messageModalTitle.style.color = '';
             if (type === 'success') {
-                messageModalTitle.style.color = '#28a745'; /* Color verde de inter.txt */
+                messageModalTitle.style.color = '#28a745';
             } else if (type === 'error') {
                 messageModalTitle.style.color = '#dc3545';
             } else if (type === 'info') {
@@ -785,6 +774,47 @@
             };
             cancelBtn.onclick = () => confirmModal.classList.remove('active');
         }
+
+        /**
+         * Muestra el modal para seleccionar el tipo de guías a eliminar.
+         */
+        function showDeleteModal() {
+            const deleteModal = document.getElementById('deleteModal');
+            deleteModal.classList.add('active');
+            cerrarFiltrosModal();
+        }
+
+        /**
+         * Cierra el modal de eliminación.
+         */
+        function closeDeleteModal() {
+            const deleteModal = document.getElementById('deleteModal');
+            deleteModal.classList.remove('active');
+        }
+
+        /**
+         * Elimina guías del Firestore basándose en el estado seleccionado.
+         * @param {string} filter 'pendiente', 'verificado', 'anulado', o 'novedad'.
+         */
+        async function eliminarGuiasPorEstado(filter) {
+            try {
+                let query = collectionGuias.where(filter, '==', true);
+                const querySnapshot = await query.get();
+                if (querySnapshot.empty) {
+                    showMessageModal('Información', `No hay guías con el estado '${filter}' para eliminar.`, 'info');
+                    return;
+                }
+                const batch = db.batch();
+                querySnapshot.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+                showMessageModal('Éxito', `${querySnapshot.size} guías con el estado '${filter}' eliminadas exitosamente.`, 'success');
+            } catch (error) {
+                console.error("Error al eliminar las guías por estado: ", error);
+                showMessageModal('Error', 'Error al eliminar las guías. Inténtalo de nuevo.', 'error');
+            }
+        }
     </script>
 </head>
 <body>
@@ -812,7 +842,7 @@
             </div>
 
             <button type="submit">Guardar Guía</button>
-            <button type="button" id="exportarExcelBtn" onclick="exportarGuiasExcel()" style="display:none;">Exportar a Excel</button>
+            <button type="button" id="exportarExcelBtn" onclick="showExportModal()" style="display:none;">Exportar a Excel</button>
             <button type="button" id="verGuiasBtn" onclick="mostrarModuloGuias()">Ver Guías</button>
             <p id="error-message" class="error-message"></p>
         </form>
@@ -861,6 +891,11 @@
                 <p><strong>PENDIENTE:</strong> El envío aún no tiene guía asignada.</p>
                 <p><strong>ANULADO:</strong> Se ha devuelto el paquete a la bodega.</p>
             </div>
+            
+            <hr style="margin-top: 20px;">
+            <div class="modal-actions" style="justify-content: center;">
+                <button type="button" class="accion-btn eliminar" id="deleteMultipleBtn" onclick="showDeleteModal()" style="display: none; width: auto; background-color: #dc3545;">Eliminar Guias por Estado</button>
+            </div>
         </div>
     </div>
 
@@ -882,6 +917,63 @@
             <div class="modal-actions">
                 <button class="confirm-btn" id="confirmActionBtn">Sí</button>
                 <button class="cancel-btn" id="cancelActionBtn">No</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE SELECCIÓN DE FILTROS PARA EXPORTAR -->
+    <div id="exportModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="closeExportModal()">&times;</button>
+            <h3>Exportar Guías a Excel</h3>
+            <p>Selecciona los tipos de guías que deseas exportar:</p>
+            <div class="filter-options">
+                <label>
+                    <input type="radio" name="exportFilter" value="all" checked> Todas
+                </label>
+                <label>
+                    <input type="radio" name="exportFilter" value="pendiente"> Pendientes
+                </label>
+                <label>
+                    <input type="radio" name="exportFilter" value="verificado"> Verificadas
+                </label>
+                <label>
+                    <input type="radio" name="exportFilter" value="anulado"> Anuladas
+                </label>
+                <label>
+                    <input type="radio" name="exportFilter" value="novedad"> Con Novedad
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button class="confirm-btn" onclick="const selectedFilter = document.querySelector('input[name=exportFilter]:checked').value; exportarGuiasExcel(selectedFilter); closeExportModal();">Exportar</button>
+                <button class="cancel-btn" onclick="closeExportModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NUEVO MODAL DE SELECCIÓN DE FILTROS PARA ELIMINAR -->
+    <div id="deleteModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="closeDeleteModal()">&times;</button>
+            <h3>Eliminar Guías por Estado</h3>
+            <p>Selecciona el tipo de guías que deseas eliminar:</p>
+            <div class="filter-options">
+                <label>
+                    <input type="radio" name="deleteFilter" value="pendiente" checked> Pendientes
+                </label>
+                <label>
+                    <input type="radio" name="deleteFilter" value="verificado"> Verificadas
+                </label>
+                <label>
+                    <input type="radio" name="deleteFilter" value="anulado"> Anuladas
+                </label>
+                <label>
+                    <input type="radio" name="deleteFilter" value="novedad"> Con Novedad
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button class="confirm-btn" onclick="const selectedFilter = document.querySelector('input[name=deleteFilter]:checked').value; eliminarGuiasPorEstado(selectedFilter); closeDeleteModal();">Eliminar</button>
+                <button class="cancel-btn" onclick="closeDeleteModal()">Cancelar</button>
             </div>
         </div>
     </div>
