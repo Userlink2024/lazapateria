@@ -98,6 +98,9 @@
             <button id="stopButton" class="hidden px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg">
                 Detener y Reprogramar
             </button>
+            <button id="testSoundButton" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-bold rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg">
+                Probar Sonido
+            </button>
         </div>
     </div>
 
@@ -106,6 +109,7 @@
         const ctx = canvas.getContext('2d');
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
+        const testSoundButton = document.getElementById('testSoundButton');
         const messageBox = document.getElementById('message-box');
         const statusMessage = document.getElementById('status-message');
         const canvasContainer = document.getElementById('canvas-container');
@@ -240,15 +244,40 @@
             statusMessage.textContent = `Próximo recordatorio en ${minutes} minutos y ${seconds} segundos.`;
             console.log(`Próximo recordatorio programado para dentro de ${minutes} minutos y ${seconds} segundos.`);
         }
+
+        // Función para probar el sonido
+        function playTestSound() {
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                const testOscillator = audioContext.createOscillator();
+                testOscillator.type = 'sine';
+                testOscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+                testOscillator.connect(audioContext.destination);
+                testOscillator.start();
+                testOscillator.stop(audioContext.currentTime + 0.5); // Sonido breve de 0.5 segundos
+            } catch (e) {
+                console.error("No se pudo reproducir el sonido de prueba.", e);
+            }
+        }
         
         // Manejadores de eventos de los botones
         startButton.addEventListener('click', () => {
             startButton.classList.add('hidden');
             stopButton.classList.remove('hidden');
+            testSoundButton.classList.add('hidden');
             scheduleNextReminder();
         });
 
-        stopButton.addEventListener('click', stopAndReschedule);
+        stopButton.addEventListener('click', () => {
+            stopAndReschedule();
+            startButton.classList.remove('hidden');
+            testSoundButton.classList.remove('hidden');
+            stopButton.classList.add('hidden');
+        });
+
+        testSoundButton.addEventListener('click', playTestSound);
 
         // Inicializar el estado del canvas al cargar la página
         drawInitialState();
