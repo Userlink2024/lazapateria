@@ -115,6 +115,7 @@
         const canvasContainer = document.getElementById('canvas-container');
 
         let reminderTimeoutId;
+        let countdownIntervalId;
         let audioContext;
         let oscillator;
         let isAlarmActive = false;
@@ -213,8 +214,9 @@
                 oscillator.disconnect();
             }
 
-            // Limpiar el temporizador
+            // Limpiar los temporizadores
             clearTimeout(reminderTimeoutId);
+            clearInterval(countdownIntervalId);
 
             // Restablecer la UI
             isAlarmActive = false;
@@ -222,6 +224,7 @@
             statusMessage.classList.remove('alert-message');
             canvasContainer.classList.remove('alarm-state');
             drawInitialState();
+            statusMessage.textContent = 'Recordatorio detenido. Haz clic en "Iniciar" para volver a programarlo.';
 
             // Reprogramar el recordatorio
             scheduleNextReminder();
@@ -231,18 +234,27 @@
         function scheduleNextReminder() {
             // Rango máximo de 35 minutos en milisegundos
             const maxTime = 35 * 60 * 1000; 
-            const randomTime = Math.floor(Math.random() * maxTime) + 1;
+            let remainingTime = Math.floor(Math.random() * maxTime) + 1;
             
-            // Convertir el tiempo aleatorio a minutos y segundos para mostrar al usuario
-            const minutes = Math.floor(randomTime / 60000);
-            const seconds = Math.floor((randomTime % 60000) / 1000);
-            
-            // Establecer el temporizador
-            reminderTimeoutId = setTimeout(triggerAlarm, randomTime);
-            
-            // Actualizar el estado del mensaje
-            statusMessage.textContent = `Próximo recordatorio en ${minutes} minutos y ${seconds} segundos.`;
-            console.log(`Próximo recordatorio programado para dentro de ${minutes} minutos y ${seconds} segundos.`);
+            // Establecer el temporizador para la alarma
+            reminderTimeoutId = setTimeout(triggerAlarm, remainingTime);
+
+            // Actualizar el estado del mensaje con la cuenta regresiva
+            clearInterval(countdownIntervalId); // Asegurarse de que no haya otro intervalo corriendo
+            countdownIntervalId = setInterval(() => {
+                const minutes = Math.floor(remainingTime / 60000);
+                const seconds = Math.floor((remainingTime % 60000) / 1000);
+                statusMessage.textContent = `Próximo recordatorio en ${minutes}m ${seconds}s.`;
+                
+                remainingTime -= 1000;
+                
+                if (remainingTime < 0) {
+                    clearInterval(countdownIntervalId);
+                    statusMessage.textContent = '¡Es hora de facturar!';
+                }
+            }, 1000);
+
+            console.log(`Próximo recordatorio programado.`);
         }
 
         // Función para probar el sonido
