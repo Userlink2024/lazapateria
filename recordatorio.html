@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recordatorio de Facturación</title>
+    <!-- Incluir Tailwind CSS para un estilo rápido y limpio -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos personalizados para el canvas */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            flex-direction: column;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 1 / 1;
+            margin-bottom: 2rem;
+            border-radius: 1.5rem;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            transition: transform 0.3s ease-in-out;
+        }
+
+        #reminderCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        #message-box {
+            background-color: #2d3748;
+            padding: 1rem 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            min-height: 5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .alarm-state {
+            animation: pulse-border 1s infinite alternate;
+            background-color: #f56565 !important;
+        }
+        
+        @keyframes pulse-border {
+            from { box-shadow: 0 0 0 0 #f56565; }
+            to { box-shadow: 0 0 0 10px rgba(245, 101, 101, 0); }
+        }
+
+        .alert-message {
+            animation: bounce 1s infinite;
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(-5%);
+                animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+            }
+            50% {
+                transform: translateY(0);
+                animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+    <div class="flex flex-col items-center justify-center p-6">
+        <h1 class="text-3xl sm:text-4xl font-extrabold mb-2">Recordatorio de Facturación</h1>
+        <p class="text-lg text-gray-400 mb-8">Nunca olvides facturar de nuevo. ¡Un recordatorio aleatorio te avisará!</p>
+
+        <div id="message-box" class="w-full max-w-lg mb-8 transition-colors duration-500 ease-in-out">
+            <span id="status-message" class="text-xl font-medium text-center">Haz clic en "Iniciar" para empezar.</span>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="reminderCanvas"></canvas>
+        </div>
+
+        <div class="flex gap-4 mt-6">
+            <button id="startButton" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg">
+                Iniciar Recordatorio
+            </button>
+            <button id="stopButton" class="hidden px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg">
+                Detener y Reprogramar
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('reminderCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const messageBox = document.getElementById('message-box');
+        const statusMessage = document.getElementById('status-message');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        let reminderTimeoutId;
+        let audioContext;
+        let oscillator;
+        let isAlarmActive = false;
+
+        // Configuración para el canvas
+        const canvasSize = 600;
+        canvas.width = canvasSize;
+        canvas.height = canvasSize;
+        let hue = 0;
+        let pulseRadius = 0;
+        let pulseSpeed = 2;
+
+        // Función para dibujar el estado inicial del canvas
+        function drawInitialState() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#2d3748';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = '2rem Inter';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Esperando...', canvas.width / 2, canvas.height / 2);
+        }
+
+        // Función para dibujar la animación de la alarma
+        function drawAlarmAnimation() {
+            if (!isAlarmActive) return;
+
+            // Cambiar el color del pulso
+            hue = (hue + 1) % 360;
+            const color = `hsl(${hue}, 100%, 70%)`;
+
+            // Aumentar el radio del pulso
+            pulseRadius += pulseSpeed;
+            if (pulseRadius > canvas.width / 2) {
+                pulseRadius = 0;
+            }
+
+            // Dibujar el fondo y el círculo pulsante
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#f56565'; // Color de fondo de alarma
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, pulseRadius, 0, Math.PI * 2, false);
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '2.5rem Inter';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('¡Es hora de facturar!', canvas.width / 2, canvas.height / 2);
+
+            requestAnimationFrame(drawAlarmAnimation);
+        }
+
+        // Función para iniciar la alarma visual y sonora
+        function triggerAlarm() {
+            isAlarmActive = true;
+            messageBox.classList.add('alarm-state');
+            statusMessage.classList.add('alert-message');
+            statusMessage.textContent = '¡Es hora de facturar!';
+            canvasContainer.classList.add('alarm-state');
+
+            // Iniciar la animación del canvas
+            drawAlarmAnimation();
+
+            // Iniciar el sonido de la alarma (tono agudo)
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                oscillator = audioContext.createOscillator();
+                oscillator.type = 'triangle'; // Un tipo de onda que suena más como una alarma
+                oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // Frecuencia de la nota A4
+                
+                const gainNode = audioContext.createGain();
+                gainNode.gain.setValueAtTime(1, audioContext.currentTime); // Volumen al máximo
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 10); // Detener después de 10 segundos
+            } catch (e) {
+                console.error("El navegador no permite la reproducción de audio sin una interacción inicial del usuario. Por favor, asegúrate de haber hecho clic en algún botón antes.", e);
+            }
+        }
+
+        // Función para detener la alarma y reprogramar el recordatorio
+        function stopAndReschedule() {
+            // Detener el sonido
+            if (oscillator) {
+                oscillator.stop();
+                oscillator.disconnect();
+            }
+
+            // Limpiar el temporizador
+            clearTimeout(reminderTimeoutId);
+
+            // Restablecer la UI
+            isAlarmActive = false;
+            messageBox.classList.remove('alarm-state');
+            statusMessage.classList.remove('alert-message');
+            canvasContainer.classList.remove('alarm-state');
+            drawInitialState();
+
+            // Reprogramar el recordatorio
+            scheduleNextReminder();
+        }
+
+        // Función para programar el próximo recordatorio
+        function scheduleNextReminder() {
+            // Rango máximo de 35 minutos en milisegundos
+            const maxTime = 35 * 60 * 1000; 
+            const randomTime = Math.floor(Math.random() * maxTime) + 1;
+            
+            // Convertir el tiempo aleatorio a minutos y segundos para mostrar al usuario
+            const minutes = Math.floor(randomTime / 60000);
+            const seconds = Math.floor((randomTime % 60000) / 1000);
+            
+            // Establecer el temporizador
+            reminderTimeoutId = setTimeout(triggerAlarm, randomTime);
+            
+            // Actualizar el estado del mensaje
+            statusMessage.textContent = `Próximo recordatorio en ${minutes} minutos y ${seconds} segundos.`;
+            console.log(`Próximo recordatorio programado para dentro de ${minutes} minutos y ${seconds} segundos.`);
+        }
+        
+        // Manejadores de eventos de los botones
+        startButton.addEventListener('click', () => {
+            startButton.classList.add('hidden');
+            stopButton.classList.remove('hidden');
+            scheduleNextReminder();
+        });
+
+        stopButton.addEventListener('click', stopAndReschedule);
+
+        // Inicializar el estado del canvas al cargar la página
+        drawInitialState();
+    </script>
+</body>
+</html>
