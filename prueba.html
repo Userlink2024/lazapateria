@@ -1014,7 +1014,17 @@
             color: #dc3545; /* Rojo Bootstrap */
             font-weight: bold;
         }
+/* --- INICIO DE CÓDIGO NUEVO --- */
+        .color-naranja {
+            color: #fd7e14; /* Naranja Bootstrap */
+            font-weight: bold;
+        }
 
+        .bodeguero-count {
+            margin-left: 8px; /* Espacio entre el nombre y el contador */
+            font-weight: bold; /* Hacer el contador más visible */
+        }
+        /* --- FIN DE CÓDIGO NUEVO --- */
         /* Media Queries for Responsiveness */
         @media (max-width: 768px) {
             .container {
@@ -1666,7 +1676,51 @@
             }
             // La limpieza del campo de búsqueda se maneja ahora en iniciarVistaPedidosEnTiempoReal() y los listeners de los botones de filtro.
         };
+// --- INICIO DE CÓDIGO NUEVO ---
+    // Variable global para almacenar los conteos de pedidos pendientes por bodeguero
+    let bodegueroPendingCounts = {};
 
+    /**
+     * Inicia un listener en tiempo real para contar los pedidos PENDIENTES (no despachados)
+     * asignados a cada bodeguero y actualiza la lista del formulario principal.
+     */
+    function startBodegueroCountListener() {
+        // Escuchamos todos los registros que NO están despachados
+        db.collection('registros').where('despachado', '==', false).onSnapshot(snapshot => {
+            const newCounts = {};
+            snapshot.forEach(doc => {
+                const bodegueros = doc.data().bodegueros_encargados;
+                // Si 'bodegueros_encargados' es un array y tiene bodegueros
+                if (Array.isArray(bodegueros)) {
+                    bodegueros.forEach(bodegueroName => {
+                        // Incrementa el conteo para ese bodeguero
+                        newCounts[bodegueroName] = (newCounts[bodegueroName] || 0) + 1;
+                    });
+                }
+            });
+
+            // Actualiza la variable global de conteos
+            bodegueroPendingCounts = newCounts;
+            console.log("Conteos de bodegueros actualizados:", bodegueroPendingCounts);
+
+            // Ahora, repoblar la lista de checkboxes del formulario principal
+            // Es importante preservar la selección actual del usuario en el formulario
+            const selectedBodeguerosMain = Array.from(document.querySelectorAll('#bodeguero_checkbox_container input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
+            
+            // Volvemos a popular la lista principal, que usará los nuevos conteos
+            // y mantendrá la selección gracias a 'selectedBodeguerosMain'
+            // Usamos un try-catch por si 'fetchBodegueros' (que es async) falla
+            try {
+                populateBodegueroCheckboxes(selectedBodeguerosMain, 'bodeguero_checkbox_container');
+            } catch(e) {
+                console.error("Error al repoblar lista de bodegueros en listener:", e);
+            }
+
+        }, error => {
+            console.error("Error al escuchar conteo de bodegueros:", error);
+        });
+    }
+    // --- FIN DE CÓDIGO NUEVO ---
         const cerrarModal = id => {
             document.getElementById(id).style.display = 'none';
             if (id === 'modal_pedidos' && pedidosListenerUnsubscribe) {
@@ -3069,6 +3123,7 @@
             }
         }
 
+// --- INICIO DE CÓDIGO MODIFICADO ---
         // Function to populate the bodeguero checkboxes
         async function populateBodegueroCheckboxes(selectedBodegueros = [], containerId = 'bodeguero_checkbox_container') {
             const bodegueroContainer = document.getElementById(containerId);
@@ -3082,6 +3137,54 @@
                 bodegueroContainer.innerHTML = '<p>No hay bodegueros disponibles.</p>';
                 return;
             }
+
+            // Ordenar bodegueros alfabéticamente
+            bodegueros.sort();
+
+            bodegueros.forEach((bodegueroName, index) => {
+                const checkboxItem = document.createElement('div');
+                checkboxItem.className = 'bodeguero-checkbox-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `${containerId}_${index}`;
+                checkbox.name = 'bodegueros';
+                checkbox.value = bodegueroName;
+                if (selectedBodegueros.includes(bodegueroName)) {
+                    checkbox.checked = true;
+                }
+
+                const label = document.createElement('label');
+                label.htmlFor = `${containerId}_${index}`;
+                label.textContent = bodegueroName; // El nombre del bodeguero
+
+                // --- NUEVA LÓGICA DE CONTEO Y COLOR ---
+                // Obtenemos el conteo de pedidos pendientes de la variable global
+                const count = bodegueroPendingCounts[bodegueroName] || 0;
+
+                // Determinamos la clase de color basada en el conteo
+                let colorClass = 'color-verde'; // Por defecto (0, 1, 2)
+                if (count === 3) {
+                    colorClass = 'color-naranja';
+                } else if (count >= 4) {
+                    colorClass = 'color-rojo';
+                }
+
+                // Creamos el 'span' para mostrar el contador
+                const countSpan = document.createElement('span');
+                countSpan.className = `bodeguero-count ${colorClass}`;
+                countSpan.textContent = `(${count})`; // Formato (3)
+                
+                // Añadimos el contador al lado del nombre, dentro del label
+                label.appendChild(countSpan);
+                // --- FIN DE NUEVA LÓGICA DE CONTEO Y COLOR ---
+
+                checkboxItem.appendChild(checkbox);
+                checkboxItem.appendChild(label);
+                bodegueroContainer.appendChild(checkboxItem);
+            });
+        }
+        // --- FIN DE CÓDIGO MODIFICADO ---
 
             bodegueros.forEach((bodegueroName, index) => {
                 const checkboxItem = document.createElement('div');
@@ -3465,6 +3568,10 @@
 
             populateBodegueroCheckboxes(); // Populate bodeguero checkboxes on initial load
             await loadTransportadorasForForm(); // Cargar transportadoras en el formulario principal
+            // --- INICIO DE CÓDIGO NUEVO ---
+            // Iniciar el listener para los conteos de bodegueros
+            startBodegueroCountListener();
+            // --- FIN DE CÓDIGO NUEVO ---
         }
 
         window.onbeforeunload = function(event) {
