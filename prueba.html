@@ -119,6 +119,14 @@
         let knownBodegueros = []; // Lista maestra de nombres
         let currentOrders = [];   // Lista de documentos de pedidos activos
 
+        // Función para actualizar el mensaje de carga
+        function updateLoadingMessage(message) {
+            const loadingMessageElement = document.getElementById('loading-message');
+            if (loadingMessageElement) {
+                loadingMessageElement.textContent = message;
+            }
+        }
+
         // Inicializar y autenticar Firebase
         if (firebaseConfig) {
             try {
@@ -131,6 +139,8 @@
                 document.getElementById('bodegueros_col_display').textContent = BODEGUEROS_COLLECTION_NAME;
                 document.getElementById('orders_col_display').textContent = ORDERS_COLLECTION_NAME;
 
+                updateLoadingMessage("Conectando y esperando la autenticación del usuario...");
+
                 // Manejo de autenticación
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
@@ -138,6 +148,7 @@
                         document.getElementById('user_id_display').textContent = userId;
                         setupFirestoreListeners(); // Inicia la escucha de datos
                     } else {
+                        updateLoadingMessage("Intentando autenticación anónima...");
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
@@ -147,17 +158,13 @@
                 });
             } catch (error) {
                 console.error("Error al inicializar o autenticar Firebase:", error);
-                const loadingMessageElement = document.getElementById('loading-message');
-                if (loadingMessageElement) {
-                    loadingMessageElement.textContent = "Error al conectar con la base de datos.";
-                }
+                updateLoadingMessage("Error al conectar con la base de datos. Verifique la configuración.");
             }
         } else {
-            const loadingMessageElement = document.getElementById('loading-message');
-            if (loadingMessageElement) {
-                loadingMessageElement.textContent = "Configuración de Firebase no disponible.";
-            }
-            console.error("Firebase Config no disponible.");
+            // Este es el caso que genera el error reportado, lo hacemos menos dramático en la consola
+            // y más claro en la UI.
+            updateLoadingMessage("Esperando la configuración de Firebase...");
+            console.warn("ADVERTENCIA: Configuración de Firebase no disponible. La aplicación no funcionará hasta que se inyecte la configuración.");
         }
 
 
@@ -250,13 +257,10 @@
          */
         function renderBodegueros(bodeguerosList) {
             const listContainer = document.getElementById('bodegueros_list');
-            const loadingMessageElement = document.getElementById('loading-message');
             
             if (!listContainer) return;
             
-            if (loadingMessageElement) {
-                loadingMessageElement.style.display = 'none';
-            }
+            updateLoadingMessage("Datos cargados correctamente.");
             
             listContainer.innerHTML = ''; // Limpiar el contenedor
 
