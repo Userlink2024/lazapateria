@@ -91,11 +91,11 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, query, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // --- Variables de Firebase y Estado (CORRECCIÓN: appId se define en el ámbito global del módulo) ---
+        // --- Variables de Firebase y Estado ---
         let db;
         let auth;
         let userId = 'anonimo_temporal';
-        let appId = 'default-app-id'; // Ahora definida en el ámbito global del módulo
+        let appId = 'default-app-id';
         
         // --- CONSTANTES CRÍTICAS DE LA COLECCIÓN DE BODEGUEROS Y PEDIDOS (¡VERIFICAR ESTO!) ---
         const BODEGUEROS_COLLECTION_NAME = 'bodegueros'; 
@@ -110,6 +110,10 @@
         let knownBodegueros = []; // Lista maestra de nombres
         let currentOrders = [];   // Lista de documentos de pedidos activos
 
+        // Bandera para evitar doble inicialización
+        let isFirebaseInitialized = false; 
+
+
         // Función para actualizar el mensaje de carga
         function updateLoadingMessage(message) {
             const loadingMessageElement = document.getElementById('loading-message');
@@ -121,65 +125,72 @@
         // --- Lógica de Sonda (Polling) para Inicialización de Firebase ---
         let initInterval;
         let attempts = 0;
-        // Aumentado a 100 intentos (10 segundos) para ser más robusto.
-        const MAX_ATTEMPTS = 100; 
+        const MAX_ATTEMPTS = 100; // 100 intentos * 100ms = 10 segundos
 
         /**
          * Verifica si las variables del entorno Canvas están inyectadas e inicializa Firebase.
          */
         function initializeFirebase() {
-            // USAMOS window. para asegurar acceso a las variables globales inyectadas.
-            const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.parse(window.__firebase_config) : null;
-            const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
+            if (isFirebaseInitialized) return;
+
+            // Intentar obtener las variables inyectadas
+            const firebaseConfigRaw = window.__firebase_config;
+            const initialAuthToken = window.__initial_auth_token;
+            const appIdRaw = window.__app_id;
             
-            // CORRECCIÓN: Asignar el valor a la variable global appId (definida arriba)
-            appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
-
-            try {
-                if (firebaseConfig) {
-                    clearInterval(initInterval); // Detener el sondeo (polling)
-
-                    const app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
-                    
-                    document.getElementById('app_id_display').textContent = appId;
-                    document.getElementById('max_assignments_display').textContent = MAX_ASSIGNMENTS;
-                    document.getElementById('bodegueros_col_display').textContent = BODEGUEROS_COLLECTION_NAME;
-                    document.getElementById('orders_col_display').textContent = ORDERS_COLLECTION_NAME;
-
-                    updateLoadingMessage("Configuración cargada. Conectando y esperando la autenticación del usuario...");
-
-                    // Manejo de autenticación
-                    onAuthStateChanged(auth, async (user) => {
-                        if (user) {
-                            userId = user.uid;
-                            document.getElementById('user_id_display').textContent = userId;
-                            setupFirestoreListeners(); // Inicia la escucha de datos
-                        } else {
-                            updateLoadingMessage("Intentando autenticación anónima...");
-                            if (initialAuthToken) {
-                                await signInWithCustomToken(auth, initialAuthToken);
-                            } else {
-                                await signInAnonymously(auth);
-                            }
-                        }
-                    });
-
+            // Comprobación estricta de variables críticas
+            if (typeof firebaseConfigRaw !== 'string' || !firebaseConfigRaw || typeof appIdRaw !== 'string' || !appIdRaw) {
+                // La configuración aún no está disponible
+                attempts++;
+                if (attempts > MAX_ATTEMPTS) {
+                    clearInterval(initInterval);
+                    console.error("Error FATAL: La configuración de Firebase nunca estuvo disponible después de múltiples intentos.");
+                    updateLoadingMessage("Error FATAL: La configuración de Firebase no está disponible. No se puede conectar a la base de datos.");
                 } else {
-                    // La configuración aún no está disponible
-                    attempts++;
-                    if (attempts > MAX_ATTEMPTS) {
-                        clearInterval(initInterval);
-                        console.error("Error FATAL: La configuración de Firebase nunca estuvo disponible después de múltiples intentos.");
-                        updateLoadingMessage("Error FATAL: La configuración de Firebase no está disponible. No se puede conectar a la base de datos.");
-                    } else {
-                        updateLoadingMessage(`Esperando la configuración de Firebase... (Intento ${attempts}/${MAX_ATTEMPTS})`);
-                        // Mantener la advertencia en la consola, pero no como error fatal
-                    }
+                    updateLoadingMessage(`Esperando la configuración de Firebase... (Intento ${attempts}/${MAX_ATTEMPTS})`);
                 }
+                return;
+            }
+            
+            // Si las variables están disponibles, detener el sondeo e inicializar
+            clearInterval(initInterval);
+            isFirebaseInitialized = true; // Establecer la bandera
+            
+            try {
+                const firebaseConfig = JSON.parse(firebaseConfigRaw);
+                appId = appIdRaw;
+
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Mostrar datos de depuración
+                document.getElementById('app_id_display').textContent = appId;
+                document.getElementById('max_assignments_display').textContent = MAX_ASSIGNMENTS;
+                document.getElementById('bodegueros_col_display').textContent = BODEGUEROS_COLLECTION_NAME;
+                document.getElementById('orders_col_display').textContent = ORDERS_COLLECTION_NAME;
+
+                updateLoadingMessage("Configuración cargada. Conectando y esperando la autenticación del usuario...");
+
+                // Manejo de autenticación
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user_id_display').textContent = userId;
+                        setupFirestoreListeners(); // Inicia la escucha de datos
+                    } else {
+                        updateLoadingMessage("Intentando autenticación anónima...");
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            // Si no hay token, usar anónimo.
+                            await signInAnonymously(auth); 
+                        }
+                    }
+                });
+
             } catch (error) {
-                 clearInterval(initInterval); // Detener el sondeo si hay un error inesperado
+                isFirebaseInitialized = false; // Permitir reintento si el error es de parseo u otro
                 console.error("Error al inicializar o autenticar Firebase:", error);
                 updateLoadingMessage("Error al conectar con la base de datos. Verifique la configuración.");
             }
@@ -187,6 +198,7 @@
         
         // Iniciar el sondeo (polling) con un intervalo corto
         initInterval = setInterval(initializeFirebase, 100);
+
 
         // --- Funciones de Lógica de Carga y Agregación (Sin cambios) ---
 
@@ -347,9 +359,9 @@
          * Configura el listener para la lista maestra de bodegueros.
          */
         function fetchBodegueros() {
-            if (!db) return;
+            if (!db || !appId) return; // Validación de inicialización
+            
             // Se asume que la lista maestra es pública/compartida
-            // USA la variable global 'appId'
             const collectionRef = collection(db, `/artifacts/${appId}/public/data/${BODEGUEROS_COLLECTION_NAME}`);
             
             onSnapshot(collectionRef, (snapshot) => {
@@ -364,8 +376,7 @@
                 
                 knownBodegueros = names; // Actualiza la lista maestra
                 
-                // Una vez que la lista maestra está actualizada, volvemos a renderizar
-                // utilizando la carga de pedidos más reciente (currentOrders).
+                // Vuelve a renderizar con la carga de pedidos más reciente
                 const loadMap = aggregateBodegueroLoad(currentOrders);
                 const bodeguerosList = createFullBodeguerosList(loadMap);
                 renderBodegueros(bodeguerosList);
@@ -381,13 +392,12 @@
          * Configura el listener en tiempo real para la colección de pedidos/despachos (la carga).
          */
         function setupFirestoreListeners() {
-            if (!db) return;
+            if (!db || !appId) return; // Validación de inicialización
 
             // 1. Inicia la escucha de la lista maestra
             fetchBodegueros();
 
             // 2. Inicia la escucha de los pedidos activos
-            // USA la variable global 'appId'
             const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
             const q = query(collectionRef);
 
@@ -414,9 +424,11 @@
          * @param {string} workerName - Nombre del bodeguero al que se asigna el pedido.
          */
         window.addAssignment = async (workerName) => {
-            if (!db) return;
+            if (!db || !appId) {
+                showAlert("La conexión a Firebase no está lista. Espere un momento.", 'warning');
+                return;
+            }
             try {
-                // USA la variable global 'appId'
                 const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
                 await addDoc(collectionRef, {
                     [WORKER_ASSIGNMENT_FIELD]: workerName, // Usa el campo configurado
@@ -439,14 +451,16 @@
          * @param {string} workerName - Nombre del bodeguero (solo para el mensaje).
          */
         window.completeAssignment = async (orderId, workerName) => {
-            if (!db) return;
+            if (!db || !appId) {
+                 showAlert("La conexión a Firebase no está lista. Espere un momento.", 'warning');
+                 return;
+            }
             if (!orderId) {
                 showAlert(`No hay pedidos activos de ${workerName} para despachar.`, 'info');
                 return;
             }
             
             try {
-                // USA la variable global 'appId'
                 const docRef = doc(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`, orderId);
                 await deleteDoc(docRef);
                 showAlert(`Pedido de ${workerName} despachado. El indicador se ha actualizado.`, 'success');
