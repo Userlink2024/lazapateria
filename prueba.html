@@ -66,6 +66,7 @@
 
             <!-- Información del Usuario Autenticado y Colecciones (Para depuración) -->
             <div class="mt-6 pt-4 border-t border-gray-100 text-sm text-gray-500 space-y-1">
+                <p class="font-bold text-red-600">⚠️ DEBUG: Abre F12 y revisa los logs de Firestore ⚠️</p>
                 <p>ID de la Aplicación: <span id="app_id_display" class="font-mono text-xs bg-gray-100 p-1 rounded"></span></p>
                 <p>Su ID de Usuario (Para operaciones): <span id="user_id_display" class="font-mono text-xs bg-gray-100 p-1 rounded break-all"></span></p>
                 <p class="mt-2">Colección Maestra (Bodegueros): <code class="font-mono text-xs bg-gray-100 p-1 rounded" id="bodegueros_col_display"></code></p>
@@ -89,7 +90,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, query, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, collection, query, addDoc, getDocs, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // --- Variables de Firebase y Estado ---
         let db;
@@ -98,6 +99,7 @@
         let appId = 'default-app-id';
         
         // --- CONSTANTES CRÍTICAS DE LA COLECCIÓN DE BODEGUEROS Y PEDIDOS (¡VERIFICAR ESTO!) ---
+        // *** REVISA ESTOS NOMBRES si la aplicación sigue sin funcionar ***
         const BODEGUEROS_COLLECTION_NAME = 'bodegueros'; 
         const BODEGUERO_NAME_FIELD = 'nombre'; 
         const ORDERS_COLLECTION_NAME = 'pedidos_despachos'; 
@@ -112,13 +114,19 @@
 
         // Bandera para evitar doble inicialización
         let isFirebaseInitialized = false; 
+        
+        // 🚨 ACTIVA EL LOGGING DE DEBUG DE FIRESTORE 🚨
+        // Esto ayudará a ver errores de permisos o configuración en la consola (F12)
+        setLogLevel('debug');
 
 
         // Función para actualizar el mensaje de carga
-        function updateLoadingMessage(message) {
+        function updateLoadingMessage(message, error = false) {
             const loadingMessageElement = document.getElementById('loading-message');
             if (loadingMessageElement) {
                 loadingMessageElement.textContent = message;
+                loadingMessageElement.classList.toggle('text-red-500', error);
+                loadingMessageElement.classList.toggle('text-gray-500', !error);
             }
         }
         
@@ -140,14 +148,13 @@
             
             // Comprobación estricta de variables críticas
             if (typeof firebaseConfigRaw !== 'string' || !firebaseConfigRaw || typeof appIdRaw !== 'string' || !appIdRaw) {
-                // La configuración aún no está disponible
                 attempts++;
                 if (attempts > MAX_ATTEMPTS) {
                     clearInterval(initInterval);
-                    console.error("Error FATAL: La configuración de Firebase nunca estuvo disponible después de múltiples intentos.");
-                    updateLoadingMessage("Error FATAL: La configuración de Firebase no está disponible. No se puede conectar a la base de datos.");
+                    console.error("Error FATAL: La configuración de Firebase nunca estuvo disponible.");
+                    updateLoadingMessage("Error FATAL: La configuración de Firebase no está disponible. No se puede conectar.", true);
                 } else {
-                    updateLoadingMessage(`Esperando la configuración de Firebase... (Intento ${attempts}/${MAX_ATTEMPTS})`);
+                    updateLoadingMessage(`Esperando configuración de Canvas... (Intento ${attempts})`);
                 }
                 return;
             }
@@ -167,32 +174,32 @@
                 // Mostrar datos de depuración
                 document.getElementById('app_id_display').textContent = appId;
                 document.getElementById('max_assignments_display').textContent = MAX_ASSIGNMENTS;
-                document.getElementById('bodegueros_col_display').textContent = BODEGUEROS_COLLECTION_NAME;
-                document.getElementById('orders_col_display').textContent = ORDERS_COLLECTION_NAME;
+                document.getElementById('bodegueros_col_display').textContent = `/artifacts/${appId}/public/data/${BODEGUEROS_COLLECTION_NAME}`;
+                document.getElementById('orders_col_display').textContent = `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`;
 
-                updateLoadingMessage("Configuración cargada. Conectando y esperando la autenticación del usuario...");
+                updateLoadingMessage("Configuración cargada. Intentando autenticar al usuario...");
 
                 // Manejo de autenticación
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
                         document.getElementById('user_id_display').textContent = userId;
+                        updateLoadingMessage("Usuario autenticado. Cargando datos de Firestore...");
                         setupFirestoreListeners(); // Inicia la escucha de datos
                     } else {
-                        updateLoadingMessage("Intentando autenticación anónima...");
+                        // Intento de autenticación solo si no estamos ya en el proceso de autenticación.
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
-                            // Si no hay token, usar anónimo.
                             await signInAnonymously(auth); 
                         }
                     }
                 });
 
             } catch (error) {
-                isFirebaseInitialized = false; // Permitir reintento si el error es de parseo u otro
-                console.error("Error al inicializar o autenticar Firebase:", error);
-                updateLoadingMessage("Error al conectar con la base de datos. Verifique la configuración.");
+                isFirebaseInitialized = false; 
+                console.error("Error al inicializar Firebase:", error);
+                updateLoadingMessage("Error al conectar con la base de datos. (Ver consola)", true);
             }
         }
         
@@ -227,13 +234,10 @@
         
         /**
          * Agrupa los pedidos activos por bodeguero.
-         * @param {Array<Object>} orders - Lista de documentos de pedidos.
-         * @returns {Map<string, {count: number, activeOrderIds: string[]}>} Mapa de {nombreBodeguero: {conteo, listaIDsparaEliminar}}.
          */
         function aggregateBodegueroLoad(orders) {
             const loadMap = new Map();
             orders.forEach(doc => {
-                // Usa la constante del campo de asignación
                 const workerName = doc.data[WORKER_ASSIGNMENT_FIELD]; 
 
                 if (workerName && typeof workerName === 'string' && workerName.trim() !== '') {
@@ -250,11 +254,8 @@
 
         /**
          * Combina la lista maestra de bodegueros con la carga actual.
-         * @param {Map<string, Object>} loadMap - Carga calculada de pedidos.
-         * @returns {Array<Object>} Lista final de bodegueros con su carga.
          */
         function createFullBodeguerosList(loadMap) {
-            // 1. Crear la lista inicial usando la lista maestra (knownBodegueros)
             const finalBodegueros = knownBodegueros.map(name => {
                 const loadData = loadMap.get(name) || { count: 0, activeOrderIds: [] };
                 return {
@@ -264,7 +265,6 @@
                 };
             });
 
-            // 2. Agregar cualquier bodeguero encontrado en los pedidos que NO esté en la lista maestra (seguridad)
             loadMap.forEach((data, name) => {
                 if (!knownBodegueros.includes(name)) {
                     finalBodegueros.push({
@@ -275,7 +275,6 @@
                 }
             });
 
-            // Asegurar que la lista final esté ordenada
             finalBodegueros.sort((a, b) => a.name.localeCompare(b.name));
             return finalBodegueros;
         }
@@ -284,22 +283,23 @@
         // --- Funciones de UI y Renderizado (Sin cambios) ---
 
         /**
-         * Renderiza la lista completa de bodegueros a partir de la lista combinada.
-         * @param {Array<Object>} bodeguerosList - Lista agregada de bodegueros {name, assignedCount, activeOrderIds}.
+         * Renderiza la lista completa de bodegueros.
          */
         function renderBodegueros(bodeguerosList) {
             const listContainer = document.getElementById('bodegueros_list');
             
             if (!listContainer) return;
             
-            updateLoadingMessage("Datos cargados correctamente.");
+            updateLoadingMessage("Carga de datos actualizada.", false);
             
             listContainer.innerHTML = ''; // Limpiar el contenedor
 
             if (bodeguerosList.length === 0) {
                 listContainer.innerHTML = `<p class="text-center text-gray-500 p-4 font-semibold">
-                    No se encontraron bodegueros en la colección <code class="bg-gray-200 p-1 rounded text-sm">${BODEGUEROS_COLLECTION_NAME}</code>.
-                    <br>Verifique si el campo de nombre (**${BODEGUERO_NAME_FIELD}**) es correcto o si hay datos.
+                    No se encontraron bodegueros.
+                    <br>Verifique las colecciones 
+                    <code class="bg-gray-200 p-1 rounded text-sm">${BODEGUEROS_COLLECTION_NAME}</code>
+                    y <code class="bg-gray-200 p-1 rounded text-sm">${ORDERS_COLLECTION_NAME}</code>.
                 </p>`;
                 return;
             }
@@ -359,31 +359,31 @@
          * Configura el listener para la lista maestra de bodegueros.
          */
         function fetchBodegueros() {
-            if (!db || !appId) return; // Validación de inicialización
+            if (!db || !appId) return; 
             
-            // Se asume que la lista maestra es pública/compartida
             const collectionRef = collection(db, `/artifacts/${appId}/public/data/${BODEGUEROS_COLLECTION_NAME}`);
             
             onSnapshot(collectionRef, (snapshot) => {
                 const names = [];
                 snapshot.forEach((doc) => {
                     const data = doc.data();
-                    const name = data[BODEGUERO_NAME_FIELD]; // Usa el campo de nombre configurado
+                    const name = data[BODEGUERO_NAME_FIELD]; 
                     if (name && typeof name === 'string' && name.trim() !== '') {
                         names.push(name.trim());
                     }
                 });
                 
-                knownBodegueros = names; // Actualiza la lista maestra
+                knownBodegueros = names; 
                 
-                // Vuelve a renderizar con la carga de pedidos más reciente
                 const loadMap = aggregateBodegueroLoad(currentOrders);
                 const bodeguerosList = createFullBodeguerosList(loadMap);
                 renderBodegueros(bodeguerosList);
 
             }, (error) => {
+                // 🚨 Este es el punto de fallo más probable por permisos 🚨
                 console.error("Error al escuchar bodegueros (Lista Maestra):", error);
-                showAlert("Error al cargar la lista maestra de bodegueros. Verifique la constante BODEGUEROS_COLLECTION_NAME.", 'error');
+                updateLoadingMessage(`ERROR: No se pudo cargar la Lista Maestra de Bodegueros. (Ver consola: ${error.code})`, true);
+                showAlert(`Error de conexión o permisos. Colección: ${BODEGUEROS_COLLECTION_NAME}. Revisa F12.`, 'error');
             });
         }
 
@@ -392,7 +392,7 @@
          * Configura el listener en tiempo real para la colección de pedidos/despachos (la carga).
          */
         function setupFirestoreListeners() {
-            if (!db || !appId) return; // Validación de inicialización
+            if (!db || !appId) return; 
 
             // 1. Inicia la escucha de la lista maestra
             fetchBodegueros();
@@ -402,57 +402,53 @@
             const q = query(collectionRef);
 
             onSnapshot(q, (snapshot) => {
-                currentOrders = []; // Actualiza la lista global de pedidos
+                currentOrders = []; 
                 snapshot.forEach((doc) => {
                     currentOrders.push({ id: doc.id, data: doc.data() });
                 });
 
-                // Calcula la carga con los pedidos actualizados y la lista maestra
                 const loadMap = aggregateBodegueroLoad(currentOrders);
                 const bodeguerosList = createFullBodeguerosList(loadMap);
                 renderBodegueros(bodeguerosList);
 
             }, (error) => {
+                // 🚨 Este es el punto de fallo más probable por permisos 🚨
                 console.error("Error al escuchar cambios en Firestore (Pedidos):", error);
-                showAlert("Error al cargar los datos del sistema de pedidos. Revise la constante ORDERS_COLLECTION_NAME.", 'error');
+                updateLoadingMessage(`ERROR: No se pudo cargar la Carga de Pedidos. (Ver consola: ${error.code})`, true);
+                showAlert(`Error de conexión o permisos. Colección: ${ORDERS_COLLECTION_NAME}. Revisa F12.`, 'error');
             });
         }
 
         /**
          * SIMULADOR: Crea un nuevo documento de pedido en la colección de órdenes.
-         * Este simula la acción de generar_pedidos.
-         * @param {string} workerName - Nombre del bodeguero al que se asigna el pedido.
          */
         window.addAssignment = async (workerName) => {
             if (!db || !appId) {
-                showAlert("La conexión a Firebase no está lista. Espere un momento.", 'warning');
+                showAlert("La conexión a Firebase no está lista.", 'warning');
                 return;
             }
             try {
                 const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
                 await addDoc(collectionRef, {
-                    [WORKER_ASSIGNMENT_FIELD]: workerName, // Usa el campo configurado
-                    pedidoId: `PED-${Date.now().toString().slice(-6)}`, // ID de pedido simulado
+                    [WORKER_ASSIGNMENT_FIELD]: workerName, 
+                    pedidoId: `PED-${Date.now().toString().slice(-6)}`, 
                     status: 'activo',
                     timestamp: new Date().toISOString(),
                     assignedBy: userId 
                 });
-                showAlert(`Pedido asignado a ${workerName}. El indicador se ha actualizado.`, 'success');
+                showAlert(`Pedido asignado a ${workerName}.`, 'success');
             } catch (e) {
                 console.error("Error al simular la asignación de pedido: ", e);
-                showAlert("Error al simular la asignación. Verifique sus constantes de colección.", 'error');
+                showAlert("Error al simular la asignación. Revisa F12.", 'error');
             }
         };
 
         /**
          * SIMULADOR: Elimina un documento de pedido de la colección de órdenes.
-         * Este simula la acción de despacho completado.
-         * @param {string} orderId - ID del documento del pedido a eliminar.
-         * @param {string} workerName - Nombre del bodeguero (solo para el mensaje).
          */
         window.completeAssignment = async (orderId, workerName) => {
             if (!db || !appId) {
-                 showAlert("La conexión a Firebase no está lista. Espere un momento.", 'warning');
+                 showAlert("La conexión a Firebase no está lista.", 'warning');
                  return;
             }
             if (!orderId) {
@@ -463,11 +459,11 @@
             try {
                 const docRef = doc(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`, orderId);
                 await deleteDoc(docRef);
-                showAlert(`Pedido de ${workerName} despachado. El indicador se ha actualizado.`, 'success');
+                showAlert(`Pedido de ${workerName} despachado.`, 'success');
 
             } catch (e) {
                 console.error("Error al simular el despacho de pedido: ", e);
-                showAlert("Error al simular el despacho. Verifique la existencia del pedido.", 'error');
+                showAlert("Error al simular el despacho. Revisa F12.", 'error');
             }
         };
 
