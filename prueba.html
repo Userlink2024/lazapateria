@@ -91,10 +91,11 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, query, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // --- Variables de Firebase y Estado ---
+        // --- Variables de Firebase y Estado (CORRECCIÓN: appId se define en el ámbito global del módulo) ---
         let db;
         let auth;
         let userId = 'anonimo_temporal';
+        let appId = 'default-app-id'; // Ahora definida en el ámbito global del módulo
         
         // --- CONSTANTES CRÍTICAS DE LA COLECCIÓN DE BODEGUEROS Y PEDIDOS (¡VERIFICAR ESTO!) ---
         const BODEGUEROS_COLLECTION_NAME = 'bodegueros'; 
@@ -130,7 +131,9 @@
             // USAMOS window. para asegurar acceso a las variables globales inyectadas.
             const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.parse(window.__firebase_config) : null;
             const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
-            const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
+            
+            // CORRECCIÓN: Asignar el valor a la variable global appId (definida arriba)
+            appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
 
             try {
                 if (firebaseConfig) {
@@ -346,6 +349,7 @@
         function fetchBodegueros() {
             if (!db) return;
             // Se asume que la lista maestra es pública/compartida
+            // USA la variable global 'appId'
             const collectionRef = collection(db, `/artifacts/${appId}/public/data/${BODEGUEROS_COLLECTION_NAME}`);
             
             onSnapshot(collectionRef, (snapshot) => {
@@ -383,6 +387,7 @@
             fetchBodegueros();
 
             // 2. Inicia la escucha de los pedidos activos
+            // USA la variable global 'appId'
             const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
             const q = query(collectionRef);
 
@@ -411,6 +416,7 @@
         window.addAssignment = async (workerName) => {
             if (!db) return;
             try {
+                // USA la variable global 'appId'
                 const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
                 await addDoc(collectionRef, {
                     [WORKER_ASSIGNMENT_FIELD]: workerName, // Usa el campo configurado
@@ -440,6 +446,7 @@
             }
             
             try {
+                // USA la variable global 'appId'
                 const docRef = doc(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`, orderId);
                 await deleteDoc(docRef);
                 showAlert(`Pedido de ${workerName} despachado. El indicador se ha actualizado.`, 'success');
