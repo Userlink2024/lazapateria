@@ -99,7 +99,6 @@
         let appId = 'default-app-id';
         
         // --- CONSTANTES CRÍTICAS DE LA COLECCIÓN DE BODEGUEROS Y PEDIDOS (¡VERIFICAR ESTO!) ---
-        // *** REVISA ESTOS NOMBRES si la aplicación sigue sin funcionar ***
         const BODEGUEROS_COLLECTION_NAME = 'bodegueros'; 
         const BODEGUERO_NAME_FIELD = 'nombre'; 
         const ORDERS_COLLECTION_NAME = 'pedidos_despachos'; 
@@ -112,11 +111,7 @@
         let knownBodegueros = []; // Lista maestra de nombres
         let currentOrders = [];   // Lista de documentos de pedidos activos
 
-        // Bandera para evitar doble inicialización
-        let isFirebaseInitialized = false; 
-        
         // 🚨 ACTIVA EL LOGGING DE DEBUG DE FIRESTORE 🚨
-        // Esto ayudará a ver errores de permisos o configuración en la consola (F12)
         setLogLevel('debug');
 
 
@@ -130,38 +125,22 @@
             }
         }
         
-        // --- Lógica de Sonda (Polling) para Inicialización de Firebase ---
-        let initInterval;
-        let attempts = 0;
-        const MAX_ATTEMPTS = 100; // 100 intentos * 100ms = 10 segundos
-
+        // --- Lógica de Inicialización (Simplificada) ---
+        
         /**
-         * Verifica si las variables del entorno Canvas están inyectadas e inicializa Firebase.
+         * Inicializa Firebase, autentica al usuario y configura los listeners.
          */
-        function initializeFirebase() {
-            if (isFirebaseInitialized) return;
-
-            // Intentar obtener las variables inyectadas
+        function setupApp() {
             const firebaseConfigRaw = window.__firebase_config;
             const initialAuthToken = window.__initial_auth_token;
             const appIdRaw = window.__app_id;
             
-            // Comprobación estricta de variables críticas
+            // Comprobación de variables críticas (fallo si no están disponibles)
             if (typeof firebaseConfigRaw !== 'string' || !firebaseConfigRaw || typeof appIdRaw !== 'string' || !appIdRaw) {
-                attempts++;
-                if (attempts > MAX_ATTEMPTS) {
-                    clearInterval(initInterval);
-                    console.error("Error FATAL: La configuración de Firebase nunca estuvo disponible.");
-                    updateLoadingMessage("Error FATAL: La configuración de Firebase no está disponible. No se puede conectar.", true);
-                } else {
-                    updateLoadingMessage(`Esperando configuración de Canvas... (Intento ${attempts})`);
-                }
+                console.error("Error FATAL: Las variables de configuración de Canvas no están definidas.");
+                updateLoadingMessage("Error FATAL: Configuración de Canvas no disponible. La aplicación no puede iniciar. Revisa F12.", true);
                 return;
             }
-            
-            // Si las variables están disponibles, detener el sondeo e inicializar
-            clearInterval(initInterval);
-            isFirebaseInitialized = true; // Establecer la bandera
             
             try {
                 const firebaseConfig = JSON.parse(firebaseConfigRaw);
@@ -187,9 +166,12 @@
                         updateLoadingMessage("Usuario autenticado. Cargando datos de Firestore...");
                         setupFirestoreListeners(); // Inicia la escucha de datos
                     } else {
-                        // Intento de autenticación solo si no estamos ya en el proceso de autenticación.
+                        // Intento de autenticación. Si falla, el listener onSnapshot fallará con error de permiso.
                         if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
+                            await signInWithCustomToken(auth, initialAuthToken).catch(e => {
+                                console.error("Error signing in with custom token:", e);
+                                signInAnonymously(auth);
+                            });
                         } else {
                             await signInAnonymously(auth); 
                         }
@@ -197,14 +179,13 @@
                 });
 
             } catch (error) {
-                isFirebaseInitialized = false; 
-                console.error("Error al inicializar Firebase:", error);
+                console.error("Error al inicializar o configurar la aplicación:", error);
                 updateLoadingMessage("Error al conectar con la base de datos. (Ver consola)", true);
             }
         }
         
-        // Iniciar el sondeo (polling) con un intervalo corto
-        initInterval = setInterval(initializeFirebase, 100);
+        // Llamar a la función de inicialización inmediatamente.
+        setupApp();
 
 
         // --- Funciones de Lógica de Carga y Agregación (Sin cambios) ---
