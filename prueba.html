@@ -144,10 +144,16 @@
                 });
             } catch (error) {
                 console.error("Error al inicializar o autenticar Firebase:", error);
-                document.getElementById('loading-message').textContent = "Error al conectar con la base de datos.";
+                const loadingMessageElement = document.getElementById('loading-message');
+                if (loadingMessageElement) {
+                    loadingMessageElement.textContent = "Error al conectar con la base de datos.";
+                }
             }
         } else {
-            document.getElementById('loading-message').textContent = "Configuración de Firebase no disponible.";
+            const loadingMessageElement = document.getElementById('loading-message');
+            if (loadingMessageElement) {
+                loadingMessageElement.textContent = "Configuración de Firebase no disponible.";
+            }
             console.error("Firebase Config no disponible.");
         }
 
@@ -216,9 +222,18 @@
                     icon = '<i class="fas fa-info-circle text-blue-500 text-2xl mr-2"></i>';
                     color = 'blue';
             }
+            
+            // FIX: Debemos asegurar que la modal y su contenido existan
+            if (!modal || !container) {
+                console.error("No se encontraron los elementos de la modal de alerta.");
+                return;
+            }
 
             // Aplicar color al borde superior del modal
-            modal.querySelector('.alert-modal-content').style.borderTopColor = `var(--${color}-500)`;
+            const alertContent = modal.querySelector('.alert-modal-content');
+            if (alertContent) {
+                alertContent.style.borderTopColor = `var(--${color}-500)`;
+            }
 
             container.innerHTML = `
                 <div class="flex items-start">
@@ -230,7 +245,7 @@
 
             // Cierre automático después de 3 segundos
             setTimeout(() => {
-                closeModal('status_alert_modal');
+                window.closeModal('status_alert_modal');
             }, 3000);
         }
 
@@ -239,7 +254,10 @@
          * @param {string} modalId - ID del elemento modal.
          */
         window.closeModal = (modalId) => {
-            document.getElementById(modalId).style.display = 'none';
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
         /**
@@ -248,8 +266,16 @@
          */
         function renderBodegueros(bodegueros) {
             const listContainer = document.getElementById('bodegueros_list');
+            const loadingMessageElement = document.getElementById('loading-message'); // Obtener referencia
+            
+            if (!listContainer) return;
+
             listContainer.innerHTML = ''; // Limpiar lista
-            document.getElementById('loading-message').style.display = 'none';
+            
+            // FIX: Asegurarse de que el elemento exista antes de intentar acceder a 'style'
+            if (loadingMessageElement) {
+                loadingMessageElement.style.display = 'none';
+            }
 
             if (bodegueros.length === 0) {
                 listContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No hay bodegueros registrados. Agregue uno para comenzar.</p>';
@@ -261,6 +287,9 @@
                 const docId = doc.id;
                 const loadClasses = getLoadColorClasses(data.assignedCount);
                 const barWidth = getLoadBarWidth(data.assignedCount);
+                
+                // Asegurarse de que assignedCount sea al menos 0 para evitar errores visuales si el contador baja demasiado
+                const displayCount = Math.max(0, data.assignedCount);
 
                 const cardHtml = `
                     <div class="bodeguero-card bg-gray-50 p-4 rounded-xl shadow-sm hover:shadow-md transition duration-200 border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center">
@@ -273,7 +302,7 @@
                             </div>
                             <div class="text-sm text-gray-600 mb-2">
                                 Despachos Asignados: 
-                                <span class="text-xl font-extrabold ${loadClasses}">${data.assignedCount}</span>
+                                <span class="text-xl font-extrabold ${loadClasses}">${displayCount}</span>
                             </div>
                             
                             <!-- Indicador de Carga (Barra de Progreso) -->
@@ -328,7 +357,12 @@
             }, (error) => {
                 console.error("Error al escuchar cambios en Firestore:", error);
                 showAlert("Error de conexión en tiempo real con la base de datos.", 'error');
-                document.getElementById('loading-message').textContent = "Error al cargar los datos.";
+                
+                // FIX: Asegurar que el elemento exista antes de actualizar el texto
+                const loadingMessageElement = document.getElementById('loading-message');
+                if (loadingMessageElement) {
+                    loadingMessageElement.textContent = "Error al cargar los datos.";
+                }
             });
         }
 
@@ -408,9 +442,6 @@
                 });
                 showAlert('Despacho completado. Carga reducida.', 'success');
 
-                // Nota: Firestore permite que el contador se vuelva negativo, 
-                // lo que puede indicar un error de lógica. La UI se mantendrá en 0.
-
             } catch (e) {
                 console.error("Error al completar asignación: ", e);
                 showAlert("Error al marcar el despacho como completado.", 'error');
@@ -424,14 +455,11 @@
          */
         window.deleteBodeguero = async (docId, name) => {
              // Reemplazo de window.confirm() con lógica de alerta
-            showAlert(`¿Seguro que desea eliminar a ${name}? Esta acción no se puede deshacer.`, 'warning');
-            
             // En una aplicación real, se usaría un modal de confirmación con dos botones.
-            // Para mantener la simplicidad sin un modal complejo, se asume la acción directa
-            // o se espera que el usuario gestione la lista de manera responsable.
+            // Para mantener la simplicidad sin un modal complejo, se utiliza un confirm tradicional
+            // aunque se ha reemplazado window.alert/confirm en la app por showAlert.
             
-            // Implementación simple para la demostración:
-            if (!confirm(`¿Estás seguro de que quieres eliminar a ${name}?\nSolo para demostración, usa un modal de confirmación en producción.`)) {
+            if (!confirm(`¿Estás seguro de que quieres eliminar a ${name}?\nNota: En una aplicación real, esto se manejaría con un modal de confirmación de dos botones en lugar de 'confirm()'.`)) {
                  return;
              }
 
