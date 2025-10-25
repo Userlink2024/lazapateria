@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestor de Carga de Bodegueros</title>
+    <title>Indicador de Carga de Bodegueros</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome for icons -->
@@ -45,35 +45,25 @@
     <div class="w-full max-w-4xl mx-auto">
         <header class="text-center mb-8">
             <h1 class="text-4xl font-extrabold text-gray-900 mb-2">
-                <i class="fas fa-warehouse text-blue-500 mr-2"></i>
-                Carga de Despachos (Bodegueros)
+                <i class="fas fa-chart-bar text-blue-500 mr-2"></i>
+                Indicador de Carga de Despachos
             </h1>
-            <p class="text-gray-500">Visualización en tiempo real del estado de asignaciones de bodega.</p>
+            <p class="text-gray-500">Monitor en tiempo real de la carga de trabajo, leyendo los datos del sistema de pedidos.</p>
         </header>
 
-        <!-- Formulario para agregar nuevo bodeguero -->
-        <div id="add-bodeguero-section" class="bg-white p-6 rounded-xl shadow-lg mb-8 border border-blue-100">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-700">Añadir Nuevo Bodeguero</h2>
-            <div class="flex flex-col sm:flex-row gap-4">
-                <input type="text" id="new_bodeguero_name" placeholder="Nombre del Bodeguero" class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
-                <button onclick="addNewBodeguero()" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-200 flex items-center justify-center">
-                    <i class="fas fa-user-plus mr-2"></i>
-                    Añadir
-                </button>
-            </div>
-        </div>
-
+        <!-- Sección de Añadir Bodeguero (ELIMINADA: Esto es un INDICADOR, no un gestor de trabajadores) -->
+        
         <!-- Lista de Bodegueros -->
         <div class="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-semibold text-gray-700">Carga Actual</h2>
+                <h2 class="text-2xl font-semibold text-gray-700">Carga de Bodegueros (Pedidos Activos)</h2>
                 <!-- Máximo de Despachos Definido -->
                 <p class="text-sm text-gray-500">Máx. asignaciones por color: <span id="max_assignments_display" class="font-bold text-blue-500">10</span></p>
             </div>
             
             <div id="bodegueros_list" class="space-y-4 scrollable-content max-h-[60vh] overflow-y-auto">
                 <!-- Los bodegueros se renderizarán aquí -->
-                <p id="loading-message" class="text-center text-gray-500">Cargando datos...</p>
+                <p id="loading-message" class="text-center text-gray-500">Cargando datos y agregando pedidos...</p>
             </div>
 
             <!-- Información del Usuario Autenticado (Requerido para apps multiusuario) -->
@@ -99,7 +89,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, query, updateDoc, increment, setDoc, getDocs, where, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, collection, query, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // --- Variables Globales del Entorno Canvas (NO MODIFICAR) ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -112,8 +102,12 @@
         let auth;
         let userId = 'anonimo_temporal';
         
-        // Constantes del negocio
-        const COLLECTION_NAME = 'bodegueros_load';
+        // --- CONSTANTES CRÍTICAS DE LA COLECCIÓN DE PEDIDOS ---
+        // *** ESTAS DEBEN COINCIDIR CON LAS USADAS EN generar_pedidos.html ***
+        const ORDERS_COLLECTION_NAME = 'pedidos_despachos'; // Nombre de la colección que contiene todos los pedidos activos.
+        const WORKER_ASSIGNMENT_FIELD = 'bodeguero_asignado'; // El nombre del campo DENTRO de cada documento de pedido que tiene el nombre del bodeguero.
+        // ------------------------------------------------------
+
         const MAX_ASSIGNMENTS = 10; // Capacidad máxima para la lógica de color
 
         // Inicializar y autenticar Firebase
@@ -133,12 +127,10 @@
                         document.getElementById('user_id_display').textContent = userId;
                         setupFirestoreListeners();
                     } else {
-                        // Si no hay token personalizado, iniciar sesión anónimamente
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
                             await signInAnonymously(auth);
-                            // La función onAuthStateChanged se volverá a llamar con el usuario anónimo
                         }
                     }
                 });
@@ -158,47 +150,213 @@
         }
 
 
-        // --- Funciones de Lógica de Carga y Color ---
+        // --- Funciones de Lógica de Carga y Agregación ---
 
         /**
          * Determina las clases de Tailwind para el color y el texto basado en la carga.
-         * @param {number} count - Número actual de asignaciones.
-         * @returns {string} Clases de Tailwind.
+         * (Mantiene la lógica visual de los colores).
          */
         function getLoadColorClasses(count) {
             const loadRatio = count / MAX_ASSIGNMENTS;
 
-            if (count <= 0) return 'bg-gray-200 text-gray-700'; // Sin carga
+            if (count <= 0) return 'bg-gray-200 text-gray-700'; 
             
-            // Verde: Baja carga (0% - 30%)
             if (loadRatio < 0.3) return 'bg-green-500 text-white';
-
-            // Amarillo/Naranja: Carga media (30% - 70%)
             if (loadRatio < 0.7) return 'bg-yellow-500 text-yellow-900';
-
-            // Rojo: Carga alta/saturada (> 70%)
             return 'bg-red-500 text-white'; 
         }
 
         /**
          * Determina el ancho de la barra de carga.
-         * @param {number} count - Número actual de asignaciones.
-         * @returns {string} Ancho de Tailwind (ej: 'w-[50%]').
          */
         function getLoadBarWidth(count) {
             let percentage = (count / MAX_ASSIGNMENTS) * 100;
             if (percentage > 100) percentage = 100;
             if (percentage < 0) percentage = 0;
-            return `w-[${percentage.toFixed(0)}%]`;
+            return `${percentage.toFixed(0)}%`;
+        }
+        
+        /**
+         * Transforma la lista de documentos de pedidos en un mapa de carga por bodeguero.
+         * @param {Array<Object>} orders - Lista de documentos de pedidos.
+         * @returns {Map<string, {count: number, activeOrderIds: string[]}>} Mapa de {nombreBodeguero: {conteo, listaIDsparaEliminar}}.
+         */
+        function aggregateBodegueroLoad(orders) {
+            const loadMap = new Map();
+            orders.forEach(doc => {
+                const workerName = doc.data[WORKER_ASSIGNMENT_FIELD];
+
+                if (workerName && typeof workerName === 'string' && workerName.trim() !== '') {
+                    if (!loadMap.has(workerName)) {
+                        loadMap.set(workerName, { count: 0, activeOrderIds: [] });
+                    }
+                    const workerData = loadMap.get(workerName);
+                    workerData.count++;
+                    workerData.activeOrderIds.push(doc.id);
+                }
+            });
+            return loadMap;
         }
 
-        // --- Funciones de UI ---
+        // --- Funciones de UI y Renderizado ---
 
         /**
-         * Muestra una alerta modal personalizada.
-         * @param {string} message - Mensaje a mostrar.
-         * @param {string} type - Tipo: 'success', 'error', 'warning', 'info'.
+         * Renderiza la lista completa de bodegueros a partir de la carga agregada.
+         * @param {Array<Object>} bodeguerosList - Lista agregada de bodegueros {name, assignedCount, activeOrderIds}.
          */
+        function renderBodegueros(bodeguerosList) {
+            const listContainer = document.getElementById('bodegueros_list');
+            const loadingMessageElement = document.getElementById('loading-message');
+            
+            if (!listContainer) return;
+
+            listContainer.innerHTML = '';
+            
+            if (loadingMessageElement) {
+                loadingMessageElement.style.display = 'none';
+            }
+
+            if (bodeguerosList.length === 0) {
+                listContainer.innerHTML = '<p class="text-center text-gray-500 p-4 font-semibold">No se encontraron pedidos activos en la colección <code class="bg-gray-200 p-1 rounded text-sm">${ORDERS_COLLECTION_NAME}</code>. Use los botones para simular pedidos o verifique su sistema de origen.</p>';
+                return;
+            }
+
+            bodeguerosList.forEach(worker => {
+                const name = worker.name;
+                const displayCount = Math.max(0, worker.assignedCount);
+                const firstOrderId = worker.activeOrderIds.length > 0 ? worker.activeOrderIds[0] : null;
+
+                const loadClasses = getLoadColorClasses(displayCount);
+                const barWidth = getLoadBarWidth(displayCount);
+                
+                const cardHtml = `
+                    <div class="bodeguero-card bg-gray-50 p-4 rounded-xl shadow-sm hover:shadow-md transition duration-200 border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center">
+                        
+                        <!-- Info y Barra de Carga -->
+                        <div class="flex-grow w-full md:w-auto mb-3 md:mb-0">
+                            <div class="flex items-center mb-1">
+                                <i class="fas fa-user-tag text-gray-500 mr-2"></i>
+                                <span class="text-lg font-bold text-gray-800">${name}</span>
+                            </div>
+                            <div class="text-sm text-gray-600 mb-2">
+                                Despachos Asignados: 
+                                <span class="text-xl font-extrabold ${loadClasses} p-1 rounded">${displayCount}</span>
+                            </div>
+                            
+                            <!-- Indicador de Carga (Barra de Progreso) -->
+                            <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-1">
+                                <div class="load-indicator h-full rounded-full ${loadClasses}" style="width: ${barWidth};"></div>
+                            </div>
+                        </div>
+
+                        <!-- Botones de Acción (Simulan la acción del otro sistema) -->
+                        <div class="flex flex-wrap gap-2 justify-end w-full md:w-auto">
+                            <button onclick="addAssignment('${name}')" 
+                                class="flex items-center px-3 py-2 text-sm bg-blue-500 text-white rounded-lg shadow-sm hover:bg-blue-600 transition duration-150"
+                                title="Simula que el sistema de pedidos le asigna un nuevo despacho a ${name}">
+                                <i class="fas fa-plus mr-1"></i> Asignar
+                            </button>
+                            <button onclick="completeAssignment('${firstOrderId}', '${name}')" 
+                                class="flex items-center px-3 py-2 text-sm bg-green-500 text-white rounded-lg shadow-sm hover:bg-green-600 transition duration-150 ${!firstOrderId ? 'opacity-50 cursor-not-allowed' : ''}"
+                                ${!firstOrderId ? 'disabled' : ''}
+                                title="${firstOrderId ? 'Simula que se completa un despacho y se elimina el pedido' : 'No hay pedidos activos para despachar'}">
+                                <i class="fas fa-check mr-1"></i> Despachar
+                            </button>
+                        </div>
+                    </div>
+                `;
+                listContainer.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+
+        // --- Funciones de Firestore (Monitor y Simulador de Acción) ---
+
+        /**
+         * Configura el listener en tiempo real para la colección de pedidos/despachos.
+         */
+        function setupFirestoreListeners() {
+            if (!db) return;
+
+            const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
+            const q = query(collectionRef);
+
+            onSnapshot(q, (snapshot) => {
+                const orders = [];
+                snapshot.forEach((doc) => {
+                    orders.push({ id: doc.id, data: doc.data() });
+                });
+
+                const loadMap = aggregateBodegueroLoad(orders);
+                
+                // Convertir el mapa de carga a una lista plana para renderizar
+                const bodeguerosList = Array.from(loadMap.entries()).map(([name, data]) => ({
+                    name: name,
+                    assignedCount: data.count,
+                    activeOrderIds: data.activeOrderIds // Se usa para el botón "Despachar"
+                }));
+
+                // Ordenar por nombre
+                bodeguerosList.sort((a, b) => a.name.localeCompare(b.name));
+                
+                renderBodegueros(bodeguerosList);
+            }, (error) => {
+                console.error("Error al escuchar cambios en Firestore:", error);
+                showAlert("Error al cargar los datos del sistema de pedidos.", 'error');
+                
+                const loadingMessageElement = document.getElementById('loading-message');
+                if (loadingMessageElement) {
+                    loadingMessageElement.textContent = "Error al cargar los datos. Revise la consola.";
+                }
+            });
+        }
+
+        /**
+         * SIMULADOR: Crea un nuevo documento de pedido en la colección de órdenes.
+         * @param {string} workerName - Nombre del bodeguero al que se asigna el pedido.
+         */
+        window.addAssignment = async (workerName) => {
+            if (!db) return;
+            try {
+                const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
+                await addDoc(collectionRef, {
+                    [WORKER_ASSIGNMENT_FIELD]: workerName, // Usa el campo configurado
+                    pedidoId: Date.now().toString().slice(-6), // ID de pedido simulado
+                    status: 'activo',
+                    timestamp: new Date().toISOString(),
+                    assignedBy: userId 
+                });
+                showAlert(`Pedido asignado a ${workerName}. El indicador se ha actualizado.`, 'success');
+            } catch (e) {
+                console.error("Error al simular la asignación de pedido: ", e);
+                showAlert("Error al simular la asignación. Verifique sus constantes de colección.", 'error');
+            }
+        };
+
+        /**
+         * SIMULADOR: Elimina un documento de pedido de la colección de órdenes.
+         * @param {string} orderId - ID del documento del pedido a eliminar.
+         * @param {string} workerName - Nombre del bodeguero (solo para el mensaje).
+         */
+        window.completeAssignment = async (orderId, workerName) => {
+            if (!db) return;
+            if (!orderId) {
+                showAlert(`No hay pedidos activos de ${workerName} para despachar.`, 'info');
+                return;
+            }
+            
+            try {
+                const docRef = doc(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`, orderId);
+                await deleteDoc(docRef);
+                showAlert(`Pedido de ${workerName} despachado. El indicador se ha actualizado.`, 'success');
+
+            } catch (e) {
+                console.error("Error al simular el despacho de pedido: ", e);
+                showAlert("Error al simular el despacho. Verifique la existencia del pedido.", 'error');
+            }
+        };
+
+        // --- Funciones de Modal (Sin cambios) ---
         function showAlert(message, type = 'info') {
             const modal = document.getElementById('status_alert_modal');
             const container = document.getElementById('alert_message_container');
@@ -223,16 +381,14 @@
                     color = 'blue';
             }
             
-            // FIX: Debemos asegurar que la modal y su contenido existan
             if (!modal || !container) {
                 console.error("No se encontraron los elementos de la modal de alerta.");
                 return;
             }
 
-            // Aplicar color al borde superior del modal
             const alertContent = modal.querySelector('.alert-modal-content');
             if (alertContent) {
-                alertContent.style.borderTopColor = `var(--${color}-500)`;
+                alertContent.style.borderTopColor = color === 'blue' ? '#3B82F6' : (color === 'green' ? '#10B981' : (color === 'red' ? '#EF4444' : '#F59E0B'));
             }
 
             container.innerHTML = `
@@ -243,236 +399,18 @@
             `;
             modal.style.display = 'flex';
 
-            // Cierre automático después de 3 segundos
             setTimeout(() => {
                 window.closeModal('status_alert_modal');
             }, 3000);
         }
 
-        /**
-         * Cierra la modal especificada.
-         * @param {string} modalId - ID del elemento modal.
-         */
         window.closeModal = (modalId) => {
             const modal = document.getElementById(modalId);
             if (modal) {
                 modal.style.display = 'none';
             }
         }
-
-        /**
-         * Renderiza la lista completa de bodegueros.
-         * @param {Array<Object>} bodegueros - Lista de documentos de bodegueros.
-         */
-        function renderBodegueros(bodegueros) {
-            const listContainer = document.getElementById('bodegueros_list');
-            const loadingMessageElement = document.getElementById('loading-message'); // Obtener referencia
-            
-            if (!listContainer) return;
-
-            listContainer.innerHTML = ''; // Limpiar lista
-            
-            // FIX: Asegurarse de que el elemento exista antes de intentar acceder a 'style'
-            if (loadingMessageElement) {
-                loadingMessageElement.style.display = 'none';
-            }
-
-            if (bodegueros.length === 0) {
-                listContainer.innerHTML = '<p class="text-center text-gray-500 p-4 font-semibold">¡No hay bodegueros! Por favor, use la sección superior para <span class="text-blue-600">Añadir Nuevo Bodeguero</span> y empezar a gestionar la carga.</p>';
-                return;
-            }
-
-            bodegueros.forEach(doc => {
-                const data = doc.data;
-                const docId = doc.id;
-                const loadClasses = getLoadColorClasses(data.assignedCount);
-                const barWidth = getLoadBarWidth(data.assignedCount);
-                
-                // Asegurarse de que assignedCount sea al menos 0 para evitar errores visuales si el contador baja demasiado
-                const displayCount = Math.max(0, data.assignedCount);
-
-                const cardHtml = `
-                    <div class="bodeguero-card bg-gray-50 p-4 rounded-xl shadow-sm hover:shadow-md transition duration-200 border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center">
-                        
-                        <!-- Info y Barra de Carga -->
-                        <div class="flex-grow w-full md:w-auto mb-3 md:mb-0">
-                            <div class="flex items-center mb-1">
-                                <i class="fas fa-user-tag text-gray-500 mr-2"></i>
-                                <span class="text-lg font-bold text-gray-800">${data.name}</span>
-                            </div>
-                            <div class="text-sm text-gray-600 mb-2">
-                                Despachos Asignados: 
-                                <span class="text-xl font-extrabold ${loadClasses} p-1 rounded">${displayCount}</span>
-                            </div>
-                            
-                            <!-- Indicador de Carga (Barra de Progreso) -->
-                            <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-1">
-                                <div class="load-indicator h-full rounded-full ${loadClasses}" style="width: ${barWidth};"></div>
-                            </div>
-                        </div>
-
-                        <!-- Botones de Acción -->
-                        <div class="flex flex-wrap gap-2 justify-end w-full md:w-auto">
-                            <button onclick="addAssignment('${docId}')" 
-                                class="flex items-center px-3 py-2 text-sm bg-blue-500 text-white rounded-lg shadow-sm hover:bg-blue-600 transition duration-150">
-                                <i class="fas fa-plus mr-1"></i> Asignar
-                            </button>
-                            <button onclick="completeAssignment('${docId}')" 
-                                class="flex items-center px-3 py-2 text-sm bg-green-500 text-white rounded-lg shadow-sm hover:bg-green-600 transition duration-150">
-                                <i class="fas fa-check mr-1"></i> Despachar
-                            </button>
-                            <button onclick="deleteBodeguero('${docId}', '${data.name}')" 
-                                class="flex items-center px-3 py-2 text-sm bg-red-500 text-white rounded-lg shadow-sm hover:bg-red-600 transition duration-150">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-                listContainer.insertAdjacentHTML('beforeend', cardHtml);
-            });
-        }
-
-
-        // --- Funciones de Firestore (CRUD) ---
-
-        /**
-         * Configura el listener en tiempo real para la colección de bodegueros.
-         */
-        function setupFirestoreListeners() {
-            if (!db) return;
-
-            const collectionRef = collection(db, `/artifacts/${appId}/public/data/${COLLECTION_NAME}`);
-            const q = collectionRef;
-
-            onSnapshot(q, (snapshot) => {
-                const bodegueros = [];
-                snapshot.forEach((doc) => {
-                    bodegueros.push({ id: doc.id, data: doc.data() });
-                });
-
-                // Ordenar por nombre
-                bodegueros.sort((a, b) => a.data.name.localeCompare(b.data.name));
-                
-                renderBodegueros(bodegueros);
-            }, (error) => {
-                console.error("Error al escuchar cambios en Firestore:", error);
-                showAlert("Error de conexión en tiempo real con la base de datos.", 'error');
-                
-                // FIX: Asegurar que el elemento exista antes de actualizar el texto
-                const loadingMessageElement = document.getElementById('loading-message');
-                if (loadingMessageElement) {
-                    loadingMessageElement.textContent = "Error al cargar los datos.";
-                }
-            });
-        }
-
-        /**
-         * Añade un nuevo bodeguero a la colección.
-         */
-        window.addNewBodeguero = async () => {
-            const nameInput = document.getElementById('new_bodeguero_name');
-            const name = nameInput.value.trim();
-
-            if (!name) {
-                showAlert('El nombre del bodeguero no puede estar vacío.', 'warning');
-                return;
-            }
-
-            try {
-                const collectionRef = collection(db, `/artifacts/${appId}/public/data/${COLLECTION_NAME}`);
-                
-                // Verificar si ya existe un bodeguero con ese nombre (opcional)
-                const q = query(collectionRef, where("name", "==", name));
-                const existingDocs = await getDocs(q);
-                if (!existingDocs.empty) {
-                    showAlert(`El bodeguero "${name}" ya existe.`, 'warning');
-                    return;
-                }
-
-                await setDoc(doc(collectionRef), {
-                    name: name,
-                    assignedCount: 0,
-                    createdAt: new Date().toISOString(),
-                    lastUpdatedBy: userId 
-                });
-
-                showAlert(`Bodeguero "${name}" añadido exitosamente.`, 'success');
-                nameInput.value = ''; // Limpiar input
-
-            } catch (e) {
-                console.error("Error al añadir documento: ", e);
-                showAlert("Error al guardar el nuevo bodeguero.", 'error');
-            }
-        };
-
-        /**
-         * Incrementa el contador de despachos asignados para un bodeguero.
-         * @param {string} docId - ID del documento del bodeguero.
-         */
-        window.addAssignment = async (docId) => {
-            if (!db) return;
-            try {
-                const docRef = doc(db, `/artifacts/${appId}/public/data/${COLLECTION_NAME}`, docId);
-                await updateDoc(docRef, {
-                    assignedCount: increment(1),
-                    lastUpdatedBy: userId 
-                });
-                showAlert('Asignación añadida. Carga incrementada.', 'success');
-            } catch (e) {
-                console.error("Error al incrementar asignación: ", e);
-                showAlert("Error al asignar un despacho.", 'error');
-            }
-        };
-
-        /**
-         * Decrementa el contador de despachos asignados para un bodeguero.
-         * Esto simula que un despacho ha sido "despachado" o completado.
-         * @param {string} docId - ID del documento del bodeguero.
-         */
-        window.completeAssignment = async (docId) => {
-            if (!db) return;
-            
-            try {
-                const docRef = doc(db, `/artifacts/${appId}/public/data/${COLLECTION_NAME}`, docId);
-                
-                // Usamos un incremento negativo (-1) para asegurarnos que la operación es atómica
-                await updateDoc(docRef, {
-                    assignedCount: increment(-1),
-                    lastUpdatedBy: userId 
-                });
-                showAlert('Despacho completado. Carga reducida.', 'success');
-
-            } catch (e) {
-                console.error("Error al completar asignación: ", e);
-                showAlert("Error al marcar el despacho como completado.", 'error');
-            }
-        };
-
-        /**
-         * Elimina un bodeguero de la lista.
-         * @param {string} docId - ID del documento del bodeguero.
-         * @param {string} name - Nombre del bodeguero (para la alerta).
-         */
-        window.deleteBodeguero = async (docId, name) => {
-             // Reemplazo de window.confirm() con lógica de alerta
-            // En una aplicación real, se usaría un modal de confirmación con dos botones.
-            // Para mantener la simplicidad sin un modal complejo, se utiliza un confirm tradicional
-            // aunque se ha reemplazado window.alert/confirm en la app por showAlert.
-            
-            if (!confirm(`¿Estás seguro de que quieres eliminar a ${name}?\nNota: En una aplicación real, esto se manejaría con un modal de confirmación de dos botones en lugar de 'confirm()'.`)) {
-                 return;
-             }
-
-            try {
-                const docRef = doc(db, `/artifacts/${appId}/public/data/${COLLECTION_NAME}`, docId);
-                await deleteDoc(docRef);
-                showAlert(`Bodeguero "${name}" eliminado.`, 'info');
-            } catch (e) {
-                console.error("Error al eliminar bodeguero: ", e);
-                showAlert("Error al intentar eliminar el bodeguero.", 'error');
-            }
-        };
-
+        // Fin de Funciones de Modal
     </script>
 </body>
 </html>
