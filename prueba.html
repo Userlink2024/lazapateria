@@ -48,28 +48,28 @@
                 <i class="fas fa-chart-bar text-blue-500 mr-2"></i>
                 Indicador de Carga de Despachos
             </h1>
-            <p class="text-gray-500">Monitor en tiempo real de la carga de trabajo, leyendo los datos del sistema de pedidos.</p>
+            <p class="text-gray-500">Monitor en tiempo real de la carga de trabajo, leyendo los datos del sistema de pedidos y la lista maestra de bodegueros.</p>
         </header>
 
-        <!-- Sección de Añadir Bodeguero (ELIMINADA: Esto es un INDICADOR, no un gestor de trabajadores) -->
-        
         <!-- Lista de Bodegueros -->
         <div class="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-semibold text-gray-700">Carga de Bodegueros (Pedidos Activos)</h2>
+                <h2 class="text-2xl font-semibold text-gray-700">Carga Actual de Bodegueros</h2>
                 <!-- Máximo de Despachos Definido -->
-                <p class="text-sm text-gray-500">Máx. asignaciones por color: <span id="max_assignments_display" class="font-bold text-blue-500">10</span></p>
+                <p class="text-sm text-gray-500">Máx. asignaciones p/color: <span id="max_assignments_display" class="font-bold text-blue-500">10</span></p>
             </div>
             
             <div id="bodegueros_list" class="space-y-4 scrollable-content max-h-[60vh] overflow-y-auto">
                 <!-- Los bodegueros se renderizarán aquí -->
-                <p id="loading-message" class="text-center text-gray-500">Cargando datos y agregando pedidos...</p>
+                <p id="loading-message" class="text-center text-gray-500">Iniciando conexión con Firebase...</p>
             </div>
 
-            <!-- Información del Usuario Autenticado (Requerido para apps multiusuario) -->
-            <div class="mt-6 pt-4 border-t border-gray-100 text-sm text-gray-500">
+            <!-- Información del Usuario Autenticado y Colecciones (Para depuración) -->
+            <div class="mt-6 pt-4 border-t border-gray-100 text-sm text-gray-500 space-y-1">
                 <p>ID de la Aplicación: <span id="app_id_display" class="font-mono text-xs bg-gray-100 p-1 rounded"></span></p>
                 <p>Su ID de Usuario (Para operaciones): <span id="user_id_display" class="font-mono text-xs bg-gray-100 p-1 rounded break-all"></span></p>
+                <p class="mt-2">Colección Maestra (Bodegueros): <code class="font-mono text-xs bg-gray-100 p-1 rounded" id="bodegueros_col_display"></code></p>
+                <p>Colección de Pedidos (Carga): <code class="font-mono text-xs bg-gray-100 p-1 rounded" id="orders_col_display"></code></p>
             </div>
         </div>
 
@@ -102,13 +102,22 @@
         let auth;
         let userId = 'anonimo_temporal';
         
-        // --- CONSTANTES CRÍTICAS DE LA COLECCIÓN DE PEDIDOS ---
-        // *** ESTAS DEBEN COINCIDIR CON LAS USADAS EN generar_pedidos.html ***
-        const ORDERS_COLLECTION_NAME = 'pedidos_despachos'; // Nombre de la colección que contiene todos los pedidos activos.
-        const WORKER_ASSIGNMENT_FIELD = 'bodeguero_asignado'; // El nombre del campo DENTRO de cada documento de pedido que tiene el nombre del bodeguero.
-        // ------------------------------------------------------
+        // --- CONSTANTES CRÍTICAS DE LA COLECCIÓN DE BODEGUEROS Y PEDIDOS (¡VERIFICAR ESTO!) ---
+        // ESTOS VALORES FUERON CONFIRMADOS POR generar_pedidos (2).html
+        // 1. Dónde están definidos los nombres de los bodegueros (Lista Maestra)
+        const BODEGUEROS_COLLECTION_NAME = 'bodegueros'; 
+        const BODEGUERO_NAME_FIELD = 'nombre'; 
+        
+        // 2. Dónde se registran los pedidos activos (Carga de trabajo)
+        const ORDERS_COLLECTION_NAME = 'pedidos_despachos'; 
+        const WORKER_ASSIGNMENT_FIELD = 'bodeguero_asignado'; 
+        // -------------------------------------------------------------------------------------
 
         const MAX_ASSIGNMENTS = 10; // Capacidad máxima para la lógica de color
+
+        // Estado global para guardar los datos
+        let knownBodegueros = []; // Lista maestra de nombres
+        let currentOrders = [];   // Lista de documentos de pedidos activos
 
         // Inicializar y autenticar Firebase
         if (firebaseConfig) {
@@ -119,13 +128,15 @@
                 
                 document.getElementById('app_id_display').textContent = appId;
                 document.getElementById('max_assignments_display').textContent = MAX_ASSIGNMENTS;
+                document.getElementById('bodegueros_col_display').textContent = BODEGUEROS_COLLECTION_NAME;
+                document.getElementById('orders_col_display').textContent = ORDERS_COLLECTION_NAME;
 
                 // Manejo de autenticación
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
                         document.getElementById('user_id_display').textContent = userId;
-                        setupFirestoreListeners();
+                        setupFirestoreListeners(); // Inicia la escucha de datos
                     } else {
                         if (initialAuthToken) {
                             await signInWithCustomToken(auth, initialAuthToken);
@@ -154,7 +165,6 @@
 
         /**
          * Determina las clases de Tailwind para el color y el texto basado en la carga.
-         * (Mantiene la lógica visual de los colores).
          */
         function getLoadColorClasses(count) {
             const loadRatio = count / MAX_ASSIGNMENTS;
@@ -177,14 +187,15 @@
         }
         
         /**
-         * Transforma la lista de documentos de pedidos en un mapa de carga por bodeguero.
+         * Agrupa los pedidos activos por bodeguero.
          * @param {Array<Object>} orders - Lista de documentos de pedidos.
          * @returns {Map<string, {count: number, activeOrderIds: string[]}>} Mapa de {nombreBodeguero: {conteo, listaIDsparaEliminar}}.
          */
         function aggregateBodegueroLoad(orders) {
             const loadMap = new Map();
             orders.forEach(doc => {
-                const workerName = doc.data[WORKER_ASSIGNMENT_FIELD];
+                // Usa la constante del campo de asignación
+                const workerName = doc.data[WORKER_ASSIGNMENT_FIELD]; 
 
                 if (workerName && typeof workerName === 'string' && workerName.trim() !== '') {
                     if (!loadMap.has(workerName)) {
@@ -198,10 +209,43 @@
             return loadMap;
         }
 
+        /**
+         * Combina la lista maestra de bodegueros con la carga actual.
+         * @param {Map<string, Object>} loadMap - Carga calculada de pedidos.
+         * @returns {Array<Object>} Lista final de bodegueros con su carga.
+         */
+        function createFullBodeguerosList(loadMap) {
+            // 1. Crear la lista inicial usando la lista maestra (knownBodegueros)
+            const finalBodegueros = knownBodegueros.map(name => {
+                const loadData = loadMap.get(name) || { count: 0, activeOrderIds: [] };
+                return {
+                    name: name,
+                    assignedCount: loadData.count,
+                    activeOrderIds: loadData.activeOrderIds
+                };
+            });
+
+            // 2. Agregar cualquier bodeguero encontrado en los pedidos que NO esté en la lista maestra (seguridad)
+            loadMap.forEach((data, name) => {
+                if (!knownBodegueros.includes(name)) {
+                    finalBodegueros.push({
+                        name: name,
+                        assignedCount: data.count,
+                        activeOrderIds: data.activeOrderIds
+                    });
+                }
+            });
+
+            // Asegurar que la lista final esté ordenada
+            finalBodegueros.sort((a, b) => a.name.localeCompare(b.name));
+            return finalBodegueros;
+        }
+
+
         // --- Funciones de UI y Renderizado ---
 
         /**
-         * Renderiza la lista completa de bodegueros a partir de la carga agregada.
+         * Renderiza la lista completa de bodegueros a partir de la lista combinada.
          * @param {Array<Object>} bodeguerosList - Lista agregada de bodegueros {name, assignedCount, activeOrderIds}.
          */
         function renderBodegueros(bodeguerosList) {
@@ -209,15 +253,18 @@
             const loadingMessageElement = document.getElementById('loading-message');
             
             if (!listContainer) return;
-
-            listContainer.innerHTML = '';
             
             if (loadingMessageElement) {
                 loadingMessageElement.style.display = 'none';
             }
+            
+            listContainer.innerHTML = ''; // Limpiar el contenedor
 
             if (bodeguerosList.length === 0) {
-                listContainer.innerHTML = '<p class="text-center text-gray-500 p-4 font-semibold">No se encontraron pedidos activos en la colección <code class="bg-gray-200 p-1 rounded text-sm">${ORDERS_COLLECTION_NAME}</code>. Use los botones para simular pedidos o verifique su sistema de origen.</p>';
+                listContainer.innerHTML = `<p class="text-center text-gray-500 p-4 font-semibold">
+                    No se encontraron bodegueros en la colección <code class="bg-gray-200 p-1 rounded text-sm">${BODEGUEROS_COLLECTION_NAME}</code>.
+                    <br>Verifique si el campo de nombre (**${BODEGUERO_NAME_FIELD}**) es correcto o si hay datos.
+                </p>`;
                 return;
             }
 
@@ -249,7 +296,7 @@
                             </div>
                         </div>
 
-                        <!-- Botones de Acción (Simulan la acción del otro sistema) -->
+                        <!-- Botones de Acción (Simulan la acción del otro sistema, manteniendo la funcionalidad de prueba) -->
                         <div class="flex flex-wrap gap-2 justify-end w-full md:w-auto">
                             <button onclick="addAssignment('${name}')" 
                                 class="flex items-center px-3 py-2 text-sm bg-blue-500 text-white rounded-lg shadow-sm hover:bg-blue-600 transition duration-150"
@@ -273,46 +320,71 @@
         // --- Funciones de Firestore (Monitor y Simulador de Acción) ---
 
         /**
-         * Configura el listener en tiempo real para la colección de pedidos/despachos.
+         * Configura el listener para la lista maestra de bodegueros.
+         */
+        function fetchBodegueros() {
+            if (!db) return;
+            // Se asume que la lista maestra es pública/compartida
+            const collectionRef = collection(db, `/artifacts/${appId}/public/data/${BODEGUEROS_COLLECTION_NAME}`);
+            
+            onSnapshot(collectionRef, (snapshot) => {
+                const names = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const name = data[BODEGUERO_NAME_FIELD]; // Usa el campo de nombre configurado
+                    if (name && typeof name === 'string' && name.trim() !== '') {
+                        names.push(name.trim());
+                    }
+                });
+                
+                knownBodegueros = names; // Actualiza la lista maestra
+                
+                // Una vez que la lista maestra está actualizada, volvemos a renderizar
+                // utilizando la carga de pedidos más reciente (currentOrders).
+                const loadMap = aggregateBodegueroLoad(currentOrders);
+                const bodeguerosList = createFullBodeguerosList(loadMap);
+                renderBodegueros(bodeguerosList);
+
+            }, (error) => {
+                console.error("Error al escuchar bodegueros (Lista Maestra):", error);
+                showAlert("Error al cargar la lista maestra de bodegueros. Verifique la constante BODEGUEROS_COLLECTION_NAME.", 'error');
+            });
+        }
+
+
+        /**
+         * Configura el listener en tiempo real para la colección de pedidos/despachos (la carga).
          */
         function setupFirestoreListeners() {
             if (!db) return;
 
+            // 1. Inicia la escucha de la lista maestra
+            fetchBodegueros();
+
+            // 2. Inicia la escucha de los pedidos activos
             const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
             const q = query(collectionRef);
 
             onSnapshot(q, (snapshot) => {
-                const orders = [];
+                currentOrders = []; // Actualiza la lista global de pedidos
                 snapshot.forEach((doc) => {
-                    orders.push({ id: doc.id, data: doc.data() });
+                    currentOrders.push({ id: doc.id, data: doc.data() });
                 });
 
-                const loadMap = aggregateBodegueroLoad(orders);
-                
-                // Convertir el mapa de carga a una lista plana para renderizar
-                const bodeguerosList = Array.from(loadMap.entries()).map(([name, data]) => ({
-                    name: name,
-                    assignedCount: data.count,
-                    activeOrderIds: data.activeOrderIds // Se usa para el botón "Despachar"
-                }));
-
-                // Ordenar por nombre
-                bodeguerosList.sort((a, b) => a.name.localeCompare(b.name));
-                
+                // Calcula la carga con los pedidos actualizados y la lista maestra
+                const loadMap = aggregateBodegueroLoad(currentOrders);
+                const bodeguerosList = createFullBodeguerosList(loadMap);
                 renderBodegueros(bodeguerosList);
+
             }, (error) => {
-                console.error("Error al escuchar cambios en Firestore:", error);
-                showAlert("Error al cargar los datos del sistema de pedidos.", 'error');
-                
-                const loadingMessageElement = document.getElementById('loading-message');
-                if (loadingMessageElement) {
-                    loadingMessageElement.textContent = "Error al cargar los datos. Revise la consola.";
-                }
+                console.error("Error al escuchar cambios en Firestore (Pedidos):", error);
+                showAlert("Error al cargar los datos del sistema de pedidos. Revise la constante ORDERS_COLLECTION_NAME.", 'error');
             });
         }
 
         /**
          * SIMULADOR: Crea un nuevo documento de pedido en la colección de órdenes.
+         * Este simula la acción de generar_pedidos.
          * @param {string} workerName - Nombre del bodeguero al que se asigna el pedido.
          */
         window.addAssignment = async (workerName) => {
@@ -321,7 +393,7 @@
                 const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
                 await addDoc(collectionRef, {
                     [WORKER_ASSIGNMENT_FIELD]: workerName, // Usa el campo configurado
-                    pedidoId: Date.now().toString().slice(-6), // ID de pedido simulado
+                    pedidoId: `PED-${Date.now().toString().slice(-6)}`, // ID de pedido simulado
                     status: 'activo',
                     timestamp: new Date().toISOString(),
                     assignedBy: userId 
@@ -335,6 +407,7 @@
 
         /**
          * SIMULADOR: Elimina un documento de pedido de la colección de órdenes.
+         * Este simula la acción de despacho completado.
          * @param {string} orderId - ID del documento del pedido a eliminar.
          * @param {string} workerName - Nombre del bodeguero (solo para el mensaje).
          */
