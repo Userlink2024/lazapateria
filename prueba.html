@@ -1,514 +1,141 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Indicador de Carga de Bodegueros</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome for icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Google Font - Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary-color: #3B82F6; /* Blue-500 */
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel de Bodega</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #2e7d32;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 30px;
+    }
+    .card {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      padding: 20px;
+      text-align: center;
+      transition: transform 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+    }
+    .nombre {
+      font-weight: 600;
+      font-size: 1.1em;
+      color: #333;
+    }
+    .contador {
+      font-size: 2.5em;
+      font-weight: 700;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      border-radius: 50%;
+      width: 80px;
+      height: 80px;
+      line-height: 80px;
+      display: inline-block;
+      color: white;
+    }
+    .verde { background-color: #28a745; }
+    .naranja { background-color: #ffc107; }
+    .rojo { background-color: #dc3545; }
+    .ultimo-update {
+      font-size: 0.8em;
+      color: #777;
+      margin-top: 10px;
+    }
+  </style>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    // Configuración de Firebase (igual que los otros archivos)
+    const firebaseConfig = {
+      apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+      authDomain: "lazapateria-c4157.firebaseapp.com",
+      projectId: "lazapateria-c4157",
+      storageBucket: "lazapateria-c4157.firebasestorage.app",
+      messagingSenderId: "300241769138",
+      appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+      measurementId: "G-HVG7615JEE"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    async function cargarPanelBodega() {
+      const contenedor = document.getElementById('panel');
+      contenedor.innerHTML = '<p>Cargando información...</p>';
+
+      const bodeguerosSnap = await db.collection('usuarios').where('permisos', '==', 'Bodeguero').get();
+      const bodegueros = {};
+      bodeguerosSnap.forEach(doc => {
+        bodegueros[doc.data().nombreCompleto] = 0;
+      });
+
+      // Suscripción en tiempo real a los pedidos
+      db.collection('pedidos').onSnapshot(snapshot => {
+        // Reiniciar contador
+        for (let b in bodegueros) bodegueros[b] = 0;
+
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          if (!data.despachado && data.bodeguero) {
+            let lista = [];
+            if (Array.isArray(data.bodeguero)) {
+              lista = data.bodeguero;
+            } else if (typeof data.bodeguero === "string") {
+              lista = [data.bodeguero];
+            }
+
+            lista.forEach(nombre => {
+              if (bodegueros[nombre] !== undefined) {
+                bodegueros[nombre]++;
+              }
+            });
+          }
+        });
+
+        // Renderizar
+        contenedor.innerHTML = '';
+        for (const [nombre, cantidad] of Object.entries(bodegueros)) {
+          let color = 'verde';
+          if (cantidad >= 4 && cantidad <= 5) color = 'naranja';
+          if (cantidad > 5) color = 'rojo';
+          
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
+            <div class="nombre">${nombre}</div>
+            <div class="contador ${color}">${cantidad}</div>
+            <div class="ultimo-update">Actualizado: ${new Date().toLocaleTimeString()}</div>
+          `;
+          contenedor.appendChild(card);
         }
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f4f7f9;
-        }
-        /* Custom scrollbar for aesthetics */
-        .scrollable-content::-webkit-scrollbar {
-            width: 8px;
-        }
-        .scrollable-content::-webkit-scrollbar-thumb {
-            background-color: #cbd5e1; /* Slate-300 */
-            border-radius: 4px;
-        }
-        .load-indicator {
-            transition: width 0.5s ease-out, background-color 0.3s ease-in;
-        }
-        /* Custom Keyframes for Alerts */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .alert-modal-content {
-            animation: fadeIn 0.3s ease-out;
-        }
-    </style>
+      });
+    }
+
+    window.onload = cargarPanelBodega;
+  </script>
 </head>
-<body class="min-h-screen p-4 sm:p-8">
-
-    <!-- Main Container -->
-    <div class="w-full max-w-4xl mx-auto">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">
-                <i class="fas fa-chart-bar text-blue-500 mr-2"></i>
-                Indicador de Carga de Despachos
-            </h1>
-            <p class="text-gray-500">Monitor en tiempo real de la carga de trabajo, leyendo los datos del sistema de pedidos y la lista maestra de bodegueros.</p>
-        </header>
-
-        <!-- Lista de Bodegueros -->
-        <div class="bg-white p-6 rounded-xl shadow-xl border border-gray-200">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-semibold text-gray-700">Carga Actual de Bodegueros</h2>
-                <!-- Máximo de Despachos Definido -->
-                <p class="text-sm text-gray-500">Máx. asignaciones p/color: <span id="max_assignments_display" class="font-bold text-blue-500">10</span></p>
-            </div>
-            
-            <div id="bodegueros_list" class="space-y-4 scrollable-content max-h-[60vh] overflow-y-auto">
-                <!-- Los bodegueros se renderizarán aquí -->
-                <p id="loading-message" class="text-center text-gray-500">Iniciando conexión con Firebase...</p>
-            </div>
-
-            <!-- Información del Usuario Autenticado y Colecciones (Para depuración) -->
-            <div class="mt-6 pt-4 border-t border-gray-100 text-sm text-gray-500 space-y-1">
-                <p class="font-bold text-red-600">⚠️ DEBUG: Abre F12 y revisa los logs de Firestore ⚠️</p>
-                <p>ID de la Aplicación: <span id="app_id_display" class="font-mono text-xs bg-gray-100 p-1 rounded"></span></p>
-                <p>Su ID de Usuario (Para operaciones): <span id="user_id_display" class="font-mono text-xs bg-gray-100 p-1 rounded break-all"></span></p>
-                <p class="mt-2">Colección Maestra (Bodegueros): <code class="font-mono text-xs bg-gray-100 p-1 rounded" id="bodegueros_col_display"></code></p>
-                <p>Colección de Pedidos (Carga): <code class="font-mono text-xs bg-gray-100 p-1 rounded" id="orders_col_display"></code></p>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Modal de Alerta/Mensaje (Para reemplazar alert()) -->
-    <div id="status_alert_modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center">
-        <div id="status_alert_content" class="bg-white p-6 rounded-xl shadow-2xl w-11/12 max-w-sm alert-modal-content border-t-4 border-blue-500 relative">
-            <span onclick="closeModal('status_alert_modal')" class="absolute top-2 right-4 text-gray-400 hover:text-gray-800 cursor-pointer text-2xl">&times;</span>
-            <div id="alert_message_container" class="mt-2">
-                <!-- El mensaje de la alerta se insertará aquí -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Firebase SDK Imports -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, query, addDoc, getDocs, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // --- Variables de Firebase y Estado ---
-        let db;
-        let auth;
-        let userId = 'anonimo_temporal';
-        let appId = 'default-app-id';
-        
-        // --- CONSTANTES CRÍTICAS DE LA COLECCIÓN DE BODEGUEROS Y PEDIDOS (¡VERIFICAR ESTO!) ---
-        const BODEGUEROS_COLLECTION_NAME = 'bodegueros'; 
-        const BODEGUERO_NAME_FIELD = 'nombre'; 
-        const ORDERS_COLLECTION_NAME = 'pedidos_despachos'; 
-        const WORKER_ASSIGNMENT_FIELD = 'bodeguero_asignado'; 
-        // -------------------------------------------------------------------------------------
-
-        const MAX_ASSIGNMENTS = 10; // Capacidad máxima para la lógica de color
-
-        // Estado global para guardar los datos
-        let knownBodegueros = []; // Lista maestra de nombres
-        let currentOrders = [];   // Lista de documentos de pedidos activos
-
-        // 🚨 ACTIVA EL LOGGING DE DEBUG DE FIRESTORE 🚨
-        setLogLevel('debug');
-
-
-        // Función para actualizar el mensaje de carga
-        function updateLoadingMessage(message, error = false) {
-            const loadingMessageElement = document.getElementById('loading-message');
-            if (loadingMessageElement) {
-                loadingMessageElement.textContent = message;
-                loadingMessageElement.classList.toggle('text-red-500', error);
-                loadingMessageElement.classList.toggle('text-gray-500', !error);
-            }
-        }
-        
-        // --- Lógica de Inicialización (Simplificada) ---
-        
-        /**
-         * Inicializa Firebase, autentica al usuario y configura los listeners.
-         */
-        function setupApp() {
-            
-            const firebaseConfigRaw = window.__firebase_config;
-            const appIdRaw = window.__app_id;
-            const initialAuthToken = window.__initial_auth_token;
-
-            // Comprobación de variables críticas.
-            if (!appIdRaw || typeof appIdRaw === 'undefined' || 
-                !firebaseConfigRaw || typeof firebaseConfigRaw === 'undefined') {
-                
-                const errorMessage = "Error FATAL: La configuración de Canvas no está disponible.";
-                const debugInfo = `__app_id: ${appIdRaw ? 'Definido' : 'UNDEFINED/EMPTY'}. __firebase_config: ${firebaseConfigRaw ? 'Definido' : 'UNDEFINED/EMPTY'}.`;
-                
-                console.error(errorMessage, debugInfo);
-                updateLoadingMessage(`${errorMessage} Revisa F12. ${debugInfo}`, true);
-                return;
-            }
-            
-            try {
-                const firebaseConfig = JSON.parse(firebaseConfigRaw);
-                appId = appIdRaw;
-
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                // Mostrar datos de depuración
-                document.getElementById('app_id_display').textContent = appId;
-                document.getElementById('max_assignments_display').textContent = MAX_ASSIGNMENTS;
-                document.getElementById('bodegueros_col_display').textContent = `/artifacts/${appId}/public/data/${BODEGUEROS_COLLECTION_NAME}`;
-                document.getElementById('orders_col_display').textContent = `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`;
-
-                updateLoadingMessage("Configuración cargada. Intentando autenticar al usuario...");
-
-                // Manejo de autenticación
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('user_id_display').textContent = userId;
-                        updateLoadingMessage("Usuario autenticado. Cargando datos de Firestore...");
-                        setupFirestoreListeners(); // Inicia la escucha de datos
-                    } else {
-                        // Intento de autenticación. Si falla, el listener onSnapshot fallará con error de permiso.
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken).catch(e => {
-                                console.error("Error signing in with custom token:", e);
-                                signInAnonymously(auth);
-                            });
-                        } else {
-                            await signInAnonymously(auth); 
-                        }
-                    }
-                });
-
-            } catch (error) {
-                console.error("Error al inicializar o configurar la aplicación:", error);
-                updateLoadingMessage("Error al conectar con la base de datos. (Ver consola)", true);
-            }
-        }
-        
-        // Llamar a la función de inicialización inmediatamente.
-        setupApp();
-
-
-        // --- Funciones de Lógica de Carga y Agregación (Sin cambios) ---
-
-        /**
-         * Determina las clases de Tailwind para el color y el texto basado en la carga.
-         */
-        function getLoadColorClasses(count) {
-            const loadRatio = count / MAX_ASSIGNMENTS;
-
-            if (count <= 0) return 'bg-gray-200 text-gray-700'; 
-            
-            if (loadRatio < 0.3) return 'bg-green-500 text-white';
-            if (loadRatio < 0.7) return 'bg-yellow-500 text-yellow-900';
-            return 'bg-red-500 text-white'; 
-        }
-
-        /**
-         * Determina el ancho de la barra de carga.
-         */
-        function getLoadBarWidth(count) {
-            let percentage = (count / MAX_ASSIGNMENTS) * 100;
-            if (percentage > 100) percentage = 100;
-            if (percentage < 0) percentage = 0;
-            return `${percentage.toFixed(0)}%`;
-        }
-        
-        /**
-         * Agrupa los pedidos activos por bodeguero.
-         */
-        function aggregateBodegueroLoad(orders) {
-            const loadMap = new Map();
-            orders.forEach(doc => {
-                const workerName = doc.data[WORKER_ASSIGNMENT_FIELD]; 
-
-                if (workerName && typeof workerName === 'string' && workerName.trim() !== '') {
-                    if (!loadMap.has(workerName)) {
-                        loadMap.set(workerName, { count: 0, activeOrderIds: [] });
-                    }
-                    const workerData = loadMap.get(workerName);
-                    workerData.count++;
-                    workerData.activeOrderIds.push(doc.id);
-                }
-            });
-            return loadMap;
-        }
-
-        /**
-         * Combina la lista maestra de bodegueros con la carga actual.
-         */
-        function createFullBodeguerosList(loadMap) {
-            const finalBodegueros = knownBodegueros.map(name => {
-                const loadData = loadMap.get(name) || { count: 0, activeOrderIds: [] };
-                return {
-                    name: name,
-                    assignedCount: loadData.count,
-                    activeOrderIds: loadData.activeOrderIds
-                };
-            });
-
-            loadMap.forEach((data, name) => {
-                if (!knownBodegueros.includes(name)) {
-                    finalBodegueros.push({
-                        name: name,
-                        assignedCount: data.count,
-                        activeOrderIds: data.activeOrderIds
-                    });
-                }
-            });
-
-            finalBodegueros.sort((a, b) => a.name.localeCompare(b.name));
-            return finalBodegueros;
-        }
-
-
-        // --- Funciones de UI y Renderizado (Sin cambios) ---
-
-        /**
-         * Renderiza la lista completa de bodegueros.
-         */
-        function renderBodegueros(bodeguerosList) {
-            const listContainer = document.getElementById('bodegueros_list');
-            
-            if (!listContainer) return;
-            
-            updateLoadingMessage("Carga de datos actualizada.", false);
-            
-            listContainer.innerHTML = ''; // Limpiar el contenedor
-
-            if (bodeguerosList.length === 0) {
-                listContainer.innerHTML = `<p class="text-center text-gray-500 p-4 font-semibold">
-                    No se encontraron bodegueros.
-                    <br>Verifique las colecciones 
-                    <code class="bg-gray-200 p-1 rounded text-sm">${BODEGUEROS_COLLECTION_NAME}</code>
-                    y <code class="bg-gray-200 p-1 rounded text-sm">${ORDERS_COLLECTION_NAME}</code>.
-                </p>`;
-                return;
-            }
-
-            bodeguerosList.forEach(worker => {
-                const name = worker.name;
-                const displayCount = Math.max(0, worker.assignedCount);
-                const firstOrderId = worker.activeOrderIds.length > 0 ? worker.activeOrderIds[0] : null;
-
-                const loadClasses = getLoadColorClasses(displayCount);
-                const barWidth = getLoadBarWidth(displayCount);
-                
-                const cardHtml = `
-                    <div class="bodeguero-card bg-gray-50 p-4 rounded-xl shadow-sm hover:shadow-md transition duration-200 border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center">
-                        
-                        <!-- Info y Barra de Carga -->
-                        <div class="flex-grow w-full md:w-auto mb-3 md:mb-0">
-                            <div class="flex items-center mb-1">
-                                <i class="fas fa-user-tag text-gray-500 mr-2"></i>
-                                <span class="text-lg font-bold text-gray-800">${name}</span>
-                            </div>
-                            <div class="text-sm text-gray-600 mb-2">
-                                Despachos Asignados: 
-                                <span class="text-xl font-extrabold ${loadClasses} p-1 rounded">${displayCount}</span>
-                            </div>
-                            
-                            <!-- Indicador de Carga (Barra de Progreso) -->
-                            <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-1">
-                                <div class="load-indicator h-full rounded-full ${loadClasses}" style="width: ${barWidth};"></div>
-                            </div>
-                        </div>
-
-                        <!-- Botones de Acción (Simulan la acción del otro sistema, manteniendo la funcionalidad de prueba) -->
-                        <div class="flex flex-wrap gap-2 justify-end w-full md:w-auto">
-                            <button onclick="addAssignment('${name}')" 
-                                class="flex items-center px-3 py-2 text-sm bg-blue-500 text-white rounded-lg shadow-sm hover:bg-blue-600 transition duration-150"
-                                title="Simula que el sistema de pedidos le asigna un nuevo despacho a ${name}">
-                                <i class="fas fa-plus mr-1"></i> Asignar
-                            </button>
-                            <button onclick="completeAssignment('${firstOrderId}', '${name}')" 
-                                class="flex items-center px-3 py-2 text-sm bg-green-500 text-white rounded-lg shadow-sm hover:bg-green-600 transition duration-150 ${!firstOrderId ? 'opacity-50 cursor-not-allowed' : ''}"
-                                ${!firstOrderId ? 'disabled' : ''}
-                                title="${firstOrderId ? 'Simula que se completa un despacho y se elimina el pedido' : 'No hay pedidos activos para despachar'}">
-                                <i class="fas fa-check mr-1"></i> Despachar
-                            </button>
-                        </div>
-                    </div>
-                `;
-                listContainer.insertAdjacentHTML('beforeend', cardHtml);
-            });
-        }
-
-
-        // --- Funciones de Firestore (Monitor y Simulador de Acción) ---
-
-        /**
-         * Configura el listener para la lista maestra de bodegueros.
-         */
-        function fetchBodegueros() {
-            if (!db || !appId) return; 
-            
-            const collectionRef = collection(db, `/artifacts/${appId}/public/data/${BODEGUEROS_COLLECTION_NAME}`);
-            
-            onSnapshot(collectionRef, (snapshot) => {
-                const names = [];
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
-                    const name = data[BODEGUERO_NAME_FIELD]; 
-                    if (name && typeof name === 'string' && name.trim() !== '') {
-                        names.push(name.trim());
-                    }
-                });
-                
-                knownBodegueros = names; 
-                
-                const loadMap = aggregateBodegueroLoad(currentOrders);
-                const bodeguerosList = createFullBodeguerosList(loadMap);
-                renderBodegueros(bodeguerosList);
-
-            }, (error) => {
-                // 🚨 Este es el punto de fallo más probable por permisos 🚨
-                console.error("Error al escuchar bodegueros (Lista Maestra):", error);
-                updateLoadingMessage(`ERROR: No se pudo cargar la Lista Maestra de Bodegueros. (Ver consola: ${error.code})`, true);
-                showAlert(`Error de conexión o permisos. Colección: ${BODEGUEROS_COLLECTION_NAME}. Revisa F12.`, 'error');
-            });
-        }
-
-
-        /**
-         * Configura el listener en tiempo real para la colección de pedidos/despachos (la carga).
-         */
-        function setupFirestoreListeners() {
-            if (!db || !appId) return; 
-
-            // 1. Inicia la escucha de la lista maestra
-            fetchBodegueros();
-
-            // 2. Inicia la escucha de los pedidos activos
-            const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
-            const q = query(collectionRef);
-
-            onSnapshot(q, (snapshot) => {
-                currentOrders = []; 
-                snapshot.forEach((doc) => {
-                    currentOrders.push({ id: doc.id, data: doc.data() });
-                });
-
-                const loadMap = aggregateBodegueroLoad(currentOrders);
-                const bodeguerosList = createFullBodeguerosList(loadMap);
-                renderBodegueros(bodeguerosList);
-
-            }, (error) => {
-                // 🚨 Este es el punto de fallo más probable por permisos 🚨
-                console.error("Error al escuchar cambios en Firestore (Pedidos):", error);
-                updateLoadingMessage(`ERROR: No se pudo cargar la Carga de Pedidos. (Ver consola: ${error.code})`, true);
-                showAlert(`Error de conexión o permisos. Colección: ${ORDERS_COLLECTION_NAME}. Revisa F12.`, 'error');
-            });
-        }
-
-        /**
-         * SIMULADOR: Crea un nuevo documento de pedido en la colección de órdenes.
-         */
-        window.addAssignment = async (workerName) => {
-            if (!db || !appId) {
-                showAlert("La conexión a Firebase no está lista.", 'warning');
-                return;
-            }
-            try {
-                const collectionRef = collection(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`);
-                await addDoc(collectionRef, {
-                    [WORKER_ASSIGNMENT_FIELD]: workerName, 
-                    pedidoId: `PED-${Date.now().toString().slice(-6)}`, 
-                    status: 'activo',
-                    timestamp: new Date().toISOString(),
-                    assignedBy: userId 
-                });
-                showAlert(`Pedido asignado a ${workerName}.`, 'success');
-            } catch (e) {
-                console.error("Error al simular la asignación de pedido: ", e);
-                showAlert("Error al simular la asignación. Revisa F12.", 'error');
-            }
-        };
-
-        /**
-         * SIMULADOR: Elimina un documento de pedido de la colección de órdenes.
-         */
-        window.completeAssignment = async (orderId, workerName) => {
-            if (!db || !appId) {
-                 showAlert("La conexión a Firebase no está lista.", 'warning');
-                 return;
-            }
-            if (!orderId) {
-                showAlert(`No hay pedidos activos de ${workerName} para despachar.`, 'info');
-                return;
-            }
-            
-            try {
-                const docRef = doc(db, `/artifacts/${appId}/public/data/${ORDERS_COLLECTION_NAME}`, orderId);
-                await deleteDoc(docRef);
-                showAlert(`Pedido de ${workerName} despachado.`, 'success');
-
-            } catch (e) {
-                console.error("Error al simular el despacho de pedido: ", e);
-                showAlert("Error al simular el despacho. Revisa F12.", 'error');
-            }
-        };
-
-        // --- Funciones de Modal (Sin cambios) ---
-        function showAlert(message, type = 'info') {
-            const modal = document.getElementById('status_alert_modal');
-            const container = document.getElementById('alert_message_container');
-            let icon = '';
-            let color = 'blue';
-
-            switch (type) {
-                case 'success':
-                    icon = '<i class="fas fa-check-circle text-green-500 text-2xl mr-2"></i>';
-                    color = 'green';
-                    break;
-                case 'error':
-                    icon = '<i class="fas fa-times-circle text-red-500 text-2xl mr-2"></i>';
-                    color = 'red';
-                    break;
-                case 'warning':
-                    icon = '<i class="fas fa-exclamation-triangle text-yellow-500 text-2xl mr-2"></i>';
-                    color = 'yellow';
-                    break;
-                default:
-                    icon = '<i class="fas fa-info-circle text-blue-500 text-2xl mr-2"></i>';
-                    color = 'blue';
-            }
-            
-            if (!modal || !container) {
-                console.error("No se encontraron los elementos de la modal de alerta.");
-                return;
-            }
-
-            const alertContent = modal.querySelector('.alert-modal-content');
-            if (alertContent) {
-                alertContent.style.borderTopColor = color === 'blue' ? '#3B82F6' : (color === 'green' ? '#10B981' : (color === 'red' ? '#EF4444' : '#F59E0B'));
-            }
-
-            container.innerHTML = `
-                <div class="flex items-start">
-                    ${icon}
-                    <p class="text-gray-700 font-medium">${message}</p>
-                </div>
-            `;
-            modal.style.display = 'flex';
-
-            setTimeout(() => {
-                window.closeModal('status_alert_modal');
-            }, 3000);
-        }
-
-        window.closeModal = (modalId) => {
-            const modal = document.getElementById(modalId);
-            if (modal) {
-                modal.style.display = 'none';
-            }
-        }
-        // Fin de Funciones de Modal
-    </script>
+<body>
+  <h1>Panel de Bodega</h1>
+  <div id="panel" class="grid"></div>
 </body>
 </html>
