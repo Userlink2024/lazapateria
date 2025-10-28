@@ -65,7 +65,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script>
-    // Configuración de Firebase
+    // 🔧 Configuración Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
       authDomain: "lazapateria-c4157.firebaseapp.com",
@@ -79,56 +79,49 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // 🔹 Cache temporal para mapear IDs de usuario a nombre completo
-    const usuariosMap = {};
-
-    async function precargarUsuarios() {
-      const snap = await db.collection('usuarios').get();
-      snap.forEach(doc => {
-        const data = doc.data();
-        usuariosMap[doc.id] = data.nombreCompleto || doc.id;
-        usuariosMap[data.nombreCompleto] = data.nombreCompleto; // soporte por nombre directo
-      });
-    }
-
+    // 🧭 Función principal
     async function cargarPanelBodega() {
       const contenedor = document.getElementById('panel');
       contenedor.innerHTML = '<p>Cargando información...</p>';
 
-      await precargarUsuarios();
-
+      // Escucha en tiempo real los pedidos
       db.collection('pedidos').onSnapshot(snapshot => {
         const conteo = {};
 
         snapshot.forEach(doc => {
           const data = doc.data();
-          if (!data.despachado && data.bodegueros) {
-            let lista = [];
+          // Ignorar pedidos despachados
+          if (data.despachado === true) return;
 
-            if (Array.isArray(data.bodegueros)) {
-              lista = data.bodegueros;
-            } else if (typeof data.bodegueros === 'string') {
-              lista = [data.bodegueros];
+          // Buscar cualquier campo que contenga la palabra "bodeguero"
+          const campos = Object.keys(data).filter(k => k.toLowerCase().includes('bodeguero'));
+          campos.forEach(campo => {
+            const valor = data[campo];
+            if (Array.isArray(valor)) {
+              valor.forEach(v => {
+                if (typeof v === 'string' && v.trim() !== '') {
+                  conteo[v] = (conteo[v] || 0) + 1;
+                }
+              });
+            } else if (typeof valor === 'string' && valor.trim() !== '') {
+              conteo[valor] = (conteo[valor] || 0) + 1;
             }
-
-            lista.forEach(b => {
-              // Convertir ID a nombre si es necesario
-              const nombre = usuariosMap[b] || b;
-              conteo[nombre] = (conteo[nombre] || 0) + 1;
-            });
-          }
+          });
         });
 
-        // Renderizar solo los bodegueros con pedidos
+        // Mostrar solo bodegueros con despachos
         contenedor.innerHTML = '';
+        const nombres = Object.keys(conteo);
 
-        const nombresOrdenados = Object.keys(conteo).sort((a, b) => conteo[b] - conteo[a]);
-        if (nombresOrdenados.length === 0) {
+        if (nombres.length === 0) {
           contenedor.innerHTML = '<p style="text-align:center;color:#666;">No hay despachos activos asignados a bodegueros.</p>';
           return;
         }
 
-        nombresOrdenados.forEach(nombre => {
+        // Ordenar por cantidad de despachos
+        nombres.sort((a, b) => conteo[b] - conteo[a]);
+
+        nombres.forEach(nombre => {
           const cantidad = conteo[nombre];
           let color = 'verde';
           if (cantidad >= 4 && cantidad <= 5) color = 'naranja';
