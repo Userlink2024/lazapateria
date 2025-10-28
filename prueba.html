@@ -97,9 +97,9 @@
       background-color: #fff;
       border-radius: 12px;
       padding: 20px;
-      width: 90%;
-      max-width: 850px;
-      max-height: 80%;
+      width: 95%;
+      max-width: 900px;
+      max-height: 85%;
       overflow-y: auto;
       box-shadow: 0 6px 15px rgba(0,0,0,0.3);
     }
@@ -122,6 +122,7 @@
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
+      font-size: 0.95em;
     }
     th, td {
       padding: 8px;
@@ -167,10 +168,8 @@
           cacheRegistros.push({ id: doc.id, ...data });
 
           const despachado = data.despachado === true || data.despachado === "si" || data.despachado === "despachado";
-
-          // según el modo
-          if (modoHistorial && !despachado) return; // si estamos en historial, queremos solo despachados
-          if (!modoHistorial && despachado) return; // si estamos en panel normal, queremos solo activos
+          if (modoHistorial && !despachado) return;
+          if (!modoHistorial && despachado) return;
 
           if (Array.isArray(data.bodegueros_encargados)) {
             data.bodegueros_encargados.forEach(nombre => {
@@ -242,6 +241,15 @@
         const paresField = Object.keys(r).find(k => k.toLowerCase().includes('pares'));
         const pares = Number(r[paresField] || 0);
 
+        // 🕒 Buscar un campo de fecha/hora de asignación
+        const fechaCampo = Object.keys(r).find(k => k.toLowerCase().includes('fecha') || k.toLowerCase().includes('hora'));
+        let fechaAsignacion = '—';
+        if (fechaCampo && r[fechaCampo]) {
+          const fechaVal = r[fechaCampo];
+          if (fechaVal.toDate) fechaAsignacion = fechaVal.toDate().toLocaleString();
+          else fechaAsignacion = new Date(fechaVal).toLocaleString();
+        }
+
         totalValor += valor;
         totalPares += pares;
 
@@ -250,13 +258,14 @@
                   <td>${asesor}</td>
                   <td>${valor.toLocaleString('es-CO')}</td>
                   <td>${pares}</td>
+                  <td>${fechaAsignacion}</td>
                 </tr>`;
       }).join('');
 
       body.innerHTML = `
         <table>
           <thead>
-            <tr><th>Cliente</th><th>Asesor</th><th>Valor</th><th>Pares</th></tr>
+            <tr><th>Cliente</th><th>Asesor</th><th>Valor</th><th>Pares</th><th>Hora Asignación</th></tr>
           </thead>
           <tbody>${filas}</tbody>
         </table>
