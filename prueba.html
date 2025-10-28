@@ -16,6 +16,26 @@
       text-align: center;
       color: #2e7d32;
     }
+    .top-bar {
+      display: flex;
+      justify-content: center;
+      margin-top: 10px;
+      margin-bottom: 20px;
+    }
+    .btn {
+      background-color: #2e7d32;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      font-size: 0.95em;
+      margin: 0 5px;
+    }
+    .btn:hover {
+      background-color: #256628;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -28,6 +48,7 @@
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
       padding: 20px;
       text-align: center;
+      cursor: pointer;
       transition: transform 0.2s ease;
     }
     .card:hover {
@@ -58,6 +79,58 @@
       color: #777;
       margin-top: 10px;
     }
+
+    /* === Modal === */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 100;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background-color: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      width: 90%;
+      max-width: 850px;
+      max-height: 80%;
+      overflow-y: auto;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .modal-header h2 {
+      margin: 0;
+      color: #2e7d32;
+    }
+    .close {
+      cursor: pointer;
+      font-size: 1.5em;
+      color: #333;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #f8f8f8;
+    }
   </style>
 
   <!-- Firebase -->
@@ -65,7 +138,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script>
-    // 🔧 Configuración Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
       authDomain: "lazapateria-c4157.firebaseapp.com",
@@ -79,28 +151,27 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    let cacheRegistros = [];
+    let modoHistorial = false;
+
     async function cargarPanelBodega() {
       const contenedor = document.getElementById('panel');
       contenedor.innerHTML = '<p>Cargando información...</p>';
 
-      // 🔍 Usamos una "collectionGroup" para leer TODAS las subcolecciones "registros"
       db.collectionGroup('registros').onSnapshot(snapshot => {
         const conteo = {};
+        cacheRegistros = [];
 
         snapshot.forEach(doc => {
           const data = doc.data();
+          cacheRegistros.push({ id: doc.id, ...data });
 
-          // Considerar activo si NO está despachado
-          const noDespachado =
-            data.despachado === false ||
-            data.despachado === "no" ||
-            data.despachado === "pendiente" ||
-            data.despachado === undefined ||
-            data.despachado === null;
+          const despachado = data.despachado === true || data.despachado === "si" || data.despachado === "despachado";
 
-          if (!noDespachado) return;
+          // según el modo
+          if (modoHistorial && !despachado) return; // si estamos en historial, queremos solo despachados
+          if (!modoHistorial && despachado) return; // si estamos en panel normal, queremos solo activos
 
-          // Contar bodegueros_encargados
           if (Array.isArray(data.bodegueros_encargados)) {
             data.bodegueros_encargados.forEach(nombre => {
               if (typeof nombre === "string" && nombre.trim() !== "") {
@@ -110,39 +181,120 @@
           }
         });
 
-        contenedor.innerHTML = '';
-        const nombres = Object.keys(conteo);
-
-        if (nombres.length === 0) {
-          contenedor.innerHTML = '<p style="text-align:center;color:#666;">No hay despachos activos asignados a bodegueros.</p>';
-          return;
-        }
-
-        nombres.sort((a, b) => conteo[b] - conteo[a]);
-
-        nombres.forEach(nombre => {
-          const cantidad = conteo[nombre];
-          let color = 'verde';
-          if (cantidad >= 4 && cantidad <= 5) color = 'naranja';
-          if (cantidad > 5) color = 'rojo';
-
-          const card = document.createElement('div');
-          card.className = 'card';
-          card.innerHTML = `
-            <div class="nombre">${nombre}</div>
-            <div class="contador ${color}">${cantidad}</div>
-            <div class="ultimo-update">Actualizado: ${new Date().toLocaleTimeString()}</div>
-          `;
-          contenedor.appendChild(card);
-        });
+        renderizarPanel(contenedor, conteo);
       });
+    }
+
+    function renderizarPanel(contenedor, conteo) {
+      contenedor.innerHTML = '';
+      const nombres = Object.keys(conteo);
+
+      if (nombres.length === 0) {
+        contenedor.innerHTML = '<p style="text-align:center;color:#666;">No hay registros en este momento.</p>';
+        return;
+      }
+
+      nombres.sort((a,b) => conteo[b] - conteo[a]);
+
+      nombres.forEach(nombre => {
+        const cantidad = conteo[nombre];
+        let color = 'verde';
+        if (cantidad >= 4 && cantidad <= 5) color = 'naranja';
+        if (cantidad > 5) color = 'rojo';
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="nombre">${nombre}</div>
+          <div class="contador ${color}">${cantidad}</div>
+          <div class="ultimo-update">Actualizado: ${new Date().toLocaleTimeString()}</div>
+        `;
+        card.onclick = () => mostrarDetalles(nombre);
+        contenedor.appendChild(card);
+      });
+    }
+
+    function mostrarDetalles(nombre) {
+      const modal = document.getElementById('detalleModal');
+      const body = document.getElementById('modalBody');
+      modal.style.display = 'flex';
+      body.innerHTML = '<p>Cargando información...</p>';
+
+      const registrosBodeguero = cacheRegistros.filter(r => {
+        const despachado = r.despachado === true || r.despachado === "si" || r.despachado === "despachado";
+        if (modoHistorial && !despachado) return false;
+        if (!modoHistorial && despachado) return false;
+        return Array.isArray(r.bodegueros_encargados) && r.bodegueros_encargados.includes(nombre);
+      });
+
+      if (registrosBodeguero.length === 0) {
+        body.innerHTML = `<p style="text-align:center;color:#555;">No hay ${modoHistorial ? 'registros despachados' : 'despachos activos'} para ${nombre}.</p>`;
+        return;
+      }
+
+      let totalValor = 0;
+      let totalPares = 0;
+
+      const filas = registrosBodeguero.map(r => {
+        const cliente = r.cliente || '—';
+        const asesor = r.asesor || r.asesor_asignado || '—';
+        const valor = Number(r.valor_total || r.valor || 0);
+        const paresField = Object.keys(r).find(k => k.toLowerCase().includes('pares'));
+        const pares = Number(r[paresField] || 0);
+
+        totalValor += valor;
+        totalPares += pares;
+
+        return `<tr>
+                  <td>${cliente}</td>
+                  <td>${asesor}</td>
+                  <td>${valor.toLocaleString('es-CO')}</td>
+                  <td>${pares}</td>
+                </tr>`;
+      }).join('');
+
+      body.innerHTML = `
+        <table>
+          <thead>
+            <tr><th>Cliente</th><th>Asesor</th><th>Valor</th><th>Pares</th></tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+        <p><strong>Total valor:</strong> ${totalValor.toLocaleString('es-CO')} — <strong>Total pares:</strong> ${totalPares}</p>
+      `;
+    }
+
+    function cerrarModal() {
+      document.getElementById('detalleModal').style.display = 'none';
+    }
+
+    function cambiarModo(historial) {
+      modoHistorial = historial;
+      document.getElementById('tituloPanel').innerText = historial ? 'Historial de Bodega' : 'Panel de Bodega';
+      cargarPanelBodega();
     }
 
     window.onload = cargarPanelBodega;
   </script>
 </head>
 <body>
-  <h1>Panel de Bodega</h1>
+  <h1 id="tituloPanel">Panel de Bodega</h1>
+  <div class="top-bar">
+    <button class="btn" onclick="cambiarModo(false)">📦 Despachos Activos</button>
+    <button class="btn" onclick="cambiarModo(true)">🕒 Historial</button>
+  </div>
+
   <div id="panel" class="grid"></div>
+
+  <!-- Modal -->
+  <div id="detalleModal" class="modal" onclick="if(event.target===this)cerrarModal()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Detalles del Bodeguero</h2>
+        <span class="close" onclick="cerrarModal()">&times;</span>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
 </body>
 </html>
