@@ -75,10 +75,27 @@
     .naranja { background-color: #ffc107; }
     .rojo { background-color: #dc3545; }
     .ultimo-update {
-      font-size: 0.8em;
-      color: #777;
+      font-size: 0.9em;
+      color: #333;
       margin-top: 10px;
     }
+
+    /* Animación de brillo para colores y signo de admiración */
+    @keyframes brillo-suave {
+      0% { box-shadow: 0 0 5px rgba(255,255,255,0.3); }
+      50% { box-shadow: 0 0 15px rgba(255,255,255,0.6); }
+      100% { box-shadow: 0 0 5px rgba(255,255,255,0.3); }
+    }
+
+    .contador.animated {
+      animation: brillo-suave 1.5s infinite alternate;
+    }
+
+    .estado.animated {
+      animation: brillo-suave 1.5s infinite alternate;
+      font-weight: 700;
+    }
+
     .modal {
       display: none;
       position: fixed;
@@ -131,7 +148,6 @@
       background-color: #f8f8f8;
     }
   </style>
-
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -218,22 +234,33 @@
       nombres.forEach(nombre => {
         const { totalDespachos, totalPares } = conteo[nombre];
         const promedio = totalPares / totalDespachos;
+
+        // Lógica de colores: priman los pares
         let color = 'verde';
-        if (promedio >= 101 && promedio <= 120) color = 'naranja';
-        if (promedio > 120) color = 'rojo';
+        if (totalPares >= 123) color = 'rojo';
+        else if (totalPares >= 101) color = 'naranja';
+        else {
+          if (totalDespachos >= 23) color = 'rojo';
+          else if (totalDespachos >= 16) color = 'naranja';
+        }
+
+        const estadoText = color === 'verde' ? 'Disponible' :
+                           color === 'naranja' ? 'Ocupado' :
+                           'Colapsado !';
 
         const card = document.createElement('div');
         card.className = 'card';
+
         card.innerHTML = `
           <div class="nombre">${nombre}</div>
-          <div class="contador ${color}">${totalDespachos}</div>
-          <div class="ultimo-update">Promedio: ${promedio.toFixed(1)} pares/despacho</div>
+          <div class="contador ${color} ${color !== 'verde' ? 'animated' : ''}">${totalDespachos}</div>
+          <div class="ultimo-update estado ${color !== 'verde' ? 'animated' : ''}">${estadoText}</div>
         `;
+
         card.onclick = () => mostrarDetalles(nombre);
         contenedor.appendChild(card);
       });
     }
-
     function mostrarDetalles(nombre) {
       bodegueroActual = nombre;
       const modal = document.getElementById('detalleModal');
@@ -373,7 +400,11 @@
     }
 
     function cerrarModal() { document.getElementById('detalleModal').style.display = 'none'; }
-    function cambiarModo(historial) { modoHistorial = historial; document.getElementById('tituloPanel').innerText = historial ? 'Historial de Bodega' : 'Panel de Bodega'; cargarPanelBodega(); }
+    function cambiarModo(historial) { 
+      modoHistorial = historial; 
+      document.getElementById('tituloPanel').innerText = historial ? 'Historial de Bodega' : 'Panel de Bodega'; 
+      cargarPanelBodega(); 
+    }
 
     window.onload = cargarPanelBodega;
   </script>
