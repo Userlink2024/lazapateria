@@ -276,7 +276,28 @@ $('user-info').textContent = usuario.usuario;
 $('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
 
 let sessionRole = 'Administrativo';
-let managerPass = localStorage.getItem('managerPass') || '0000';
+// *** MODIFICACIÓN: La clave de Gerente ahora se gestiona desde Firebase ***
+let managerPass = '0000'; // Valor predeterminado hasta que se cargue
+const settingsRef = db.collection('settings').doc('managerPassword');
+
+function loadManagerPass() {
+    settingsRef.onSnapshot(doc => {
+        if (doc.exists && doc.data().password) {
+            managerPass = doc.data().password;
+        } else {
+            // Si el documento no existe, lo creamos con una clave por defecto
+            if (!doc.exists) {
+                settingsRef.set({ password: '0000' }).catch(e => console.error("Error creando clave por defecto:", e));
+            }
+            managerPass = '0000'; 
+        }
+    }, error => {
+        console.error("Error al cargar la clave de gerente:", error);
+    });
+}
+loadManagerPass();
+// *************************************************************************
+
 let selectedAccountId = null;
 let selectedAccountName = "SinNombre";
 let currentConsignsSnapshot = []; 
@@ -499,11 +520,19 @@ $('options-cancel').addEventListener('click', ()=> $('modal-options').classList.
 $('gear-change').addEventListener('click', ()=> $('gear-panel').classList.toggle('hidden'));
 $('cancel-gear').addEventListener('click', ()=> $('gear-panel').classList.add('hidden'));
 
-$('save-manager-pass').addEventListener('click', ()=>{
-  const p = $('new-manager-pass').value.trim(); if(!p){ showModal('Atención', 'Ingrese nueva clave.', false); return; }
-  managerPass = p; localStorage.setItem('managerPass', managerPass); 
-  showModal('Éxito', 'Clave actualizada.', false); 
-  $('gear-panel').classList.add('hidden');
+$('save-manager-pass').addEventListener('click', async ()=>{
+  const p = $('new-manager-pass').value.trim(); 
+  if(!p){ showModal('Atención', 'Ingrese nueva clave.', false); return; }
+  
+  try {
+    // *** MODIFICACIÓN: Guardar la nueva clave en Firebase ***
+    await settingsRef.set({ password: p }, { merge: true }); 
+    managerPass = p; // Actualiza el estado local inmediatamente
+    showModal('Éxito', 'Clave actualizada en el sistema.', false); 
+    $('gear-panel').classList.add('hidden');
+  } catch(e) {
+    showModal('Error', 'Error al guardar la clave: ' + e.message, false);
+  }
 });
 
 $('options-continue').addEventListener('click', ()=>{
