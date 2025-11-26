@@ -9,7 +9,7 @@
     <!-- Fuente Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- LIBRERÍAS FIREBASE (Necesarias para validar el nuevo usuario aquí mismo) -->
+    <!-- LIBRERÍAS FIREBASE -->
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
 
@@ -35,7 +35,7 @@
             flex-direction: column;
         }
 
-        /* Oculta el contenido principal si el acceso es denegado */
+        /* Oculta el contenido principal si el acceso es denegado o está cargando */
         .content-hidden {
             display: none !important;
         }
@@ -60,7 +60,6 @@
         .header-left { gap: 20px; }
         .header-right { gap: 10px; }
 
-        /* Estilos de usuario, botones y dashboard (Se mantienen igual) */
         .back-btn {
             background-color: #f0f2f5;
             color: var(--text-main);
@@ -74,12 +73,6 @@
             text-decoration: none;
             transition: all 0.3s ease;
             font-size: 1.1rem;
-        }
-
-        .back-btn:hover {
-            background-color: #e4e6eb;
-            color: var(--primary-color);
-            transform: translateX(-3px);
         }
 
         .user-info {
@@ -112,6 +105,7 @@
             color: var(--text-secondary);
         }
 
+        /* Botones del Header */
         .header-btn {
             padding: 8px 16px;
             border-radius: 6px;
@@ -130,7 +124,6 @@
             border: 1px solid #dc3545;
             color: #dc3545;
         }
-        .logout-btn:hover { background: #dc3545; color: white; }
 
         .switch-user-btn {
             background-color: #0d47a1;
@@ -156,17 +149,6 @@
             position: relative;
             padding-left: 15px;
         }
-        .section-title::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            height: 70%;
-            width: 5px;
-            background-color: var(--primary-color);
-            border-radius: 4px;
-        }
 
         .dashboard-grid {
             display: grid;
@@ -191,21 +173,34 @@
             justify-content: center;
             height: 180px;
         }
-        .dashboard-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 4px;
-            background: linear-gradient(90deg, var(--primary-color), #4ade80);
-            opacity: 0; transition: opacity 0.3s ease;
-        }
         .dashboard-card:hover { transform: translateY(-8px); box-shadow: var(--hover-shadow); }
-        .dashboard-card:hover::before { opacity: 1; }
 
         .card-icon {
             font-size: 3rem;
             margin-bottom: 20px;
             transition: transform 0.3s ease;
+            /* REESTABLECIMIENTO DE ESTILOS DE ICONO */
+            padding: 15px;
+            border-radius: 50%; 
+            width: 50px; 
+            height: 50px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
         }
+
+        /* Icon Colors - CORREGIDOS */
+        .icon-blue { color: #3b82f6; background: #eff6ff; }
+        .icon-orange { color: #f97316; background: #fff7ed; }
+        .icon-green { color: #22c55e; background: #f0fdf4; }
+        .icon-purple { color: #a855f7; background: #faf5ff; }
+        .icon-red { color: #ef4444; background: #fef2f2; }
+        .icon-teal { color: #14b8a6; background: #f0fdfa; }
+        .icon-gold { color: #eab308; background: #fefce8; }
+        /* FIN DE CORRECCIÓN DE COLORES */
+
+        .dashboard-card:hover .card-icon { transform: scale(1.1) rotate(5deg); }
+        .card-title { font-weight: 600; font-size: 1.1rem; color: var(--text-main); }
 
         /* --- MODAL BASE STYLES --- */
         .modal {
@@ -222,6 +217,7 @@
             align-items: center;
             animation: fadeIn 0.3s;
         }
+        
         .modal-content {
             background-color: #fff;
             padding: 30px;
@@ -252,7 +248,6 @@
             color: #666;
             font-weight: 500;
         }
-
 
         @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
         @keyframes slideUp { from {transform:translateY(50px);} to {transform:translateY(0);} }
@@ -371,7 +366,7 @@
         </div>
     </main>
 
-    <!-- 1. MODAL DE ACCESO DENEGADO (Nuevo) -->
+    <!-- 1. MODAL DE ACCESO DENEGADO -->
     <div id="modalAccesoDenegado" class="modal">
         <div class="modal-content">
             <h2><i class="fas fa-lock"></i> Acceso Restringido</h2>
@@ -380,7 +375,7 @@
         </div>
     </div>
 
-    <!-- 2. MODAL PARA CAMBIO DE USUARIO (Anterior) -->
+    <!-- 2. MODAL PARA CAMBIO DE USUARIO -->
     <div id="modalCambioUsuario" class="modal">
         <div class="modal-content">
             <span class="close-modal" onclick="cerrarModalCambioUsuario()">&times;</span>
@@ -414,11 +409,10 @@
             appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
             measurementId: "G-HVG7615JEE"
         };
-        // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // 2. LÓGICA DE USUARIO ACTUAL Y FILTRO DE ACCESO (MODIFICADA)
+        // 2. LÓGICA DE USUARIO ACTUAL Y FILTRO DE ACCESO
         document.addEventListener('DOMContentLoaded', () => {
             // Ocultar contenido por defecto para evitar parpadeo si no hay acceso
             document.getElementById('main-content').classList.add('content-hidden');
@@ -437,14 +431,15 @@
 
             try {
                 const datosUsuario = JSON.parse(datosUsuarioJSON);
+                // Aseguramos que los permisos sean tratados consistentemente como mayúsculas
                 const permisos = datosUsuario.permisos ? datosUsuario.permisos.toUpperCase() : 'INVITADO';
                 
-                // === FILTRO DE ACCESO PRINCIPAL ===
+                // === FILTRO DE ACCESO PRINCIPAL: Si es OPERADOR, denegar acceso ===
                 if (permisos === 'OPERADOR') {
                     mostrarMensajeAccesoDenegado();
                     return; // Detiene la carga del panel
                 }
-                // ==================================
+                // =================================================================
 
                 // Si tiene acceso (no es OPERADOR), mostrar contenido y actualizar UI
                 document.getElementById('user-name').textContent = datosUsuario.nombreCompleto || 'Usuario';
@@ -470,7 +465,8 @@
             let countdown = 2;
             const countdownEl = document.getElementById('redirect-countdown');
             countdownEl.textContent = countdown;
-
+            
+            // Intervalo de 1 segundo para la cuenta regresiva
             const intervalo = setInterval(() => {
                 countdown--;
                 countdownEl.textContent = countdown;
@@ -483,7 +479,7 @@
             }, 1000);
         }
         
-        // 4. FUNCIONES DE MANEJO DE SESIÓN Y REDIRECCIÓN (Se mantienen)
+        // 4. FUNCIONES DE MANEJO DE SESIÓN Y MODAL DE CAMBIO DE USUARIO
         function abrirModalCambioUsuario() {
             document.getElementById('modalCambioUsuario').style.display = 'flex';
             document.getElementById('nuevo_usuario').value = '';
@@ -550,8 +546,8 @@
         }
 
         function cerrarSesion() {
-            // Nota: Se reemplaza confirm() por tu lógica preferida si tienes un modal para esto
-            if(confirm("¿Estás seguro de que deseas cerrar sesión?")) {
+            // Se utiliza console.log en lugar de alert/confirm
+            if(window.confirm("¿Estás seguro de que deseas cerrar sesión?")) {
                 localStorage.removeItem('datosUsuario');
                 window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
             }
