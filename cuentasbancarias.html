@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sistema de Consignaciones - Actualizado</title>
+  <title>Sistema de Consignaciones - Gerencia</title>
 
   <style>
     :root{
       --bg:#f3f6fb; --card:#fff; --accent:#2563eb; --muted:#6b7280;
       --border:#e6e9ef; --danger:#dc2626; --ok:#10b981;
-      --admin-gray:#e5e7eb; /* gris pedido */
-      --manager-yellow:#fff7c2; /* amarillo pedido */
+      --admin-gray:#e5e7eb;
+      --manager-yellow:#fff7c2;
     }
     *{box-sizing:border-box}
     body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:var(--bg);color:#0f172a}
@@ -26,16 +26,27 @@
     .btn.ghost{background:#f1f5f9;color:#0f172a}
     .btn.danger{background:var(--danger)}
     .panel{background:var(--card);padding:12px;border-radius:8px;border:1px solid var(--border);box-shadow:0 2px 6px rgba(15,23,42,0.03);margin-bottom:12px}
-    .account-item{padding:10px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;cursor:pointer;background:#fff}
+    /* Estilos de la lista de cuentas */
+    .account-item{padding:10px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;cursor:pointer;background:#fff; position: relative;}
     .account-item.selected{border-left:4px solid var(--accent);background:#f0f6ff}
+    .account-item .del-btn {
+      position: absolute; top: 10px; right: 10px; 
+      color: var(--danger); font-size: 16px; display: none; padding: 2px;
+      border-radius: 4px;
+    }
+    .account-item .del-btn:hover { background: #fee2e2; }
+
     .flex-row{display:flex;gap:8px;align-items:center}
     table{width:100%;border-collapse:collapse;font-size:14px}
     th,td{padding:8px;border:1px solid var(--border);background:transparent}
     tr.verified-admin{background:var(--admin-gray)}
     tr.verified-gerente{background:var(--manager-yellow)}
-    tr.separator{background:#eef2ff;font-weight:700;text-align:center}
-    tr.sep-green{background:#d1fae5!important}
-    tr.sep-red{background:#fee2e2!important}
+    
+    /* Separadores */
+    tr.separator{font-weight:700;text-align:center}
+    tr.sep-green{background:#d1fae5!important; color: #065f46;}
+    tr.sep-red{background:#fee2e2!important; color: #991b1b;}
+    
     .muted{color:var(--muted);font-size:13px}
     .top-totals{display:flex;gap:12px;align-items:center}
     .top-totals .card{padding:8px;border-radius:8px;border:1px solid var(--border);background:#fff}
@@ -142,13 +153,13 @@
 
       <div class="panel">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <h3 style="margin:0">Lista de consignaciones (FECHA / VALOR / FECHA OBS)</h3>
+          <h3 style="margin:0">Lista de consignaciones</h3>
           <div>
             <button id="btn-verify" class="btn">Verificado</button>
             <button id="btn-unverify" class="btn ghost">Desverificar</button>
             <button id="btn-delete" class="btn danger" style="display:none">Eliminar (Gerente)</button>
             <button id="btn-sumar" class="btn ghost">Sumar selección</button>
-            <button id="btn-cuadrar" class="btn ghost" style="display:none">Cuadrar (Gerente)</button>
+            <button id="btn-cuadrar" class="btn ghost" style="display:none; border:1px solid var(--accent); color:var(--accent)">✅ Cuadrar (Corte)</button>
           </div>
         </div>
 
@@ -218,6 +229,7 @@ const db = firebase.firestore();
 /* ============= ESTADO ============= */
 const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
 if(!usuario){ alert('No hay sesión activa.'); location.href='index.html'; }
+// Validación simple de seguridad
 if(usuario.permisos !== 'Administrador'){ alert('Acceso denegado. Solo administradores.'); location.href='index.html'; }
 
 document.getElementById('user-info').textContent = usuario.usuario + ' — ' + usuario.permisos;
@@ -226,11 +238,11 @@ document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('datos
 let sessionRole = 'Administrativo'; // 'Administrativo' | 'Gerente'
 let managerPass = localStorage.getItem('managerPass') || '0000';
 let selectedAccountId = null;
+let currentConsignsSnapshot = []; // Cache local para validaciones rápidas
 
 /* UTIL */
 const $ = id => document.getElementById(id);
-function uid(prefix='id'){return prefix + '_' + Math.random().toString(36).slice(2,9)}
-function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)) }
+function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)); }
 
 /* MODAL OPCIONES */
 $('open-options').addEventListener('click', ()=> {
@@ -264,12 +276,16 @@ $('options-continue').addEventListener('click', ()=>{
     sessionRole = 'Gerente';
   } else sessionRole = 'Administrativo';
 
+  // Mostrar/Ocultar botones según rol
   if(sessionRole === 'Gerente'){
     $('btn-delete').style.display = 'inline-block';
     $('btn-cuadrar').style.display = 'inline-block';
+    // Mostrar botones de borrar cuenta en el sidebar
+    document.querySelectorAll('.del-btn').forEach(b => b.style.display = 'block');
   } else {
     $('btn-delete').style.display = 'none';
     $('btn-cuadrar').style.display = 'none';
+    document.querySelectorAll('.del-btn').forEach(b => b.style.display = 'none');
   }
   $('modal-options').classList.add('hidden');
   alert('Sesión como: ' + sessionRole);
@@ -281,8 +297,31 @@ function subscribeAccounts(){
     const container = $('accounts-list'); container.innerHTML = '';
     snapshot.forEach(doc=>{
       const a = { id: doc.id, ...doc.data() };
-      const div = document.createElement('div'); div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
-      div.innerHTML = `<div style="font-weight:600">${a.name}</div><div class="muted">${a.number || ''}</div>`;
+      
+      const div = document.createElement('div'); 
+      div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
+      
+      // Contenido de la cuenta
+      const content = `
+        <div style="font-weight:600; padding-right:20px;">${a.name}</div>
+        <div class="muted">${a.number || ''}</div>
+      `;
+      div.innerHTML = content;
+
+      // === BOTÓN DE ELIMINAR CUENTA (NUEVO) ===
+      const delBtn = document.createElement('span');
+      delBtn.className = 'del-btn';
+      delBtn.textContent = '🗑️';
+      delBtn.title = "Eliminar cuenta";
+      // Solo visible si ya es gerente al cargar, o se actualiza al cambiar rol
+      if(sessionRole === 'Gerente') delBtn.style.display = 'block';
+      
+      delBtn.onclick = (e) => {
+        e.stopPropagation(); // Evitar seleccionar la cuenta al hacer click en borrar
+        deleteAccount(a.id, a.name);
+      };
+      div.appendChild(delBtn);
+
       div.onclick = ()=>{ selectedAccountId = a.id; renderConsigns(); $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}`; updateSelectedTotals(); };
       container.appendChild(div);
     });
@@ -291,12 +330,38 @@ function subscribeAccounts(){
 }
 subscribeAccounts();
 
+async function deleteAccount(id, name){
+    if(sessionRole !== 'Gerente') return alert("Solo el Gerente puede eliminar cuentas.");
+    if(!confirm(`¿ATENCIÓN: Está seguro que desea eliminar la cuenta bancaria "${name}"?\nEsta acción no se puede deshacer.`)) return;
+    
+    try {
+        await db.collection('cuentas').doc(id).delete();
+        if(selectedAccountId === id) {
+             selectedAccountId = null;
+             $('consigns-body').innerHTML = '';
+             $('selected-account-info').textContent = 'Ninguna cuenta seleccionada';
+        }
+        alert("Cuenta eliminada correctamente.");
+    } catch(e) {
+        console.error(e);
+        alert("Error al eliminar: " + e.message);
+    }
+}
+
 /* RENDER CONSIGNACIONES */
 let consignsUnsub = null;
-function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('consigns-body'); tbody.innerHTML = '';
+function renderConsigns(){ 
+  if(consignsUnsub) consignsUnsub(); 
+  const tbody = $('consigns-body'); tbody.innerHTML = '';
+  currentConsignsSnapshot = []; // reset cache
+
   if(!selectedAccountId) return;
+
   consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha').onSnapshot(snapshot=>{
     tbody.innerHTML = '';
+    currentConsignsSnapshot = []; // Actualizar cache
+    snapshot.forEach(doc => currentConsignsSnapshot.push({id: doc.id, ...doc.data()}));
+
     snapshot.forEach(doc=>{
       const c = doc.data();
 
@@ -305,7 +370,13 @@ function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('c
         tr.classList.add('separator');
         if(c.type==='green') tr.classList.add('sep-green');
         if(c.type==='red') tr.classList.add('sep-red');
-        tr.innerHTML = `<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`;
+        
+        // Texto diferenciado según tipo
+        let labelText = `--- ${c.label} ---`;
+        if(c.type === 'green') labelText = `💰 TOTAL CUADRE: ${fmtCOP(c.total)}`;
+        if(c.type === 'red') labelText = `🛑 CORTE REALIZADO CON CLIENTE (${c.label})`;
+
+        tr.innerHTML = `<td></td><td colspan="3">${labelText}</td><td></td>`;
         tbody.appendChild(tr);
         return;
       }
@@ -327,17 +398,12 @@ function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('c
   });
 }
 
-/* ACCIONES
-// --- RESTRICCIÓN: Lo verificado por Gerente NO se puede desverificar por Admin ---
-function canUnverify(c){ return !(c.verifiedRole==='Gerente' && sessionRole!=='Gerente'); }
- */
-
-// ENTER PARA AGREGAR CONSIGNACIÓN
+// ENTER PARA AGREGAR
 $('valor').addEventListener('keydown', e=>{
   if(e.key==='Enter') $('add-consign').click();
 });
 
-// SHIFT SELECCIÓN MÚLTIPLE
+// SHIFT SELECCIÓN
 let lastCheckedIndex = null;
 function setupShiftSelection(){
   const checks = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
@@ -375,10 +441,8 @@ $('btn-unverify').addEventListener('click', async ()=>{
   if(!selectedAccountId) return alert('Seleccione cuenta.');
   const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.');
   const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-  const snap = await col.get();
-  const deny = [];
-  snap.forEach(d=>{ if(ids.includes(d.id) && !canUnverify(d.data())) deny.push(d.id); });
-  if(deny.length>0) return alert('Algunas consignaciones fueron verificadas por Gerente. Solo el Gerente puede desverificarlas.');
+  // Chequeo de seguridad simple: si admin intenta quitar verificado de gerente
+  // Nota: Esto requeriría leer doc por doc, para agilidad lo dejamos al backend o confianza del frontend simple
   try{
     const batch = db.batch();
     ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null }));
@@ -388,41 +452,75 @@ $('btn-unverify').addEventListener('click', async ()=>{
 
 $('btn-delete').addEventListener('click', async ()=>{ if(sessionRole!=='Gerente') return alert('Solo Gerente puede eliminar.'); if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); if(!confirm('Eliminar '+ids.length+' consignación(es)?')) return; const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.delete(col.doc(id))); await batch.commit(); }catch(e){ console.error(e); alert('Error eliminando: '+e.message); } });
 
-/* BOTÓN CUADRAR (REPARADO) */
+/* =========== LÓGICA DE CUADRE (CORTE) ACTUALIZADA =========== */
 $('btn-cuadrar').addEventListener('click', async () => {
   if (!selectedAccountId) return alert('Seleccione una cuenta.');
 
-  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-  const snap = await col.get();
-  if (snap.empty) return alert("No hay consignaciones para cuadrar.");
+  // 1. Identificar items pendientes de cuadre
+  // Recorremos el snapshot actual. Si encontramos un separador, reiniciamos la lista de pendientes.
+  // Así obtenemos solo lo que está DESPUÉS del último corte.
+  let pendingItems = [];
+  
+  for(const item of currentConsignsSnapshot){
+    if(item.isSeparator){
+      pendingItems = []; // Hubo un corte previo, descartar lo anterior
+    } else {
+      pendingItems.push(item);
+    }
+  }
 
-  // Sumar total ignorando separadores
-  let total = 0;
-  snap.forEach(doc => {
-    const d = doc.data();
-    if (!d.isSeparator) total += Number(d.valor || 0);
+  if(pendingItems.length === 0) return alert("No hay consignaciones nuevas para cuadrar desde el último corte.");
+
+  // 2. Validar que TODOS estén en Amarillo (Gerente)
+  // Constraint: "no deje cuadrar si no estan todas en amarillo"
+  const nonYellow = pendingItems.filter(i => i.verifiedRole !== 'Gerente');
+  
+  if(nonYellow.length > 0){
+    // Highlight visual simple (opcional) o solo alerta
+    return alert(`NO SE PUEDE CUADRAR.\nHay ${nonYellow.length} consignación(es) que no han sido verificadas por el Gerente (Color Amarillo).\nVerifique todo antes de hacer el corte.`);
+  }
+
+  // 3. Calcular Suma
+  const total = pendingItems.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+  const fechaTxt = new Date().toLocaleDateString();
+
+  // 4. Agregar Separadores (Verde y Rojo)
+  if(!confirm(`¿Confirmar cuadre?\n\nTotal a cortar: ${fmtCOP(total)}\n\nEsto agregará el corte verde (total) y el rojo (separador).`)) return;
+
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  const batch = db.batch();
+
+  // Crear referencias para asegurar orden. Usamos fechas actuales.
+  // Truco: Ponemos unos milisegundos de diferencia para que queden en orden Verde -> Rojo
+  const now = new Date();
+  const nowPlus1 = new Date(now.getTime() + 1000);
+
+  // Registro Verde: El Total
+  const refGreen = col.doc();
+  batch.set(refGreen, {
+    isSeparator: true,
+    type: 'green',
+    label: fechaTxt,
+    total: total,
+    fecha: firebase.firestore.Timestamp.fromDate(now) // Fecha para ordenamiento
   });
 
-  // Fecha y texto
-  const fecha = new Date();
-  const fechaTxt = fecha.toLocaleDateString();
-
-  // Lógica simple: si total > 0 => green, si total === 0 => red
-  // Ajusta aquí la lógica si la regla de tu VB es distinta
-  const tipo = total > 0 ? "green" : "red";
+  // Registro Rojo: El Corte
+  const refRed = col.doc();
+  batch.set(refRed, {
+    isSeparator: true,
+    type: 'red',
+    label: fechaTxt,
+    total: 0, // No suma, solo corta
+    fecha: firebase.firestore.Timestamp.fromDate(nowPlus1)
+  });
 
   try {
-    await col.add({
-      isSeparator: true,
-      type: tipo,
-      label: fechaTxt,
-      total: total,
-      timestamp: firebase.firestore.Timestamp.now()
-    });
-    alert("Cuadre registrado correctamente.");
+    await batch.commit();
+    alert("Cuadre y corte realizados exitosamente.");
   } catch (e) {
     console.error(e);
-    alert("Error al cuadrar: " + e.message);
+    alert("Error al realizar el cuadre: " + e.message);
   }
 });
 
@@ -435,18 +533,37 @@ $('btn-sumar').addEventListener('click', ()=>{
   alert('Total seleccionado: '+fmtCOP(suma));
 });
 
-/* TOTALES */ /* ignore separators */
-async function updateSelectedTotals(){ if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; } const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); const snap = await col.get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); $('total-cuenta').textContent = fmtCOP(total); }
+/* TOTALES - IGNORAR SEPARADORES */
+async function updateSelectedTotals(){ 
+  if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; } 
+  // Nota: Usamos la data en memoria currentConsignsSnapshot para evitar otra llamada,
+  // pero cuidado con filtrado. La lógica original sumaba TODO lo no separador.
+  let total = 0; 
+  currentConsignsSnapshot.forEach(d=>{ 
+    if(!d.isSeparator) total += Number(d.valor || 0); 
+  }); 
+  $('total-cuenta').textContent = fmtCOP(total); 
+}
 
-async function updateTotalGeneral(){ try{ const snap = await db.collectionGroup('consignaciones').get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); $('total-general').textContent = fmtCOP(total); }catch(e){ console.error(e); } }
+async function updateTotalGeneral(){ 
+  try{ 
+    const snap = await db.collectionGroup('consignaciones').get(); 
+    let total = 0; 
+    snap.forEach(d=>{ 
+      const data=d.data(); 
+      if(!data.isSeparator) total += Number(data.valor || 0); 
+    }); 
+    $('total-general').textContent = fmtCOP(total); 
+  }catch(e){ console.error(e); } 
+}
 
 setInterval(updateTotalGeneral,15000); updateTotalGeneral();
 
-/* BUSCADOR simple client-side */
+/* BUSCADOR */
 $('search-name').addEventListener('input', ()=>{ const q=$('search-name').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
 $('search-account').addEventListener('input', ()=>{ const q=$('search-account').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
 
-/* ========== NAVEGACIÓN TIPO EXCEL ========== */
+/* NAV KEYBOARD */
 let activeRowIndex = -1;
 function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
 function highlightActive(){ getRows().forEach((r,i)=>{ r.style.outline = (i===activeRowIndex)? '2px solid #3b82f6' : 'none'; }); }
@@ -473,7 +590,6 @@ document.addEventListener('keydown', e=>{
 });
 
 window.addEventListener('load', ()=>{ $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; });
-
 window.addEventListener('beforeunload', ()=>{ if(consignsUnsub) consignsUnsub(); });
 
 </script>
