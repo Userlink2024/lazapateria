@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Consignaciones Bancarias</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome para íconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Configuración de Tailwind para usar la fuente Inter */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+
+        /* Estilos personalizados para el modal y la tabla */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #ffffff;
+            margin: auto;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            width: 90%;
+            max-width: 700px;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .deposit-row-admin-verified {
+            background-color: #f3f4f6; /* Gris claro para Admin verificado */
+            color: #6b7280;
+        }
+        .deposit-row-manager-verified {
+            background-color: #fcd34d; /* Amarillo para Gerente verificado */
+            color: #78350f;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex">
+
+    <!-- Panel Lateral de Cuentas (Búsqueda y Creación) -->
+    <div id="account-sidebar" class="w-full md:w-80 bg-white p-6 shadow-xl flex-shrink-0">
+        <h1 class="text-2xl font-bold text-indigo-700 mb-6 border-b pb-2">Consignaciones Bancarias</h1>
+
+        <!-- Identificador de Usuario (Importante para colaboración) -->
+        <div class="text-xs mb-4 p-2 bg-indigo-50 rounded-lg text-gray-700 break-all">
+            <span class="font-semibold">ID de Usuario:</span> <span id="user-id-display">Cargando...</span>
+        </div>
+
+        <div id="auth-status" class="mb-4 text-sm text-center font-semibold text-red-500">
+            Cargando Autenticación...
+        </div>
+
+        <!-- Botón de Revisión/Roles -->
+        <button id="btn-open-review-modal" onclick="openModal('role-modal')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl transition duration-200 shadow-lg mb-6 flex items-center justify-center">
+            <i class="fas fa-lock mr-2"></i> Revisar Pagos / Elegir Rol
+        </button>
+
+        <!-- Búsqueda de Cuentas -->
+        <div class="space-y-4">
+            <h2 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">Buscar Cuenta</h2>
+            <input type="text" id="search-name" placeholder="Buscar por Nombre" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+            <input type="text" id="search-number" placeholder="Buscar por Número de Cuenta" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+        </div>
+
+        <!-- Lista de Cuentas Encontradas (o todas) -->
+        <div class="mt-6">
+            <h3 class="text-md font-semibold text-gray-700 mb-3">Cuentas Disponibles</h3>
+            <ul id="accounts-list" class="space-y-2 max-h-60 overflow-y-auto">
+                <!-- Las cuentas se cargarán aquí -->
+            </ul>
+        </div>
+
+        <!-- Agregar Nueva Cuenta -->
+        <button onclick="openModal('add-account-modal')" class="mt-6 w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center">
+            <i class="fas fa-plus-circle mr-2"></i> Agregar Nueva Cuenta
+        </button>
+    </div>
+
+    <!-- Contenido Principal: Formulario de Consignación y Vista de Revisión -->
+    <div id="main-content-panel" class="flex-grow p-6 md:p-10 transition-all duration-300">
+        <div id="initial-message" class="text-center py-20 text-gray-500">
+            <i class="fas fa-hand-point-left text-5xl mb-4 text-indigo-300"></i>
+            <p class="text-xl font-semibold">Selecciona una cuenta del panel izquierdo para comenzar a registrar consignaciones.</p>
+        </div>
+
+        <!-- Vista de Ingreso de Consignación -->
+        <div id="deposit-entry-view" class="hidden bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">
+                Consignación a: <span id="current-account-name" class="text-indigo-600"></span>
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Columna de Fecha -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">FECHA</label>
+                    <div id="date-options" class="space-y-2">
+                        <label class="flex items-center text-gray-700">
+                            <input type="radio" name="deposit-date" value="today" checked class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 mr-2"> Hoy
+                        </label>
+                        <label class="flex items-center text-gray-700">
+                            <input type="radio" name="deposit-date" value="yesterday" class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 mr-2"> Ayer
+                        </label>
+                        <label class="flex items-center text-gray-700">
+                            <input type="radio" name="deposit-date" value="dayBefore" class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 mr-2"> Antier
+                        </label>
+                    </div>
+                    <button onclick="document.getElementById('manual-date-input').focus()" class="mt-3 w-full text-indigo-600 hover:text-indigo-800 border border-indigo-200 py-2 rounded-lg transition duration-150 flex items-center justify-center">
+                        <i class="fas fa-calendar-alt mr-2"></i> Seleccionar Manual
+                    </button>
+                    <input type="date" id="manual-date-input" class="w-full p-3 border border-gray-300 rounded-lg mt-3 hidden focus:ring-indigo-500 focus:border-indigo-500" onchange="document.querySelector('input[name=\\'deposit-date\\'][value=\\'manual\\']').checked = true;" />
+                    <input type="radio" name="deposit-date" value="manual" class="hidden">
+                </div>
+
+                <!-- Columna de Valor -->
+                <div>
+                    <label for="deposit-value" class="block text-sm font-medium text-gray-700 mb-2">VALOR (COP)</label>
+                    <input type="number" id="deposit-value" placeholder="Ej: 500000" class="w-full p-3 text-2xl font-mono text-right border-2 border-green-400 rounded-lg focus:ring-green-500 focus:border-green-500 transition duration-150" required>
+                    <p class="text-xs text-gray-500 mt-1">Ingrese el valor en pesos colombianos sin puntos ni comas.</p>
+                </div>
+
+                <!-- Columna de Observaciones -->
+                <div>
+                    <label for="deposit-observation" class="block text-sm font-medium text-gray-700 mb-2">OBSERVACIÓN</label>
+                    <textarea id="deposit-observation" rows="4" placeholder="Breve descripción o referencia" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" required></textarea>
+                </div>
+            </div>
+
+            <button onclick="addDeposit()" class="mt-8 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-xl transition duration-200 shadow-lg flex items-center justify-center">
+                <i class="fas fa-save mr-2"></i> Registrar Consignación
+            </button>
+        </div>
+
+        <!-- Vista de Revisión (Modal Grande) -->
+        <div id="review-view" class="hidden mt-8 bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 flex justify-between items-center">
+                Verificación de Pagos - Rol: <span id="current-user-role" class="text-red-500"></span>
+            </h2>
+            <h3 class="text-xl font-semibold text-indigo-600 mb-4">Cuenta Seleccionada: <span id="review-account-name"></span></h3>
+
+            <!-- Resumen de Totales (Solo visible para Gerente) -->
+            <div id="manager-summary" class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-4 rounded-lg shadow-inner mb-6 hidden">
+                <div class="text-center p-2 bg-white rounded-lg shadow-sm">
+                    <p class="text-xs text-gray-500">TOTAL CONSIGNADO (Cuenta)</p>
+                    <p id="account-total-display" class="text-xl font-bold text-indigo-700">$ 0</p>
+                </div>
+                <div class="text-center p-2 bg-white rounded-lg shadow-sm">
+                    <p class="text-xs text-gray-500">TOTAL PENDIENTE DE CUADRE</p>
+                    <p id="pending-total-display" class="text-xl font-bold text-red-600">$ 0</p>
+                </div>
+                <div class="text-center p-2 bg-white rounded-lg shadow-sm">
+                    <p class="text-xs text-gray-500">ÚLTIMO CUADRE (Valor)</p>
+                    <p id="last-balance-display" class="text-xl font-bold text-green-600">$ 0</p>
+                </div>
+            </div>
+
+            <!-- Controles de Verificación -->
+            <div id="verification-controls" class="flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
+                <div>
+                    <button onclick="verifySelectedDeposits()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center disabled:opacity-50" id="btn-verify-selected" disabled>
+                        <i class="fas fa-check-double mr-2"></i> Verificar Seleccionados
+                    </button>
+                </div>
+                <!-- Controles de Gerente (Eliminar, Cuadrar) -->
+                <div id="manager-actions" class="flex space-x-3 hidden">
+                    <button onclick="deleteSelectedDeposits()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center disabled:opacity-50" id="btn-delete-selected" disabled>
+                        <i class="fas fa-trash-alt mr-2"></i> Eliminar Seleccionados
+                    </button>
+                    <button onclick="balanceAccount()" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 flex items-center" id="btn-balance-account">
+                        <i class="fas fa-money-check-alt mr-2"></i> Cuadrar Cuenta
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabla Tipo Excel de Consignaciones -->
+            <div class="overflow-x-auto rounded-lg border border-gray-300">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
+                                <input type="checkbox" id="select-all-deposits" class="rounded text-indigo-600 h-4 w-4 border-gray-300">
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FECHA</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OBSERVACIÓN</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ESTADO</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ACCIONES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deposits-table-body" class="bg-white divide-y divide-gray-200">
+                        <tr><td colspan="6" class="text-center py-4 text-gray-400">Selecciona una cuenta y un rol.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- MODALES -->
+
+    <!-- Modal 1: Agregar Nueva Cuenta -->
+    <div id="add-account-modal" class="modal">
+        <div class="modal-content max-w-sm">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">Agregar Nueva Cuenta Bancaria</h3>
+            <label for="new-account-name" class="block text-sm font-medium text-gray-700">Nombre de la Cuenta</label>
+            <input type="text" id="new-account-name" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg" required>
+
+            <label for="new-account-number" class="block text-sm font-medium text-gray-700 mt-4">Número de Cuenta</label>
+            <input type="text" id="new-account-number" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg" required>
+
+            <div class="flex justify-end space-x-3 mt-6">
+                <button onclick="cerrarModal('add-account-modal')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg">Cancelar</button>
+                <button onclick="addAccount()" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg">Guardar Cuenta</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Selección de Rol y Clave de Gerente -->
+    <div id="role-modal" class="modal">
+        <div class="modal-content max-w-sm">
+            <h3 class="text-xl font-bold mb-6 text-gray-800">Acceso a Revisión</h3>
+
+            <label class="block text-sm font-medium text-gray-700 mb-2">Seleccione su Rol:</label>
+            <div class="space-y-3 mb-6">
+                <label class="flex items-center p-3 border border-gray-300 rounded-lg hover:bg-indigo-50 transition duration-150 cursor-pointer">
+                    <input type="radio" name="select-role" value="Administrativo" onchange="toggleManagerKeyInput()" class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 mr-3">
+                    <span class="font-semibold text-gray-700">Administrativo</span>
+                </label>
+                <label class="flex items-center p-3 border border-gray-300 rounded-lg hover:bg-red-50 transition duration-150 cursor-pointer">
+                    <input type="radio" name="select-role" value="Gerente" onchange="toggleManagerKeyInput()" class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 mr-3">
+                    <span class="font-semibold text-gray-700">Gerente</span>
+                </label>
+            </div>
+
+            <div id="manager-key-group" class="hidden">
+                <label for="manager-key" class="block text-sm font-medium text-gray-700">Clave de Gerente</label>
+                <input type="password" id="manager-key" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500">
+            </div>
+
+            <div class="flex justify-between items-center mt-6">
+                <button onclick="openModal('change-key-modal')" class="text-gray-500 hover:text-gray-700 transition duration-150 flex items-center">
+                    <i class="fas fa-cog mr-2"></i> Cambiar Clave
+                </button>
+                <button onclick="enterReviewView()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg disabled:opacity-50" id="btn-enter-review" disabled>
+                    Entrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 3: Cambiar Clave de Gerente -->
+    <div id="change-key-modal" class="modal">
+        <div class="modal-content max-w-sm">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">Cambiar Clave de Gerente</h3>
+
+            <label for="old-manager-key" class="block text-sm font-medium text-gray-700">Clave Actual</label>
+            <input type="password" id="old-manager-key" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg" required>
+
+            <label for="new-manager-key" class="block text-sm font-medium text-gray-700 mt-4">Nueva Clave</label>
+            <input type="password" id="new-manager-key" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg" required>
+
+            <div class="flex justify-end space-x-3 mt-6">
+                <button onclick="cerrarModal('change-key-modal')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg">Cancelar</button>
+                <button onclick="changeManagerKey()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg">Actualizar Clave</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 4: Mensajes de Error/Notificación (Reemplaza alert()) -->
+    <div id="alert-modal" class="modal">
+        <div class="modal-content max-w-xs text-center">
+            <div id="alert-message" class="text-lg font-semibold text-gray-700"></div>
+            <button onclick="cerrarModal('alert-modal')" class="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg">Aceptar</button>
+        </div>
+    </div>
+
+
+    <!-- Configuración e Inicialización de Firebase -->
+    <script type="module">
+        // Importaciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, runTransaction, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Establecer nivel de log para depuración de Firestore
+        setLogLevel('debug');
+
+        // Variables Globales de Canvas (MANDATORY)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Instancias de Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Variables de Estado Global de la Aplicación
+        let currentUserId = null;
+        let isAuthReady = false;
+        let accounts = []; // Lista de todas las cuentas
+        let deposits = []; // Lista de consignaciones de la cuenta seleccionada
+        let currentAccount = null; // La cuenta actualmente seleccionada en el panel
+        let userRole = null; // 'Administrativo', 'Gerente', o null
+        let managerKey = "0000"; // Clave del Gerente (se carga desde Firestore)
+
+        // Referencias de colecciones (Path Segura y Pública)
+        const ACCOUNTS_COLLECTION_PATH = `artifacts/${appId}/public/data/bank_accounts`;
+        const DEPOSITS_COLLECTION_PATH = `artifacts/${appId}/public/data/bank_deposits`;
+        const SETTINGS_DOC_PATH = `artifacts/${appId}/public/data/settings/manager_key`;
+
+        // -----------------------------------------------------------
+        // 1. FUNCIONES DE UTILIDAD
+        // -----------------------------------------------------------
+
+        window.openModal = function(id) {
+            document.getElementById(id).style.display = 'flex';
+        }
+
+        window.cerrarModal = function(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function showAlert(message) {
+            document.getElementById('alert-message').innerHTML = message;
+            openModal('alert-modal');
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency: 'COP',
+                minimumFractionDigits: 0
+            }).format(value);
+        }
+
+        // -----------------------------------------------------------
+        // 2. AUTENTICACIÓN Y CARGA INICIAL
+        // -----------------------------------------------------------
+
+        // Autenticación inicial y carga del estado
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUserId = user.uid;
+            } else {
+                currentUserId = 'anon-' + crypto.randomUUID(); // Fallback anónimo
+            }
+            document.getElementById('user-id-display').textContent = currentUserId;
+
+            // Intentar autenticación con el token proporcionado
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                isAuthReady = true;
+                document.getElementById('auth-status').textContent = 'Conectado a Firebase';
+                document.getElementById('auth-status').classList.remove('text-red-500');
+                document.getElementById('auth-status').classList.add('text-green-500');
+
+                // Iniciar listeners
+                listenForManagerKey();
+                listenForAccounts();
+
+            } catch (error) {
+                console.error("Error en la autenticación o inicialización:", error);
+                document.getElementById('auth-status').textContent = 'Error de Autenticación';
+                showAlert(`Error de conexión: ${error.message}`);
+            }
+        });
+
+        // -----------------------------------------------------------
+        // 3. GESTIÓN DE CUENTAS (ACCOUNTS)
+        // -----------------------------------------------------------
+
+        // Listener para cuentas
+        function listenForAccounts() {
+            if (!isAuthReady) return;
+
+            const q = collection(db, ACCOUNTS_COLLECTION_PATH);
+            onSnapshot(q, (snapshot) => {
+                accounts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderAccountsList();
+                // Si ya teníamos una cuenta seleccionada, recargar sus detalles
+                if (currentAccount) {
+                    currentAccount = accounts.find(a => a.id === currentAccount.id);
+                    if (currentAccount && userRole) {
+                         listenForDeposits(currentAccount.id);
+                    }
+                }
+            }, (error) => {
+                console.error("Error al escuchar cuentas:", error);
+                showAlert("Error al cargar cuentas.");
+            });
+        }
+
+        // Renderiza la lista de cuentas en el panel lateral
+        function renderAccountsList() {
+            const listElement = document.getElementById('accounts-list');
+            listElement.innerHTML = '';
+            const searchValue = document.getElementById('search-name').value.toLowerCase();
+            const searchNumber = document.getElementById('search-number').value;
+
+            const filteredAccounts = accounts.filter(account => {
+                const nameMatch = account.name.toLowerCase().includes(searchValue);
+                const numberMatch = account.accountNumber.includes(searchNumber);
+                return nameMatch && numberMatch;
+            });
+
+            if (filteredAccounts.length === 0) {
+                listElement.innerHTML = '<li class="text-sm text-gray-500 p-2">No se encontraron cuentas.</li>';
+                return;
+            }
+
+            filteredAccounts.forEach(account => {
+                const isActive = currentAccount && currentAccount.id === account.id;
+                const listItem = document.createElement('li');
+                listItem.className = `p-3 rounded-lg cursor-pointer transition duration-150 ${isActive ? 'bg-indigo-100 border-l-4 border-indigo-600' : 'bg-gray-50 hover:bg-gray-100'}`;
+                listItem.innerHTML = `
+                    <div class="font-semibold text-gray-800">${account.name}</div>
+                    <div class="text-xs text-gray-500">${account.accountNumber}</div>
+                `;
+                listItem.onclick = () => selectAccount(account);
+                listElement.appendChild(listItem);
+            });
+        }
+
+        window.addAccount = async function() {
+            const name = document.getElementById('new-account-name').value.trim();
+            const number = document.getElementById('new-account-number').value.trim();
+
+            if (!name || !number) {
+                showAlert("Debe ingresar el nombre y el número de cuenta.");
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, ACCOUNTS_COLLECTION_PATH), {
+                    name: name,
+                    accountNumber: number,
+                    lastBalanceValue: 0,
+                    lastBalanceDate: Timestamp.now()
+                });
+                cerrarModal('add-account-modal');
+                document.getElementById('new-account-name').value = '';
+                document.getElementById('new-account-number').value = '';
+                showAlert("¡Cuenta agregada exitosamente!");
+            } catch (error) {
+                console.error("Error al agregar cuenta:", error);
+                showAlert("Error al guardar la cuenta.");
+            }
+        }
+
+        window.selectAccount = function(account) {
+            currentAccount = account;
+            document.getElementById('initial-message').classList.add('hidden');
+            document.getElementById('deposit-entry-view').classList.remove('hidden');
+            document.getElementById('current-account-name').textContent = account.name;
+            document.getElementById('review-account-name').textContent = account.name;
+
+            // Volver a renderizar la lista para resaltar la selección
+            renderAccountsList();
+
+            // Si hay un rol activo, cargamos la vista de revisión inmediatamente
+            if (userRole) {
+                listenForDeposits(currentAccount.id);
+            } else {
+                 // Si no hay rol activo, ocultar la vista de revisión
+                 document.getElementById('review-view').classList.add('hidden');
+            }
+        }
+
+
+        // -----------------------------------------------------------
+        // 4. GESTIÓN DE CONSIGNACIONES (DEPOSITS)
+        // -----------------------------------------------------------
+
+        function calculateDepositDate() {
+            const selectedOption = document.querySelector('input[name="deposit-date"]:checked').value;
+            const date = new Date();
+
+            switch (selectedOption) {
+                case 'today':
+                    break;
+                case 'yesterday':
+                    date.setDate(date.getDate() - 1);
+                    break;
+                case 'dayBefore':
+                    date.setDate(date.getDate() - 2);
+                    break;
+                case 'manual':
+                    const manualDate = document.getElementById('manual-date-input').value;
+                    if (manualDate) {
+                        return new Date(manualDate + 'T12:00:00'); // Establecer al mediodía para evitar problemas de zona horaria
+                    }
+                    // Si el manual no está puesto, se devuelve hoy como fallback
+                    break;
+            }
+            return date;
+        }
+
+        window.addDeposit = async function() {
+            if (!currentAccount) {
+                showAlert("Por favor, seleccione una cuenta primero.");
+                return;
+            }
+
+            const value = parseFloat(document.getElementById('deposit-value').value);
+            const observation = document.getElementById('deposit-observation').value.trim();
+            const date = calculateDepositDate();
+
+            if (isNaN(value) || value <= 0 || !observation) {
+                showAlert("Por favor, ingrese un valor de consignación válido y una observación.");
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, DEPOSITS_COLLECTION_PATH), {
+                    accountId: currentAccount.id,
+                    date: Timestamp.fromDate(date),
+                    value: value,
+                    observation: observation,
+                    verifiedByAdmin: false,
+                    verifiedByManager: false,
+                    verifiedAdminUserId: null,
+                    verifiedManagerUserId: null,
+                    isBalanced: false, // Para la función de cuadre
+                    createdAt: Timestamp.now()
+                });
+
+                document.getElementById('deposit-value').value = '';
+                document.getElementById('deposit-observation').value = '';
+                document.querySelector('input[name="deposit-date"][value="today"]').checked = true; // Resetear fecha
+                showAlert("¡Consignación registrada con éxito!");
+
+            } catch (error) {
+                console.error("Error al registrar consignación:", error);
+                showAlert("Error al guardar la consignación.");
+            }
+        }
+
+        // Listener para consignaciones de la cuenta seleccionada
+        function listenForDeposits(accountId) {
+            if (!isAuthReady || !accountId || !userRole) return;
+
+            const q = query(collection(db, DEPOSITS_COLLECTION_PATH), where("accountId", "==", accountId));
+
+            onSnapshot(q, (snapshot) => {
+                deposits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.date.seconds - b.date.seconds);
+                renderDepositsTable();
+            }, (error) => {
+                console.error("Error al escuchar consignaciones:", error);
+                showAlert("Error al cargar las consignaciones.");
+            });
+        }
+
+        // -----------------------------------------------------------
+        // 5. VISTA DE REVISIÓN Y ROLES
+        // -----------------------------------------------------------
+
+        function toggleManagerKeyInput() {
+            const role = document.querySelector('input[name="select-role"]:checked')?.value;
+            const keyGroup = document.getElementById('manager-key-group');
+            const btnEnter = document.getElementById('btn-enter-review');
+
+            if (role === 'Gerente') {
+                keyGroup.classList.remove('hidden');
+                btnEnter.disabled = false;
+            } else if (role === 'Administrativo') {
+                keyGroup.classList.add('hidden');
+                btnEnter.disabled = false;
+            } else {
+                keyGroup.classList.add('hidden');
+                btnEnter.disabled = true;
+            }
+        }
+
+        window.enterReviewView = function() {
+            const role = document.querySelector('input[name="select-role"]:checked')?.value;
+            const key = document.getElementById('manager-key').value;
+
+            if (!role) {
+                showAlert("Debe seleccionar un rol.");
+                return;
+            }
+
+            if (role === 'Gerente' && key !== managerKey) {
+                showAlert("Clave de Gerente incorrecta. Intente de nuevo.");
+                document.getElementById('manager-key').value = '';
+                return;
+            }
+
+            userRole = role;
+            cerrarModal('role-modal');
+            document.getElementById('current-user-role').textContent = userRole;
+
+            if (userRole === 'Gerente') {
+                document.getElementById('manager-summary').classList.remove('hidden');
+                document.getElementById('manager-actions').classList.remove('hidden');
+            } else {
+                document.getElementById('manager-summary').classList.add('hidden');
+                document.getElementById('manager-actions').classList.add('hidden');
+            }
+
+            if (currentAccount) {
+                document.getElementById('review-view').classList.remove('hidden');
+                listenForDeposits(currentAccount.id); // Recargar datos con el nuevo rol
+            } else {
+                document.getElementById('review-view').classList.add('hidden');
+                showAlert("Seleccione una cuenta antes de entrar a la revisión.");
+            }
+        }
+
+        // -----------------------------------------------------------
+        // 6. GESTIÓN DE CLAVE DE GERENTE
+        // -----------------------------------------------------------
+
+        function listenForManagerKey() {
+            if (!isAuthReady) return;
+
+            // Aseguramos que el documento exista con la clave por defecto
+            const settingsRef = doc(db, SETTINGS_DOC_PATH);
+            getDoc(settingsRef).then(docSnap => {
+                if (!docSnap.exists()) {
+                    setDoc(settingsRef, { key: "0000" }); // Clave por defecto
+                }
+            });
+
+            // Listener en tiempo real
+            onSnapshot(settingsRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    managerKey = docSnap.data().key;
+                } else {
+                    managerKey = "0000"; // Fallback si el doc se elimina
+                }
+            }, (error) => {
+                console.error("Error al escuchar clave de gerente:", error);
+            });
+        }
+
+        window.changeManagerKey = async function() {
+            const oldKey = document.getElementById('old-manager-key').value;
+            const newKey = document.getElementById('new-manager-key').value;
+
+            if (oldKey !== managerKey) {
+                showAlert("La clave actual es incorrecta.");
+                return;
+            }
+            if (newKey.length < 4) {
+                 showAlert("La nueva clave debe tener al menos 4 caracteres.");
+                return;
+            }
+
+            try {
+                const settingsRef = doc(db, SETTINGS_DOC_PATH);
+                await updateDoc(settingsRef, { key: newKey });
+                cerrarModal('change-key-modal');
+                showAlert("¡Clave de Gerente actualizada con éxito!");
+            } catch (error) {
+                console.error("Error al cambiar clave:", error);
+                showAlert("Error al cambiar la clave.");
+            }
+        }
+
+        // -----------------------------------------------------------
+        // 7. RENDERIZADO Y LÓGICA DE LA TABLA DE DEPÓSITOS
+        // -----------------------------------------------------------
+
+        function renderDepositsTable() {
+            const tableBody = document.getElementById('deposits-table-body');
+            tableBody.innerHTML = '';
+            let totalConsigned = 0;
+            let totalPendingBalance = 0;
+
+            if (!deposits.length) {
+                tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-400">No hay consignaciones registradas para esta cuenta.</td></tr>';
+                return;
+            }
+
+            deposits.forEach(deposit => {
+                const dateString = deposit.date.toDate().toLocaleDateString('es-CO');
+                const isVerified = userRole === 'Administrativo' ? deposit.verifiedByAdmin : deposit.verifiedByManager;
+                const adminClass = deposit.verifiedByAdmin ? 'deposit-row-admin-verified' : '';
+                const managerClass = deposit.verifiedByManager ? 'deposit-row-manager-verified' : '';
+
+                let rowClass = '';
+                if (deposit.verifiedByManager) {
+                    rowClass = managerClass;
+                } else if (deposit.verifiedByAdmin) {
+                    rowClass = adminClass;
+                }
+
+                // Cálculo de totales
+                totalConsigned += deposit.value;
+                if (!deposit.isBalanced) {
+                     totalPendingBalance += deposit.value;
+                }
+
+                // Marcador de Cuadre
+                if (deposit.isBalanced) {
+                    const balanceRow = document.createElement('tr');
+                    balanceRow.className = 'bg-gray-700 text-white font-bold';
+                    balanceRow.innerHTML = `<td colspan="6" class="px-6 py-2 text-center text-sm">CUADRE REALIZADO HASTA ESTE PUNTO | VALOR: ${formatCurrency(deposit.value)} | FECHA: ${dateString}</td>`;
+                    tableBody.appendChild(balanceRow);
+                }
+
+
+                const row = document.createElement('tr');
+                row.className = `transition duration-150 ease-in-out ${rowClass}`;
+                row.dataset.id = deposit.id;
+
+                let verificationStatus = '';
+                if (deposit.verifiedByManager) {
+                    verificationStatus = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Gerente OK</span>';
+                } else if (deposit.verifiedByAdmin) {
+                    verificationStatus = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-200 text-gray-800">Admin OK</span>';
+                } else {
+                    verificationStatus = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Pendiente</span>';
+                }
+
+                row.innerHTML = `
+                    <td class="px-3 py-3 whitespace-nowrap">
+                        <input type="checkbox" data-deposit-id="${deposit.id}" class="deposit-checkbox rounded text-indigo-600 h-4 w-4 border-gray-300" onchange="updateVerificationButtons()">
+                    </td>
+                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">${dateString}</td>
+                    <td class="px-6 py-3 whitespace-nowrap text-sm text-right font-mono text-gray-800">${formatCurrency(deposit.value)}</td>
+                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">${deposit.observation}</td>
+                    <td class="px-6 py-3 whitespace-nowrap">${verificationStatus}</td>
+                    <td class="px-6 py-3 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick="unverifyDeposit('${deposit.id}')" class="text-red-500 hover:text-red-700 text-xs disabled:opacity-30" ${isVerified ? '' : 'disabled'} title="Desverificar Pago">
+                            <i class="fas fa-undo"></i> Desverificar
+                        </button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            // Actualizar totales de Gerente
+            if (userRole === 'Gerente') {
+                document.getElementById('account-total-display').textContent = formatCurrency(totalConsigned);
+                document.getElementById('pending-total-display').textContent = formatCurrency(totalPendingBalance);
+                document.getElementById('last-balance-display').textContent = formatCurrency(currentAccount.lastBalanceValue || 0);
+            }
+
+            // Evento para seleccionar/deseleccionar todos
+            document.getElementById('select-all-deposits').onchange = (e) => {
+                document.querySelectorAll('.deposit-checkbox').forEach(cb => {
+                    cb.checked = e.target.checked;
+                });
+                updateVerificationButtons();
+            };
+        }
+
+        window.updateVerificationButtons = function() {
+            const selected = document.querySelectorAll('.deposit-checkbox:checked').length > 0;
+            document.getElementById('btn-verify-selected').disabled = !selected;
+            if (userRole === 'Gerente') {
+                 document.getElementById('btn-delete-selected').disabled = !selected;
+            }
+        }
+
+
+        window.verifySelectedDeposits = async function() {
+            const selectedIds = Array.from(document.querySelectorAll('.deposit-checkbox:checked')).map(cb => cb.dataset.depositId);
+
+            if (selectedIds.length === 0) {
+                showAlert("Seleccione al menos una consignación para verificar.");
+                return;
+            }
+
+            const fieldToUpdate = userRole === 'Administrativo' ? 'verifiedByAdmin' : 'verifiedByManager';
+            const userField = userRole === 'Administrativo' ? 'verifiedAdminUserId' : 'verifiedManagerUserId';
+
+            try {
+                for (const id of selectedIds) {
+                    const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, id);
+                    await updateDoc(depositRef, {
+                        [fieldToUpdate]: true,
+                        [userField]: currentUserId
+                    });
+                }
+                showAlert(`¡${selectedIds.length} consignaciones verificadas como ${userRole}!`);
+            } catch (error) {
+                console.error("Error al verificar:", error);
+                showAlert("Error al verificar las consignaciones.");
+            }
+        }
+
+        window.unverifyDeposit = async function(id) {
+            const deposit = deposits.find(d => d.id === id);
+            if (!deposit) return;
+
+            const fieldsToUpdate = {};
+
+            if (userRole === 'Administrativo') {
+                // El admin solo puede desverificar su propia verificación
+                if (deposit.verifiedByAdmin && !deposit.verifiedByManager) {
+                    fieldsToUpdate.verifiedByAdmin = false;
+                    fieldsToUpdate.verifiedAdminUserId = null;
+                } else if (deposit.verifiedByManager) {
+                     showAlert("Esta consignación ya fue verificada por Gerente y no puede ser desverificada por un Administrativo.");
+                     return;
+                } else {
+                     showAlert("Esta consignación no está verificada por Administrativo.");
+                     return;
+                }
+            } else if (userRole === 'Gerente') {
+                // El gerente puede desverificar ambas
+                if (deposit.verifiedByManager) {
+                    fieldsToUpdate.verifiedByManager = false;
+                    fieldsToUpdate.verifiedManagerUserId = null;
+                } else if (deposit.verifiedByAdmin) {
+                     fieldsToUpdate.verifiedByAdmin = false;
+                     fieldsToUpdate.verifiedAdminUserId = null;
+                } else {
+                     showAlert("Esta consignación no tiene ninguna verificación activa.");
+                     return;
+                }
+            }
+
+            if (Object.keys(fieldsToUpdate).length === 0) return; // No hay nada que desverificar
+
+            try {
+                const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, id);
+                await updateDoc(depositRef, fieldsToUpdate);
+                showAlert("Consignación desverificada.");
+            } catch (error) {
+                console.error("Error al desverificar:", error);
+                showAlert("Error al desverificar la consignación.");
+            }
+        }
+
+        window.deleteSelectedDeposits = async function() {
+            if (userRole !== 'Gerente') return;
+
+            const selectedIds = Array.from(document.querySelectorAll('.deposit-checkbox:checked')).map(cb => cb.dataset.depositId);
+
+             if (selectedIds.length === 0) {
+                showAlert("Seleccione al menos una consignación para eliminar.");
+                return;
+            }
+
+            if (!window.confirm("¿Está seguro de que desea eliminar las consignaciones seleccionadas? ESTA ACCIÓN ES IRREVERSIBLE.")) {
+                 return;
+            }
+
+            try {
+                for (const id of selectedIds) {
+                    const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, id);
+                    await deleteDoc(depositRef);
+                }
+                showAlert(`¡${selectedIds.length} consignaciones eliminadas!`);
+            } catch (error) {
+                console.error("Error al eliminar:", error);
+                showAlert("Error al eliminar las consignaciones.");
+            }
+        }
+
+        window.balanceAccount = async function() {
+            if (userRole !== 'Gerente' || !currentAccount) return;
+
+            const depositsToBalance = deposits.filter(d => !d.isBalanced);
+
+            if (depositsToBalance.length === 0) {
+                 showAlert("No hay consignaciones pendientes de cuadrar.");
+                 return;
+            }
+
+            // Usamos una transacción para asegurar que la actualización de la cuenta y los depósitos sean atómicos
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const accountRef = doc(db, ACCOUNTS_COLLECTION_PATH, currentAccount.id);
+
+                    // 1. Calcular el valor a cuadrar (suma de los valores NO balanceados)
+                    const newBalanceValue = depositsToBalance.reduce((sum, d) => sum + d.value, 0);
+
+                    // 2. Actualizar la cuenta (Cuadrar)
+                    transaction.update(accountRef, {
+                        lastBalanceValue: newBalanceValue,
+                        lastBalanceDate: Timestamp.now()
+                    });
+
+                    // 3. Marcar todas las consignaciones no balanceadas como balanceadas
+                    for (const deposit of depositsToBalance) {
+                        const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, deposit.id);
+                        transaction.update(depositRef, {
+                            isBalanced: true,
+                            // Usamos el valor total del cuadre en una de las transacciones para crear el "salto" visual
+                            value: newBalanceValue
+                        });
+                        // Solo necesitamos la marca de 'isBalanced' en la primera consignación para el marcador visual
+                        break; // Salir después de la primera actualización ya que el `value` solo se usa para el marcador.
+                    }
+                });
+
+                showAlert(`¡Cuenta cuadrando exitosamente! Total Cuadrado: ${formatCurrency(totalPendingBalance)}`);
+            } catch (error) {
+                console.error("Error en la transacción de cuadre:", error);
+                showAlert("Error al cuadrar la cuenta.");
+            }
+        }
+
+        // -----------------------------------------------------------
+        // 8. EVENT LISTENERS VARIOS
+        // -----------------------------------------------------------
+
+        // Eventos de búsqueda
+        document.getElementById('search-name').addEventListener('input', renderAccountsList);
+        document.getElementById('search-number').addEventListener('input', renderAccountsList);
+    </script>
+</body>
+</html>
