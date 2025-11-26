@@ -6,12 +6,16 @@
     <title>Panel de Control - Sistema Moderno</title>
     <!-- Iconos Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Fuente Inter (Misma que tu archivo original para consistencia) -->
+    <!-- Fuente Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
+    <!-- LIBRERÍAS FIREBASE (Necesarias para validar el nuevo usuario aquí mismo) -->
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+
     <style>
         :root {
-            --primary-color: #2e7d32; /* Verde corporativo */
+            --primary-color: #2e7d32;
             --bg-color: #f0f2f5;
             --card-bg: #ffffff;
             --text-main: #333333;
@@ -31,7 +35,12 @@
             flex-direction: column;
         }
 
-        /* Header / Barra Superior */
+        /* Oculta el contenido principal si el acceso es denegado */
+        .content-hidden {
+            display: none !important;
+        }
+
+        /* --- HEADER --- */
         header {
             background-color: var(--card-bg);
             padding: 1rem 2rem;
@@ -44,20 +53,14 @@
             z-index: 100;
         }
 
-        /* Grupo Izquierdo: Botón Atrás + Info Usuario */
-        .header-left {
+        .header-left, .header-right {
             display: flex;
             align-items: center;
-            gap: 20px;
         }
+        .header-left { gap: 20px; }
+        .header-right { gap: 10px; }
 
-        /* Grupo Derecho: Botones de Acción */
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
+        /* Estilos de usuario, botones y dashboard (Se mantienen igual) */
         .back-btn {
             background-color: #f0f2f5;
             color: var(--text-main);
@@ -75,8 +78,8 @@
 
         .back-btn:hover {
             background-color: #e4e6eb;
-            transform: translateX(-3px); /* Efecto visual de ir atrás */
             color: var(--primary-color);
+            transform: translateX(-3px);
         }
 
         .user-info {
@@ -109,50 +112,36 @@
             color: var(--text-secondary);
         }
 
-        /* Botón Cerrar Sesión (Rojo) */
+        .header-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+        }
+
         .logout-btn {
-            background: none;
+            background: transparent;
             border: 1px solid #dc3545;
             color: #dc3545;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
+        .logout-btn:hover { background: #dc3545; color: white; }
 
-        .logout-btn:hover {
-            background: #dc3545;
-            color: white;
-        }
-
-        /* Nuevo Botón Cambiar Usuario (Azul Oscuro) */
         .switch-user-btn {
-            background-color: #0d47a1; /* Azul oscuro */
-            border: 1px solid #0d47a1;
+            background-color: #0d47a1;
             color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
-
         .switch-user-btn:hover {
-            background-color: #002171; /* Azul más oscuro al pasar mouse */
-            border-color: #002171;
+            background-color: #002171;
             transform: translateY(-1px);
         }
 
-        /* Contenedor Principal */
+        /* --- DASHBOARD GRID --- */
         .main-canvas {
             max-width: 1200px;
             width: 90%;
@@ -167,7 +156,6 @@
             position: relative;
             padding-left: 15px;
         }
-
         .section-title::before {
             content: '';
             position: absolute;
@@ -180,7 +168,6 @@
             border-radius: 4px;
         }
 
-        /* Grid de Tarjetas (Botones) */
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -204,27 +191,15 @@
             justify-content: center;
             height: 180px;
         }
-
         .dashboard-card::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
+            top: 0; left: 0; width: 100%; height: 4px;
             background: linear-gradient(90deg, var(--primary-color), #4ade80);
-            opacity: 0;
-            transition: opacity 0.3s ease;
+            opacity: 0; transition: opacity 0.3s ease;
         }
-
-        .dashboard-card:hover {
-            transform: translateY(-8px);
-            box-shadow: var(--hover-shadow);
-        }
-
-        .dashboard-card:hover::before {
-            opacity: 1;
-        }
+        .dashboard-card:hover { transform: translateY(-8px); box-shadow: var(--hover-shadow); }
+        .dashboard-card:hover::before { opacity: 1; }
 
         .card-icon {
             font-size: 3rem;
@@ -232,166 +207,226 @@
             transition: transform 0.3s ease;
         }
 
-        /* Colores específicos para iconos */
-        .icon-blue { color: #3b82f6; background: #eff6ff; padding: 15px; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;}
-        .icon-orange { color: #f97316; background: #fff7ed; padding: 15px; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;}
-        .icon-green { color: #22c55e; background: #f0fdf4; padding: 15px; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;}
-        .icon-purple { color: #a855f7; background: #faf5ff; padding: 15px; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;}
-        .icon-red { color: #ef4444; background: #fef2f2; padding: 15px; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;}
-        .icon-teal { color: #14b8a6; background: #f0fdfa; padding: 15px; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;}
-        .icon-gold { color: #eab308; background: #fefce8; padding: 15px; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;}
-
-        .dashboard-card:hover .card-icon {
-            transform: scale(1.1) rotate(5deg);
+        /* --- MODAL BASE STYLES --- */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s;
         }
-
-        .card-title {
-            font-weight: 600;
-            font-size: 1.1rem;
-            color: var(--text-main);
-        }
-
-        /* Footer simple */
-        footer {
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
             text-align: center;
-            padding: 20px;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-top: auto;
+            position: relative;
+            animation: slideUp 0.3s;
         }
 
-        /* Responsive */
+        /* Estilos específicos para el Modal de Alerta de Acceso */
+        #modalAccesoDenegado .modal-content {
+            border-top: 5px solid #ff9800; /* Naranja para advertencia */
+        }
+        #modalAccesoDenegado h2 {
+            color: #ff9800;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        #modalAccesoDenegado .redirect-message {
+            margin-top: 15px;
+            font-size: 0.95rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+
+        @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
+        @keyframes slideUp { from {transform:translateY(50px);} to {transform:translateY(0);} }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #aaa;
+        }
+        .close-modal:hover { color: #333; }
+
+        .modal h2 { color: #0d47a1; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #555; }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        .form-group input:focus { outline: none; border-color: #0d47a1; }
+
+        .btn-login {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px;
+            width: 100%;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .btn-login:hover { background-color: #45a049; }
+
+        .error-msg { color: #dc3545; margin-top: 10px; font-size: 0.9rem; font-weight: 600; }
+
+        footer { text-align: center; padding: 20px; color: var(--text-secondary); margin-top: auto; }
+
         @media (max-width: 600px) {
-            header {
-                flex-direction: column;
-                gap: 15px;
-                text-align: center;
-                padding: 1rem;
-            }
-            .header-left {
-                width: 100%;
-                justify-content: center;
-                position: relative;
-            }
-            .header-right {
-                width: 100%;
-                justify-content: center;
-                flex-direction: column; /* Apilar botones en móvil */
-                gap: 10px;
-            }
-            .back-btn {
-                position: absolute;
-                left: 0;
-            }
-            .user-info {
-                flex-direction: column;
-            }
-            .logout-btn, .switch-user-btn {
-                width: 100%; /* Botones full width en móvil */
-                justify-content: center;
-            }
-            .dashboard-grid {
-                grid-template-columns: 1fr;
-            }
+            header { flex-direction: column; gap: 15px; padding: 1rem; }
+            .header-right { width: 100%; justify-content: center; flex-direction: column; }
+            .header-btn { width: 100%; justify-content: center; }
+            .back-btn { position: absolute; left: 0; }
+            .dashboard-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
 
-    <!-- Header con información del usuario -->
-    <header>
-        <!-- Grupo Izquierdo: Botón Atrás + Info Usuario -->
+    <!-- Header -->
+    <header id="app-header">
         <div class="header-left">
             <a href="https://userlink2024.github.io/lazapateria/TABLERO.HTML" class="back-btn" title="Volver al Tablero">
                 <i class="fas fa-arrow-left"></i>
             </a>
-
             <div class="user-info">
                 <div class="user-avatar" id="avatar-initial">U</div>
                 <div class="user-details">
-                    <h3 id="user-name">Cargando usuario...</h3>
-                    <span id="user-role">Bienvenido al sistema</span>
+                    <h3 id="user-name">Cargando...</h3>
+                    <span id="user-role">...</span>
                 </div>
             </div>
         </div>
 
-        <!-- Grupo Derecho: Botones de Acción -->
         <div class="header-right">
-            <!-- Botón Cambiar Usuario (Azul Oscuro) -->
-            <button class="switch-user-btn" onclick="cambiarUsuario()">
+            <!-- Botón para abrir la ventana modal -->
+            <button class="header-btn switch-user-btn" onclick="abrirModalCambioUsuario()">
                 <i class="fas fa-user-friends"></i> Cambiar Usuario
             </button>
-
-            <!-- Botón Cerrar Sesión (Rojo) -->
-            <button class="logout-btn" onclick="cerrarSesion()">
+            <button class="header-btn logout-btn" onclick="cerrarSesion()">
                 <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
             </button>
         </div>
     </header>
 
-    <!-- Contenedor Principal (Lienzo) -->
-    <main class="main-canvas">
+    <!-- Contenido Principal -->
+    <main class="main-canvas" id="main-content">
         <h1 class="section-title">Panel Principal</h1>
 
         <div class="dashboard-grid">
-            
-            <!-- Botón 1: Cuentas Bancarias -->
             <div class="dashboard-card" onclick="redirigir('cuentas')">
                 <div class="card-icon icon-blue"><i class="fas fa-university"></i></div>
                 <div class="card-title">Cuentas Bancarias</div>
             </div>
-
-            <!-- Botón 2: Ingreso de Fabricantes -->
             <div class="dashboard-card" onclick="redirigir('fabricantes')">
                 <div class="card-icon icon-orange"><i class="fas fa-industry"></i></div>
                 <div class="card-title">Ingreso de Fabricantes</div>
             </div>
-
-            <!-- Botón 3: Historial de Ventas -->
             <div class="dashboard-card" onclick="redirigir('ventas')">
                 <div class="card-icon icon-green"><i class="fas fa-file-invoice-dollar"></i></div>
                 <div class="card-title">Historial de Ventas</div>
             </div>
-
-            <!-- Botón 4: Historial Guías -->
             <div class="dashboard-card" onclick="redirigir('guias')">
                 <div class="card-icon icon-purple"><i class="fas fa-truck-fast"></i></div>
-                <div class="card-title">Historial Guías Transportadoras</div>
+                <div class="card-title">Historial Guías</div>
             </div>
-
-            <!-- Botón 5: Gráfica General -->
             <div class="dashboard-card" onclick="redirigir('grafica_general')">
                 <div class="card-icon icon-red"><i class="fas fa-chart-line"></i></div>
                 <div class="card-title">Gráfica General</div>
             </div>
-
-            <!-- Botón 6: Gráfica por Asesor -->
             <div class="dashboard-card" onclick="redirigir('grafica_asesor')">
                 <div class="card-icon icon-teal"><i class="fas fa-chart-pie"></i></div>
                 <div class="card-title">Gráfica por Asesor</div>
             </div>
-
-            <!-- Botón 7: Nómina Propulsar -->
             <div class="dashboard-card" onclick="redirigir('nomina')">
                 <div class="card-icon icon-gold"><i class="fas fa-users-cog"></i></div>
                 <div class="card-title">Nómina de Propulsar</div>
             </div>
-
         </div>
     </main>
 
-    <footer>
-        &copy; 2024 La Zapatería System v2.0
-    </footer>
+    <!-- 1. MODAL DE ACCESO DENEGADO (Nuevo) -->
+    <div id="modalAccesoDenegado" class="modal">
+        <div class="modal-content">
+            <h2><i class="fas fa-lock"></i> Acceso Restringido</h2>
+            <p style="color: #333;">Su tipo de usuario (**OPERADOR**) no tiene permisos para acceder al Panel de Control Principal.</p>
+            <p class="redirect-message">Será redirigido a su panel de trabajo en <span id="redirect-countdown">2</span> segundos...</p>
+        </div>
+    </div>
+
+    <!-- 2. MODAL PARA CAMBIO DE USUARIO (Anterior) -->
+    <div id="modalCambioUsuario" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="cerrarModalCambioUsuario()">&times;</span>
+            <h2><i class="fas fa-user-circle"></i> Iniciar Otra Sesión</h2>
+            <p style="color: #666; margin-bottom: 20px;">Ingresa las credenciales del nuevo usuario</p>
+            
+            <div class="form-group">
+                <label for="nuevo_usuario">Usuario:</label>
+                <input type="text" id="nuevo_usuario" placeholder="Ej: admin">
+            </div>
+            <div class="form-group">
+                <label for="nuevo_password">Contraseña:</label>
+                <input type="password" id="nuevo_password" placeholder="******">
+            </div>
+            
+            <button class="btn-login" onclick="autenticarNuevoUsuario()">Ingresar</button>
+            <p id="error-login" class="error-msg"></p>
+        </div>
+    </div>
+
+    <footer>&copy; 2024 La Zapatería System v2.0</footer>
 
     <script>
-        // 1. LÓGICA DE USUARIO
+        // 1. CONFIGURACIÓN FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+            authDomain: "lazapateria-c4157.firebaseapp.com",
+            projectId: "lazapateria-c4157",
+            storageBucket: "lazapateria-c4157.firebasestorage.app",
+            messagingSenderId: "300241769138",
+            appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+            measurementId: "G-HVG7615JEE"
+        };
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // 2. LÓGICA DE USUARIO ACTUAL Y FILTRO DE ACCESO (MODIFICADA)
         document.addEventListener('DOMContentLoaded', () => {
-            verificarUsuario();
+            // Ocultar contenido por defecto para evitar parpadeo si no hay acceso
+            document.getElementById('main-content').classList.add('content-hidden');
+            document.getElementById('app-header').classList.add('content-hidden');
+            verificarUsuarioActual();
         });
 
-        function verificarUsuario() {
-            // Intentar obtener los datos del localStorage
+        function verificarUsuarioActual() {
             const datosUsuarioJSON = localStorage.getItem('datosUsuario');
             
             if (!datosUsuarioJSON) {
@@ -402,75 +437,138 @@
 
             try {
                 const datosUsuario = JSON.parse(datosUsuarioJSON);
+                const permisos = datosUsuario.permisos ? datosUsuario.permisos.toUpperCase() : 'INVITADO';
                 
-                // Verificar que tenga nombre
-                if (!datosUsuario.nombreCompleto) {
-                    throw new Error("Datos incompletos");
+                // === FILTRO DE ACCESO PRINCIPAL ===
+                if (permisos === 'OPERADOR') {
+                    mostrarMensajeAccesoDenegado();
+                    return; // Detiene la carga del panel
                 }
+                // ==================================
 
-                // Mostrar nombre en el header
-                document.getElementById('user-name').textContent = datosUsuario.nombreCompleto;
+                // Si tiene acceso (no es OPERADOR), mostrar contenido y actualizar UI
+                document.getElementById('user-name').textContent = datosUsuario.nombreCompleto || 'Usuario';
+                document.getElementById('avatar-initial').textContent = (datosUsuario.nombreCompleto || 'U').charAt(0).toUpperCase();
+                document.getElementById('user-role').textContent = permisos;
                 
-                // Mostrar inicial en el avatar
-                const inicial = datosUsuario.nombreCompleto.charAt(0).toUpperCase();
-                document.getElementById('avatar-initial').textContent = inicial;
+                document.getElementById('main-content').classList.remove('content-hidden');
+                document.getElementById('app-header').classList.remove('content-hidden');
 
-                // Opcional: Mostrar rol si existe
-                if (datosUsuario.permisos) {
-                    document.getElementById('user-role').textContent = datosUsuario.permisos.toUpperCase();
-                }
 
             } catch (e) {
                 console.error("Error al leer usuario:", e);
-                // Si los datos están corruptos, borrar y redirigir
                 localStorage.removeItem('datosUsuario');
                 window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
             }
         }
 
-        // Función para cambiar de usuario (Redirige sin preguntar confirmación)
-        function cambiarUsuario() {
-            // Elimina la sesión actual para obligar a loguearse de nuevo
-            localStorage.removeItem('datosUsuario');
-            // Redirige al login
-            window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+        // 3. FUNCIÓN DE MENSAJE DE ACCESO DENEGADO
+        function mostrarMensajeAccesoDenegado() {
+            const modal = document.getElementById('modalAccesoDenegado');
+            modal.style.display = 'flex';
+            
+            let countdown = 2;
+            const countdownEl = document.getElementById('redirect-countdown');
+            countdownEl.textContent = countdown;
+
+            const intervalo = setInterval(() => {
+                countdown--;
+                countdownEl.textContent = countdown;
+
+                if (countdown <= 0) {
+                    clearInterval(intervalo);
+                    // Redirigir al link del operador
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/TABLERO.HTML';
+                }
+            }, 1000);
+        }
+        
+        // 4. FUNCIONES DE MANEJO DE SESIÓN Y REDIRECCIÓN (Se mantienen)
+        function abrirModalCambioUsuario() {
+            document.getElementById('modalCambioUsuario').style.display = 'flex';
+            document.getElementById('nuevo_usuario').value = '';
+            document.getElementById('nuevo_password').value = '';
+            document.getElementById('error-login').textContent = '';
+            document.getElementById('nuevo_usuario').focus();
+        }
+
+        function cerrarModalCambioUsuario() {
+            document.getElementById('modalCambioUsuario').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal1 = document.getElementById('modalCambioUsuario');
+            const modal2 = document.getElementById('modalAccesoDenegado');
+            if (event.target == modal1) {
+                cerrarModalCambioUsuario();
+            }
+            // NOTA: El modalAccesoDenegado se cierra solo por redirección
+        }
+
+        async function autenticarNuevoUsuario() {
+            let usuarioInput = document.getElementById('nuevo_usuario').value.trim();
+            let passwordInput = document.getElementById('nuevo_password').value.trim();
+            let errorMsg = document.getElementById('error-login');
+            let btn = document.querySelector('.btn-login');
+
+            if (!usuarioInput || !passwordInput) {
+                errorMsg.textContent = 'Por favor, complete todos los campos.';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Verificando...';
+            errorMsg.textContent = '';
+
+            try {
+                const snapshot = await db.collection('usuarios').where('usuario', '==', usuarioInput).get();
+                let loginExitoso = false;
+                
+                if (!snapshot.empty) {
+                    snapshot.forEach(doc => {
+                        const usuarioEncontrado = doc.data();
+                        if (usuarioEncontrado.contraseña && usuarioEncontrado.contraseña === passwordInput) {
+                            loginExitoso = true;
+                            localStorage.setItem('datosUsuario', JSON.stringify(usuarioEncontrado));
+                            location.reload(); 
+                        }
+                    });
+                }
+
+                if (!loginExitoso) {
+                    errorMsg.textContent = 'Usuario o contraseña incorrectos.';
+                    btn.disabled = false;
+                    btn.textContent = 'Ingresar';
+                }
+
+            } catch (error) {
+                errorMsg.textContent = 'Error: ' + error.message;
+                btn.disabled = false;
+                btn.textContent = 'Ingresar';
+                console.error(error);
+            }
         }
 
         function cerrarSesion() {
+            // Nota: Se reemplaza confirm() por tu lógica preferida si tienes un modal para esto
             if(confirm("¿Estás seguro de que deseas cerrar sesión?")) {
                 localStorage.removeItem('datosUsuario');
                 window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
             }
         }
 
-        // 2. LÓGICA DE REDIRECCIÓN (Reemplaza con tus enlaces reales)
         function redirigir(seccion) {
             console.log("Navegando a: " + seccion);
-
+            // Reemplaza con tus enlaces reales
             switch(seccion) {
-                case 'cuentas':
-                    window.location.href = 'ruta/a/cuentas_bancarias.html'; 
-                    break;
-                case 'fabricantes':
-                    window.location.href = 'ruta/a/ingreso_fabricantes.html';
-                    break;
-                case 'ventas':
-                    window.location.href = 'ruta/a/historial_ventas.html';
-                    break;
-                case 'guias':
-                    window.location.href = 'ruta/a/historial_guias.html';
-                    break;
-                case 'grafica_general':
-                    window.location.href = 'ruta/a/grafica_general.html';
-                    break;
-                case 'grafica_asesor':
-                    window.location.href = 'ruta/a/grafica_asesor.html';
-                    break;
-                case 'nomina':
-                    window.location.href = 'ruta/a/nomina_propulsar.html';
-                    break;
-                default:
-                    alert("Ruta no configurada para: " + seccion);
+                case 'cuentas': window.location.href = 'ruta/a/cuentas.html'; break;
+                case 'fabricantes': window.location.href = 'ruta/a/fabricantes.html'; break;
+                case 'ventas': window.location.href = 'ruta/a/ventas.html'; break;
+                case 'guias': window.location.href = 'ruta/a/guias.html'; break;
+                case 'grafica_general': window.location.href = 'ruta/a/grafica_gen.html'; break;
+                case 'grafica_asesor': window.location.href = 'ruta/a/grafica_ase.html'; break;
+                case 'nomina': window.location.href = 'ruta/a/nomina.html'; break;
+                default: console.warn("Ruta no configurada: " + seccion);
             }
         }
     </script>
