@@ -280,7 +280,7 @@ function showModal(title, message, isConfirm, onOk, onCancel){
     $('generic-modal').classList.remove('hidden');
 }
 
-function showPasswordModal(title, message, onCorrectPassword, onCancel){
+function showPasswordModal(title, message){
     return new Promise((resolve, reject) => {
         $('modal-title').textContent = title;
         $('modal-body').textContent = message;
@@ -321,12 +321,11 @@ function showPasswordModal(title, message, onCorrectPassword, onCancel){
         if(e.message !== "Acción cancelada.") {
             showModal('Error', e.message, false);
         }
-        if(onCancel) onCancel();
         throw e; // Re-throw to propagate rejection
     });
 }
 
-/* MODAL DE OPCIONES Y ROLES */
+/* MODAL DE OPCIONES Y ROLES (Unchanged) */
 $('open-options').addEventListener('click', ()=> {
   $('modal-options').classList.remove('hidden');
   document.querySelector('input[name="sessionRole"][value="Administrativo"]').checked = true;
@@ -388,7 +387,7 @@ async function checkSensitiveAction(selectedData) {
   return true; 
 }
 
-/* GESTIÓN DE CUENTAS */
+/* GESTIÓN DE CUENTAS (Unchanged) */
 function subscribeAccounts(){
   db.collection('cuentas').orderBy('name').onSnapshot(snapshot=>{
     const container = $('accounts-list'); container.innerHTML = '';
@@ -447,7 +446,7 @@ async function deleteAccount(id, name){
     });
 }
 
-/* RENDER CONSIGNACIONES */
+/* RENDER CONSIGNACIONES (Unchanged) */
 let consignsUnsub = null;
 function renderConsigns(){ 
   if(consignsUnsub) consignsUnsub(); 
@@ -560,9 +559,8 @@ document.addEventListener('keydown', e => {
 });
 
 /* BOTONES DE EXPORTACIÓN (Unchanged) */
-// Función de exportación de cuenta seleccionada (Unchanged logic)
+// Función de exportación de cuenta seleccionada
 $('btn-export-excel').addEventListener('click', () => {
-    // ... Lógica de exportación de cuenta seleccionada ...
   if(!selectedAccountId || currentConsignsSnapshot.length === 0) return showModal('Atención', "No hay datos para exportar.", false);
 
   const dataForExcel = currentConsignsSnapshot
@@ -600,7 +598,7 @@ $('btn-export-excel').addEventListener('click', () => {
   XLSX.writeFile(wb, `Consignaciones_${selectedAccountName.replace(/\s+/g,'_')}.xlsx`);
 });
 
-// Función de exportación de maestra (Actualizada para usar Modal)
+// Función de exportación de maestra
 $('btn-export-master').addEventListener('click', async () => {
   if (sessionRole !== 'Gerente') return;
   
@@ -663,7 +661,7 @@ $('btn-export-master').addEventListener('click', async () => {
 });
 
 
-/* OPERACIONES DE DATOS */
+/* OPERACIONES DE DATOS (Unchanged) */
 $('add-consign').addEventListener('click', async ()=>{
   if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   const fecha = parseDateRadio('dateOpt','date-picker'); const obsdate = parseDateRadio('obsOpt','obsdate-picker'); const valor = Number($('valor').value || 0);
@@ -701,57 +699,91 @@ $('btn-unverify').addEventListener('click', async ()=>{
   showModal('Éxito', `${ids.length} movimientos desverificados.`, false);
 });
 
-// ELIMINAR CON PROTECCIÓN Y RECALCULO DE CORTE
+// FUNCIÓN DE ELIMINACIÓN CORREGIDA CON RECALCULO GENERAL
 $('btn-delete').addEventListener('click', async ()=>{ 
   if(sessionRole!=='Gerente') return showModal('Error', 'Solo Gerente puede eliminar movimientos.', false); 
   const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para eliminar.', false);
   const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
   const selectedData = currentConsignsSnapshot.filter(c => ids.includes(c.id));
-  const consignsToDelete = selectedData.filter(c => !c.isSeparator); // Solo consignaciones
-
+  
   if(!await checkSensitiveAction(selectedData)) return;
 
   showModal('Confirmación', `¿Eliminar ${ids.length} items permanentemente?`, true, async () => {
     try {
-        const batch = db.batch(); 
-        ids.forEach(id=> batch.delete(col.doc(id))); 
-        await batch.commit();
+        // 1. Eliminar los documentos seleccionados
+        const deletionBatch = db.batch(); 
+        ids.forEach(id=> deletionBatch.delete(col.doc(id))); 
+        await deletionBatch.commit();
         
-        // --- LÓGICA DE RECALCULO DE CORTE (CUADRADO) ---
-        // 1. Identificar si una consignación eliminada era parte del ÚLTIMO corte (Verificada por Gerente antes del último corte verde)
-        const lastGreenSeparator = currentConsignsSnapshot.findLast(c => c.type === 'green');
+        // --- LÓGICA DE RECALCULO DE CORTES AFECTADOS ---
+        const affectedGreenSeparatorIds = new Set();
+        // Solo las consignaciones verificadas por Gerente que se acaban de borrar
+        const deletedVerifiedConsigns = selectedData.filter(c => c.verifiedRole === 'Gerente' && !c.isSeparator);
         
-        let needsRecalculation = false;
-        if (lastGreenSeparator) {
-            const lastGreenDate = lastGreenSeparator.fecha.toDate();
-            consignsToDelete.forEach(c => {
-                if (c.verifiedRole === 'Gerente' && c.fecha.toDate() <= lastGreenDate) {
-                    needsRecalculation = true;
+        // 2. Identificar los cortes (separadores verdes) que contenían el movimiento eliminado
+        deletedVerifiedConsigns.forEach(deletedConsign => {
+            const deletedDate = deletedConsign.fecha.toDate().getTime();
+
+            // Buscar el NEXT green separator en el snapshot local (pre-delete)
+            const affectedGreenSeparator = currentConsignsSnapshot.find(c => 
+                c.type === 'green' && c.fecha.toDate().getTime() > deletedDate
+            );
+            
+            if (affectedGreenSeparator) {
+                affectedGreenSeparatorIds.add(affectedGreenSeparator.id);
+            }
+        });
+
+        if (affectedGreenSeparatorIds.size > 0) {
+            
+            // 3. Obtener la lista de consignaciones REMANENTES (data fresca post-eliminación)
+            const updatedSnapshot = await col.orderBy('fecha').get();
+            const updatedConsigns = [];
+            updatedSnapshot.forEach(doc => updatedConsigns.push({id: doc.id, ...doc.data()}));
+
+            const updateBatch = db.batch();
+            let recalculationCount = 0;
+
+            // 4. Recalcular cada corte afectado
+            for (const greenId of affectedGreenSeparatorIds) {
+                const affectedGreenSeparator = currentConsignsSnapshot.find(c => c.id === greenId);
+                if (!affectedGreenSeparator) continue; // Si se eliminó el separador o no se encontró
+
+                // Encontrar el RED separator inmediatamente precedente al corte afectado
+                const greenIndex = currentConsignsSnapshot.indexOf(affectedGreenSeparator);
+                let precedingRedSeparator = null;
+                for (let i = greenIndex - 1; i >= 0; i--) {
+                    if (currentConsignsSnapshot[i].type === 'red') {
+                        precedingRedSeparator = currentConsignsSnapshot[i];
+                        break;
+                    }
                 }
-            });
-        }
 
-        if (needsRecalculation) {
-            // 2. Encontrar el corte (red separator) anterior al verde afectado.
-            const lastRedSeparator = currentConsignsSnapshot.findLast(c => c.type === 'red' && c.fecha.toDate() < lastGreenSeparator.fecha.toDate());
+                // Definir el inicio del periodo de cálculo (fecha del rojo, o fecha de inicio)
+                const queryStart = precedingRedSeparator ? precedingRedSeparator.fecha.toDate().getTime() : new Date(0).getTime();
+                const queryEnd = affectedGreenSeparator.fecha.toDate().getTime();
+
+                // Sumar las consignaciones restantes verificadas por Gerente en ese periodo
+                const remainingConsignsInPeriod = updatedConsigns
+                    .filter(c => 
+                        !c.isSeparator && 
+                        c.verifiedRole === 'Gerente' && 
+                        c.fecha.toDate().getTime() > queryStart && 
+                        c.fecha.toDate().getTime() < queryEnd
+                    );
+
+                const newCutTotal = remainingConsignsInPeriod.reduce((sum, c) => sum + Number(c.valor || 0), 0);
+                
+                // Aplicar la actualización al separador verde
+                updateBatch.update(col.doc(greenId), { 
+                    total: newCutTotal,
+                    label: `🚨 Recalculado ${new Date().toLocaleDateString()}` 
+                });
+                recalculationCount++;
+            }
             
-            // 3. Recalcular la suma de todos los items *restantes* Verificados por Gerente en ese periodo.
-            // Para ser robustos, hacemos una nueva consulta después de la eliminación.
-            const queryStart = lastRedSeparator ? lastRedSeparator.fecha.toDate() : new Date(0);
-
-            const remainingConsigns = (await col.where('fecha', '>', queryStart).orderBy('fecha').get()).docs
-                .map(d => d.data())
-                .filter(c => c.verifiedRole === 'Gerente' && !c.isSeparator);
-
-            const newCutTotal = remainingConsigns.reduce((sum, c) => sum + Number(c.valor || 0), 0);
-            
-            // 4. Actualizar el documento del separador verde.
-            await col.doc(lastGreenSeparator.id).update({ 
-                total: newCutTotal,
-                label: `🚨 Recalculado ${new Date().toLocaleDateString()}` // Marca para saber que fue modificado
-            });
-
-            showModal('¡Atención!', 'Eliminación exitosa. El total del ÚLTIMO CORTE ha sido recalculado y corregido.', false);
+            await updateBatch.commit();
+            showModal('¡Atención!', `Eliminación exitosa. ${recalculationCount} CORTES afectados han sido recalculados y corregidos.`, false);
         } else {
             showModal('Éxito', `${ids.length} items eliminados.`, false);
         }
@@ -794,7 +826,6 @@ $('btn-sumar').addEventListener('click', ()=>{
   const rows = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]:checked'));
   let suma = 0;
   rows.forEach(ch=>{
-    // Obtener el objeto de datos en lugar de parsear la tabla (más seguro)
     const index = parseInt(ch.dataset.idx);
     const item = currentConsignsSnapshot[index];
     if(item && !item.isSeparator) {
@@ -833,7 +864,7 @@ $('search-name').addEventListener('input', () => filter('search-name'));
 $('search-account').addEventListener('input', () => filter('search-account'));
 
 window.addEventListener('load', ()=>{ 
-    if(!usuario){ return; } // Si no hay usuario, el redireccionamiento ya se disparó
+    if(!usuario){ return; } 
     $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; 
 });
 window.addEventListener('beforeunload', ()=>{ if(consignsUnsub) consignsUnsub(); });
