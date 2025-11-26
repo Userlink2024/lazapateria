@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sistema de Consignaciones - Blindado</title>
+  <title>Sistema de Consignaciones - Blindado y Final</title>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
 
@@ -22,7 +22,7 @@
     .main{flex:1;padding:18px;overflow:auto}
     h2,h3{margin:0 0 8px 0}
     label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
-    input[type=text], input[type=number], input[type=date], select, textarea{width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:#fff}
+    input[type=text], input[type=number], input[type=date], select, textarea, input[type=password]{width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:#fff}
     textarea{resize:vertical}
     .btn{background:var(--accent);color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
     .btn.ghost{background:#f1f5f9;color:#0f172a}
@@ -61,6 +61,12 @@
     .modal .card{width:720px;max-width:96%;padding:16px}
     .hidden{display:none}
     .gear{cursor:pointer;padding:6px;border-radius:6px;border:1px solid var(--border);background:#fff}
+    
+    /* Nuevo modal genérico */
+    #generic-modal .card{width:400px!important; max-width:96%; padding:16px; position:relative;}
+    #modal-title{color:var(--accent); margin-bottom:12px;}
+    #modal-body{margin-bottom:12px;}
+    #modal-password-input{margin-top:4px;}
   </style>
 </head>
 <body>
@@ -211,6 +217,21 @@
     </div>
   </div>
 
+  <div id="generic-modal" class="modal hidden">
+    <div class="panel card">
+        <h4 id="modal-title" style="margin-top:0;"></h4>
+        <div id="modal-body"></div>
+        <div id="modal-password-area" class="hidden" style="margin-top:12px">
+            <label>CLAVE DE GERENTE</label>
+            <input id="modal-password-input" type="password">
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+            <button id="modal-cancel-btn" class="btn ghost hidden">Cancelar</button>
+            <button id="modal-ok-btn" class="btn">Aceptar</button>
+        </div>
+    </div>
+  </div>
+
 <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
 <script>
@@ -228,8 +249,8 @@ const db = firebase.firestore();
 
 /* ESTADO GLOBAL */
 const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
-if(!usuario){ alert('No hay sesión activa.'); location.href='index.html'; }
-if(usuario.permisos !== 'Administrador'){ alert('Acceso denegado.'); location.href='index.html'; }
+if(!usuario){ showModal('Error', 'No hay sesión activa.', false, ()=>location.href='index.html'); }
+if(usuario.permisos !== 'Administrador'){ showModal('Error', 'Acceso denegado.', false, ()=>location.href='index.html'); }
 
 $('user-info').textContent = usuario.usuario;
 $('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
@@ -244,6 +265,66 @@ let currentConsignsSnapshot = [];
 function $(id){ return document.getElementById(id); }
 function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)); }
 function parseDateRadio(name, pickerId){ const opts = document.getElementsByName(name); let sel=null; for(const r of opts) if(r.checked) sel=r.value; if(sel==='today') return new Date(); if(sel==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); return d; } if(sel==='daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); return d; } const v=$(pickerId).value; return v? new Date(v): null; }
+
+/* FUNCIONES DE MODAL GENÉRICO */
+function showModal(title, message, isConfirm, onOk, onCancel){
+    $('modal-title').textContent = title;
+    $('modal-body').textContent = message;
+    $('modal-password-area').classList.add('hidden');
+    $('modal-password-input').value = '';
+
+    $('modal-cancel-btn').classList.toggle('hidden', !isConfirm);
+    $('modal-ok-btn').onclick = () => { $('generic-modal').classList.add('hidden'); if(onOk) onOk(); };
+    $('modal-cancel-btn').onclick = () => { $('generic-modal').classList.add('hidden'); if(onCancel) onCancel(); };
+
+    $('generic-modal').classList.remove('hidden');
+}
+
+function showPasswordModal(title, message, onCorrectPassword, onCancel){
+    return new Promise((resolve, reject) => {
+        $('modal-title').textContent = title;
+        $('modal-body').textContent = message;
+        $('modal-password-area').classList.remove('hidden');
+        $('modal-password-input').value = '';
+        $('modal-password-input').focus();
+        
+        $('modal-cancel-btn').classList.remove('hidden');
+
+        const checkPass = () => {
+            const pass = $('modal-password-input').value;
+            if (pass === managerPass) {
+                $('generic-modal').classList.add('hidden');
+                resolve(true);
+            } else {
+                showModal('Error de Seguridad', 'Clave incorrecta. Intente de nuevo.', false);
+                $('modal-password-input').value = '';
+                $('modal-password-input').focus();
+                // No resolve/reject here, just wait for retry
+            }
+        };
+
+        const handleCancel = () => {
+            $('generic-modal').classList.add('hidden');
+            reject(new Error("Acción cancelada."));
+        };
+
+        $('modal-ok-btn').onclick = checkPass;
+        $('modal-cancel-btn').onclick = handleCancel;
+        
+        // Permite usar Enter en el input de contraseña
+        $('modal-password-input').onkeydown = (e) => {
+            if(e.key === 'Enter') { e.preventDefault(); checkPass(); }
+        };
+
+        $('generic-modal').classList.remove('hidden');
+    }).catch(e => {
+        if(e.message !== "Acción cancelada.") {
+            showModal('Error', e.message, false);
+        }
+        if(onCancel) onCancel();
+        throw e; // Re-throw to propagate rejection
+    });
+}
 
 /* MODAL DE OPCIONES Y ROLES */
 $('open-options').addEventListener('click', ()=> {
@@ -264,37 +345,44 @@ document.querySelectorAll('input[name="sessionRole"]').forEach(r=>{
 $('options-cancel').addEventListener('click', ()=> $('modal-options').classList.add('hidden'));
 $('gear-change').addEventListener('click', ()=> $('gear-panel').classList.toggle('hidden'));
 $('cancel-gear').addEventListener('click', ()=> $('gear-panel').classList.add('hidden'));
+
 $('save-manager-pass').addEventListener('click', ()=>{
-  const p = $('new-manager-pass').value.trim(); if(!p){ alert('Ingrese nueva clave'); return; }
-  managerPass = p; localStorage.setItem('managerPass', managerPass); alert('Clave actualizada'); $('gear-panel').classList.add('hidden');
+  const p = $('new-manager-pass').value.trim(); if(!p){ showModal('Atención', 'Ingrese nueva clave.', false); return; }
+  managerPass = p; localStorage.setItem('managerPass', managerPass); 
+  showModal('Éxito', 'Clave actualizada.', false); 
+  $('gear-panel').classList.add('hidden');
 });
 
 $('options-continue').addEventListener('click', ()=>{
   const chosen = document.querySelector('input[name="sessionRole"]:checked').value;
   if(chosen === 'Gerente'){
-    if($('manager-pass').value !== managerPass){ alert('Clave incorrecta'); return; }
+    if($('manager-pass').value !== managerPass){ showModal('Error', 'Clave incorrecta.', false); return; }
     sessionRole = 'Gerente';
   } else sessionRole = 'Administrativo';
 
   const isMgr = (sessionRole === 'Gerente');
   $('btn-delete').style.display = isMgr ? 'inline-block' : 'none';
   $('btn-cuadrar').style.display = isMgr ? 'inline-block' : 'none';
-  $('btn-export-master').style.display = isMgr ? 'inline-block' : 'none'; // Mostrar botón de Maestra
+  $('btn-export-master').style.display = isMgr ? 'inline-block' : 'none';
   document.querySelectorAll('.del-btn').forEach(b => b.style.display = isMgr ? 'block' : 'none');
   
   $('modal-options').classList.add('hidden');
-  alert('Rol activo: ' + sessionRole);
+  showModal('Acceso', 'Rol activo: ' + sessionRole, false);
 });
 
 /* SEGURIDAD EXTRA: Proteger cambios en items verificados */
-function checkSensitiveAction(selectedData) {
+async function checkSensitiveAction(selectedData) {
   const lockedItems = selectedData.filter(i => i.verifiedRole || i.isSeparator);
   
   if (lockedItems.length > 0) {
-    const pass = prompt("⚠️ ACCIÓN RESTRINGIDA ⚠️\n\nEstá intentando modificar/eliminar registros VERIFICADOS o CORTES.\nPara continuar, ingrese la CLAVE DE GERENTE:");
-    if (pass !== managerPass) {
-      alert("⛔ CLAVE INCORRECTA. Acción cancelada para proteger la información.");
-      return false; 
+    try {
+        await showPasswordModal(
+            "⚠️ ACCIÓN RESTRINGIDA ⚠️", 
+            "Está intentando modificar/eliminar registros VERIFICADOS o CORTES. Ingrese la CLAVE DE GERENTE para continuar:"
+        );
+        return true;
+    } catch (e) {
+        return false;
     }
   }
   return true; 
@@ -341,18 +429,25 @@ function subscribeAccounts(){
 subscribeAccounts();
 
 async function deleteAccount(id, name){
-    if(sessionRole !== 'Gerente') return alert("Solo Gerente.");
-    const pass = prompt(`⚠️ PELIGRO: Va a eliminar la cuenta "${name}" y todo su historial.\nIngrese CLAVE DE GERENTE para confirmar:`);
-    if(pass !== managerPass) return alert("Clave incorrecta.");
+    if(sessionRole !== 'Gerente') return showModal('Error', "Solo Gerente puede eliminar cuentas.", false);
+    
+    showModal('Confirmación', `¿Eliminar cuenta "${name}" permanentemente?`, true, async () => {
+        try {
+            await showPasswordModal(
+                "⚠️ PELIGRO ⚠️",
+                `Va a eliminar la cuenta "${name}" y todo su historial. Ingrese CLAVE DE GERENTE para confirmar:`
+            );
 
-    try {
-        await db.collection('cuentas').doc(id).delete();
-        if(selectedAccountId === id) { selectedAccountId=null; $('consigns-body').innerHTML=''; $('selected-account-info').textContent='...'; }
-        alert("Cuenta eliminada.");
-    } catch(e) { alert("Error: " + e.message); }
+            await db.collection('cuentas').doc(id).delete();
+            if(selectedAccountId === id) { selectedAccountId=null; $('consigns-body').innerHTML=''; $('selected-account-info').textContent='...'; }
+            showModal('Éxito', "Cuenta eliminada.", false);
+        } catch(e) { 
+            if(e.message !== "Acción cancelada.") showModal('Error', "Error: " + e.message, false);
+        }
+    });
 }
 
-/* RENDER CONSIGNACIONES (Omitting for brevity, remains unchanged from previous version) */
+/* RENDER CONSIGNACIONES */
 let consignsUnsub = null;
 function renderConsigns(){ 
   if(consignsUnsub) consignsUnsub(); 
@@ -375,7 +470,7 @@ function renderConsigns(){
         let labelText = `--- ${c.label} ---`;
         if(c.type === 'green') labelText = `💰 TOTAL: ${fmtCOP(c.total)}`;
         if(c.type === 'red') labelText = `🛑 CORTE (${c.label})`;
-        tr.innerHTML = `<td><input type="checkbox" data-id="${c.id}" data-idx="${index}"></td><td colspan="3">${labelText}</td><td></td>`;
+        tr.innerHTML = `<td><input type="checkbox" data-id="${c.id}" data-idx="${index}" data-separator="true"></td><td colspan="3">${labelText}</td><td></td>`;
         tbody.appendChild(tr);
         return;
       }
@@ -407,7 +502,7 @@ function renderConsigns(){
   });
 }
 
-/* LÓGICA DE TECLADO Y SELECCIÓN (Unchanged from previous version) */
+/* LÓGICA DE TECLADO Y SELECCIÓN (Unchanged) */
 let activeRowIndex = -1;
 let anchorRowIndex = -1;
 function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
@@ -464,69 +559,64 @@ document.addEventListener('keydown', e => {
     }
 });
 
-/* BOTÓN EXPORTAR CUENTA SELECCIONADA (Mantenido) */
+/* BOTONES DE EXPORTACIÓN (Unchanged) */
+// Función de exportación de cuenta seleccionada (Unchanged logic)
 $('btn-export-excel').addEventListener('click', () => {
-  if(!selectedAccountId || currentConsignsSnapshot.length === 0) return alert("No hay datos para exportar");
+    // ... Lógica de exportación de cuenta seleccionada ...
+  if(!selectedAccountId || currentConsignsSnapshot.length === 0) return showModal('Atención', "No hay datos para exportar.", false);
 
   const dataForExcel = currentConsignsSnapshot
     .filter(c => !c.isSeparator)
     .map(c => {
-      // Usar objetos Date reales para que SheetJS pueda formatearlos
       const fechaDate = c.fecha && c.fecha.toDate ? c.fecha.toDate() : null;
       const obsDate = c.obsdate && c.obsdate.toDate ? c.obsdate.toDate() : null;
       
       return {
-        // En Excel, si el tipo es Date, se puede formatear.
         FECHA: fechaDate, 
         VALOR: Number(c.valor || 0),
         OBSERVACIONES: obsDate
       };
     });
 
-  if(dataForExcel.length === 0) return alert("No hay movimientos válidos (solo separadores).");
+  if(dataForExcel.length === 0) return showModal('Atención', "No hay movimientos válidos (solo separadores).", false);
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES"] });
 
-  // Aplicar formatos a las columnas
   const range = XLSX.utils.decode_range(ws['!ref']);
   for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
       const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); 
       const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); 
       const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); 
 
-      // FECHA (Larga)
       if (ws[cell_fecha_addr]) ws[cell_fecha_addr].z = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
-      // VALOR (Moneda)
       if (ws[cell_valor_addr]) ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
-      // OBSERVACIONES (Corta)
       if (ws[cell_obs_addr]) ws[cell_obs_addr].z = 'dd/mm/yyyy'; 
   }
 
-  // Ajustar anchos
   ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}];
   
   XLSX.utils.book_append_sheet(wb, ws, selectedAccountName.substring(0, 31)); 
   XLSX.writeFile(wb, `Consignaciones_${selectedAccountName.replace(/\s+/g,'_')}.xlsx`);
 });
 
-
-/* NUEVO BOTÓN EXPORTAR MAESTRA (Gerente) */
+// Función de exportación de maestra (Actualizada para usar Modal)
 $('btn-export-master').addEventListener('click', async () => {
-  if (sessionRole !== 'Gerente') return alert("Esta función es solo para Gerente.");
-
-  const pass = prompt("Para descargar toda la Maestra, ingrese la CLAVE DE GERENTE:");
-  if (pass !== managerPass) return alert("Clave incorrecta. Descarga cancelada.");
+  if (sessionRole !== 'Gerente') return;
   
   try {
+    await showPasswordModal(
+        "⚠️ DESCARGA DE MAESTRA ⚠️",
+        "Esta acción descarga toda la información del sistema. Ingrese la CLAVE DE GERENTE para continuar:"
+    );
+
     const accountsSnapshot = await db.collection('cuentas').get();
     const wb = XLSX.utils.book_new();
 
     for (const doc of accountsSnapshot.docs) {
       const account = { id: doc.id, ...doc.data() };
-      const accountName = account.name.substring(0, 31).replace(/[\/\?\[\]\*\\\: ]/g, '_'); // Nombre de hoja limpio
+      const accountName = account.name.substring(0, 31).replace(/[\/\?\[\]\*\\\: ]/g, '_'); 
 
-      // Obtener consignaciones de la subcolección
       const consignsSnapshot = await db.collection('cuentas').doc(account.id).collection('consignaciones').orderBy('fecha').get();
 
       const dataForExcel = consignsSnapshot.docs
@@ -546,22 +636,16 @@ $('btn-export-master').addEventListener('click', async () => {
 
       const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES"] });
 
-      // Aplicar formatos a las columnas de esta hoja
       if (ws['!ref']) {
           const range = XLSX.utils.decode_range(ws['!ref']);
           for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
               const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); 
               const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); 
               const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); 
-
-              // FECHA (Larga)
               if (ws[cell_fecha_addr]) ws[cell_fecha_addr].z = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
-              // VALOR (Moneda)
               if (ws[cell_valor_addr]) ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
-              // OBSERVACIONES (Corta)
               if (ws[cell_obs_addr]) ws[cell_obs_addr].z = 'dd/mm/yyyy'; 
           }
-           // Ajustar anchos
            ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}];
       }
 
@@ -571,26 +655,26 @@ $('btn-export-master').addEventListener('click', async () => {
     if (wb.SheetNames.length > 0) {
       XLSX.writeFile(wb, `Maestra_Consignaciones_${new Date().toLocaleDateString().replace(/\//g,'-')}.xlsx`);
     } else {
-      alert("No se encontraron movimientos en ninguna cuenta para exportar.");
+      showModal('Atención', "No se encontraron movimientos en ninguna cuenta para exportar.", false);
     }
   } catch (e) {
-    console.error("Error al exportar la maestra:", e);
-    alert("Ocurrió un error al intentar exportar la maestra: " + e.message);
+    if(e.message !== "Acción cancelada.") showModal('Error', "Ocurrió un error al intentar exportar la maestra: " + e.message, false);
   }
 });
 
 
-/* OPERACIONES DE DATOS (Omitting for brevity, mostly unchanged) */
+/* OPERACIONES DE DATOS */
 $('add-consign').addEventListener('click', async ()=>{
-  if(!selectedAccountId) return alert('Seleccione cuenta.');
+  if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   const fecha = parseDateRadio('dateOpt','date-picker'); const obsdate = parseDateRadio('obsOpt','obsdate-picker'); const valor = Number($('valor').value || 0);
-  if(!fecha) return alert('Fecha inválida.');
+  if(!fecha) return showModal('Atención', 'Fecha inválida.', false);
   try{ 
     await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
         fecha: firebase.firestore.Timestamp.fromDate(fecha), obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, valor, verifiedBy:null, verifiedRole:null 
     }); 
     $('valor').value=''; $('valor').focus();
-  }catch(e){ alert('Error: '+e.message); }
+    showModal('Éxito', 'Consignación agregada.', false);
+  }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
 });
 
 $('valor').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-consign').click(); });
@@ -598,71 +682,129 @@ $('valor').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-consign')
 function getSelectedConsignIds(){ return Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]:checked')).map(c=>c.dataset.id); }
 
 $('btn-verify').addEventListener('click', async ()=>{
-  const ids=getSelectedConsignIds(); if(ids.length===0) return;
+  const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para verificar.', false);
   const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); 
   const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); 
   await batch.commit();
+  showModal('Éxito', `${ids.length} movimientos verificados.`, false);
 });
 
 $('btn-unverify').addEventListener('click', async ()=>{
-  const ids=getSelectedConsignIds(); if(ids.length===0) return;
+  const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para desverificar.', false);
   const selectedData = currentConsignsSnapshot.filter(c => ids.includes(c.id));
-  if(!checkSensitiveAction(selectedData)) return;
+  
+  if(!await checkSensitiveAction(selectedData)) return;
 
   const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
   ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null })); 
   await batch.commit();
+  showModal('Éxito', `${ids.length} movimientos desverificados.`, false);
 });
 
+// ELIMINAR CON PROTECCIÓN Y RECALCULO DE CORTE
 $('btn-delete').addEventListener('click', async ()=>{ 
-  if(sessionRole!=='Gerente') return; 
-  const ids=getSelectedConsignIds(); if(ids.length===0) return;
+  if(sessionRole!=='Gerente') return showModal('Error', 'Solo Gerente puede eliminar movimientos.', false); 
+  const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para eliminar.', false);
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
   const selectedData = currentConsignsSnapshot.filter(c => ids.includes(c.id));
-  if(!checkSensitiveAction(selectedData)) return;
+  const consignsToDelete = selectedData.filter(c => !c.isSeparator); // Solo consignaciones
 
-  if(!confirm('¿Eliminar '+ids.length+' items permanentemente?')) return; 
-  const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-  ids.forEach(id=> batch.delete(col.doc(id))); await batch.commit(); 
+  if(!await checkSensitiveAction(selectedData)) return;
+
+  showModal('Confirmación', `¿Eliminar ${ids.length} items permanentemente?`, true, async () => {
+    try {
+        const batch = db.batch(); 
+        ids.forEach(id=> batch.delete(col.doc(id))); 
+        await batch.commit();
+        
+        // --- LÓGICA DE RECALCULO DE CORTE (CUADRADO) ---
+        // 1. Identificar si una consignación eliminada era parte del ÚLTIMO corte (Verificada por Gerente antes del último corte verde)
+        const lastGreenSeparator = currentConsignsSnapshot.findLast(c => c.type === 'green');
+        
+        let needsRecalculation = false;
+        if (lastGreenSeparator) {
+            const lastGreenDate = lastGreenSeparator.fecha.toDate();
+            consignsToDelete.forEach(c => {
+                if (c.verifiedRole === 'Gerente' && c.fecha.toDate() <= lastGreenDate) {
+                    needsRecalculation = true;
+                }
+            });
+        }
+
+        if (needsRecalculation) {
+            // 2. Encontrar el corte (red separator) anterior al verde afectado.
+            const lastRedSeparator = currentConsignsSnapshot.findLast(c => c.type === 'red' && c.fecha.toDate() < lastGreenSeparator.fecha.toDate());
+            
+            // 3. Recalcular la suma de todos los items *restantes* Verificados por Gerente en ese periodo.
+            // Para ser robustos, hacemos una nueva consulta después de la eliminación.
+            const queryStart = lastRedSeparator ? lastRedSeparator.fecha.toDate() : new Date(0);
+
+            const remainingConsigns = (await col.where('fecha', '>', queryStart).orderBy('fecha').get()).docs
+                .map(d => d.data())
+                .filter(c => c.verifiedRole === 'Gerente' && !c.isSeparator);
+
+            const newCutTotal = remainingConsigns.reduce((sum, c) => sum + Number(c.valor || 0), 0);
+            
+            // 4. Actualizar el documento del separador verde.
+            await col.doc(lastGreenSeparator.id).update({ 
+                total: newCutTotal,
+                label: `🚨 Recalculado ${new Date().toLocaleDateString()}` // Marca para saber que fue modificado
+            });
+
+            showModal('¡Atención!', 'Eliminación exitosa. El total del ÚLTIMO CORTE ha sido recalculado y corregido.', false);
+        } else {
+            showModal('Éxito', `${ids.length} items eliminados.`, false);
+        }
+
+    } catch(e) { 
+        if(e.message !== "Acción cancelada.") showModal('Error', 'Error al eliminar: '+e.message, false);
+    }
+  });
 });
 
 $('btn-cuadrar').addEventListener('click', async () => {
-  if (!selectedAccountId) return;
+  if (!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   
   let pendingItems = [];
   for(const item of currentConsignsSnapshot){
     if(item.isSeparator) pendingItems = [];
     else pendingItems.push(item);
   }
-  if(pendingItems.length === 0) return alert("Nada nuevo para cuadrar.");
+  if(pendingItems.length === 0) return showModal('Atención', "Nada nuevo para cuadrar. No hay movimientos pendientes desde el último corte.", false);
 
   const nonYellow = pendingItems.filter(i => i.verifiedRole !== 'Gerente');
-  if(nonYellow.length > 0) return alert(`Hay ${nonYellow.length} items sin verificar por Gerente.`);
+  if(nonYellow.length > 0) return showModal('Atención', `Hay ${nonYellow.length} items sin verificar por Gerente. Verifique todos los ítems primero.`, false);
 
   const total = pendingItems.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
-  if(!confirm(`¿Realizar corte?\nTotal: ${fmtCOP(total)}`)) return;
-
-  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-  const batch = db.batch();
-  const now = new Date();
   
-  batch.set(col.doc(), { isSeparator:true, type:'green', label: now.toLocaleDateString(), total: total, fecha: firebase.firestore.Timestamp.fromDate(now) });
-  batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString(), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1000)) });
+  showModal('Confirmación', `¿Realizar corte?\nTotal a Cuadrar: ${fmtCOP(total)}`, true, async () => {
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+    const batch = db.batch();
+    const now = new Date();
+    
+    batch.set(col.doc(), { isSeparator:true, type:'green', label: now.toLocaleDateString(), total: total, fecha: firebase.firestore.Timestamp.fromDate(now) });
+    batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString(), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1000)) });
 
-  await batch.commit();
+    await batch.commit();
+    showModal('Éxito', '¡Corte realizado con éxito!', false);
+  });
 });
 
 $('btn-sumar').addEventListener('click', ()=>{
   const rows = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]:checked'));
   let suma = 0;
   rows.forEach(ch=>{
-    const tr=ch.closest('tr'); 
-    const val = tr.children[2].textContent.replace(/\./g,'').replace(/,/g,''); 
-    suma += Number(val)||0; 
+    // Obtener el objeto de datos en lugar de parsear la tabla (más seguro)
+    const index = parseInt(ch.dataset.idx);
+    const item = currentConsignsSnapshot[index];
+    if(item && !item.isSeparator) {
+        suma += Number(item.valor || 0);
+    }
   });
-  alert('Suma selección: '+fmtCOP(suma));
+  showModal('Suma de Selección', `La suma de los ítems seleccionados es: ${fmtCOP(suma)}`, false);
 });
 
-/* CALCULOS TOTALES (Unchanged from previous version) */
+/* CALCULOS TOTALES (Unchanged) */
 async function updateSelectedTotals(){ 
   if(!selectedAccountId){ $('total-cuenta').textContent = 0; return; }
   let total = 0; 
@@ -676,11 +818,11 @@ async function updateTotalGeneral(){
     let total = 0; 
     snap.forEach(d=>{ if(!d.data().isSeparator) total += Number(d.data().valor || 0); }); 
     $('total-general').textContent = fmtCOP(total); 
-  }catch(e){} 
+  }catch(e){ console.error("Error al actualizar total general:", e); } 
 }
 setInterval(updateTotalGeneral,15000); updateTotalGeneral();
 
-/* BUSQUEDA (Unchanged from previous version) */
+/* BUSQUEDA (Unchanged) */
 const filter = (id) => {
     const q = $(id).value.toLowerCase();
     document.querySelectorAll('#accounts-list .account-item').forEach(it => {
@@ -690,7 +832,10 @@ const filter = (id) => {
 $('search-name').addEventListener('input', () => filter('search-name'));
 $('search-account').addEventListener('input', () => filter('search-account'));
 
-window.addEventListener('load', ()=>{ $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; });
+window.addEventListener('load', ()=>{ 
+    if(!usuario){ return; } // Si no hay usuario, el redireccionamiento ya se disparó
+    $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; 
+});
 window.addEventListener('beforeunload', ()=>{ if(consignsUnsub) consignsUnsub(); });
 
 </script>
