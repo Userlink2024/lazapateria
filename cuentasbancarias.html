@@ -371,6 +371,35 @@ setInterval(updateTotalGeneral,15000); updateTotalGeneral();
 $('search-name').addEventListener('input', ()=>{ const q=$('search-name').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
 $('search-account').addEventListener('input', ()=>{ const q=$('search-account').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
 
+/* ========== NAVEGACIÓN TIPO EXCEL ========== */
+let activeRowIndex = -1;
+function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
+function highlightActive(){ getRows().forEach((r,i)=>{ r.style.outline = (i===activeRowIndex)? '2px solid #3b82f6' : 'none'; }); }
+function moveActive(delta){ const rows=getRows(); if(rows.length===0) return; activeRowIndex = Math.min(rows.length-1, Math.max(0, activeRowIndex+delta)); highlightActive(); rows[activeRowIndex].scrollIntoView({block:'nearest'}); }
+$('consigns-body').addEventListener('click', e=>{
+  const row = e.target.closest('tr'); if(!row) return;
+  const rows=getRows(); activeRowIndex = rows.indexOf(row); highlightActive();
+});
+document.addEventListener('keydown', e=>{
+  if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
+  if(['ArrowUp','ArrowDown','Shift',' '].includes(e.key)) e.preventDefault();
+  const rows=getRows(); if(rows.length===0) return;
+  if(e.key==='ArrowDown') moveActive(1);
+  if(e.key==='ArrowUp') moveActive(-1);
+  if(e.key===' ' && activeRowIndex>=0){ const chk=rows[activeRowIndex].querySelector('input[type="checkbox"]'); if(chk){ chk.checked=!chk.checked; }}
+  if(e.shiftKey && (e.key==='ArrowDown' || e.key==='ArrowUp')){
+    const target=activeRowIndex;
+    const prev=lastCheckedIndex ?? target;
+    const start=Math.min(prev,target);
+    const end=Math.max(prev,target);
+    const checks = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
+    for(let i=start;i<=end;i++) checks[i].checked = true;
+  }
+});
+
+$('search-name').addEventListener('input', ()=>{ const q=$('search-name').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
+$('search-account').addEventListener('input', ()=>{ const q=$('search-account').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
+
 /* show options modal on load so user chooses sessionRole */
 window.addEventListener('load', ()=>{ $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; });
 
