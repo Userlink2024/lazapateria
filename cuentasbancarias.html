@@ -299,7 +299,7 @@ loadManagerPass();
 let selectedAccountId = null;
 let selectedAccountName = "SinNombre";
 let currentConsignsSnapshot = []; 
-let selectedConsignIds = new Set(); // <-- NUEVO: Almacenamiento local de IDs seleccionados (para persistencia en UI)
+let selectedConsignIds = new Set(); // Almacenamiento local de IDs seleccionados (para persistencia en UI)
 
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
@@ -617,8 +617,11 @@ function subscribeAccounts(){
         selectedAccountId = a.id; 
         selectedAccountName = a.name;
         
-        // LIMPIAR LA SELECCIÓN AL CAMBIAR DE CUENTA (Nuevo)
+        // LIMPIAR LA SELECCIÓN AL CAMBIAR DE CUENTA
         selectedConsignIds.clear(); 
+        document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+        activeRowIndex = -1; // Limpiar índice activo/ancla
+        anchorRowIndex = -1;
         
         // La actualización de la UI se maneja mejor forzando el resalto localmente 
         // y dejando que la próxima snapshot de cuentas actualice todo el sidebar.
@@ -773,9 +776,19 @@ function renderConsigns(){
         <td style="width:160px">${obsText}</td>
         <td style="width:160px">${c.verifiedRole ? (c.verifiedRole === 'Gerente' ? 'Verificado (Amarillo)' : 'Verificado (Gris)') : 'Pendiente'}</td>
       `;
+      
+      // *** MODIFICACIÓN CRUCIAL AQUÍ ***
       tr.addEventListener('click', (e)=>{
         if(e.target.type !== 'checkbox') {
             activeRowIndex = index;
+            anchorRowIndex = index; // <-- FIX: Establecer el ancla al hacer clic en la fila
+            
+            // Comportamiento estándar: Un clic simple en la fila limpia la selección previa
+            if(!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                selectedConsignIds.clear();
+                document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+            }
+
             highlightRow(index);
         }
       });
@@ -816,7 +829,7 @@ $('consigns-body').addEventListener('change', (e)=>{
             selectedConsignIds.delete(id);
         }
         
-        if(!lastShiftState) anchorRowIndex = idx;
+        if(!lastShiftState) anchorRowIndex = idx; // Se actualiza el ancla si NO se usa Shift
     }
 });
 
@@ -830,34 +843,49 @@ document.addEventListener('keydown', e => {
     if(rows.length === 0) return;
     if(['ArrowUp','ArrowDown'].includes(e.key)){
         e.preventDefault();
-        if(activeRowIndex === -1) { activeRowIndex = 0; anchorRowIndex = 0; }
+        
+        // Inicializa o corrige el índice activo/ancla
+        if(activeRowIndex === -1) { 
+            activeRowIndex = 0; 
+            anchorRowIndex = 0; 
+        }
+        
         let newIndex = activeRowIndex;
         if(e.key === 'ArrowDown') newIndex++;
         if(e.key === 'ArrowUp') newIndex--;
         newIndex = Math.max(0, Math.min(newIndex, rows.length - 1));
         
         if(e.shiftKey){
+            // Lógica de selección de rango (Shift + Flechas)
+            
+            // Calcula el rango entre el ancla y la nueva posición
             const start = Math.min(anchorRowIndex, newIndex);
             const end = Math.max(anchorRowIndex, newIndex);
             
-            // LÓGICA DE SINCRONIZACIÓN SHIFT+SELECCIÓN (Nuevo)
-            selectedConsignIds.clear(); // Limpia la selección antes de re-aplicar
+            // Limpia la selección actual para re-aplicar el nuevo rango
+            selectedConsignIds.clear(); 
             
             rows.forEach((r, i) => {
                 const chk = r.querySelector('input[type="checkbox"]');
                 if(!chk) return;
                 
+                // Selecciona solo los elementos dentro del nuevo rango
                 if(i >= start && i <= end){
                     chk.checked = true;
-                    selectedConsignIds.add(chk.dataset.id); // Agrega al Set
+                    selectedConsignIds.add(chk.dataset.id); 
                 } else {
-                    chk.checked = false;
+                    chk.checked = false; // Deselecciona los que quedan fuera
                 }
             });
             
         } else {
+            // Sin Shift: se mueve el cursor y se establece un nuevo ancla
             anchorRowIndex = newIndex;
+            // Opcional: limpiar la selección si no se usa Shift (ya manejado en click, pero aquí garantiza que solo se mueva el foco)
+            selectedConsignIds.clear(); 
+            document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
         }
+        
         activeRowIndex = newIndex;
         highlightRow(activeRowIndex);
     }
@@ -878,7 +906,10 @@ document.addEventListener('keydown', e => {
                     selectedConsignIds.delete(chk.dataset.id);
                 }
                 
-                anchorRowIndex = activeRowIndex;
+                // Actualiza el ancla si no se usó Shift (aunque ya está en el change listener, lo ponemos aquí por si acaso)
+                if(!e.shiftKey) {
+                    anchorRowIndex = activeRowIndex;
+                }
             }
         }
     }
