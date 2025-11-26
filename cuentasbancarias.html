@@ -3,244 +3,337 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sistema de Consignaciones (Integrado con login del sistema)</title>
+  <title>Sistema de Consignaciones</title>
+
   <style>
-    :root{--bg:#f7f7f9;--card:#fff;--accent:#0d6efd;--muted:#6c757d}
-    body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);margin:0;padding:20px;color:#222}
-    .container{max-width:1200px;margin:0 auto}
-    .card{background:var(--card);border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.06);margin-bottom:16px}
-    .row{display:flex;gap:12px;align-items:center}
-    .col{flex:1}
-    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
-    input, textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px}
-    button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
-    button.ghost{background:#eee;color:#222}
-    .account-list{max-height:220px;overflow:auto;border:1px dashed #e3e3e3;padding:8px;border-radius:6px}
-    .account-item{padding:8px;border-radius:6px;cursor:pointer}
-    .account-item:hover{background:#f1f7ff}
-    .account-item.selected{background:#e8f0ff;border-left:4px solid var(--accent)}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border:1px solid #e9e9ee;text-align:left;font-size:14px}
-    tr.verified-admin{background:#e9ecef;color:#555}
-    tr.verified-manager{background:#fff3bf;color:#555}
-    tr.separator{background:#f8f9fa;font-weight:700;text-align:center}
-    .small{font-size:13px;color:var(--muted)}
-    .controls{display:flex;gap:8px;flex-wrap:wrap}
-    .hidden{display:none}
+    :root{
+      --bg:#eef1f6;
+      --card:#ffffff;
+      --accent:#2563eb;
+      --accent-light:#dce7ff;
+      --border:#d8dce3;
+      --text:#1e293b;
+    }
+
+    body{
+      font-family:Inter,Segoe UI,Roboto,Arial;
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+    }
+
+    /* --- LAYOUT GENERAL --- */
+    .layout{
+      display:flex;
+      height:100vh;
+      overflow:hidden;
+    }
+
+    /* --- TOP BAR --- */
+    #topbar{
+      background:white;
+      padding:10px 16px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    /* --- SIDEBAR --- */
+    .sidebar{
+      width:280px;
+      background:#fff;
+      border-right:1px solid var(--border);
+      display:flex;
+      flex-direction:column;
+      padding:16px;
+    }
+
+    .sidebar h2{
+      margin-top:0;
+      font-size:18px;
+      font-weight:600;
+    }
+
+    .account-list{
+      flex:1;
+      overflow-y:auto;
+      border-radius:6px;
+      border:1px solid var(--border);
+      background:#fafafa;
+      padding:6px;
+    }
+
+    .account-item{
+      padding:10px;
+      background:white;
+      border:1px solid var(--border);
+      border-radius:6px;
+      margin-bottom:6px;
+      cursor:pointer;
+      transition:0.15s;
+    }
+    .account-item:hover{background:var(--accent-light)}
+    .account-item.selected{
+      background:var(--accent-light);
+      border-color:var(--accent);
+    }
+
+    /* --- MAIN --- */
+    .main{
+      flex:1;
+      padding:20px;
+      overflow-y:auto;
+    }
+
+    .card{
+      background:white;
+      border-radius:10px;
+      padding:16px;
+      margin-bottom:20px;
+      border:1px solid var(--border);
+      box-shadow:0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .col{flex:1;min-width:200px}
+
+    label{font-size:14px;font-weight:500;margin-bottom:4px;display:block}
+    input,textarea{
+      width:100%;padding:8px;border:1px solid var(--border);
+      border-radius:6px;font-size:14px;
+    }
+
+    button{
+      background:var(--accent);
+      color:#fff;border:none;
+      padding:8px 14px;border-radius:6px;
+      cursor:pointer;font-weight:500;
+    }
+
+    button.ghost{background:#e2e8f0;color:#111}
+    button.danger{background:#dc2626;color:white}
+
+    table{
+      width:100%;border-collapse:collapse;font-size:14px
+    }
+    th,td{
+      border:1px solid var(--border);
+      padding:8px;
+      background:white;
+    }
+
+    tr.verified-admin{background:#e4e4e4}
+    tr.verified-manager{background:#fff2b3}
+    tr.separator{background:#eaf1ff;font-weight:600;text-align:center}
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <h2>Sistema de Consignaciones</h2>
+<div id="topbar">
+  <div><strong>Sistema de Consignaciones</strong></div>
+  <div>
+    <span id="user-info"></span>
+    <button id="logout" class="ghost" style="margin-left:12px">Cerrar sesión</button>
+  </div>
+</div>
 
-    <div class="card" id="user-panel">
-      <label>Usuario actual:</label>
-      <div id="user-info" class="small muted">Cargando...</div>
-      <button id="logout" class="ghost">Cerrar sesión</button>
-    </div>
+<div class="layout" id="app" style="display:none">
 
-    <div id="app" class="hidden">
-      <div class="card" id="main-panel">
-        <div class="row">
-          <div class="col" style="flex:0.6">
-            <label>Buscar por nombre</label>
-            <input id="search-name" type="text">
-          </div>
-          <div class="col" style="flex:0.6">
-            <label>Buscar por número</label>
-            <input id="search-account" type="text">
-          </div>
-          <div style="flex:0.8">
-            <label>Agregar nueva cuenta</label>
-            <div style="display:flex;gap:8px">
-              <input id="new-account-name" type="text" placeholder="Nombre">
-              <input id="new-account-number" type="text" placeholder="Número de cuenta">
-              <button id="add-account">Agregar</button>
-            </div>
-          </div>
-        </div>
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <h2>Cuentas</h2>
 
-        <div style="display:flex;gap:12px;margin-top:12px">
-          <div style="width:320px">
-            <div class="card">
-              <strong>Cuentas</strong> <span id="accounts-count" class="small"></span>
-              <div class="account-list" id="accounts-list"></div>
-            </div>
-          </div>
+    <label>Buscar por nombre</label>
+    <input id="search-name" type="text">
 
-          <div style="flex:1">
-            <div class="card">
-              <strong>Consignación - cuenta seleccionada</strong>
-              <div id="selected-account-info" class="small muted">Ninguna cuenta seleccionada</div>
-              <hr>
+    <label style="margin-top:10px">Buscar por número</label>
+    <input id="search-account" type="text">
 
-              <label>Fecha</label>
-              <input id="date-picker" type="date">
+    <h3 style="margin-top:20px;font-size:15px">Agregar nueva cuenta</h3>
+    <input id="new-account-name" placeholder="Nombre">
+    <input id="new-account-number" placeholder="Número" style="margin-top:6px">
+    <button id="add-account" style="margin-top:8px;width:100%">Agregar cuenta</button>
 
-              <label>Fecha observación</label>
-              <input id="obsdate-picker" type="date">
-
-              <label>Observaciones</label>
-              <textarea id="observations" rows="2"></textarea>
-
-              <label>Valor (COP)</label>
-              <input id="valor" type="number">
-
-              <button id="add-consign" style="margin-top:10px">Agregar consignación</button>
-            </div>
-
-            <div class="card">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <strong>Consignaciones</strong>
-                <div class="controls">
-                  <button id="btn-verify">Verificar</button>
-                  <button id="btn-unverify" class="ghost">Desverificar</button>
-                  <button id="btn-delete" class="ghost hidden">Eliminar</button>
-                  <button id="btn-cuadrar" class="ghost hidden">Cuadrar</button>
-                </div>
-              </div>
-
-              <div style="margin-top:8px;overflow:auto;max-height:360px">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Sel</th>
-                      <th>Fecha</th>
-                      <th>Valor</th>
-                      <th>Observación</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody id="consigns-body"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="account-list" id="accounts-list" style="margin-top:16px"></div>
   </div>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+  <!-- MAIN AREA -->
+  <div class="main">
 
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
-      authDomain: "lazapateria-c4157.firebaseapp.com",
-      projectId: "lazapateria-c4157",
-      storageBucket: "lazapateria-c4157.firebasestorage.app",
-      messagingSenderId: "300241769138",
-      appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
-      measurementId: "G-HVG7615JEE"
-    };
+    <!-- FORM CONSIGNACIONES -->
+    <div class="card">
+      <h3>Agregar consignación</h3>
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+      <div id="selected-account-info" style="margin-bottom:10px;color:#555">Seleccione una cuenta</div>
 
-    // Leer usuario desde localStorage
-    const usuario = JSON.parse(localStorage.getItem('datosUsuario'));
+      <div class="row">
+        <div class="col">
+          <label>Fecha</label>
+          <input id="date-picker" type="date">
+        </div>
+        <div class="col">
+          <label>Fecha Observación</label>
+          <input id="obsdate-picker" type="date">
+        </div>
+      </div>
 
-    if (!usuario) {
-      alert('No hay sesión iniciada');
-      window.location.href = 'index.html';
-    }
+      <label style="margin-top:12px">Observaciones</label>
+      <textarea id="observations" rows="2"></textarea>
 
-    document.getElementById('user-info').textContent = usuario.usuario + ' — ' + usuario.permisos;
+      <label style="margin-top:12px">Valor (COP)</label>
+      <input id="valor" type="number">
 
-    if (usuario.permisos !== 'Administrador') {
-      alert('Acceso denegado. Solo administradores pueden ingresar.');
-      window.location.href = 'index.html';
-    }
+      <button id="add-consign" style="margin-top:14px">Agregar consignación</button>
+    </div>
 
-    document.getElementById('app').classList.remove('hidden');
+    <!-- TABLA -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Consignaciones</h3>
+        <div>
+          <button id="btn-verify">Verificar</button>
+          <button id="btn-unverify" class="ghost">Desverificar</button>
+          <button id="btn-delete" class="danger" style="display:none">Eliminar</button>
+          <button id="btn-cuadrar" class="ghost" style="display:none">Cuadrar</button>
+        </div>
+      </div>
 
-    document.getElementById('logout').onclick = ()=>{
-      localStorage.removeItem('datosUsuario');
-      window.location.href = 'index.html';
-    };
+      <div style="margin-top:14px;max-height:420px;overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Sel</th>
+              <th>Fecha</th>
+              <th>Valor</th>
+              <th>Observación</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="consigns-body"></tbody>
+        </table>
+      </div>
+    </div>
 
-    let selectedAccountId = null;
+  </div>
+</div>
 
-    function renderAccounts() {
-      db.collection('cuentas').orderBy('name').onSnapshot(snapshot => {
-        const list = document.getElementById('accounts-list');
-        list.innerHTML = '';
+<!-- FIREBASE -->
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
 
-        snapshot.forEach(doc => {
-          const a = { id: doc.id, ...doc.data() };
-          const div = document.createElement('div');
-          div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
-          div.innerHTML = `<strong>${a.name}</strong><div class="small">${a.number}</div>`;
-          div.onclick = ()=>{
-            selectedAccountId = a.id;
-            renderAccounts();
-            renderConsigns();
-          };
-          list.appendChild(div);
-        });
+<script>
+  /* CONFIG FIREBASE */
+  const firebaseConfig = {
+    apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+    authDomain:"lazapateria-c4157.firebaseapp.com",
+    projectId:"lazapateria-c4157",
+    storageBucket:"lazapateria-c4157.firebasestorage.app",
+    messagingSenderId:"300241769138",
+    appId:"1:300241769138:web:8ca1847de3c4fb5042afab"
+  };
 
-        document.getElementById('accounts-count').textContent = snapshot.size;
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  /* USUARIO */
+  const usuario = JSON.parse(localStorage.getItem('datosUsuario'));
+  if (!usuario){ alert("No hay sesión activa"); location.href='index.html'; }
+  if (usuario.permisos !== 'Administrador'){ alert("Acceso denegado"); location.href='index.html'; }
+
+  document.getElementById('user-info').textContent = usuario.usuario + ' / ' + usuario.permisos;
+  document.getElementById('app').style.display='flex';
+  document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
+
+  let selectedAccountId = null;
+
+  /* ---------- LISTAR CUENTAS ----------- */
+  function renderAccounts() {
+    db.collection('cuentas').orderBy('name').onSnapshot(snapshot => {
+      const list = document.getElementById('accounts-list');
+      list.innerHTML = '';
+
+      snapshot.forEach(doc => {
+        const a = { id: doc.id, ...doc.data() };
+        const div = document.createElement('div');
+        div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
+        div.innerHTML = `<strong>${a.name}</strong><div style="font-size:12px;color:#555">${a.number}</div>`;
+        div.onclick = ()=>{
+          selectedAccountId = a.id;
+          renderAccounts();
+          renderConsigns();
+          document.getElementById("selected-account-info").textContent =
+            `Cuenta: ${a.name} (${a.number})`;
+        };
+        list.appendChild(div);
       });
-    }
+    });
+  }
+  renderAccounts();
 
-    renderAccounts();
+  /* ---- AGREGAR NUEVA CUENTA ---- */
+  document.getElementById('add-account').onclick = async ()=>{
+    const name = document.getElementById('new-account-name').value.trim();
+    const number = document.getElementById('new-account-number').value.trim();
+    if (!name || !number) return alert('Complete nombre y número');
+    await db.collection('cuentas').add({ name, number });
+  };
 
-    document.getElementById('add-account').onclick = async ()=>{
-      const name = document.getElementById('new-account-name').value.trim();
-      const number = document.getElementById('new-account-number').value.trim();
-      if (!name || !number) return alert('Complete nombre y número');
-      await db.collection('cuentas').add({ name, number });
-    };
+  /* ---------- CONSIGNACIONES ---------- */
+  function renderConsigns() {
+    if (!selectedAccountId) return;
 
-    function renderConsigns() {
-      if (!selectedAccountId) return;
+    const tbody = document.getElementById('consigns-body');
 
-      const tbody = document.getElementById('consigns-body');
-      tbody.innerHTML = '';
-
-      db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha').onSnapshot(snapshot=>{
+    db.collection('cuentas').doc(selectedAccountId)
+      .collection('consignaciones')
+      .orderBy('fecha')
+      .onSnapshot(snapshot=>{
         tbody.innerHTML = '';
 
-        snapshot.forEach(doc => {
+        snapshot.forEach(doc=>{
           const c = doc.data();
-          const tr = document.createElement('tr');
 
-          if (c.isSeparator) {
+          if (c.isSeparator){
+            const tr = document.createElement('tr');
             tr.className = 'separator';
-            tr.innerHTML = `<td></td><td colspan='3'>--- CUADRE: ${c.label} TOTAL: ${c.total}</td><td></td>`;
+            tr.innerHTML = `<td></td><td colspan="3">--- CUADRE: ${c.label} TOTAL: ${c.total}</td><td></td>`;
             tbody.appendChild(tr);
             return;
           }
 
-          let estado = 'Sin verificar';
-          if (c.verifiedBy) estado = 'Verificado';
+          let tr = document.createElement('tr');
+
+          if (c.verifiedRole === "Administrador")
+            tr.classList.add("verified-admin");
 
           tr.innerHTML = `
             <td><input type='checkbox' data-id='${doc.id}'></td>
             <td>${c.fecha ? new Date(c.fecha.toDate()).toLocaleDateString() : ''}</td>
             <td>${c.valor}</td>
             <td>${c.observaciones || ''}</td>
-            <td>${estado}</td>
+            <td>${c.verifiedBy ? "Verificado" : "Pendiente"}</td>
           `;
 
           tbody.appendChild(tr);
         });
       });
-    }
+  }
 
-    document.getElementById('add-consign').onclick = async ()=>{
-      if (!selectedAccountId) return alert('Seleccione cuenta');
+  /* ---- AGREGAR CONSIGNACIÓN ---- */
+  document.getElementById('add-consign').onclick = async ()=>{
+    if (!selectedAccountId) return alert('Seleccione una cuenta');
 
-      const fecha = document.getElementById('date-picker').value;
-      const obsdate = document.getElementById('obsdate-picker').value;
-      const observaciones = document.getElementById('observations').value.trim();
-      const valor = Number(document.getElementById('valor').value);
+    const fecha = document.getElementById('date-picker').value;
+    const obsdate = document.getElementById('obsdate-picker').value;
+    const observaciones = document.getElementById('observations').value.trim();
+    const valor = Number(document.getElementById('valor').value);
 
-      if (!fecha) return alert('Seleccione fecha');
+    if (!fecha) return alert('Seleccione fecha');
 
-      await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({
+    await db.collection('cuentas').doc(selectedAccountId)
+      .collection('consignaciones')
+      .add({
         fecha: firebase.firestore.Timestamp.fromDate(new Date(fecha)),
         obsdate: obsdate ? firebase.firestore.Timestamp.fromDate(new Date(obsdate)) : null,
         observaciones,
@@ -248,53 +341,75 @@
         verifiedBy: null,
         verifiedRole: null
       });
-    };
+  };
 
-    function getSelectedConsignIds() {
-      return Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]')).filter(c => c.checked).map(c => c.dataset.id);
-    }
+  /* UTILIDADES */
+  function getSelectedConsignIds() {
+    return Array.from(
+      document.querySelectorAll('#consigns-body input[type="checkbox"]')
+    )
+    .filter(c => c.checked)
+    .map(c => c.dataset.id);
+  }
 
-    document.getElementById('btn-verify').onclick = async ()=>{
-      if (!selectedAccountId) return;
-      const ids = getSelectedConsignIds();
-      const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  /* ---- VERIFICAR ---- */
+  document.getElementById('btn-verify').onclick = async ()=>{
+    const ids = getSelectedConsignIds();
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
 
-      ids.forEach(id => col.doc(id).update({ verifiedBy: usuario.usuario, verifiedRole: usuario.permisos }));
-    };
+    ids.forEach(id =>
+      col.doc(id).update({
+        verifiedBy: usuario.usuario,
+        verifiedRole: usuario.permisos
+      })
+    );
+  };
 
-    document.getElementById('btn-unverify').onclick = async ()=>{
-      if (!selectedAccountId) return;
-      const ids = getSelectedConsignIds();
-      const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  /* ---- DESVERIFICAR ---- */
+  document.getElementById('btn-unverify').onclick = async ()=>{
+    const ids = getSelectedConsignIds();
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
 
-      ids.forEach(id => col.doc(id).update({ verifiedBy: null, verifiedRole: null }));
-    };
+    ids.forEach(id =>
+      col.doc(id).update({
+        verifiedBy: null,
+        verifiedRole: null
+      })
+    );
+  };
 
-    document.getElementById('btn-delete').onclick = async ()=>{
-      if (usuario.permisos !== 'Administrador') return;
-      const ids = getSelectedConsignIds();
-      const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-      ids.forEach(id => col.doc(id).delete());
-    };
+  /* ---- ELIMINAR SOLO ADMIN ---- */
+  document.getElementById('btn-delete').onclick = async ()=>{
+    const ids = getSelectedConsignIds();
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+    ids.forEach(id => col.doc(id).delete());
+  };
 
-    document.getElementById('btn-cuadrar').onclick = async ()=>{
-      if (usuario.permisos !== 'Administrador') return;
+  /* ---- CUADRAR ---- */
+  document.getElementById('btn-cuadrar').onclick = async ()=>{
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
 
-      const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-      const snap = await col.get();
-      let total = 0;
+    const snap = await col.get();
+    let total = 0;
 
-      snap.forEach(d => {
-        if (!d.data().isSeparator) total += Number(d.data().valor || 0);
-      });
+    snap.forEach(doc=>{
+      const d = doc.data();
+      if (!d.isSeparator) total += Number(d.valor || 0);
+    });
 
-      await col.add({ isSeparator:true, label:new Date().toLocaleString(), total });
-    };
+    await col.add({
+      isSeparator:true,
+      label:new Date().toLocaleString(),
+      total
+    });
+  };
 
-    if (usuario.permisos === 'Administrador') {
-      document.getElementById('btn-delete').classList.remove('hidden');
-      document.getElementById('btn-cuadrar').classList.remove('hidden');
-    }
-  </script>
+  /* HABILITAR BOTONES DE ADMIN */
+  if (usuario.permisos === "Administrador"){
+    document.getElementById('btn-delete').style.display = "inline-block";
+    document.getElementById('btn-cuadrar').style.display = "inline-block";
+  }
+</script>
+
 </body>
 </html>
