@@ -34,6 +34,9 @@
     tr.verified-admin{background:var(--admin-gray)}
     tr.verified-gerente{background:var(--manager-yellow)}
     tr.separator{background:#eef2ff;font-weight:700;text-align:center}
+tr.sep-green{background:#d1fae5!important}
+tr.sep-red{background:#fee2e2!important}
+tr.separator{background:#eef2ff;font-weight:700;text-align:center}
     .muted{color:var(--muted);font-size:13px}
     .top-totals{display:flex;gap:12px;align-items:center}
     .top-totals .card{padding:8px;border-radius:8px;border:1px solid var(--border);background:#fff}
@@ -145,6 +148,7 @@
             <button id="btn-verify" class="btn">Verificado</button>
             <button id="btn-unverify" class="btn ghost">Desverificar</button>
             <button id="btn-delete" class="btn danger" style="display:none">Eliminar (Gerente)</button>
+            <button id="btn-sumar" class="btn ghost">Sumar selección</button>
             <button id="btn-cuadrar" class="btn ghost" style="display:none">Cuadrar (Gerente)</button>
           </div>
         </div>
@@ -296,7 +300,7 @@ function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('c
     tbody.innerHTML = '';
     snapshot.forEach(doc=>{
       const c = doc.data();
-      if(c.isSeparator){ const tr = document.createElement('tr'); tr.className='separator'; tr.innerHTML = `<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`; tbody.appendChild(tr); return; }
+      if(c.isSeparator){ const tr=document.createElement('tr'); tr.classList.add('separator'); if(c.type==='green') tr.classList.add('sep-green'); if(c.type==='red') tr.classList.add('sep-red'); tr.innerHTML=`<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`; tbody.appendChild(tr); return; }{ const tr = document.createElement('tr'); tr.className='separator'; tr.innerHTML = `<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`; tbody.appendChild(tr); return; }
       const tr = document.createElement('tr');
       if(c.verifiedRole === 'Administrativo') tr.classList.add('verified-admin');
       if(c.verifiedRole === 'Gerente') tr.classList.add('verified-gerente');
@@ -314,7 +318,10 @@ function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('c
   });
 }
 
-/* ACCIONES */
+/* ACCIONES
+// --- RESTRICCIÓN: Lo verificado por Gerente NO se puede desverificar por Admin ---
+function canUnverify(c){ return !(c.verifiedRole==='Gerente' && sessionRole!=='Gerente'); }
+ */
 // ENTER PARA AGREGAR CONSIGNACIÓN
 $('valor').addEventListener('keydown', e=>{
   if(e.key==='Enter') $('add-consign').click();
@@ -354,13 +361,49 @@ $('btn-verify').addEventListener('click', async ()=>{
   if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); await batch.commit(); }catch(e){ console.error(e); alert('Error verificando: '+e.message); }
 });
 
-$('btn-unverify').addEventListener('click', async ()=>{ if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: null, verifiedRole: null })); await batch.commit(); }catch(e){ console.error(e); alert('Error desverificando: '+e.message); } });
+$('btn-unverify').addEventListener('click', async ()=>{
+  if(!selectedAccountId) return alert('Seleccione cuenta.');
+  const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.');
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  const snap = await col.get();
+  const deny = [];
+  snap.forEach(d=>{ if(ids.includes(d.id) && !canUnverify(d.data())) deny.push(d.id); });
+  if(deny.length>0) return alert('Algunas consignaciones fueron verificadas por Gerente. Solo el Gerente puede desverificarlas.');
+  try{
+    const batch = db.batch();
+    ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null }));
+    await batch.commit();
+  }catch(e){ console.error(e); alert('Error desverificando: '+e.message); }
+});('click', async ()=>{ if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: null, verifiedRole: null })); await batch.commit(); }catch(e){ console.error(e); alert('Error desverificando: '+e.message); } });
 
 $('btn-delete').addEventListener('click', async ()=>{ if(sessionRole!=='Gerente') return alert('Solo Gerente puede eliminar.'); if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); if(!confirm('Eliminar '+ids.length+' consignación(es)?')) return; const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.delete(col.doc(id))); await batch.commit(); }catch(e){ console.error(e); alert('Error eliminando: '+e.message); } });
 
 $('btn-cuadrar').addEventListener('click', async ()=>{ if(sessionRole!=='Gerente') return alert('Solo Gerente puede cuadrar.'); if(!selectedAccountId) return alert('Seleccione cuenta.'); try{ const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); const snap = await col.get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); await col.add({ isSeparator:true, label:new Date().toLocaleString(), total }); alert('Cuadre guardado: ' + fmtCOP(total)); }catch(e){ console.error(e); alert('Error al cuadrar: '+e.message); } });
 
-/* TOTALES: ignore separators */
+/* --- CUADRAR CON REGISTRO VERDE + ROJO --- */
+$('btn-cuadrar').addEventListener('click', async ()=>{
+  if(sessionRole!=='Gerente') return alert('Solo Gerente puede cuadrar.');
+  if(!selectedAccountId) return alert('Seleccione cuenta.');
+  try{
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+    const snap = await col.get(); let total=0;
+    snap.forEach(d=>{ const c=d.data(); if(!c.isSeparator) total+=Number(c.valor||0); });
+    const fecha = new Date().toLocaleString();
+    await col.add({ isSeparator:true, type:'green', label:fecha, total });
+    await col.add({ isSeparator:true, type:'red', label:fecha, total });
+    alert('Cuadre registrado');
+  }catch(e){ console.error(e); alert('Error al cuadrar: '+e.message);} });
+
+$('#btn-sumar').addEventListener('click', ()=>{
+  const rows = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
+  let suma = 0;
+  rows.forEach(ch=>{
+    if(ch.checked){ const tr=ch.closest('tr'); const val = tr.children[2].textContent.replace(/\./g,'').replace(/,/g,''); suma += Number(val)||0; }
+  });
+  alert('Total seleccionado: '+fmtCOP(suma));
+});
+
+/* TOTALES */: ignore separators */
 async function updateSelectedTotals(){ if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; } const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); const snap = await col.get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); $('total-cuenta').textContent = fmtCOP(total); }
 
 async function updateTotalGeneral(){ try{ const snap = await db.collectionGroup('consignaciones').get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); $('total-general').textContent = fmtCOP(total); }catch(e){ console.error(e); } }
