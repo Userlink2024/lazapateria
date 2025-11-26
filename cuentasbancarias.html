@@ -1,3 +1,6 @@
+<!-- ================= PARTE 1 ================= -->
+<!-- Estructura completa del HTML (SIN el <script>) -->
+
 <!doctype html>
 <html lang="es">
 <head>
@@ -142,340 +145,385 @@
 
       <div class="panel">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <h3 style="margin:0">Lista de consignaciones (FECHA / VALOR / FECHA OBS)</h3>
-          <div>
-            <button id="btn-verify" class="btn">Verificado</button>
-            <button id="btn-unverify" class="btn ghost">Desverificar</button>
-            <button id="btn-delete" class="btn danger" style="display:none">Eliminar (Gerente)</button>
-            <button id="btn-sumar" class="btn ghost">Sumar selección</button>
-            <button id="btn-cuadrar" class="btn ghost" style="display:none">Cuadrar (Gerente)</button>
-          </div>
-        </div>
+          <h3 style="margin:0">Lista de consignaciones (FECHA / VALOR / FECHA OBS)</h
 
-        <div style="margin-top:12px;max-height:52vh;overflow:auto">
-          <table>
-            <thead>
-              <tr><th>Sel</th><th>FECHA</th><th>VALOR</th><th>FECHA OBS</th><th>ESTADO</th></tr>
-            </thead>
-            <tbody id="consigns-body"></tbody>
-          </table>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <div id="modal-options" class="modal hidden">
-    <div class="panel card" style="width:720px;max-width:96%">
-      <h3>Opciones de Acceso (seleccione)</h3>
-      <div style="margin-top:8px">
-        <label><input type="radio" name="sessionRole" value="Administrativo" checked> Administrativo</label>
-        <label style="margin-left:12px"><input type="radio" name="sessionRole" value="Gerente"> Gerente</label>
-      </div>
-
-      <div id="manager-pass-area" class="hidden" style="margin-top:12px">
-        <label>Clave Gerente</label>
-        <input id="manager-pass" type="password" value="">
-      </div>
-
-      <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <span class="gear" id="gear-change" title="Cambiar clave">⚙️</span>
-          <small class="muted" style="margin-left:8px">Usa la tuerca para cambiar la clave por defecto (0000)</small>
-        </div>
-        <div>
-          <button id="options-continue" class="btn">Continuar</button>
-          <button id="options-cancel" class="btn ghost">Cancelar</button>
-        </div>
-      </div>
-
-      <div id="gear-panel" class="hidden" style="margin-top:14px">
-        <label>Nueva clave Gerente</label>
-        <input id="new-manager-pass" type="text" placeholder="Nueva clave (ej. 1234)">
-        <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
-          <button id="save-manager-pass" class="btn">Guardar clave</button>
-          <button id="cancel-gear" class="btn ghost">Cerrar</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+<!-- ================= PARTE 2 ================= -->
+<!-- SCRIPT COMPLETO -->
 <script>
-/* ============= CONFIG FIREBASE ============= */
+// ======================== VARIABLES GLOBALES ========================
+const $ = id => document.getElementById(id);
+let selectedAccountId = null;
+let sessionRole = null;   // "Admin" o "Gerente"
+let usuario = {};
+let managerPass = "1234"; // Ajustable
+
+// ======================== MODALES ========================
+function showModal(msg, type="info"){
+  const box = document.getElementById("app-modal-box");
+  const colors = {
+    info: "#2563eb",
+    success: "#16a34a",
+    warning: "#facc15",
+    error: "#dc2626"
+  };
+  box.style.border = `3px solid ${colors[type]}`;
+  $("app-modal-msg").innerHTML = msg;
+  $("app-modal").classList.remove("hidden");
+}
+function hideModal(){ $("app-modal").classList.add("hidden"); }
+
+// Modal tipo PROMPT (clave gerente)
+let promptCallback = null;
+function showPromptModal(msg, cb){
+  promptCallback = cb;
+  $("prompt-message").innerHTML = msg;
+  $("prompt-input").value = "";
+  $("prompt-modal").classList.remove("hidden");
+  setTimeout(() => $("prompt-input").focus(), 50);
+}
+function submitPrompt(){
+  const val = $("prompt-input").value;
+  $("prompt-modal").classList.add("hidden");
+  if (promptCallback) promptCallback(val);
+}
+function closePrompt(){
+  $("prompt-modal").classList.add("hidden");
+  if(promptCallback) promptCallback(null);
+}
+
+// ======================== FIREBASE ========================
 const firebaseConfig = {
-  apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
-  authDomain:"lazapateria-c4157.firebaseapp.com",
-  projectId:"lazapateria-c4157",
-  storageBucket:"lazapateria-c4157.firebasestorage.app",
-  messagingSenderId:"300241769138",
-  appId:"1:300241769138:web:8ca1847de3c4fb5042afab"
+  apiKey: "xxxx",
+  authDomain: "xxxx",
+  projectId: "xxxx",
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-/* ============= ESTADO ============= */
-const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
-if(!usuario){ alert('No hay sesión activa.'); location.href='index.html'; }
-if(usuario.permisos !== 'Administrador'){ alert('Acceso denegado. Solo administradores.'); location.href='index.html'; }
+// ======================== SESIÓN ========================
+function loadSession(){
+  usuario = { usuario:"Gerente", rol:"Gerente" };
+  sessionRole = usuario.rol;
+  $("user-info").innerHTML = `${usuario.usuario} / ${sessionRole}`;
+}
+loadSession();
 
-document.getElementById('user-info').textContent = usuario.usuario + ' — ' + usuario.permisos;
-document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
-
-let sessionRole = 'Administrativo'; // 'Administrativo' | 'Gerente'
-let managerPass = localStorage.getItem('managerPass') || '0000';
-let selectedAccountId = null;
-
-/* UTIL */
-const $ = id => document.getElementById(id);
-function uid(prefix='id'){return prefix + '_' + Math.random().toString(36).slice(2,9)}
-function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)) }
-
-/* MODAL OPCIONES */
-$('open-options').addEventListener('click', ()=> {
-  $('modal-options').classList.remove('hidden');
-  document.querySelector('input[name="sessionRole"][value="Administrativo"]').checked = true;
-  $('manager-pass-area').classList.add('hidden');
-  $('manager-pass').value = '';
-  $('gear-panel').classList.add('hidden');
-});
-
-document.querySelectorAll('input[name="sessionRole"]').forEach(r=>{
-  r.addEventListener('change', (e)=>{
-    if(e.target.value === 'Gerente') $('manager-pass-area').classList.remove('hidden');
-    else $('manager-pass-area').classList.add('hidden');
+// ======================== LISTAR CUENTAS ========================
+async function loadAccounts(){
+  const cont = $("accounts-list");
+  cont.innerHTML = "Cargando...";
+  const snap = await db.collection("cuentas").get();
+  let html = "";
+  snap.forEach(doc =>{
+    const d = doc.data();
+    html += `<div class='account-item' data-id='${doc.id}'>${d.nombre}<br><span class='small'>${d.numero}</span></div>`;
   });
-});
+  cont.innerHTML = html;
 
-$('options-cancel').addEventListener('click', ()=> $('modal-options').classList.add('hidden'));
-$('gear-change').addEventListener('click', ()=> $('gear-panel').classList.toggle('hidden'));
-$('cancel-gear').addEventListener('click', ()=> $('gear-panel').classList.add('hidden'));
-$('save-manager-pass').addEventListener('click', ()=>{
-  const p = $('new-manager-pass').value.trim(); if(!p){ alert('Ingrese nueva clave'); return; }
-  managerPass = p; localStorage.setItem('managerPass', managerPass); alert('Clave de gerente actualizada'); $('gear-panel').classList.add('hidden');
-});
+  [...cont.querySelectorAll('.account-item')].forEach(el=>{
+    el.onclick = ()=> selectAccount(el.dataset.id, el);
+  });
+}
+loadAccounts();
 
-$('options-continue').addEventListener('click', ()=>{
-  const chosen = document.querySelector('input[name="sessionRole"]:checked').value;
-  if(chosen === 'Gerente'){
-    const pass = $('manager-pass').value;
-    if(pass !== managerPass){ alert('Clave de gerente incorrecta'); return; }
-    sessionRole = 'Gerente';
-  } else sessionRole = 'Administrativo';
+// ======================== SELECCIONAR CUENTA ========================
+function selectAccount(id, el){
+  selectedAccountId = id;
+  [...document.querySelectorAll('.account-item')].forEach(x=>x.classList.remove('selected'));
+  el.classList.add('selected');
+  $("selected-account-info").innerHTML = `Cuenta seleccionada: ${el.innerText}`;
+  loadConsigns();
+}
 
-  if(sessionRole === 'Gerente'){
-    $('btn-delete').style.display = 'inline-block';
-    $('btn-cuadrar').style.display = 'inline-block';
-  } else {
-    $('btn-delete').style.display = 'none';
-    $('btn-cuadrar').style.display = 'none';
+// ======================== AGREGAR CUENTA ========================
+$("add-account").onclick = async () =>{
+  const nombre = $("new-account-name").value.trim();
+  const numero = $("new-account-number").value.trim();
+  if(!nombre || !numero) return showModal("Debe llenar todos los campos", "warning");
+
+  await db.collection("cuentas").add({nombre, numero});
+  showModal("Cuenta agregada", "success");
+  loadAccounts();
+};
+
+// ======================== AGREGAR CONSIGNACIÓN ========================
+$("add-consign").onclick = async ()=>{
+  if(!selectedAccountId) return showModal("Seleccione una cuenta", "warning");
+
+  const valor = Number($("valor").value);
+  if(!valor) return showModal("Ingrese un valor válido", "warning");
+
+  let fecha = getDateFromRadios("dateOpt", "date-picker");
+  let fechaObs = getDateFromRadios("obsOpt", "obsdate-picker");
+
+  const col = db.collection("cuentas").doc(selectedAccountId).collection("consignaciones");
+  await col.add({
+    fecha,
+    fechaObs,
+    valor,
+    verifiedBy:null,
+    verifiedRole:null,
+    isSeparator:false,
+    locked:false,
+    timestamp: firebase.firestore.Timestamp.now()
+  });
+
+  showModal("Consignación agregada", "success");
+  loadConsigns();
+};
+
+function getDateFromRadios(name, picker){
+  const val = document.querySelector(`input[name="${name}"]:checked`);
+  let d = new Date();
+  if(val){
+    if(val.value === "yesterday") d.setDate(d.getDate()-1);
+    if(val.value === "daybefore") d.setDate(d.getDate()-2);
+    return d.toISOString().substring(0,10);
   }
-  $('modal-options').classList.add('hidden');
-  alert('Sesión como: ' + sessionRole);
-});
-
-/* SUBSCRIBE CUENTAS */
-function subscribeAccounts(){
-  db.collection('cuentas').orderBy('name').onSnapshot(snapshot=>{
-    const container = $('accounts-list'); container.innerHTML = '';
-    snapshot.forEach(doc=>{
-      const a = { id: doc.id, ...doc.data() };
-      const div = document.createElement('div'); div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
-      div.innerHTML = `<div style="font-weight:600">${a.name}</div><div class="muted">${a.number || ''}</div>`;
-      div.onclick = ()=>{ selectedAccountId = a.id; renderConsigns(); $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}`; updateSelectedTotals(); };
-      container.appendChild(div);
-    });
-    if(!selectedAccountId && snapshot.docs.length>0){ selectedAccountId = snapshot.docs[0].id; renderConsigns(); }
-  });
+  const pk = $(picker).value;
+  return pk || new Date().toISOString().substring(0,10);
 }
-subscribeAccounts();
 
-/* RENDER CONSIGNACIONES */
-let consignsUnsub = null;
-function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('consigns-body'); tbody.innerHTML = '';
+// ======================== CARGAR CONSIGNACIONES ========================
+async function loadConsigns(){
   if(!selectedAccountId) return;
-  consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha').onSnapshot(snapshot=>{
-    tbody.innerHTML = '';
-    snapshot.forEach(doc=>{
-      const c = doc.data();
+  const tbody = document.querySelector('#cons-table-body');
+  if(!tbody) return;
 
-      if(c.isSeparator){
-        const tr=document.createElement('tr');
-        tr.classList.add('separator');
-        if(c.type==='green') tr.classList.add('sep-green');
-        if(c.type==='red') tr.classList.add('sep-red');
-        tr.innerHTML = `<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`;
-        tbody.appendChild(tr);
-        return;
+  const snap = await db.collection("cuentas")
+    .doc(selectedAccountId)
+    .collection("consignaciones")
+    .orderBy('timestamp','asc')
+    .get();
+
+  let html = "";
+  let totalCuenta = 0;
+
+  snap.forEach(doc=>{
+    const d = doc.data();
+    if(d.isSeparator){
+      html += `<tr class='separator ${d.type==="green"?"sep-green":"sep-red"}'><td colspan='4'>${d.label} — ${d.total || ""}</td></tr>`;
+      return;
+    }
+
+    totalCuenta += Number(d.valor || 0);
+
+    let cls = "";
+    if(d.verifiedRole === "Admin") cls = "verified-admin";
+    if(d.verifiedRole === "Gerente") cls = "verified-gerente";
+
+    html += `
+    <tr class='${cls}'>
+      <td><input type='checkbox' data-id='${doc.id}'></td>
+      <td>${d.fecha}</td>
+      <td>${Number(d.valor).toLocaleString()}</td>
+      <td>${d.fechaObs}</td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+  $("total-cuenta").innerHTML = totalCuenta.toLocaleString();
+}
+
+// ======================== SELECCIÓN ========================
+function getSelectedConsignIds(){
+  return [...document.querySelectorAll('#cons-table-body input[type=checkbox]:checked')]
+    .map(x => x.dataset.id);
+}
+
+// ======================== SEGURIDAD PARA BLOQUEADAS ========================
+async function verifyAccessForLocked(id){
+  const col = db.collection("cuentas").doc(selectedAccountId).collection("consignaciones");
+  const doc = await col.doc(id).get();
+  const d = doc.data();
+
+  if(!d.locked) return true;
+  if(sessionRole !== "Gerente"){
+    showModal("Esta consignación pertenece a un bloque cerrado.", "error");
+    return false;
+  }
+
+  return new Promise(resolve=>{
+    showPromptModal("Consignación cerrada. Ingrese clave del Gerente:", (v)=>{
+      if(v===managerPass) resolve(true);
+      else{
+        showModal("Clave incorrecta", "error");
+        resolve(false);
       }
-
-      const tr = document.createElement('tr');
-      if(c.verifiedRole === 'Administrativo') tr.classList.add('verified-admin');
-      if(c.verifiedRole === 'Gerente') tr.classList.add('verified-gerente');
-      const fechaText = c.fecha && c.fecha.toDate ? new Date(c.fecha.toDate()).toLocaleDateString() : '';
-      const obsText = c.obsdate && c.obsdate.toDate ? new Date(c.obsdate.toDate()).toLocaleDateString() : '';
-      tr.innerHTML = `
-        <td style="width:56px"><input type="checkbox" data-id="${doc.id}"></td>
-        <td style="width:160px">${fechaText}</td>
-        <td style="width:140px">${fmtCOP(c.valor)}</td>
-        <td style="width:160px">${obsText}</td>
-        <td style="width:160px">${c.verifiedRole ? (c.verifiedRole === 'Gerente' ? 'Verificado (Gerente)' : 'Verificado (Admin)') : 'Sin verificar'}</td>
-      `; tbody.appendChild(tr);
-    });
-    updateSelectedTotals(); updateTotalGeneral(); setupShiftSelection();
-  });
-}
-
-/* ACCIONES
-// --- RESTRICCIÓN: Lo verificado por Gerente NO se puede desverificar por Admin ---
-function canUnverify(c){ return !(c.verifiedRole==='Gerente' && sessionRole!=='Gerente'); }
- */
-
-// ENTER PARA AGREGAR CONSIGNACIÓN
-$('valor').addEventListener('keydown', e=>{
-  if(e.key==='Enter') $('add-consign').click();
-});
-
-// SHIFT SELECCIÓN MÚLTIPLE
-let lastCheckedIndex = null;
-function setupShiftSelection(){
-  const checks = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
-  checks.forEach((chk, idx)=>{
-    chk.addEventListener('click', e=>{
-      if(!e.shiftKey || lastCheckedIndex===null){ lastCheckedIndex = idx; return; }
-      const start = Math.min(lastCheckedIndex, idx);
-      const end = Math.max(lastCheckedIndex, idx);
-      for(let i=start;i<=end;i++) checks[i].checked = true;
     });
   });
 }
 
-$('add-account').addEventListener('click', async ()=>{
-  const name = $('new-account-name').value.trim(); const number = $('new-account-number').value.trim(); if(!name||!number) return alert('Nombre y número requeridos.');
-  try{ await db.collection('cuentas').add({ name, number }); $('new-account-name').value=''; $('new-account-number').value=''; }catch(e){ console.error(e); alert('Error creando cuenta: '+e.message); }
-});
+// ======================== VERIFICAR ========================
+$("btn-verify").onclick = async ()=>{
+  const ids = getSelectedConsignIds();
+  if(ids.length===0) return showModal("Seleccione consignaciones", "warning");
 
-function parseDateRadio(name, pickerId){ const opts = document.getElementsByName(name); let sel=null; for(const r of opts) if(r.checked) sel=r.value; if(sel==='today') return new Date(); if(sel==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); return d; } if(sel==='daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); return d; } const v=$(pickerId).value; return v? new Date(v): null; }
+  const col = db.collection("cuentas").doc(selectedAccountId).collection("consignaciones");
 
-$('add-consign').addEventListener('click', async ()=>{
-  if(!selectedAccountId) return alert('Seleccione una cuenta.');
-  const fecha = parseDateRadio('dateOpt','date-picker'); const obsdate = parseDateRadio('obsOpt','obsdate-picker'); const valor = Number($('valor').value || 0);
-  if(!fecha) return alert('Seleccione una fecha válida.');
-  try{ await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ fecha: firebase.firestore.Timestamp.fromDate(fecha), obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, valor, verifiedBy:null, verifiedRole:null }); $('valor').value=''; }catch(e){ console.error(e); alert('Error agregando consignación: '+e.message); }
-});
+  for(let id of ids){
+    const ok = await verifyAccessForLocked(id);
+    if(!ok) return;
+  }
 
-function getSelectedConsignIds(){ return Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]')).filter(c=>c.checked).map(c=>c.dataset.id); }
+  const batch = db.batch();
+  ids.forEach(id => batch.update(col.doc(id),{ verifiedBy:usuario.usuario, verifiedRole:sessionRole }));
+  await batch.commit();
+  showModal("Verificadas", "success");
+  loadConsigns();
+};
 
-$('btn-verify').addEventListener('click', async ()=>{
-  if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); await batch.commit(); }catch(e){ console.error(e); alert('Error verificando: '+e.message); }
-});
+// ======================== DESVERIFICAR ========================
+$("btn-unverify").onclick = async ()=>{
+  const ids = getSelectedConsignIds();
+  if(ids.length===0) return showModal("Seleccione consignaciones", "warning");
 
-$('btn-unverify').addEventListener('click', async ()=>{
-  if(!selectedAccountId) return alert('Seleccione cuenta.');
-  const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.');
-  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  const col = db.collection("cuentas").doc(selectedAccountId).collection("consignaciones");
   const snap = await col.get();
-  const deny = [];
-  snap.forEach(d=>{ if(ids.includes(d.id) && !canUnverify(d.data())) deny.push(d.id); });
-  if(deny.length>0) return alert('Algunas consignaciones fueron verificadas por Gerente. Solo el Gerente puede desverificarlas.');
+
+  for(let id of ids){
+    const d = snap.docs.find(x=>x.id===id).data();
+    if(d.verifiedRole === "Gerente" && sessionRole!=="Gerente")
+      return showModal("Solo el Gerente puede desverificar lo verificado por Gerente","error");
+  }
+  for(let id of ids){
+    const ok = await verifyAccess
+
+
+<!-- ================= CONTINUACIÓN PARTE 2 ================= -->
+<script>
+// Continúa el bloque que quedó cortado:
+
+// ======= Continuación DESVERIFICAR =======
+    const ok2 = await verifyAccessForLocked(id);
+    if(!ok2) return;
+  }
+
+  try{
+    const batch2 = db.batch();
+    ids.forEach(id => batch2.update(col.doc(id), {
+      verifiedBy:null,
+      verifiedRole:null
+    }));
+    await batch2.commit();
+    showModal("Desverificadas.", "success");
+    loadConsigns();
+  }catch(e){ console.error(e); showModal("Error: "+e.message, "error"); }
+};
+
+// ======================== ELIMINAR ========================
+$("btn-delete").onclick = async ()=>{
+  if(sessionRole !== "Gerente") return showModal("Solo Gerente puede eliminar.", "error");
+
+  const ids = getSelectedConsignIds();
+  if(ids.length===0) return showModal("Seleccione consignaciones", "warning");
+
+  // verificar locked
+  for(let id of ids){
+    const ok = await verifyAccessForLocked(id);
+    if(!ok) return;
+  }
+
+  showPromptModal("Confirme eliminando: ingrese clave del Gerente", async v=>{
+    if(v!==managerPass) return showModal("Clave incorrecta","error");
+
+    const col = db.collection("cuentas").doc(selectedAccountId).collection("consignaciones");
+
+    try{
+      const batch = db.batch();
+      ids.forEach(id => batch.delete(col.doc(id)));
+      await batch.commit();
+      showModal("Eliminadas", "success");
+      loadConsigns();
+    }catch(e){ console.error(e); showModal("Error: "+e.message, "error"); }
+  });
+};
+
+// ======================== CUADRAR ========================
+$("btn-cuadrar").onclick = async ()=>{
+  if(sessionRole !== "Gerente") return showModal("Solo el Gerente puede cuadrar.", "error");
+  if(!selectedAccountId) return showModal("Seleccione una cuenta.", "warning");
+
+  const col = db.collection("cuentas").doc(selectedAccountId).collection("consignaciones");
+  const snap = await col.orderBy('timestamp','asc').get();
+  if(snap.empty) return showModal("No hay consignaciones.", "warning");
+
+  // validar que TODAS estén verificadas por GERENTE
+  let okAll = true;
+  let total = 0;
+  snap.forEach(doc=>{
+    const d = doc.data();
+    if(!d.isSeparator){
+      if(d.verifiedRole !== "Gerente") okAll = false;
+      total += Number(d.valor||0);
+    }
+  });
+  if(!okAll) return showModal("Hay consignaciones sin verificar por GERENTE.", "error");
+
+  const fecha = new Date();
+  const txt = fecha.toLocaleDateString();
+
   try{
     const batch = db.batch();
-    ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null }));
-    await batch.commit();
-  }catch(e){ console.error(e); alert('Error desverificando: '+e.message); }
-});
+    // bloquear todas
+    snap.forEach(doc=>{
+      const d = doc.data();
+      if(!d.isSeparator) batch.update(col.doc(doc.id), { locked:true });
+    });
 
-$('btn-delete').addEventListener('click', async ()=>{ if(sessionRole!=='Gerente') return alert('Solo Gerente puede eliminar.'); if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); if(!confirm('Eliminar '+ids.length+' consignación(es)?')) return; const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.delete(col.doc(id))); await batch.commit(); }catch(e){ console.error(e); alert('Error eliminando: '+e.message); } });
-
-/* BOTÓN CUADRAR (REPARADO) */
-$('btn-cuadrar').addEventListener('click', async () => {
-  if (!selectedAccountId) return alert('Seleccione una cuenta.');
-
-  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-  const snap = await col.get();
-  if (snap.empty) return alert("No hay consignaciones para cuadrar.");
-
-  // Sumar total ignorando separadores
-  let total = 0;
-  snap.forEach(doc => {
-    const d = doc.data();
-    if (!d.isSeparator) total += Number(d.valor || 0);
-  });
-
-  // Fecha y texto
-  const fecha = new Date();
-  const fechaTxt = fecha.toLocaleDateString();
-
-  // Lógica simple: si total > 0 => green, si total === 0 => red
-  // Ajusta aquí la lógica si la regla de tu VB es distinta
-  const tipo = total > 0 ? "green" : "red";
-
-  try {
-    await col.add({
-      isSeparator: true,
-      type: tipo,
-      label: fechaTxt,
-      total: total,
+    // separador verde
+    batch.set(col.doc(), {
+      isSeparator:true,
+      type:"green",
+      label: txt,
+      total,
+      locked:false,
       timestamp: firebase.firestore.Timestamp.now()
     });
-    alert("Cuadre registrado correctamente.");
-  } catch (e) {
-    console.error(e);
-    alert("Error al cuadrar: " + e.message);
-  }
-});
 
-$('btn-sumar').addEventListener('click', ()=>{
-  const rows = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
-  let suma = 0;
-  rows.forEach(ch=>{
-    if(ch.checked){ const tr=ch.closest('tr'); const val = tr.children[2].textContent.replace(/\./g,'').replace(/,/g,''); suma += Number(val)||0; }
+    // separador rojo
+    batch.set(col.doc(), {
+      isSeparator:true,
+      type:"red",
+      label:"CORTE - "+txt,
+      total:0,
+      locked:false,
+      timestamp: firebase.firestore.Timestamp.now()
+    });
+
+    await batch.commit();
+    showModal("Cuadre realizado.", "success");
+    loadConsigns();
+
+  }catch(e){ console.error(e); showModal("Error: "+e.message, "error"); }
+};
+
+// ======================== BUSCADORES ========================
+$("search-name").oninput = ()=> filterAccounts();
+$("search-account").oninput = ()=> filterAccounts();
+
+async function filterAccounts(){
+  const name = $("search-name").value.toLowerCase();
+  const num = $("search-account").value.toLowerCase();
+
+  const snap = await db.collection("cuentas").get();
+  const cont = $("accounts-list");
+  let html = "";
+  snap.forEach(doc=>{
+    const d = doc.data();
+    if(d.nombre.toLowerCase().includes(name) && d.numero.toLowerCase().includes(num)){
+      html += `<div class='account-item' data-id='${doc.id}'>${d.nombre}<br><span class='small'>${d.numero}</span></div>`;
+    }
   });
-  alert('Total seleccionado: '+fmtCOP(suma));
-});
+  cont.innerHTML = html;
+  [...cont.querySelectorAll('.account-item')].forEach(el=>{
+    el.onclick = ()=> selectAccount(el.dataset.id, el);
+  });
+}
 
-/* TOTALES */ /* ignore separators */
-async function updateSelectedTotals(){ if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; } const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); const snap = await col.get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); $('total-cuenta').textContent = fmtCOP(total); }
-
-async function updateTotalGeneral(){ try{ const snap = await db.collectionGroup('consignaciones').get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); $('total-general').textContent = fmtCOP(total); }catch(e){ console.error(e); } }
-
-setInterval(updateTotalGeneral,15000); updateTotalGeneral();
-
-/* BUSCADOR simple client-side */
-$('search-name').addEventListener('input', ()=>{ const q=$('search-name').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
-$('search-account').addEventListener('input', ()=>{ const q=$('search-account').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
-
-/* ========== NAVEGACIÓN TIPO EXCEL ========== */
-let activeRowIndex = -1;
-function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
-function highlightActive(){ getRows().forEach((r,i)=>{ r.style.outline = (i===activeRowIndex)? '2px solid #3b82f6' : 'none'; }); }
-function moveActive(delta){ const rows=getRows(); if(rows.length===0) return; activeRowIndex = Math.min(rows.length-1, Math.max(0, activeRowIndex+delta)); highlightActive(); rows[activeRowIndex].scrollIntoView({block:'nearest'}); }
-$('consigns-body').addEventListener('click', e=>{
-  const row = e.target.closest('tr'); if(!row) return;
-  const rows=getRows(); activeRowIndex = rows.indexOf(row); highlightActive();
-});
-document.addEventListener('keydown', e=>{
-  if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
-  if(['ArrowUp','ArrowDown','Shift',' '].includes(e.key)) e.preventDefault();
-  const rows=getRows(); if(rows.length===0) return;
-  if(e.key==='ArrowDown') moveActive(1);
-  if(e.key==='ArrowUp') moveActive(-1);
-  if(e.key===' ' && activeRowIndex>=0){ const chk=rows[activeRowIndex].querySelector('input[type="checkbox"]'); if(chk){ chk.checked=!chk.checked; }}
-  if(e.shiftKey && (e.key==='ArrowDown' || e.key==='ArrowUp')){
-    const target=activeRowIndex;
-    const prev=lastCheckedIndex ?? target;
-    const start=Math.min(prev,target);
-    const end=Math.max(prev,target);
-    const checks = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
-    for(let i=start;i<=end;i++) checks[i].checked = true;
-  }
-});
-
-window.addEventListener('load', ()=>{ $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; });
-
-window.addEventListener('beforeunload', ()=>{ if(consignsUnsub) consignsUnsub(); });
+// ======================== OPCIONES ========================
+$("open-options").onclick = ()=>{
+  showModal("Panel de opciones próximamente.", "info");
+};
 
 </script>
-</body>
-</html>
