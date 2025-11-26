@@ -379,15 +379,13 @@ function showSuperWarning(title, message, onContinue) {
     });
 }
 
-/** NUEVA FUNCIÓN: Maneja el doble clic para inserción retroactiva (Solo Gerente) */
+/** Función para Inserción Retroactiva (Doble Clic) */
 async function handleDoubleClick(clickedConsign, index) {
-    // 1. Verificar Rol
     if (sessionRole !== 'Gerente') {
         showModal('Acceso Denegado', 'Solo el **Gerente** puede insertar movimientos retroactivos.', false);
         return;
     }
     
-    // 2. Verificar que no sea un separador y esté verificado
     if (clickedConsign.isSeparator || !clickedConsign.verifiedRole) {
          showModal('Atención', 'Solo puede insertar antes de consignaciones verificadas.', false);
          return;
@@ -395,11 +393,11 @@ async function handleDoubleClick(clickedConsign, index) {
     
     // 3. Preparar datos
     const clickedDate = clickedConsign.fecha.toDate();
-    // La nueva fecha será 1 milisegundo ANTES para garantizar el orden de aparición.
-    const newDate = new Date(clickedDate.getTime() - 1); 
+    const clickedTimestamp = clickedDate.getTime();
+    const today = new Date().toISOString().substring(0, 10);
     const clickedDateStr = clickedDate.toLocaleDateString('es-CO');
 
-    // 4. Configurar el Modal Dinámico
+    // 4. Configurar el Modal Dinámico con inputs de Fecha y Observación
     $('modal-title').innerHTML = `
         <div class="warning-title-container">
             <span class="warning-icon" style="color: var(--accent);">📝</span> 
@@ -408,8 +406,18 @@ async function handleDoubleClick(clickedConsign, index) {
     `;
     $('modal-body').innerHTML = `
         <p class="warning-message">
-            El nuevo movimiento se insertará **ANTES** de la consignación del **${clickedDateStr}** y se marcará automáticamente como **Verificado (Gerente)**.
+            El nuevo movimiento se insertará con la fecha y valor que especifique, garantizando que aparezca **justo encima** de la consignación del **${clickedDateStr}** y se marcará como Verificado (Gerente).
         </p>
+        <div style="display:flex; gap:10px;">
+            <div style="flex:1">
+                <label style="font-size:13px; color:var(--muted); margin-bottom:6px;">FECHA CONSIGNACIÓN:</label>
+                <input type="date" id="modal-retro-fecha" required value="${today}" style="width: 100%;">
+            </div>
+            <div style="flex:1">
+                <label style="font-size:13px; color:var(--muted); margin-bottom:6px;">FECHA DE OBSERVACIÓN (Opcional):</label>
+                <input type="date" id="modal-retro-obsdate" style="width: 100%;">
+            </div>
+        </div>
         <div style="margin-top:12px;">
             <label style="font-size:13px; color:var(--muted); margin-bottom:6px;">VALOR (COP) a insertar:</label>
             <input type="number" id="modal-retro-valor" placeholder="0.00" style="padding: 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%;">
@@ -424,23 +432,36 @@ async function handleDoubleClick(clickedConsign, index) {
     // 5. Lógica de Aceptar
     const insertAction = async () => {
         const valorInput = document.getElementById('modal-retro-valor');
+        const fechaInput = document.getElementById('modal-retro-fecha');
+        const obsdateInput = document.getElementById('modal-retro-obsdate');
+        
         const valor = Number(valorInput.value);
+        const fechaStr = fechaInput.value;
+        const obsdateStr = obsdateInput.value;
 
         if (isNaN(valor) || valor <= 0) {
             showModal('Error', 'Valor inválido o no ingresado. Intente de nuevo.', false);
-            // Reabrir el modal de inserción para que el usuario pueda corregir
             return handleDoubleClick(clickedConsign, index); 
         }
+        if (!fechaStr) {
+            showModal('Error', 'Debe seleccionar una fecha para la consignación.', false);
+            return handleDoubleClick(clickedConsign, index);
+        }
 
+        const userFecha = new Date(fechaStr);
+        const userObsdate = obsdateStr ? new Date(obsdateStr) : null;
+        
+        // El truco para forzar el orden: el nuevo documento tendrá un timestamp 1ms ANTES que el seleccionado.
+        const finalTimestampForSorting = firebase.firestore.Timestamp.fromMillis(clickedTimestamp - 1);
+        
         try {
             await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-                fecha: firebase.firestore.Timestamp.fromDate(newDate), 
-                obsdate: null,
+                fecha: finalTimestampForSorting, // Usamos 1ms menos para forzar la posición
+                obsdate: userObsdate ? firebase.firestore.Timestamp.fromDate(userObsdate) : null,
                 valor: valor, 
                 verifiedBy: usuario.usuario, 
-                verifiedRole: 'Gerente' // Automáticamente verificado como Gerente
+                verifiedRole: 'Gerente'
             });
-            // Éxito: no se muestra modal de confirmación
         } catch(e) { 
             showModal('Error', 'Error al insertar consignación: '+e.message, false); 
         } finally {
@@ -523,13 +544,13 @@ async function checkSensitiveAction(selectedData) {
   return true; 
 }
 
-/* GESTIÓN DE CUENTAS (Incluye lógica de cierre) */
+/* GESTIÓN DE CUENTAS (Incluye lógica de cierre y re-apertura con clave) */
 function subscribeAccounts(){
   db.collection('cuentas').orderBy('name').onSnapshot(snapshot=>{
     const container = $('accounts-list'); container.innerHTML = '';
     snapshot.forEach(doc=>{
       const a = { id: doc.id, ...doc.data() };
-      const isClosed = a.closed || false; // Nuevo estado de cuenta cerrada
+      const isClosed = a.closed || false; 
       const isMgr = (sessionRole === 'Gerente');
 
       const div = document.createElement('div'); 
@@ -578,12 +599,16 @@ document.addEventListener('change', async (e) => {
         
         try {
             if (newState) {
+                // Requiere clave para CERRAR
                 await showPasswordModal("Confirmación de Cierre", `¿Desea CERRAR la cuenta "${selectedAccountName}" permanentemente? Esto evitará nuevas consignaciones, a menos que se fuerce la acción.`);
+            } else {
+                // REQUISITO NUEVO: Requiere clave para REABRIR (quitar el cerrado)
+                await showPasswordModal("Confirmación de Apertura", `¿Desea REABRIR la cuenta "${selectedAccountName}"? Esto permitirá nuevas consignaciones. Ingrese CLAVE DE GERENTE.`);
             }
             
             await db.collection('cuentas').doc(accountId).update({ closed: newState });
         } catch (error) {
-            e.target.checked = !newState; // Revert state in UI on failure/cancel
+            e.target.checked = !newState; // Revertir estado en la UI si falla o cancela
             if (error.message !== "Acción cancelada.") {
                 showModal('Error', "Error al actualizar el estado de la cuenta: " + error.message, false);
             }
@@ -725,7 +750,37 @@ document.addEventListener('keydown', e => {
     }
 });
 
-/* BOTONES DE EXPORTACIÓN (Con formato de fecha largo) */
+/* BOTONES DE EXPORTACIÓN (Con formato de fecha corregido) */
+const longDateFormat = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
+const shortDateFormat = 'DD/MM/YYYY'; 
+
+function applyExcelDateFormats(ws) {
+    if (!ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    
+    for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
+        const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); // FECHA
+        const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); // VALOR
+        const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); // OBSERVACIONES
+
+        // FECHA: Formato de fecha LARGO
+        if (ws[cell_fecha_addr] && ws[cell_fecha_addr].t === 'n') {
+            ws[cell_fecha_addr].z = longDateFormat; 
+        }
+        // OBSERVACIONES: Formato de fecha CORTO (dd/mm/yyyy)
+        if (ws[cell_obs_addr] && ws[cell_obs_addr].t === 'n') {
+            ws[cell_obs_addr].z = shortDateFormat; 
+        }
+        
+        // Formato de moneda
+        if (ws[cell_valor_addr]) {
+            ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
+        }
+    }
+    // Ajuste de anchos 
+    ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}];
+}
+
 // Función de exportación de cuenta seleccionada
 $('btn-export-excel').addEventListener('click', () => {
   if(!selectedAccountId || currentConsignsSnapshot.length === 0) return showModal('Atención', "No hay datos para exportar.", false);
@@ -733,6 +788,7 @@ $('btn-export-excel').addEventListener('click', () => {
   const dataForExcel = currentConsignsSnapshot
     .filter(c => !c.isSeparator)
     .map(c => {
+      // Es crucial pasar los objetos Date para que el formato de Excel funcione
       const fechaDate = c.fecha && c.fecha.toDate ? c.fecha.toDate() : null;
       const obsDate = c.obsdate && c.obsdate.toDate ? c.obsdate.toDate() : null;
       
@@ -755,24 +811,7 @@ $('btn-export-excel').addEventListener('click', () => {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES", "ESTADO/COLOR"] }); 
 
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  const longDateFormat = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
-  
-  for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
-      const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); 
-      const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); 
-      const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); 
-
-      // FORMATO DE FECHA LARGO SOLICITADO
-      if (ws[cell_fecha_addr]) ws[cell_fecha_addr].z = longDateFormat; 
-      if (ws[cell_obs_addr]) ws[cell_obs_addr].z = longDateFormat; 
-      
-      // Formato de moneda
-      if (ws[cell_valor_addr]) ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
-  }
-
-  // Ajuste de anchos 
-  ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}];
+  applyExcelDateFormats(ws);
   
   XLSX.utils.book_append_sheet(wb, ws, selectedAccountName.substring(0, 31)); 
   XLSX.writeFile(wb, `Consignaciones_${selectedAccountName.replace(/\s+/g,'_')}.xlsx`);
@@ -822,21 +861,7 @@ $('btn-export-master').addEventListener('click', async () => {
 
       const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES", "ESTADO/COLOR"] }); 
 
-      if (ws['!ref']) {
-          const range = XLSX.utils.decode_range(ws['!ref']);
-          const longDateFormat = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
-          for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
-              const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); 
-              const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); 
-              const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); 
-              
-              if (ws[cell_fecha_addr]) ws[cell_fecha_addr].z = longDateFormat; 
-              if (ws[cell_obs_addr]) ws[cell_obs_addr].z = longDateFormat; 
-              if (ws[cell_valor_addr]) ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
-          }
-           // Ajuste de anchos 
-           ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}];
-      }
+      applyExcelDateFormats(ws);
 
       XLSX.utils.book_append_sheet(wb, ws, accountName);
     }
@@ -852,7 +877,7 @@ $('btn-export-master').addEventListener('click', async () => {
 });
 
 
-/* OPERACIONES DE DATOS (Se eliminó el modal de éxito) */
+/* OPERACIONES DE DATOS (Sin modal de éxito) */
 $('add-consign').addEventListener('click', async ()=>{
   if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   
@@ -903,7 +928,6 @@ $('add-consign').addEventListener('click', async ()=>{
     }); 
     $('valor').value=''; 
     $('valor').focus();
-    // showModal('Éxito', 'Consignación agregada.', false); <-- REMOVIDO POR SOLICITUD
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
 });
 
