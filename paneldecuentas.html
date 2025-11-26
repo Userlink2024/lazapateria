@@ -1,572 +1,543 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Control - Sistema Moderno</title>
-    <!-- Iconos Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Fuente Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- LIBRERÍAS FIREBASE -->
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
-
-    <style>
-        :root {
-            --primary-color: #2e7d32;
-            --bg-color: #f0f2f5;
-            --card-bg: #ffffff;
-            --text-main: #333333;
-            --text-secondary: #666666;
-            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            --hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            margin: 0;
-            padding: 0;
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Oculta el contenido principal si el acceso es denegado o está cargando */
-        .content-hidden {
-            display: none !important;
-        }
-
-        /* --- HEADER --- */
-        header {
-            background-color: var(--card-bg);
-            padding: 1rem 2rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .header-left, .header-right {
-            display: flex;
-            align-items: center;
-        }
-        .header-left { gap: 20px; }
-        .header-right { gap: 10px; }
-
-        .back-btn {
-            background-color: #f0f2f5;
-            color: var(--text-main);
-            border: 1px solid #ddd;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, #28a745 0%, #218838 100%);
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 1.2rem;
-        }
-
-        .user-details h3 {
-            margin: 0;
-            font-size: 1rem;
-            font-weight: 700;
-        }
-
-        .user-details span {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-        }
-
-        /* Botones del Header */
-        .header-btn {
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border: none;
-        }
-
-        .logout-btn {
-            background: transparent;
-            border: 1px solid #dc3545;
-            color: #dc3545;
-        }
-
-        .switch-user-btn {
-            background-color: #0d47a1;
-            color: white;
-        }
-        .switch-user-btn:hover {
-            background-color: #002171;
-            transform: translateY(-1px);
-        }
-
-        /* --- DASHBOARD GRID --- */
-        .main-canvas {
-            max-width: 1200px;
-            width: 90%;
-            margin: 40px auto;
-            flex-grow: 1;
-        }
-
-        .section-title {
-            font-size: 1.8rem;
-            margin-bottom: 30px;
-            color: #1a1a1a;
-            position: relative;
-            padding-left: 15px;
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 25px;
-        }
-
-        .dashboard-card {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 30px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: var(--shadow);
-            border: 1px solid rgba(0,0,0,0.02);
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 180px;
-        }
-        .dashboard-card:hover { transform: translateY(-8px); box-shadow: var(--hover-shadow); }
-
-        .card-icon {
-            font-size: 3rem;
-            margin-bottom: 20px;
-            transition: transform 0.3s ease;
-            /* REESTABLECIMIENTO DE ESTILOS DE ICONO */
-            padding: 15px;
-            border-radius: 50%; 
-            width: 50px; 
-            height: 50px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-        }
-
-        /* Icon Colors - CORREGIDOS */
-        .icon-blue { color: #3b82f6; background: #eff6ff; }
-        .icon-orange { color: #f97316; background: #fff7ed; }
-        .icon-green { color: #22c55e; background: #f0fdf4; }
-        .icon-purple { color: #a855f7; background: #faf5ff; }
-        .icon-red { color: #ef4444; background: #fef2f2; }
-        .icon-teal { color: #14b8a6; background: #f0fdfa; }
-        .icon-gold { color: #eab308; background: #fefce8; }
-        /* FIN DE CORRECCIÓN DE COLORES */
-
-        .dashboard-card:hover .card-icon { transform: scale(1.1) rotate(5deg); }
-        .card-title { font-weight: 600; font-size: 1.1rem; color: var(--text-main); }
-
-        /* --- MODAL BASE STYLES --- */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            backdrop-filter: blur(5px);
-            justify-content: center;
-            align-items: center;
-            animation: fadeIn 0.3s;
-        }
-        
-        .modal-content {
-            background-color: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 400px;
-            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
-            text-align: center;
-            position: relative;
-            animation: slideUp 0.3s;
-        }
-
-        /* Estilos específicos para el Modal de Alerta de Acceso */
-        #modalAccesoDenegado .modal-content {
-            border-top: 5px solid #ff9800; /* Naranja para advertencia */
-        }
-        #modalAccesoDenegado h2 {
-            color: #ff9800;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-        #modalAccesoDenegado .redirect-message {
-            margin-top: 15px;
-            font-size: 0.95rem;
-            color: #666;
-            font-weight: 500;
-        }
-
-        @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
-        @keyframes slideUp { from {transform:translateY(50px);} to {transform:translateY(0);} }
-
-        .close-modal {
-            position: absolute;
-            top: 15px;
-            right: 20px;
-            font-size: 24px;
-            cursor: pointer;
-            color: #aaa;
-        }
-        .close-modal:hover { color: #333; }
-
-        .modal h2 { color: #0d47a1; margin-bottom: 20px; }
-        .form-group { margin-bottom: 15px; text-align: left; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #555; }
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            box-sizing: border-box;
-            font-size: 1rem;
-        }
-        .form-group input:focus { outline: none; border-color: #0d47a1; }
-
-        .btn-login {
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px;
-            width: 100%;
-            border: none;
-            border-radius: 6px;
-            font-size: 1rem;
-            cursor: pointer;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-        .btn-login:hover { background-color: #45a049; }
-
-        .error-msg { color: #dc3545; margin-top: 10px; font-size: 0.9rem; font-weight: 600; }
-
-        footer { text-align: center; padding: 20px; color: var(--text-secondary); margin-top: auto; }
-
-        @media (max-width: 600px) {
-            header { flex-direction: column; gap: 15px; padding: 1rem; }
-            .header-right { width: 100%; justify-content: center; flex-direction: column; }
-            .header-btn { width: 100%; justify-content: center; }
-            .back-btn { position: absolute; left: 0; }
-            .dashboard-grid { grid-template-columns: 1fr; }
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sistema de Consignaciones - Completo</title>
+  <style>
+    :root{
+      --bg:#f3f6fb; --card:#fff; --accent:#2563eb; --muted:#6b7280;
+      --border:#e6e9ef; --danger:#dc2626; --ok:#10b981;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:var(--bg);color:#0f172a}
+    #topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:var(--card);border-bottom:1px solid var(--border)}
+    .layout{display:flex;height:calc(100vh - 56px)}
+    .sidebar{width:320px;padding:16px;background:#fff;border-right:1px solid var(--border);overflow:auto}
+    .main{flex:1;padding:18px;overflow:auto}
+    h2,h3{margin:0 0 8px 0}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input[type=text], input[type=number], input[type=date], select, textarea{width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:#fff}
+    textarea{resize:vertical}
+    .btn{background:var(--accent);color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    .btn.ghost{background:#f1f5f9;color:#0f172a}
+    .btn.danger{background:var(--danger)}
+    .panel{background:var(--card);padding:12px;border-radius:8px;border:1px solid var(--border);box-shadow:0 2px 6px rgba(15,23,42,0.03);margin-bottom:12px}
+    .account-item{padding:10px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;cursor:pointer;background:#fff}
+    .account-item.selected{border-left:4px solid var(--accent);background:#f0f6ff}
+    .flex-row{display:flex;gap:8px;align-items:center}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:8px;border:1px solid var(--border);background:#fff}
+    tr.verified-admin{background:#e9ecef} /* gris */
+    tr.verified-gerente{background:#fff7cc} /* amarillo */
+    tr.separator{background:#eef2ff;font-weight:700;text-align:center}
+    .muted{color:var(--muted);font-size:13px}
+    .top-totals{display:flex;gap:12px;align-items:center}
+    .top-totals .card{padding:8px;border-radius:8px;border:1px solid var(--border);background:#fff}
+    .small{font-size:12px;color:var(--muted)}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center}
+    .modal .card{width:720px;max-width:96%;padding:16px}
+    .hidden{display:none}
+    .gear{cursor:pointer;padding:6px;border-radius:6px;border:1px solid var(--border);background:#fff}
+  </style>
 </head>
 <body>
 
-    <!-- Header -->
-    <header id="app-header">
-        <div class="header-left">
-            <a href="https://userlink2024.github.io/lazapateria/TABLERO.HTML" class="back-btn" title="Volver al Tablero">
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <div class="user-info">
-                <div class="user-avatar" id="avatar-initial">U</div>
-                <div class="user-details">
-                    <h3 id="user-name">Cargando...</h3>
-                    <span id="user-role">...</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="header-right">
-            <!-- Botón para abrir la ventana modal -->
-            <button class="header-btn switch-user-btn" onclick="abrirModalCambioUsuario()">
-                <i class="fas fa-user-friends"></i> Cambiar Usuario
-            </button>
-            <button class="header-btn logout-btn" onclick="cerrarSesion()">
-                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-            </button>
-        </div>
-    </header>
-
-    <!-- Contenido Principal -->
-    <main class="main-canvas" id="main-content">
-        <h1 class="section-title">Panel Principal</h1>
-
-        <div class="dashboard-grid">
-            <div class="dashboard-card" onclick="redirigir('cuentas')">
-                <div class="card-icon icon-blue"><i class="fas fa-university"></i></div>
-                <div class="card-title">Cuentas Bancarias</div>
-            </div>
-            <div class="dashboard-card" onclick="redirigir('fabricantes')">
-                <div class="card-icon icon-orange"><i class="fas fa-industry"></i></div>
-                <div class="card-title">Ingreso de Fabricantes</div>
-            </div>
-            <div class="dashboard-card" onclick="redirigir('ventas')">
-                <div class="card-icon icon-green"><i class="fas fa-file-invoice-dollar"></i></div>
-                <div class="card-title">Historial de Ventas</div>
-            </div>
-            <div class="dashboard-card" onclick="redirigir('guias')">
-                <div class="card-icon icon-purple"><i class="fas fa-truck-fast"></i></div>
-                <div class="card-title">Historial Guías</div>
-            </div>
-            <div class="dashboard-card" onclick="redirigir('grafica_general')">
-                <div class="card-icon icon-red"><i class="fas fa-chart-line"></i></div>
-                <div class="card-title">Gráfica General</div>
-            </div>
-            <div class="dashboard-card" onclick="redirigir('grafica_asesor')">
-                <div class="card-icon icon-teal"><i class="fas fa-chart-pie"></i></div>
-                <div class="card-title">Gráfica por Asesor</div>
-            </div>
-            <div class="dashboard-card" onclick="redirigir('nomina')">
-                <div class="card-icon icon-gold"><i class="fas fa-users-cog"></i></div>
-                <div class="card-title">Nómina de Propulsar</div>
-            </div>
-        </div>
-    </main>
-
-    <!-- 1. MODAL DE ACCESO DENEGADO -->
-    <div id="modalAccesoDenegado" class="modal">
-        <div class="modal-content">
-            <h2><i class="fas fa-lock"></i> Acceso Restringido</h2>
-            <p style="color: #333;">Su tipo de usuario (**OPERADOR**) no tiene permisos para acceder al Panel de Control Principal.</p>
-            <p class="redirect-message">Será redirigido a su panel de trabajo en <span id="redirect-countdown">10</span> segundos...</p>
-        </div>
+  <div id="topbar">
+    <div style="display:flex;gap:12px;align-items:center">
+      <strong>Sistema de Consignaciones</strong>
+      <div class="small">Formato: FECHA / VALOR / OBSERVACION</div>
     </div>
 
-    <!-- 2. MODAL PARA CAMBIO DE USUARIO -->
-    <div id="modalCambioUsuario" class="modal">
-        <div class="modal-content">
-            <span class="close-modal" onclick="cerrarModalCambioUsuario()">&times;</span>
-            <h2><i class="fas fa-user-circle"></i> Iniciar Otra Sesión</h2>
-            <p style="color: #666; margin-bottom: 20px;">Ingresa las credenciales del nuevo usuario</p>
-            
-            <div class="form-group">
-                <label for="nuevo_usuario">Usuario:</label>
-                <input type="text" id="nuevo_usuario" placeholder="Ej: admin">
-            </div>
-            <div class="form-group">
-                <label for="nuevo_password">Contraseña:</label>
-                <input type="password" id="nuevo_password" placeholder="******">
-            </div>
-            
-            <button class="btn-login" onclick="autenticarNuevoUsuario()">Ingresar</button>
-            <p id="error-login" class="error-msg"></p>
+    <div class="top-totals">
+      <div class="card small">
+        <div class="muted">Total general (todas las cuentas)</div>
+        <div id="total-general">0</div>
+      </div>
+      <div class="card small">
+        <div class="muted">Total cuenta seleccionada</div>
+        <div id="total-cuenta">0</div>
+      </div>
+      <div class="card small">
+        <div class="muted">Sesión</div>
+        <div id="user-info">cargando...</div>
+      </div>
+      <button id="open-options" class="btn ghost">Opciones</button>
+      <button id="logout" class="btn ghost">Salir</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <h3>Buscar / Cuentas</h3>
+
+      <label>Buscar por nombre</label>
+      <input id="search-name" type="text" placeholder="Nombre...">
+
+      <label style="margin-top:10px">Buscar por número de cuenta</label>
+      <input id="search-account" type="text" placeholder="000000...">
+
+      <div style="margin-top:12px" class="panel">
+        <h4 style="margin-bottom:8px">Agregar nueva cuenta</h4>
+        <label>Nombre</label>
+        <input id="new-account-name" type="text">
+        <label style="margin-top:8px">Número</label>
+        <input id="new-account-number" type="text">
+        <div style="margin-top:8px" class="flex-row">
+          <button id="add-account" class="btn" style="flex:1">Agregar</button>
         </div>
+      </div>
+
+      <div>
+        <div class="muted" style="margin-bottom:6px">Cuentas</div>
+        <div id="accounts-list" style="max-height:50vh;overflow:auto"></div>
+      </div>
     </div>
 
-    <footer>&copy; 2026 La Zapatería System v2.0</footer>
+    <!-- MAIN -->
+    <div class="main">
 
-    <script>
-        // 1. CONFIGURACIÓN FIREBASE
-        const firebaseConfig = {
-            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
-            authDomain: "lazapateria-c4157.firebaseapp.com",
-            projectId: "lazapateria-c4157",
-            storageBucket: "lazapateria-c4157.firebasestorage.app",
-            messagingSenderId: "300241769138",
-            appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
-            measurementId: "G-HVG7615JEE"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
+      <div class="panel">
+        <h3>Agregar consignación</h3>
+        <div id="selected-account-info" class="muted" style="margin-bottom:8px">Ninguna cuenta seleccionada</div>
 
-        // 2. LÓGICA DE USUARIO ACTUAL Y FILTRO DE ACCESO
-        document.addEventListener('DOMContentLoaded', () => {
-            // Ocultar contenido por defecto para evitar parpadeo si no hay acceso
-            document.getElementById('main-content').classList.add('content-hidden');
-            document.getElementById('app-header').classList.add('content-hidden');
-            verificarUsuarioActual();
-        });
+        <div style="display:flex;gap:12px">
+          <div style="flex:1">
+            <label>FECHA</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <label><input type="radio" name="dateOpt" value="today"> Hoy</label>
+              <label><input type="radio" name="dateOpt" value="yesterday"> Ayer</label>
+              <label><input type="radio" name="dateOpt" value="daybefore"> Antier</label>
+              <label style="margin-left:6px">Manual</label>
+              <input id="date-picker" type="date">
+            </div>
+          </div>
 
-        function verificarUsuarioActual() {
-            const datosUsuarioJSON = localStorage.getItem('datosUsuario');
-            
-            if (!datosUsuarioJSON) {
-                // Si no hay datos, redirigir al login
-                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
-                return;
-            }
+          <div style="flex:1">
+            <label>FECHA DE OBSERVACIÓN</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <label><input type="radio" name="obsOpt" value="today"> Hoy</label>
+              <label><input type="radio" name="obsOpt" value="yesterday"> Ayer</label>
+              <label><input type="radio" name="obsOpt" value="daybefore"> Antier</label>
+              <label style="margin-left:6px">Manual</label>
+              <input id="obsdate-picker" type="date">
+            </div>
+          </div>
+        </div>
 
-            try {
-                const datosUsuario = JSON.parse(datosUsuarioJSON);
-                // Aseguramos que los permisos sean tratados consistentemente como mayúsculas
-                const permisos = datosUsuario.permisos ? datosUsuario.permisos.toUpperCase() : 'INVITADO';
-                
-                // === FILTRO DE ACCESO PRINCIPAL: Si es OPERADOR, denegar acceso ===
-                if (permisos === 'OPERADOR') {
-                    mostrarMensajeAccesoDenegado();
-                    return; // Detiene la carga del panel
-                }
-                // =================================================================
+        <div style="margin-top:10px">
+          <label>OBSERVACIONES</label>
+          <textarea id="observations" rows="2" placeholder="Observación..."></textarea>
+        </div>
 
-                // Si tiene acceso (no es OPERADOR), mostrar contenido y actualizar UI
-                document.getElementById('user-name').textContent = datosUsuario.nombreCompleto || 'Usuario';
-                document.getElementById('avatar-initial').textContent = (datosUsuario.nombreCompleto || 'U').charAt(0).toUpperCase();
-                document.getElementById('user-role').textContent = permisos;
-                
-                document.getElementById('main-content').classList.remove('content-hidden');
-                document.getElementById('app-header').classList.remove('content-hidden');
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:end">
+          <div style="flex:1">
+            <label>VALOR (COP)</label>
+            <input id="valor" type="number" placeholder="0">
+          </div>
+          <div style="width:220px">
+            <button id="add-consign" class="btn" style="width:100%">Agregar consignación</button>
+          </div>
+        </div>
+      </div>
 
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Lista de consignaciones (FECHA / VALOR / OBSERVACIÓN)</h3>
+          <div>
+            <button id="btn-verify" class="btn">Verificado</button>
+            <button id="btn-unverify" class="btn ghost">Desverificar</button>
+            <button id="btn-delete" class="btn danger" style="display:none">Eliminar (Gerente)</button>
+            <button id="btn-cuadrar" class="btn ghost" style="display:none">Cuadrar (Gerente)</button>
+          </div>
+        </div>
 
-            } catch (e) {
-                console.error("Error al leer usuario:", e);
-                localStorage.removeItem('datosUsuario');
-                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
-            }
-        }
+        <div style="margin-top:12px;max-height:52vh;overflow:auto">
+          <table>
+            <thead>
+              <tr><th>Sel</th><th>FECHA</th><th>VALOR</th><th>OBSERVACIÓN</th><th>ESTADO</th></tr>
+            </thead>
+            <tbody id="consigns-body"></tbody>
+          </table>
+        </div>
+      </div>
 
-        // 3. FUNCIÓN DE MENSAJE DE ACCESO DENEGADO
-        function mostrarMensajeAccesoDenegado() {
-            const modal = document.getElementById('modalAccesoDenegado');
-            modal.style.display = 'flex';
-            
-            let countdown = 10;
-            const countdownEl = document.getElementById('redirect-countdown');
-            countdownEl.textContent = countdown;
-            
-            // Intervalo de 1 segundo para la cuenta regresiva
-            const intervalo = setInterval(() => {
-                countdown--;
-                countdownEl.textContent = countdown;
+    </div>
+  </div>
 
-                if (countdown <= 0) {
-                    clearInterval(intervalo);
-                    // Redirigir al link del operador
-                    window.location.href = 'https://userlink2024.github.io/lazapateria/TABLERO.HTML';
-                }
-            }, 1000);
-        }
-        
-        // 4. FUNCIONES DE MANEJO DE SESIÓN Y MODAL DE CAMBIO DE USUARIO
-        function abrirModalCambioUsuario() {
-            document.getElementById('modalCambioUsuario').style.display = 'flex';
-            document.getElementById('nuevo_usuario').value = '';
-            document.getElementById('nuevo_password').value = '';
-            document.getElementById('error-login').textContent = '';
-            document.getElementById('nuevo_usuario').focus();
-        }
+  <!-- MODAL OPCIONES (ADMINISTRATIVO / GERENTE + CAMBIO DE CLAVE) -->
+  <div id="modal-options" class="modal hidden">
+    <div class="panel card" style="width:720px;max-width:96%">
+      <h3>Opciones de Acceso (seleccione)</h3>
+      <div style="margin-top:8px">
+        <label><input type="radio" name="sessionRole" value="Administrativo" checked> Administrativo</label>
+        <label style="margin-left:12px"><input type="radio" name="sessionRole" value="Gerente"> Gerente</label>
+      </div>
 
-        function cerrarModalCambioUsuario() {
-            document.getElementById('modalCambioUsuario').style.display = 'none';
-        }
+      <div id="manager-pass-area" class="hidden" style="margin-top:12px">
+        <label>Clave Gerente</label>
+        <input id="manager-pass" type="password" value="">
+      </div>
 
-        window.onclick = function(event) {
-            const modal1 = document.getElementById('modalCambioUsuario');
-            const modal2 = document.getElementById('modalAccesoDenegado');
-            if (event.target == modal1) {
-                cerrarModalCambioUsuario();
-            }
-            // NOTA: El modalAccesoDenegado se cierra solo por redirección
-        }
+      <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <span class="gear" id="gear-change" title="Cambiar clave">⚙️</span>
+          <small class="muted" style="margin-left:8px">Usa la tuerca para cambiar la clave por defecto (0000)</small>
+        </div>
+        <div>
+          <button id="options-continue" class="btn">Continuar</button>
+          <button id="options-cancel" class="btn ghost">Cancelar</button>
+        </div>
+      </div>
 
-        async function autenticarNuevoUsuario() {
-            let usuarioInput = document.getElementById('nuevo_usuario').value.trim();
-            let passwordInput = document.getElementById('nuevo_password').value.trim();
-            let errorMsg = document.getElementById('error-login');
-            let btn = document.querySelector('.btn-login');
+      <div id="gear-panel" class="hidden" style="margin-top:14px">
+        <label>Nueva clave Gerente</label>
+        <input id="new-manager-pass" type="text" placeholder="Nueva clave (ej. 1234)">
+        <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
+          <button id="save-manager-pass" class="btn">Guardar clave</button>
+          <button id="cancel-gear" class="btn ghost">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-            if (!usuarioInput || !passwordInput) {
-                errorMsg.textContent = 'Por favor, complete todos los campos.';
-                return;
-            }
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+<script>
+/* ============= CONFIG FIREBASE ============= */
+const firebaseConfig = {
+  apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+  authDomain:"lazapateria-c4157.firebaseapp.com",
+  projectId:"lazapateria-c4157",
+  storageBucket:"lazapateria-c4157.firebasestorage.app",
+  messagingSenderId:"300241769138",
+  appId:"1:300241769138:web:8ca1847de3c4fb5042afab"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-            btn.disabled = true;
-            btn.textContent = 'Verificando...';
-            errorMsg.textContent = '';
+/* ============= ESTADO ============= */
+const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
+if(!usuario){ alert('No hay sesión activa.'); location.href='index.html'; }
+if(usuario.permisos !== 'Administrador'){ alert('Acceso denegado. Solo administradores.'); location.href='index.html'; }
 
-            try {
-                const snapshot = await db.collection('usuarios').where('usuario', '==', usuarioInput).get();
-                let loginExitoso = false;
-                
-                if (!snapshot.empty) {
-                    snapshot.forEach(doc => {
-                        const usuarioEncontrado = doc.data();
-                        if (usuarioEncontrado.contraseña && usuarioEncontrado.contraseña === passwordInput) {
-                            loginExitoso = true;
-                            localStorage.setItem('datosUsuario', JSON.stringify(usuarioEncontrado));
-                            location.reload(); 
-                        }
-                    });
-                }
+document.getElementById('user-info').textContent = usuario.usuario + ' — ' + usuario.permisos;
+document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
 
-                if (!loginExitoso) {
-                    errorMsg.textContent = 'Usuario o contraseña incorrectos.';
-                    btn.disabled = false;
-                    btn.textContent = 'Ingresar';
-                }
+let sessionRole = 'Administrativo'; // lo elegirá el modal: 'Administrativo' | 'Gerente'
+let managerPass = localStorage.getItem('managerPass') || '0000';
 
-            } catch (error) {
-                errorMsg.textContent = 'Error: ' + error.message;
-                btn.disabled = false;
-                btn.textContent = 'Ingresar';
-                console.error(error);
-            }
-        }
+let selectedAccountId = null;
 
-        function cerrarSesion() {
-            // Se utiliza console.log en lugar de alert/confirm
-            if(window.confirm("¿Estás seguro de que deseas cerrar sesión?")) {
-                localStorage.removeItem('datosUsuario');
-                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
-            }
-        }
+/* ============= UTILIDADES ============= */
+const $ = id => document.getElementById(id);
+function uid(prefix='id'){return prefix + '_' + Math.random().toString(36).slice(2,9)}
+function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)) }
 
-        function redirigir(seccion) {
-            console.log("Navegando a: " + seccion);
-            // Reemplaza con tus enlaces reales
-            switch(seccion) {
-                case 'cuentas': window.location.href = 'https://userlink2024.github.io/lazapateria/cuentasbancarias.html'; break;
-                case 'fabricantes': window.location.href = 'ruta/a/fabricantes.html'; break;
-                case 'ventas': window.location.href = 'ruta/a/ventas.html'; break;
-                case 'guias': window.location.href = 'ruta/a/guias.html'; break;
-                case 'grafica_general': window.location.href = 'ruta/a/grafica_gen.html'; break;
-                case 'grafica_asesor': window.location.href = 'ruta/a/grafica_ase.html'; break;
-                case 'nomina': window.location.href = 'ruta/a/nomina.html'; break;
-                default: console.warn("Ruta no configurada: " + seccion);
-            }
-        }
-    </script>
+/* ============= UI: Opciones modal ============= */
+$('open-options').addEventListener('click', ()=> {
+  $('modal-options').classList.remove('hidden');
+  // reset UI
+  document.querySelector('input[name="sessionRole"][value="Administrativo"]').checked = true;
+  document.getElementById('manager-pass-area').classList.add('hidden');
+  document.getElementById('manager-pass').value = '';
+  document.getElementById('gear-panel').classList.add('hidden');
+});
+
+document.querySelectorAll('input[name="sessionRole"]').forEach(r=>{
+  r.addEventListener('change', (e)=>{
+    if(e.target.value === 'Gerente') $('manager-pass-area').classList.remove('hidden');
+    else $('manager-pass-area').classList.add('hidden');
+  });
+});
+
+$('options-cancel').addEventListener('click', ()=> $('modal-options').classList.add('hidden'));
+
+$('gear-change').addEventListener('click', ()=> {
+  $('gear-panel').classList.toggle('hidden');
+  $('new-manager-pass').value = '';
+});
+$('cancel-gear').addEventListener('click', ()=> $('gear-panel').classList.add('hidden'));
+$('save-manager-pass').addEventListener('click', ()=>{
+  const p = $('new-manager-pass').value.trim();
+  if(!p){ alert('Ingrese nueva clave'); return; }
+  managerPass = p;
+  localStorage.setItem('managerPass', managerPass);
+  alert('Clave de gerente actualizada');
+  $('gear-panel').classList.add('hidden');
+});
+
+/* CONTINUAR DESDE MODAL: validar clave si Gerente */
+$('options-continue').addEventListener('click', ()=>{
+  const chosen = document.querySelector('input[name="sessionRole"]:checked').value;
+  if(chosen === 'Gerente'){
+    const pass = $('manager-pass').value;
+    if(pass !== managerPass){ alert('Clave de gerente incorrecta'); return; }
+    sessionRole = 'Gerente';
+  } else {
+    sessionRole = 'Administrativo';
+  }
+  // actualizar UI segun sessionRole
+  if(sessionRole === 'Gerente'){
+    $('btn-delete').style.display = 'inline-block';
+    $('btn-cuadrar').style.display = 'inline-block';
+  } else {
+    $('btn-delete').style.display = 'none';
+    $('btn-cuadrar').style.display = 'none';
+  }
+  $('modal-options').classList.add('hidden');
+  alert('Sesión como: ' + sessionRole);
+});
+
+/* ============= SUBSCRIPCIONES y RENDER ============= */
+/* Render accounts list (real-time) */
+function subscribeAccounts(){
+  db.collection('cuentas').orderBy('name').onSnapshot(snapshot=>{
+    const container = $('accounts-list');
+    container.innerHTML = '';
+    snapshot.forEach(doc=>{
+      const a = { id: doc.id, ...doc.data() };
+      const div = document.createElement('div');
+      div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
+      div.innerHTML = `<div style="font-weight:600">${a.name}</div><div class="muted">${a.number || ''}</div>`;
+      div.onclick = ()=> { selectedAccountId = a.id; renderAccounts(snapshot); renderConsigns(); updateSelectedTotals(); $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}`; };
+      container.appendChild(div);
+    });
+    // if none selected pick first
+    if(!selectedAccountId && snapshot.docs.length>0){
+      selectedAccountId = snapshot.docs[0].id;
+      renderConsigns();
+      updateSelectedTotals();
+      // select visually by re-rendering
+      renderAccounts(snapshot);
+    }
+  });
+}
+function renderAccounts(snapshot){ /* helper to re-style selection */
+  const items = Array.from(document.querySelectorAll('#accounts-list .account-item'));
+  items.forEach(it=>{
+    it.classList.remove('selected');
+    // find matching by innerText? simple approach: rely on click to update selection visuals
+  });
+}
+/* start subscription */
+subscribeAccounts();
+
+/* Subscribe consigns of selected account */
+let consignsUnsub = null;
+function renderConsigns(){
+  if(consignsUnsub) consignsUnsub();
+  const tbody = $('consigns-body');
+  tbody.innerHTML = '';
+  if(!selectedAccountId) return;
+  consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha').onSnapshot(snapshot=>{
+    tbody.innerHTML = '';
+    snapshot.forEach(doc=>{
+      const c = doc.data();
+      if(c.isSeparator){
+        const tr = document.createElement('tr'); tr.className = 'separator';
+        tr.innerHTML = `<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`;
+        tbody.appendChild(tr);
+        return;
+      }
+      const tr = document.createElement('tr');
+      if(c.verifiedRole === 'Administrativo') tr.classList.add('verified-admin');
+      if(c.verifiedRole === 'Gerente') tr.classList.add('verified-gerente');
+      const fechaText = c.fecha && c.fecha.toDate ? new Date(c.fecha.toDate()).toLocaleDateString() : '';
+      tr.innerHTML = `
+        <td style="width:56px"><input type="checkbox" data-id="${doc.id}"></td>
+        <td style="width:160px">${fechaText}<br><small class="small">Obs: ${c.obsdate && c.obsdate.toDate ? new Date(c.obsdate.toDate()).toLocaleDateString() : ''}</small></td>
+        <td style="width:140px">${fmtCOP(c.valor)}</td>
+        <td>${(c.observaciones || '')}</td>
+        <td style="width:160px">${c.verifiedRole ? (c.verifiedRole === 'Gerente' ? 'Verificado (Gerente)' : 'Verificado (Admin)') : 'Sin verificar'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    updateSelectedTotals();
+    updateTotalGeneral();
+  });
+}
+
+/* ============= ACCIONES (Add account / consign / verify / unverify / delete / cuadrar) ============= */
+
+/* Agregar cuenta */
+$('add-account').addEventListener('click', async ()=>{
+  const name = $('new-account-name').value.trim();
+  const number = $('new-account-number').value.trim();
+  if(!name || !number) return alert('Nombre y número requeridos.');
+  try{
+    await db.collection('cuentas').add({ name, number });
+    $('new-account-name').value = '';
+    $('new-account-number').value = '';
+  }catch(e){ console.error(e); alert('Error creando cuenta: ' + e.message); }
+});
+
+/* Fecha helpers */
+function parseDateRadio(name, pickerId){
+  const opts = document.getElementsByName(name);
+  let sel = null;
+  for(const r of opts) if(r.checked) sel = r.value;
+  if(sel === 'today') return new Date();
+  if(sel === 'yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); return d; }
+  if(sel === 'daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); return d; }
+  // manual
+  const v = $(pickerId).value;
+  return v ? new Date(v) : null;
+}
+
+/* Agregar consignación */
+$('add-consign').addEventListener('click', async ()=>{
+  if(!selectedAccountId) return alert('Seleccione una cuenta.');
+  const fecha = parseDateRadio('dateOpt','date-picker');
+  const obsdate = parseDateRadio('obsOpt','obsdate-picker');
+  const observaciones = $('observations').value.trim();
+  const valor = Number($('valor').value || 0);
+  if(!fecha) return alert('Seleccione una fecha válida.');
+  try{
+    await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({
+      fecha: firebase.firestore.Timestamp.fromDate(fecha),
+      obsdate: obsdate ? firebase.firestore.Timestamp.fromDate(obsdate) : null,
+      observaciones, valor,
+      verifiedBy:null, verifiedRole:null
+    });
+    $('observations').value=''; $('valor').value='';
+  }catch(e){ console.error(e); alert('Error agregando consignación: '+e.message); }
+});
+
+/* Obtener ids seleccionados */
+function getSelectedConsignIds(){
+  return Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]')).filter(c=>c.checked).map(c=>c.dataset.id);
+}
+
+/* Verificar (según sessionRole colorea y guarda role) */
+$('btn-verify').addEventListener('click', async ()=>{
+  if(!selectedAccountId) return alert('Seleccione cuenta.');
+  const ids = getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.');
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  try{
+    const batch = db.batch();
+    ids.forEach(id=>{
+      const ref = col.doc(id);
+      batch.update(ref, { verifiedBy: usuario.usuario, verifiedRole: sessionRole });
+    });
+    await batch.commit();
+    // after commit UI auto-updates via snapshot
+  }catch(e){ console.error(e); alert('Error verificando: '+e.message); }
+});
+
+/* Desverificar */
+$('btn-unverify').addEventListener('click', async ()=>{
+  if(!selectedAccountId) return alert('Seleccione cuenta.');
+  const ids = getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.');
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  try{
+    const batch = db.batch();
+    ids.forEach(id=>{
+      const ref = col.doc(id);
+      batch.update(ref, { verifiedBy: null, verifiedRole: null });
+    });
+    await batch.commit();
+  }catch(e){ console.error(e); alert('Error desverificando: '+e.message); }
+});
+
+/* Eliminar (solo Gerente activo) */
+$('btn-delete').addEventListener('click', async ()=>{
+  if(sessionRole !== 'Gerente') return alert('Solo Gerente puede eliminar.');
+  if(!selectedAccountId) return alert('Seleccione cuenta.');
+  const ids = getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.');
+  if(!confirm('Eliminar '+ids.length+' consignación(es)?')) return;
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  try{
+    const batch = db.batch();
+    ids.forEach(id => batch.delete(col.doc(id)));
+    await batch.commit();
+  }catch(e){ console.error(e); alert('Error eliminando: '+e.message); }
+});
+
+/* Cuadrar (solo Gerente) */
+$('btn-cuadrar').addEventListener('click', async ()=>{
+  if(sessionRole !== 'Gerente') return alert('Solo Gerente puede cuadrar.');
+  if(!selectedAccountId) return alert('Seleccione cuenta.');
+  try{
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+    const snap = await col.get();
+    let total = 0;
+    snap.forEach(d=>{
+      const data = d.data();
+      if(!data.isSeparator) total += Number(data.valor || 0);
+    });
+    await col.add({ isSeparator:true, label: new Date().toLocaleString(), total });
+    alert('Cuadre guardado: ' + fmtCOP(total));
+  }catch(e){ console.error(e); alert('Error al cuadrar: '+e.message); }
+});
+
+/* ============= TOTALES ============= */
+/* Total por cuenta mostrado en top */
+async function updateSelectedTotals(){
+  if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; }
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  const snap = await col.get();
+  let total = 0;
+  snap.forEach(d=>{
+    const data = d.data();
+    if(!data.isSeparator) total += Number(data.valor || 0);
+  });
+  $('total-cuenta').textContent = fmtCOP(total);
+}
+
+/* Total general (todas las cuentas) usando collectionGroup */
+async function updateTotalGeneral(){
+  try{
+    const snap = await db.collectionGroup('consignaciones').get();
+    let total = 0;
+    snap.forEach(d=>{
+      const data = d.data();
+      if(!data.isSeparator) total += Number(data.valor || 0);
+    });
+    $('total-general').textContent = fmtCOP(total);
+  }catch(e){ console.error(e); }
+}
+
+/* Actualizar total general a intervalos y cuando haya cambios */
+setInterval(updateTotalGeneral, 15000); // cada 15s
+updateTotalGeneral();
+
+/* update totals on load and when consigns change */
+window.addEventListener('focus', ()=>{ updateTotalGeneral(); updateSelectedTotals(); });
+
+/* ============= Busquedas (front-end quick filter) ============= */
+$('search-name').addEventListener('input', ()=> {
+  const q = $('search-name').value.toLowerCase();
+  Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{
+    it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+$('search-account').addEventListener('input', ()=> {
+  const q = $('search-account').value.toLowerCase();
+  Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{
+    it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+
+/* inicializar: mostrar modal opciones por defecto para definir sessionRole */
+window.addEventListener('load', ()=> {
+  // show app area (accounts subscription will render)
+  // Open the options modal so user selects if they act as Administrativo or Gerente
+  $('modal-options').classList.remove('hidden');
+  // set default managerPass value into manager-pass input for convenience
+  $('manager-pass').value = '';
+});
+
+/* cleanup listeners on unload */
+window.addEventListener('beforeunload', ()=> {
+  if(consignsUnsub) consignsUnsub();
+});
+
+/* start initial rendering if account already selected (subscribeAccounts handles selection) */
+updateSelectedTotals();
+updateTotalGeneral();
+
+</script>
 </body>
 </html>
