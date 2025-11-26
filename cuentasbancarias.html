@@ -608,6 +608,8 @@ function subscribeAccounts(){
         renderConsigns(); 
         updateSelectedTotals(); 
     }
+    // Aseguramos que el total general se actualice al cargar las cuentas por primera vez
+    updateTotalGeneral(); 
   });
 }
 subscribeAccounts();
@@ -741,7 +743,9 @@ function renderConsigns(){
 
       tbody.appendChild(tr);
     });
-    updateSelectedTotals(); updateTotalGeneral();
+    // *** Actualización de totales aquí, cada vez que la lista cambia ***
+    updateSelectedTotals(); 
+    updateTotalGeneral();
   });
 }
 
@@ -1150,22 +1154,50 @@ $('btn-sumar').addEventListener('click', ()=>{
 });
 
 /* CALCULOS TOTALES */
+// ** CORREGIDO: Total de Cuenta Actual (Depende de la lista actual en memoria) **
 async function updateSelectedTotals(){ 
-  if(!selectedAccountId){ $('total-cuenta').textContent = 0; return; }
+  if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; }
   let total = 0; 
-  currentConsignsSnapshot.forEach(d=>{ if(!d.isSeparator) total += Number(d.valor || 0); }); 
+  // Usa el snapshot de la cuenta actual que ya está en memoria
+  currentConsignsSnapshot.forEach(d=>{ 
+      if(!d.isSeparator) total += Number(d.valor || 0); 
+  }); 
   $('total-cuenta').textContent = fmtCOP(total); 
 }
 
+// ** CORREGIDO: Total General (Implementación más robusta sin CollectionGroup) **
 async function updateTotalGeneral(){ 
   try{ 
-    const snap = await db.collectionGroup('consignaciones').get(); 
+    // 1. Obtener todas las cuentas
+    const accountsSnapshot = await db.collection('cuentas').get();
     let total = 0; 
-    snap.forEach(d=>{ if(!d.data().isSeparator) total += Number(d.data().valor || 0); }); 
+    
+    // 2. Obtener las consignaciones para cada cuenta (en paralelo)
+    const consignPromises = accountsSnapshot.docs.map(doc => 
+        db.collection('cuentas').doc(doc.id).collection('consignaciones').get()
+    );
+    
+    const allConsignSnapshots = await Promise.all(consignPromises);
+
+    // 3. Sumar todas las consignaciones no-separadoras de todas las cuentas
+    allConsignSnapshots.forEach(snap => {
+        snap.forEach(d => {
+            const data = d.data();
+            if(!data.isSeparator) {
+                total += Number(data.valor || 0);
+            }
+        });
+    });
+
     $('total-general').textContent = fmtCOP(total); 
-  }catch(e){ console.error("Error al actualizar total general:", e); } 
+  }catch(e){ 
+    console.error("Error al actualizar total general (VERIFIQUE CONSOLA):", e);
+    // En caso de fallo, se asegura de mostrar 0 para evitar valores incorrectos o vacíos.
+    $('total-general').textContent = fmtCOP(0); 
+  } 
 }
-setInterval(updateTotalGeneral,15000); updateTotalGeneral();
+// Se llama al inicio en subscribeAccounts y luego cada vez que se actualiza una cuenta.
+setInterval(updateTotalGeneral,15000); 
 
 /* BUSQUEDA */
 const filter = (id) => {
