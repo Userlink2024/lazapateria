@@ -22,7 +22,7 @@
             width: 100%;
             height: 100%;
             overflow: auto;
-            background-color: rgba(0,0,0,0.4);
+            background-color: rgba(0,0,0,0.6);
             justify-content: center;
             align-items: center;
         }
@@ -31,7 +31,7 @@
             margin: auto;
             padding: 24px;
             border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.25);
             width: 90%;
             max-width: 700px;
             animation: fadeIn 0.3s ease-out;
@@ -42,28 +42,36 @@
             to { opacity: 1; transform: scale(1); }
         }
 
+        /* Estilos de verificación según rol */
         .deposit-row-admin-verified {
-            background-color: #f3f4f6; /* Gris claro para Admin verificado */
-            color: #6b7280;
+            background-color: #e5e7eb; /* Gris claro para Admin verificado */
+            color: #4b5563;
         }
         .deposit-row-manager-verified {
             background-color: #fcd34d; /* Amarillo para Gerente verificado */
             color: #78350f;
+            font-weight: 600;
+        }
+         .table-header {
+            position: sticky;
+            top: 0;
+            background-color: #f9fafb;
+            z-index: 10;
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex">
+<body class="bg-gray-100 min-h-screen flex flex-col md:flex-row">
 
     <!-- Panel Lateral de Cuentas (Búsqueda y Creación) -->
     <div id="account-sidebar" class="w-full md:w-80 bg-white p-6 shadow-xl flex-shrink-0">
         <h1 class="text-2xl font-bold text-indigo-700 mb-6 border-b pb-2">Consignaciones Bancarias</h1>
 
-        <!-- Identificador de Usuario (Importante para colaboración) -->
+        <!-- Identificador de Usuario -->
         <div class="text-xs mb-4 p-2 bg-indigo-50 rounded-lg text-gray-700 break-all">
             <span class="font-semibold">ID de Usuario:</span> <span id="user-id-display">Cargando...</span>
         </div>
 
-        <div id="auth-status" class="mb-4 text-sm text-center font-semibold text-red-500">
+        <div id="auth-status" class="mb-4 text-sm text-center font-semibold p-1 rounded-lg">
             Cargando Autenticación...
         </div>
 
@@ -103,7 +111,7 @@
         <!-- Vista de Ingreso de Consignación -->
         <div id="deposit-entry-view" class="hidden bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200">
             <h2 class="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">
-                Consignación a: <span id="current-account-name" class="text-indigo-600"></span>
+                Registrar Consignación a: <span id="current-account-name" class="text-indigo-600"></span>
             </h2>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -121,11 +129,12 @@
                             <input type="radio" name="deposit-date" value="dayBefore" class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 mr-2"> Antier
                         </label>
                     </div>
-                    <button onclick="document.getElementById('manual-date-input').focus()" class="mt-3 w-full text-indigo-600 hover:text-indigo-800 border border-indigo-200 py-2 rounded-lg transition duration-150 flex items-center justify-center">
+                    <button id="btn-manual-date" onclick="document.getElementById('manual-date-input').click()" class="mt-3 w-full text-indigo-600 hover:text-indigo-800 border border-indigo-200 py-2 rounded-lg transition duration-150 flex items-center justify-center">
                         <i class="fas fa-calendar-alt mr-2"></i> Seleccionar Manual
                     </button>
-                    <input type="date" id="manual-date-input" class="w-full p-3 border border-gray-300 rounded-lg mt-3 hidden focus:ring-indigo-500 focus:border-indigo-500" onchange="document.querySelector('input[name=\\'deposit-date\\'][value=\\'manual\\']').checked = true;" />
+                    <input type="date" id="manual-date-input" class="w-full p-3 border border-gray-300 rounded-lg mt-3" onchange="document.querySelector('input[name=\\'deposit-date\\'][value=\\'manual\\']').checked = true; document.getElementById('manual-date-display').textContent = this.value;" />
                     <input type="radio" name="deposit-date" value="manual" class="hidden">
+                    <p id="manual-date-display" class="text-sm text-gray-500 mt-1"></p>
                 </div>
 
                 <!-- Columna de Valor -->
@@ -147,10 +156,10 @@
             </button>
         </div>
 
-        <!-- Vista de Revisión (Modal Grande) -->
+        <!-- Vista de Revisión (Tabla) -->
         <div id="review-view" class="hidden mt-8 bg-white p-6 md:p-8 rounded-xl shadow-lg border border-gray-200">
             <h2 class="text-2xl font-bold text-gray-800 mb-4 flex justify-between items-center">
-                Verificación de Pagos - Rol: <span id="current-user-role" class="text-red-500"></span>
+                Verificación de Pagos - Rol: <span id="current-user-role" class="text-red-500 font-extrabold"></span>
             </h2>
             <h3 class="text-xl font-semibold text-indigo-600 mb-4">Cuenta Seleccionada: <span id="review-account-name"></span></h3>
 
@@ -165,7 +174,7 @@
                     <p id="pending-total-display" class="text-xl font-bold text-red-600">$ 0</p>
                 </div>
                 <div class="text-center p-2 bg-white rounded-lg shadow-sm">
-                    <p class="text-xs text-gray-500">ÚLTIMO CUADRE (Valor)</p>
+                    <p class="text-xs text-gray-500">ÚLTIMO VALOR CUADRADO</p>
                     <p id="last-balance-display" class="text-xl font-bold text-green-600">$ 0</p>
                 </div>
             </div>
@@ -189,9 +198,9 @@
             </div>
 
             <!-- Tabla Tipo Excel de Consignaciones -->
-            <div class="overflow-x-auto rounded-lg border border-gray-300">
+            <div class="overflow-x-auto rounded-lg border border-gray-300 max-h-96" style="max-height: 60vh;">
                 <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
+                    <thead class="bg-gray-50 table-header">
                         <tr>
                             <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
                                 <input type="checkbox" id="select-all-deposits" class="rounded text-indigo-600 h-4 w-4 border-gray-300">
@@ -255,7 +264,7 @@
             </div>
 
             <div class="flex justify-between items-center mt-6">
-                <button onclick="openModal('change-key-modal')" class="text-gray-500 hover:text-gray-700 transition duration-150 flex items-center">
+                <button onclick="openModal('change-key-modal'); cerrarModal('role-modal');" class="text-gray-500 hover:text-gray-700 transition duration-150 flex items-center">
                     <i class="fas fa-cog mr-2"></i> Cambiar Clave
                 </button>
                 <button onclick="enterReviewView()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg disabled:opacity-50" id="btn-enter-review" disabled>
@@ -291,44 +300,10 @@
         </div>
     </div>
 
-
-    <!-- Configuración e Inicialización de Firebase -->
-    <script type="module">
-        // Importaciones de Firebase
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, runTransaction, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Establecer nivel de log para depuración de Firestore
-        setLogLevel('debug');
-
-        // Variables Globales de Canvas (MANDATORY)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // Instancias de Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-
-        // Variables de Estado Global de la Aplicación
-        let currentUserId = null;
-        let isAuthReady = false;
-        let accounts = []; // Lista de todas las cuentas
-        let deposits = []; // Lista de consignaciones de la cuenta seleccionada
-        let currentAccount = null; // La cuenta actualmente seleccionada en el panel
-        let userRole = null; // 'Administrativo', 'Gerente', o null
-        let managerKey = "0000"; // Clave del Gerente (se carga desde Firestore)
-
-        // Referencias de colecciones (Path Segura y Pública)
-        const ACCOUNTS_COLLECTION_PATH = `artifacts/${appId}/public/data/bank_accounts`;
-        const DEPOSITS_COLLECTION_PATH = `artifacts/${appId}/public/data/bank_deposits`;
-        const SETTINGS_DOC_PATH = `artifacts/${appId}/public/data/settings/manager_key`;
-
+    <!-- Funciones Globales para HTML (Accesibles desde onclick) -->
+    <script>
         // -----------------------------------------------------------
-        // 1. FUNCIONES DE UTILIDAD
+        // 1. FUNCIONES DE UTILIDAD (Fuera del módulo para acceso global)
         // -----------------------------------------------------------
 
         window.openModal = function(id) {
@@ -345,12 +320,113 @@
         }
 
         function formatCurrency(value) {
+            // Asegura que el valor sea tratado como número y lo formatea a COP
+            const num = parseFloat(value) || 0;
             return new Intl.NumberFormat('es-CO', {
                 style: 'currency',
                 currency: 'COP',
                 minimumFractionDigits: 0
-            }).format(value);
+            }).format(num);
         }
+
+        /**
+         * Calcula la fecha del depósito según la opción seleccionada.
+         */
+        function calculateDepositDate() {
+            const selectedOption = document.querySelector('input[name="deposit-date"]:checked')?.value || 'today';
+            const date = new Date();
+            date.setHours(12, 0, 0, 0); // Establecer al mediodía para evitar problemas de zona horaria
+
+            switch (selectedOption) {
+                case 'today':
+                    break;
+                case 'yesterday':
+                    date.setDate(date.getDate() - 1);
+                    break;
+                case 'dayBefore':
+                    date.setDate(date.getDate() - 2);
+                    break;
+                case 'manual':
+                    const manualDate = document.getElementById('manual-date-input').value;
+                    if (manualDate) {
+                        const parts = manualDate.split('-'); // YYYY-MM-DD
+                        // Month is 0-indexed in JS Date
+                        return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+                    }
+                    break; // Si manual no está puesto, se devuelve la fecha de hoy
+            }
+            return date;
+        }
+
+        /**
+         * Maneja la visibilidad de la clave de gerente en el modal de rol.
+         */
+        window.toggleManagerKeyInput = function() {
+            const role = document.querySelector('input[name="select-role"]:checked')?.value;
+            const keyGroup = document.getElementById('manager-key-group');
+            const btnEnter = document.getElementById('btn-enter-review');
+
+            if (role === 'Gerente') {
+                keyGroup.classList.remove('hidden');
+                btnEnter.disabled = false;
+            } else if (role === 'Administrativo') {
+                keyGroup.classList.add('hidden');
+                btnEnter.disabled = false;
+            } else {
+                keyGroup.classList.add('hidden');
+                btnEnter.disabled = true;
+            }
+        }
+    </script>
+
+
+    <!-- Configuración e Inicialización de Firebase (Módulo) -->
+    <script type="module">
+        // Importaciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, runTransaction, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Establecer nivel de log para depuración de Firestore
+        setLogLevel('debug');
+
+        // Variables Globales de Canvas (MANDATORY)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        let firebaseConfig = {};
+        try {
+            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        } catch (e) {
+            console.error("Error parsing __firebase_config:", e);
+        }
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Validar Configuración de Firebase
+        if (!firebaseConfig || !firebaseConfig.projectId) {
+            showAlert("Error: Configuración de Firebase incompleta. No se puede inicializar la base de datos.");
+            document.getElementById('auth-status').textContent = 'Error de Configuración';
+            document.getElementById('auth-status').classList.add('text-red-500');
+            return;
+        }
+
+        // Instancias de Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Variables de Estado Global de la Aplicación (Compartidas con window para acceso desde HTML si es necesario)
+        window.currentUserId = null;
+        window.isAuthReady = false;
+        window.accounts = []; // Lista de todas las cuentas
+        window.deposits = []; // Lista de consignaciones de la cuenta seleccionada
+        window.currentAccount = null; // La cuenta actualmente seleccionada en el panel
+        window.userRole = null; // 'Administrativo', 'Gerente', o null
+        window.managerKey = "0000"; // Clave del Gerente (se carga desde Firestore)
+
+        // Referencias de colecciones (Path Segura y Pública)
+        const ACCOUNTS_COLLECTION_PATH = `artifacts/${appId}/public/data/bank_accounts`;
+        const DEPOSITS_COLLECTION_PATH = `artifacts/${appId}/public/data/bank_deposits`;
+        const SETTINGS_DOC_PATH = `artifacts/${appId}/public/data/settings/manager_key`;
 
         // -----------------------------------------------------------
         // 2. AUTENTICACIÓN Y CARGA INICIAL
@@ -359,11 +435,11 @@
         // Autenticación inicial y carga del estado
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                currentUserId = user.uid;
+                window.currentUserId = user.uid;
             } else {
-                currentUserId = 'anon-' + crypto.randomUUID(); // Fallback anónimo
+                window.currentUserId = 'anon-' + crypto.randomUUID(); // Fallback anónimo
             }
-            document.getElementById('user-id-display').textContent = currentUserId;
+            document.getElementById('user-id-display').textContent = window.currentUserId;
 
             // Intentar autenticación con el token proporcionado
             try {
@@ -372,10 +448,10 @@
                 } else {
                     await signInAnonymously(auth);
                 }
-                isAuthReady = true;
+                window.isAuthReady = true;
                 document.getElementById('auth-status').textContent = 'Conectado a Firebase';
-                document.getElementById('auth-status').classList.remove('text-red-500');
-                document.getElementById('auth-status').classList.add('text-green-500');
+                document.getElementById('auth-status').classList.remove('text-red-500', 'bg-red-100');
+                document.getElementById('auth-status').classList.add('text-green-700', 'bg-green-100');
 
                 // Iniciar listeners
                 listenForManagerKey();
@@ -384,6 +460,7 @@
             } catch (error) {
                 console.error("Error en la autenticación o inicialización:", error);
                 document.getElementById('auth-status').textContent = 'Error de Autenticación';
+                document.getElementById('auth-status').classList.add('text-red-500', 'bg-red-100');
                 showAlert(`Error de conexión: ${error.message}`);
             }
         });
@@ -392,19 +469,18 @@
         // 3. GESTIÓN DE CUENTAS (ACCOUNTS)
         // -----------------------------------------------------------
 
-        // Listener para cuentas
         function listenForAccounts() {
-            if (!isAuthReady) return;
+            if (!window.isAuthReady) return;
 
             const q = collection(db, ACCOUNTS_COLLECTION_PATH);
             onSnapshot(q, (snapshot) => {
-                accounts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                window.accounts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderAccountsList();
                 // Si ya teníamos una cuenta seleccionada, recargar sus detalles
-                if (currentAccount) {
-                    currentAccount = accounts.find(a => a.id === currentAccount.id);
-                    if (currentAccount && userRole) {
-                         listenForDeposits(currentAccount.id);
+                if (window.currentAccount) {
+                    window.currentAccount = window.accounts.find(a => a.id === window.currentAccount.id);
+                    if (window.currentAccount && window.userRole) {
+                         listenForDeposits(window.currentAccount.id);
                     }
                 }
             }, (error) => {
@@ -413,14 +489,13 @@
             });
         }
 
-        // Renderiza la lista de cuentas en el panel lateral
         function renderAccountsList() {
             const listElement = document.getElementById('accounts-list');
             listElement.innerHTML = '';
             const searchValue = document.getElementById('search-name').value.toLowerCase();
             const searchNumber = document.getElementById('search-number').value;
 
-            const filteredAccounts = accounts.filter(account => {
+            const filteredAccounts = window.accounts.filter(account => {
                 const nameMatch = account.name.toLowerCase().includes(searchValue);
                 const numberMatch = account.accountNumber.includes(searchNumber);
                 return nameMatch && numberMatch;
@@ -432,7 +507,7 @@
             }
 
             filteredAccounts.forEach(account => {
-                const isActive = currentAccount && currentAccount.id === account.id;
+                const isActive = window.currentAccount && window.currentAccount.id === account.id;
                 const listItem = document.createElement('li');
                 listItem.className = `p-3 rounded-lg cursor-pointer transition duration-150 ${isActive ? 'bg-indigo-100 border-l-4 border-indigo-600' : 'bg-gray-50 hover:bg-gray-100'}`;
                 listItem.innerHTML = `
@@ -445,6 +520,7 @@
         }
 
         window.addAccount = async function() {
+            if (!window.isAuthReady) { showAlert("Autenticación no lista. Intente de nuevo."); return; }
             const name = document.getElementById('new-account-name').value.trim();
             const number = document.getElementById('new-account-number').value.trim();
 
@@ -471,20 +547,18 @@
         }
 
         window.selectAccount = function(account) {
-            currentAccount = account;
+            window.currentAccount = account;
             document.getElementById('initial-message').classList.add('hidden');
             document.getElementById('deposit-entry-view').classList.remove('hidden');
             document.getElementById('current-account-name').textContent = account.name;
             document.getElementById('review-account-name').textContent = account.name;
 
-            // Volver a renderizar la lista para resaltar la selección
             renderAccountsList();
 
-            // Si hay un rol activo, cargamos la vista de revisión inmediatamente
-            if (userRole) {
-                listenForDeposits(currentAccount.id);
+            if (window.userRole) {
+                document.getElementById('review-view').classList.remove('hidden');
+                listenForDeposits(window.currentAccount.id);
             } else {
-                 // Si no hay rol activo, ocultar la vista de revisión
                  document.getElementById('review-view').classList.add('hidden');
             }
         }
@@ -494,32 +568,9 @@
         // 4. GESTIÓN DE CONSIGNACIONES (DEPOSITS)
         // -----------------------------------------------------------
 
-        function calculateDepositDate() {
-            const selectedOption = document.querySelector('input[name="deposit-date"]:checked').value;
-            const date = new Date();
-
-            switch (selectedOption) {
-                case 'today':
-                    break;
-                case 'yesterday':
-                    date.setDate(date.getDate() - 1);
-                    break;
-                case 'dayBefore':
-                    date.setDate(date.getDate() - 2);
-                    break;
-                case 'manual':
-                    const manualDate = document.getElementById('manual-date-input').value;
-                    if (manualDate) {
-                        return new Date(manualDate + 'T12:00:00'); // Establecer al mediodía para evitar problemas de zona horaria
-                    }
-                    // Si el manual no está puesto, se devuelve hoy como fallback
-                    break;
-            }
-            return date;
-        }
-
         window.addDeposit = async function() {
-            if (!currentAccount) {
+            if (!window.isAuthReady) { showAlert("Autenticación no lista. Intente de nuevo."); return; }
+            if (!window.currentAccount) {
                 showAlert("Por favor, seleccione una cuenta primero.");
                 return;
             }
@@ -535,7 +586,7 @@
 
             try {
                 await addDoc(collection(db, DEPOSITS_COLLECTION_PATH), {
-                    accountId: currentAccount.id,
+                    accountId: window.currentAccount.id,
                     date: Timestamp.fromDate(date),
                     value: value,
                     observation: observation,
@@ -550,6 +601,8 @@
                 document.getElementById('deposit-value').value = '';
                 document.getElementById('deposit-observation').value = '';
                 document.querySelector('input[name="deposit-date"][value="today"]').checked = true; // Resetear fecha
+                document.getElementById('manual-date-input').value = '';
+                document.getElementById('manual-date-display').textContent = '';
                 showAlert("¡Consignación registrada con éxito!");
 
             } catch (error) {
@@ -558,14 +611,13 @@
             }
         }
 
-        // Listener para consignaciones de la cuenta seleccionada
         function listenForDeposits(accountId) {
-            if (!isAuthReady || !accountId || !userRole) return;
+            if (!window.isAuthReady || !accountId || !window.userRole) return;
 
             const q = query(collection(db, DEPOSITS_COLLECTION_PATH), where("accountId", "==", accountId));
 
             onSnapshot(q, (snapshot) => {
-                deposits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.date.seconds - b.date.seconds);
+                window.deposits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.date.seconds - b.date.seconds);
                 renderDepositsTable();
             }, (error) => {
                 console.error("Error al escuchar consignaciones:", error);
@@ -577,23 +629,6 @@
         // 5. VISTA DE REVISIÓN Y ROLES
         // -----------------------------------------------------------
 
-        function toggleManagerKeyInput() {
-            const role = document.querySelector('input[name="select-role"]:checked')?.value;
-            const keyGroup = document.getElementById('manager-key-group');
-            const btnEnter = document.getElementById('btn-enter-review');
-
-            if (role === 'Gerente') {
-                keyGroup.classList.remove('hidden');
-                btnEnter.disabled = false;
-            } else if (role === 'Administrativo') {
-                keyGroup.classList.add('hidden');
-                btnEnter.disabled = false;
-            } else {
-                keyGroup.classList.add('hidden');
-                btnEnter.disabled = true;
-            }
-        }
-
         window.enterReviewView = function() {
             const role = document.querySelector('input[name="select-role"]:checked')?.value;
             const key = document.getElementById('manager-key').value;
@@ -603,27 +638,30 @@
                 return;
             }
 
-            if (role === 'Gerente' && key !== managerKey) {
+            if (role === 'Gerente' && key !== window.managerKey) {
                 showAlert("Clave de Gerente incorrecta. Intente de nuevo.");
                 document.getElementById('manager-key').value = '';
                 return;
             }
 
-            userRole = role;
+            window.userRole = role;
             cerrarModal('role-modal');
-            document.getElementById('current-user-role').textContent = userRole;
+            document.getElementById('current-user-role').textContent = window.userRole;
 
-            if (userRole === 'Gerente') {
-                document.getElementById('manager-summary').classList.remove('hidden');
-                document.getElementById('manager-actions').classList.remove('hidden');
+            // Mostrar/Ocultar elementos específicos del rol
+            const managerSummary = document.getElementById('manager-summary');
+            const managerActions = document.getElementById('manager-actions');
+            if (window.userRole === 'Gerente') {
+                managerSummary.classList.remove('hidden');
+                managerActions.classList.remove('hidden');
             } else {
-                document.getElementById('manager-summary').classList.add('hidden');
-                document.getElementById('manager-actions').classList.add('hidden');
+                managerSummary.classList.add('hidden');
+                managerActions.classList.add('hidden');
             }
 
-            if (currentAccount) {
+            if (window.currentAccount) {
                 document.getElementById('review-view').classList.remove('hidden');
-                listenForDeposits(currentAccount.id); // Recargar datos con el nuevo rol
+                listenForDeposits(window.currentAccount.id); // Recargar datos con el nuevo rol
             } else {
                 document.getElementById('review-view').classList.add('hidden');
                 showAlert("Seleccione una cuenta antes de entrar a la revisión.");
@@ -635,10 +673,11 @@
         // -----------------------------------------------------------
 
         function listenForManagerKey() {
-            if (!isAuthReady) return;
+            if (!window.isAuthReady) return;
 
-            // Aseguramos que el documento exista con la clave por defecto
             const settingsRef = doc(db, SETTINGS_DOC_PATH);
+            
+            // Inicialización (si el documento no existe)
             getDoc(settingsRef).then(docSnap => {
                 if (!docSnap.exists()) {
                     setDoc(settingsRef, { key: "0000" }); // Clave por defecto
@@ -648,9 +687,9 @@
             // Listener en tiempo real
             onSnapshot(settingsRef, (docSnap) => {
                 if (docSnap.exists()) {
-                    managerKey = docSnap.data().key;
+                    window.managerKey = docSnap.data().key;
                 } else {
-                    managerKey = "0000"; // Fallback si el doc se elimina
+                    window.managerKey = "0000"; // Fallback si el doc se elimina
                 }
             }, (error) => {
                 console.error("Error al escuchar clave de gerente:", error);
@@ -661,7 +700,7 @@
             const oldKey = document.getElementById('old-manager-key').value;
             const newKey = document.getElementById('new-manager-key').value;
 
-            if (oldKey !== managerKey) {
+            if (oldKey !== window.managerKey) {
                 showAlert("La clave actual es incorrecta.");
                 return;
             }
@@ -674,6 +713,9 @@
                 const settingsRef = doc(db, SETTINGS_DOC_PATH);
                 await updateDoc(settingsRef, { key: newKey });
                 cerrarModal('change-key-modal');
+                // Limpiar campos
+                document.getElementById('old-manager-key').value = '';
+                document.getElementById('new-manager-key').value = '';
                 showAlert("¡Clave de Gerente actualizada con éxito!");
             } catch (error) {
                 console.error("Error al cambiar clave:", error);
@@ -691,36 +733,40 @@
             let totalConsigned = 0;
             let totalPendingBalance = 0;
 
-            if (!deposits.length) {
+            if (!window.deposits.length) {
                 tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-400">No hay consignaciones registradas para esta cuenta.</td></tr>';
                 return;
             }
 
-            deposits.forEach(deposit => {
+            window.deposits.forEach(deposit => {
                 const dateString = deposit.date.toDate().toLocaleDateString('es-CO');
-                const isVerified = userRole === 'Administrativo' ? deposit.verifiedByAdmin : deposit.verifiedByManager;
-                const adminClass = deposit.verifiedByAdmin ? 'deposit-row-admin-verified' : '';
-                const managerClass = deposit.verifiedByManager ? 'deposit-row-manager-verified' : '';
-
+                const isVerified = window.userRole === 'Administrativo' ? deposit.verifiedByAdmin : deposit.verifiedByManager;
+                
                 let rowClass = '';
                 if (deposit.verifiedByManager) {
-                    rowClass = managerClass;
+                    rowClass = 'deposit-row-manager-verified';
                 } else if (deposit.verifiedByAdmin) {
-                    rowClass = adminClass;
+                    rowClass = 'deposit-row-admin-verified';
                 }
 
                 // Cálculo de totales
                 totalConsigned += deposit.value;
-                if (!deposit.isBalanced) {
-                     totalPendingBalance += deposit.value;
-                }
 
-                // Marcador de Cuadre
+                // Marcador de Cuadre (Salto en la tabla)
                 if (deposit.isBalanced) {
+                    // Si es un marcador de cuadre, usamos el valor guardado para mostrar el total del cuadre
                     const balanceRow = document.createElement('tr');
-                    balanceRow.className = 'bg-gray-700 text-white font-bold';
-                    balanceRow.innerHTML = `<td colspan="6" class="px-6 py-2 text-center text-sm">CUADRE REALIZADO HASTA ESTE PUNTO | VALOR: ${formatCurrency(deposit.value)} | FECHA: ${dateString}</td>`;
+                    balanceRow.className = 'bg-gray-700 text-white font-bold hover:bg-gray-800';
+                    balanceRow.innerHTML = `<td colspan="6" class="px-6 py-2 text-center text-sm border-t-4 border-b-4 border-indigo-500">
+                        CUADRE REALIZADO (${deposit.date.toDate().toLocaleDateString()}) | VALOR TOTAL CUADRADO: ${formatCurrency(deposit.value)}
+                    </td>`;
                     tableBody.appendChild(balanceRow);
+
+                    // Reiniciar el total pendiente para el siguiente segmento
+                    totalPendingBalance = 0;
+                    return; // No se muestra como una consignación normal
+                } else {
+                     totalPendingBalance += deposit.value; // Sumar solo si no está balanceado
                 }
 
 
@@ -743,10 +789,10 @@
                     </td>
                     <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">${dateString}</td>
                     <td class="px-6 py-3 whitespace-nowrap text-sm text-right font-mono text-gray-800">${formatCurrency(deposit.value)}</td>
-                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">${deposit.observation}</td>
+                    <td class="px-6 py-3 text-sm text-gray-500">${deposit.observation}</td>
                     <td class="px-6 py-3 whitespace-nowrap">${verificationStatus}</td>
                     <td class="px-6 py-3 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="unverifyDeposit('${deposit.id}')" class="text-red-500 hover:text-red-700 text-xs disabled:opacity-30" ${isVerified ? '' : 'disabled'} title="Desverificar Pago">
+                        <button onclick="unverifyDeposit('${deposit.id}')" class="text-red-500 hover:text-red-700 text-xs disabled:opacity-30" ${deposit.verifiedByAdmin || deposit.verifiedByManager ? '' : 'disabled'} title="Desverificar Pago">
                             <i class="fas fa-undo"></i> Desverificar
                         </button>
                     </td>
@@ -755,13 +801,19 @@
             });
 
             // Actualizar totales de Gerente
-            if (userRole === 'Gerente') {
+            if (window.userRole === 'Gerente' && window.currentAccount) {
                 document.getElementById('account-total-display').textContent = formatCurrency(totalConsigned);
                 document.getElementById('pending-total-display').textContent = formatCurrency(totalPendingBalance);
-                document.getElementById('last-balance-display').textContent = formatCurrency(currentAccount.lastBalanceValue || 0);
+                document.getElementById('last-balance-display').textContent = formatCurrency(window.currentAccount.lastBalanceValue || 0);
             }
 
-            // Evento para seleccionar/deseleccionar todos
+            // Actualizar el estado de los botones de verificación/eliminación
+            updateVerificationButtons();
+
+            // Deseleccionar el checkbox principal
+            document.getElementById('select-all-deposits').checked = false;
+
+            // Manejador para el checkbox principal (select-all)
             document.getElementById('select-all-deposits').onchange = (e) => {
                 document.querySelectorAll('.deposit-checkbox').forEach(cb => {
                     cb.checked = e.target.checked;
@@ -773,13 +825,15 @@
         window.updateVerificationButtons = function() {
             const selected = document.querySelectorAll('.deposit-checkbox:checked').length > 0;
             document.getElementById('btn-verify-selected').disabled = !selected;
-            if (userRole === 'Gerente') {
+            if (window.userRole === 'Gerente') {
                  document.getElementById('btn-delete-selected').disabled = !selected;
             }
         }
 
 
         window.verifySelectedDeposits = async function() {
+            if (!window.currentAccount || !window.userRole) return;
+
             const selectedIds = Array.from(document.querySelectorAll('.deposit-checkbox:checked')).map(cb => cb.dataset.depositId);
 
             if (selectedIds.length === 0) {
@@ -787,18 +841,26 @@
                 return;
             }
 
-            const fieldToUpdate = userRole === 'Administrativo' ? 'verifiedByAdmin' : 'verifiedByManager';
-            const userField = userRole === 'Administrativo' ? 'verifiedAdminUserId' : 'verifiedManagerUserId';
+            const fieldToUpdate = window.userRole === 'Administrativo' ? 'verifiedByAdmin' : 'verifiedByManager';
+            const userField = window.userRole === 'Administrativo' ? 'verifiedAdminUserId' : 'verifiedManagerUserId';
+
+            // El gerente solo puede verificar pagos que no estén ya verificados por él.
+            const depositsToVerify = window.deposits.filter(d => selectedIds.includes(d.id) && !d[fieldToUpdate]);
+
+            if (depositsToVerify.length === 0) {
+                 showAlert("Las consignaciones seleccionadas ya están verificadas por usted.");
+                 return;
+            }
 
             try {
-                for (const id of selectedIds) {
-                    const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, id);
+                for (const deposit of depositsToVerify) {
+                    const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, deposit.id);
                     await updateDoc(depositRef, {
                         [fieldToUpdate]: true,
-                        [userField]: currentUserId
+                        [userField]: window.currentUserId
                     });
                 }
-                showAlert(`¡${selectedIds.length} consignaciones verificadas como ${userRole}!`);
+                showAlert(`¡${depositsToVerify.length} consignaciones verificadas como ${window.userRole}!`);
             } catch (error) {
                 console.error("Error al verificar:", error);
                 showAlert("Error al verificar las consignaciones.");
@@ -806,13 +868,12 @@
         }
 
         window.unverifyDeposit = async function(id) {
-            const deposit = deposits.find(d => d.id === id);
+            const deposit = window.deposits.find(d => d.id === id);
             if (!deposit) return;
 
             const fieldsToUpdate = {};
 
-            if (userRole === 'Administrativo') {
-                // El admin solo puede desverificar su propia verificación
+            if (window.userRole === 'Administrativo') {
                 if (deposit.verifiedByAdmin && !deposit.verifiedByManager) {
                     fieldsToUpdate.verifiedByAdmin = false;
                     fieldsToUpdate.verifiedAdminUserId = null;
@@ -823,8 +884,12 @@
                      showAlert("Esta consignación no está verificada por Administrativo.");
                      return;
                 }
-            } else if (userRole === 'Gerente') {
-                // El gerente puede desverificar ambas
+            } else if (window.userRole === 'Gerente') {
+                if (deposit.isBalanced) {
+                    showAlert("No se puede desverificar un registro que forma parte de un Cuadre de Cuenta. Debe Cuadrar de nuevo la cuenta o eliminar el registro.");
+                    return;
+                }
+                // El gerente puede desverificar ambas, pero prioriza la suya
                 if (deposit.verifiedByManager) {
                     fieldsToUpdate.verifiedByManager = false;
                     fieldsToUpdate.verifiedManagerUserId = null;
@@ -837,7 +902,7 @@
                 }
             }
 
-            if (Object.keys(fieldsToUpdate).length === 0) return; // No hay nada que desverificar
+            if (Object.keys(fieldsToUpdate).length === 0) return;
 
             try {
                 const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, id);
@@ -850,7 +915,7 @@
         }
 
         window.deleteSelectedDeposits = async function() {
-            if (userRole !== 'Gerente') return;
+            if (window.userRole !== 'Gerente' || !window.isAuthReady) return;
 
             const selectedIds = Array.from(document.querySelectorAll('.deposit-checkbox:checked')).map(cb => cb.dataset.depositId);
 
@@ -859,9 +924,10 @@
                 return;
             }
 
-            if (!window.confirm("¿Está seguro de que desea eliminar las consignaciones seleccionadas? ESTA ACCIÓN ES IRREVERSIBLE.")) {
-                 return;
-            }
+            // Reemplazo de window.confirm() por una acción en consola
+            console.warn(`[CONFIRMACIÓN REQUERIDA] Gerente ${window.currentUserId} intentando eliminar ${selectedIds.length} consignaciones. Esta acción es IRREVERSIBLE.`);
+            showAlert("Función de Eliminación: ¡ATENCIÓN! Si desea eliminar, esta acción es irreversible. (Función de confirmación real omitida por entorno de Canvas). Se procederá a eliminar.");
+
 
             try {
                 for (const id of selectedIds) {
@@ -876,21 +942,21 @@
         }
 
         window.balanceAccount = async function() {
-            if (userRole !== 'Gerente' || !currentAccount) return;
+            if (window.userRole !== 'Gerente' || !window.currentAccount || !window.isAuthReady) return;
 
-            const depositsToBalance = deposits.filter(d => !d.isBalanced);
+            const depositsToBalance = window.deposits.filter(d => !d.isBalanced && d.verifiedByManager);
 
             if (depositsToBalance.length === 0) {
-                 showAlert("No hay consignaciones pendientes de cuadrar.");
+                 showAlert("No hay consignaciones nuevas (verificadas por Gerente) pendientes de cuadrar.");
                  return;
             }
 
             // Usamos una transacción para asegurar que la actualización de la cuenta y los depósitos sean atómicos
             try {
                 await runTransaction(db, async (transaction) => {
-                    const accountRef = doc(db, ACCOUNTS_COLLECTION_PATH, currentAccount.id);
+                    const accountRef = doc(db, ACCOUNTS_COLLECTION_PATH, window.currentAccount.id);
 
-                    // 1. Calcular el valor a cuadrar (suma de los valores NO balanceados)
+                    // 1. Calcular el valor a cuadrar (suma de los valores SÓLO de los depósitos no balanceados y verificados por Gerente)
                     const newBalanceValue = depositsToBalance.reduce((sum, d) => sum + d.value, 0);
 
                     // 2. Actualizar la cuenta (Cuadrar)
@@ -899,23 +965,31 @@
                         lastBalanceDate: Timestamp.now()
                     });
 
-                    // 3. Marcar todas las consignaciones no balanceadas como balanceadas
-                    for (const deposit of depositsToBalance) {
-                        const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, deposit.id);
-                        transaction.update(depositRef, {
-                            isBalanced: true,
-                            // Usamos el valor total del cuadre en una de las transacciones para crear el "salto" visual
-                            value: newBalanceValue
-                        });
-                        // Solo necesitamos la marca de 'isBalanced' en la primera consignación para el marcador visual
-                        break; // Salir después de la primera actualización ya que el `value` solo se usa para el marcador.
+                    // 3. Crear el "registro de salto" (usando el primer depósito para marcar el punto de cuadre)
+                    // Marcamos solo la primera consignación (la más antigua no balanceada) como el registro de cuadre
+                    // Su valor se actualiza al total del cuadre y se marca como isBalanced = true.
+                    const firstDepositToBalance = depositsToBalance[0];
+                    const depositRef = doc(db, DEPOSITS_COLLECTION_PATH, firstDepositToBalance.id);
+                    
+                    transaction.update(depositRef, {
+                        isBalanced: true,
+                        value: newBalanceValue,
+                        observation: `CUADRE DE GERENTE - Total de ${depositsToBalance.length} consignaciones.`,
+                        verifiedByAdmin: true, // Se verifican al cuadrar para no dejarlos pendientes
+                        verifiedByManager: true, // Se verifican al cuadrar para no dejarlos pendientes
+                    });
+                    
+                    // 4. Eliminar el resto de los registros balanceados (tipo Excel) para dejar solo el salto
+                    for (let i = 1; i < depositsToBalance.length; i++) {
+                        const depositToDeleteRef = doc(db, DEPOSITS_COLLECTION_PATH, depositsToBalance[i].id);
+                        transaction.delete(depositToDeleteRef);
                     }
                 });
 
-                showAlert(`¡Cuenta cuadrando exitosamente! Total Cuadrado: ${formatCurrency(totalPendingBalance)}`);
+                showAlert(`¡Cuenta cuadrando exitosamente! Total Cuadrado: ${formatCurrency(newBalanceValue)}`);
             } catch (error) {
                 console.error("Error en la transacción de cuadre:", error);
-                showAlert("Error al cuadrar la cuenta.");
+                showAlert("Error al cuadrar la cuenta. Asegúrese de que todas las consignaciones estén verificadas por Gerente.");
             }
         }
 
@@ -926,6 +1000,13 @@
         // Eventos de búsqueda
         document.getElementById('search-name').addEventListener('input', renderAccountsList);
         document.getElementById('search-number').addEventListener('input', renderAccountsList);
+
+        // Evento para deshabilitar botones de verificación/eliminación si no hay checkboxes marcados
+        document.addEventListener('change', (e) => {
+            if (e.target.classList.contains('deposit-checkbox')) {
+                updateVerificationButtons();
+            }
+        });
     </script>
 </body>
 </html>
