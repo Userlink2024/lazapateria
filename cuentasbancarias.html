@@ -34,9 +34,8 @@
     tr.verified-admin{background:var(--admin-gray)}
     tr.verified-gerente{background:var(--manager-yellow)}
     tr.separator{background:#eef2ff;font-weight:700;text-align:center}
-tr.sep-green{background:#d1fae5!important}
-tr.sep-red{background:#fee2e2!important}
-tr.separator{background:#eef2ff;font-weight:700;text-align:center}
+    tr.sep-green{background:#d1fae5!important}
+    tr.sep-red{background:#fee2e2!important}
     .muted{color:var(--muted);font-size:13px}
     .top-totals{display:flex;gap:12px;align-items:center}
     .top-totals .card{padding:8px;border-radius:8px;border:1px solid var(--border);background:#fff}
@@ -300,7 +299,17 @@ function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('c
     tbody.innerHTML = '';
     snapshot.forEach(doc=>{
       const c = doc.data();
-      if(c.isSeparator){ const tr=document.createElement('tr'); tr.classList.add('separator'); if(c.type==='green') tr.classList.add('sep-green'); if(c.type==='red') tr.classList.add('sep-red'); tr.innerHTML=`<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`; tbody.appendChild(tr); return; }{ const tr = document.createElement('tr'); tr.className='separator'; tr.innerHTML = `<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`; tbody.appendChild(tr); return; }
+
+      if(c.isSeparator){
+        const tr=document.createElement('tr');
+        tr.classList.add('separator');
+        if(c.type==='green') tr.classList.add('sep-green');
+        if(c.type==='red') tr.classList.add('sep-red');
+        tr.innerHTML = `<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${fmtCOP(c.total)}</td><td></td>`;
+        tbody.appendChild(tr);
+        return;
+      }
+
       const tr = document.createElement('tr');
       if(c.verifiedRole === 'Administrativo') tr.classList.add('verified-admin');
       if(c.verifiedRole === 'Gerente') tr.classList.add('verified-gerente');
@@ -322,6 +331,7 @@ function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('c
 // --- RESTRICCIÓN: Lo verificado por Gerente NO se puede desverificar por Admin ---
 function canUnverify(c){ return !(c.verifiedRole==='Gerente' && sessionRole!=='Gerente'); }
  */
+
 // ENTER PARA AGREGAR CONSIGNACIÓN
 $('valor').addEventListener('keydown', e=>{
   if(e.key==='Enter') $('add-consign').click();
@@ -374,18 +384,49 @@ $('btn-unverify').addEventListener('click', async ()=>{
     ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null }));
     await batch.commit();
   }catch(e){ console.error(e); alert('Error desverificando: '+e.message); }
-});('click', async ()=>{ if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: null, verifiedRole: null })); await batch.commit(); }catch(e){ console.error(e); alert('Error desverificando: '+e.message); } });
+});
 
 $('btn-delete').addEventListener('click', async ()=>{ if(sessionRole!=='Gerente') return alert('Solo Gerente puede eliminar.'); if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); if(!confirm('Eliminar '+ids.length+' consignación(es)?')) return; const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.delete(col.doc(id))); await batch.commit(); }catch(e){ console.error(e); alert('Error eliminando: '+e.message); } });
 
- 
+/* BOTÓN CUADRAR (REPARADO) */
+$('btn-cuadrar').addEventListener('click', async () => {
+  if (!selectedAccountId) return alert('Seleccione una cuenta.');
 
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  const snap = await col.get();
+  if (snap.empty) return alert("No hay consignaciones para cuadrar.");
 
-    await col.add({ isSeparator:true, type:'red', label:fecha, total });
-    alert('Cuadre registrado');
-  }catch(e){ console.error(e); alert('Error al cuadrar: '+e.message);} });
+  // Sumar total ignorando separadores
+  let total = 0;
+  snap.forEach(doc => {
+    const d = doc.data();
+    if (!d.isSeparator) total += Number(d.valor || 0);
+  });
 
-$('#btn-sumar').addEventListener('click', ()=>{
+  // Fecha y texto
+  const fecha = new Date();
+  const fechaTxt = fecha.toLocaleDateString();
+
+  // Lógica simple: si total > 0 => green, si total === 0 => red
+  // Ajusta aquí la lógica si la regla de tu VB es distinta
+  const tipo = total > 0 ? "green" : "red";
+
+  try {
+    await col.add({
+      isSeparator: true,
+      type: tipo,
+      label: fechaTxt,
+      total: total,
+      timestamp: firebase.firestore.Timestamp.now()
+    });
+    alert("Cuadre registrado correctamente.");
+  } catch (e) {
+    console.error(e);
+    alert("Error al cuadrar: " + e.message);
+  }
+});
+
+$('btn-sumar').addEventListener('click', ()=>{
   const rows = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
   let suma = 0;
   rows.forEach(ch=>{
@@ -394,7 +435,7 @@ $('#btn-sumar').addEventListener('click', ()=>{
   alert('Total seleccionado: '+fmtCOP(suma));
 });
 
-/* TOTALES */: ignore separators */
+/* TOTALES */ /* ignore separators */
 async function updateSelectedTotals(){ if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; } const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); const snap = await col.get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); $('total-cuenta').textContent = fmtCOP(total); }
 
 async function updateTotalGeneral(){ try{ const snap = await db.collectionGroup('consignaciones').get(); let total = 0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor || 0); }); $('total-general').textContent = fmtCOP(total); }catch(e){ console.error(e); } }
@@ -431,10 +472,6 @@ document.addEventListener('keydown', e=>{
   }
 });
 
-$('search-name').addEventListener('input', ()=>{ const q=$('search-name').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
-$('search-account').addEventListener('input', ()=>{ const q=$('search-account').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
-
-/* show options modal on load so user chooses sessionRole */
 window.addEventListener('load', ()=>{ $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; });
 
 window.addEventListener('beforeunload', ()=>{ if(consignsUnsub) consignsUnsub(); });
