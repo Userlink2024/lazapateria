@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sistema de Consignaciones - Final</title>
+  <title>Sistema de Consignaciones - Blindado</title>
 
   <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
 
@@ -27,7 +27,7 @@
     .btn{background:var(--accent);color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
     .btn.ghost{background:#f1f5f9;color:#0f172a}
     .btn.danger{background:var(--danger)}
-    .btn.success{background:var(--ok)} /* Estilo boton excel */
+    .btn.success{background:var(--ok)} 
     .panel{background:var(--card);padding:12px;border-radius:8px;border:1px solid var(--border);box-shadow:0 2px 6px rgba(15,23,42,0.03);margin-bottom:12px}
     
     .account-item{padding:10px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;cursor:pointer;background:#fff; position: relative;}
@@ -57,7 +57,7 @@
     .top-totals{display:flex;gap:12px;align-items:center}
     .top-totals .card{padding:8px;border-radius:8px;border:1px solid var(--border);background:#fff}
     .small{font-size:12px;color:var(--muted)}
-    .modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:999;}
     .modal .card{width:720px;max-width:96%;padding:16px}
     .hidden{display:none}
     .gear{cursor:pointer;padding:6px;border-radius:6px;border:1px solid var(--border);background:#fff}
@@ -155,7 +155,9 @@
         <div style="display:flex;justify-content:space-between;align-items:center; flex-wrap:wrap; gap:10px;">
           <h3 style="margin:0">Movimientos</h3>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="btn-export-excel" class="btn success">📥 Descargar Excel</button>
+            <button id="btn-export-excel" class="btn success">📥 Descargar Cuenta</button>
+            <button id="btn-export-master" class="btn success" style="display:none; background:#7c3aed; color:white;">📥 Descargar Maestra (G)</button>
+
             <div style="width:1px; background:#e5e7eb; margin:0 4px;"></div>
             <button id="btn-verify" class="btn">Verificado</button>
             <button id="btn-unverify" class="btn ghost">Desverificar</button>
@@ -236,7 +238,7 @@ let sessionRole = 'Administrativo';
 let managerPass = localStorage.getItem('managerPass') || '0000';
 let selectedAccountId = null;
 let selectedAccountName = "SinNombre";
-let currentConsignsSnapshot = []; // Cache de datos visibles
+let currentConsignsSnapshot = []; 
 
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
@@ -277,11 +279,26 @@ $('options-continue').addEventListener('click', ()=>{
   const isMgr = (sessionRole === 'Gerente');
   $('btn-delete').style.display = isMgr ? 'inline-block' : 'none';
   $('btn-cuadrar').style.display = isMgr ? 'inline-block' : 'none';
+  $('btn-export-master').style.display = isMgr ? 'inline-block' : 'none'; // Mostrar botón de Maestra
   document.querySelectorAll('.del-btn').forEach(b => b.style.display = isMgr ? 'block' : 'none');
   
   $('modal-options').classList.add('hidden');
   alert('Rol activo: ' + sessionRole);
 });
+
+/* SEGURIDAD EXTRA: Proteger cambios en items verificados */
+function checkSensitiveAction(selectedData) {
+  const lockedItems = selectedData.filter(i => i.verifiedRole || i.isSeparator);
+  
+  if (lockedItems.length > 0) {
+    const pass = prompt("⚠️ ACCIÓN RESTRINGIDA ⚠️\n\nEstá intentando modificar/eliminar registros VERIFICADOS o CORTES.\nPara continuar, ingrese la CLAVE DE GERENTE:");
+    if (pass !== managerPass) {
+      alert("⛔ CLAVE INCORRECTA. Acción cancelada para proteger la información.");
+      return false; 
+    }
+  }
+  return true; 
+}
 
 /* GESTIÓN DE CUENTAS */
 function subscribeAccounts(){
@@ -325,7 +342,9 @@ subscribeAccounts();
 
 async function deleteAccount(id, name){
     if(sessionRole !== 'Gerente') return alert("Solo Gerente.");
-    if(!confirm(`¿Eliminar cuenta "${name}" permanentemente?`)) return;
+    const pass = prompt(`⚠️ PELIGRO: Va a eliminar la cuenta "${name}" y todo su historial.\nIngrese CLAVE DE GERENTE para confirmar:`);
+    if(pass !== managerPass) return alert("Clave incorrecta.");
+
     try {
         await db.collection('cuentas').doc(id).delete();
         if(selectedAccountId === id) { selectedAccountId=null; $('consigns-body').innerHTML=''; $('selected-account-info').textContent='...'; }
@@ -333,7 +352,7 @@ async function deleteAccount(id, name){
     } catch(e) { alert("Error: " + e.message); }
 }
 
-/* RENDER CONSIGNACIONES */
+/* RENDER CONSIGNACIONES (Omitting for brevity, remains unchanged from previous version) */
 let consignsUnsub = null;
 function renderConsigns(){ 
   if(consignsUnsub) consignsUnsub(); 
@@ -347,9 +366,7 @@ function renderConsigns(){
     currentConsignsSnapshot = [];
     snapshot.forEach(doc => currentConsignsSnapshot.push({id: doc.id, ...doc.data()}));
 
-    // Renderizado
     currentConsignsSnapshot.forEach((c, index)=>{
-      // Separadores
       if(c.isSeparator){
         const tr=document.createElement('tr');
         tr.classList.add('separator');
@@ -358,14 +375,13 @@ function renderConsigns(){
         let labelText = `--- ${c.label} ---`;
         if(c.type === 'green') labelText = `💰 TOTAL: ${fmtCOP(c.total)}`;
         if(c.type === 'red') labelText = `🛑 CORTE (${c.label})`;
-        tr.innerHTML = `<td></td><td colspan="3">${labelText}</td><td></td>`;
+        tr.innerHTML = `<td><input type="checkbox" data-id="${c.id}" data-idx="${index}"></td><td colspan="3">${labelText}</td><td></td>`;
         tbody.appendChild(tr);
         return;
       }
 
-      // Filas normales
       const tr = document.createElement('tr');
-      tr.setAttribute('data-index', index); // Indice visual para el teclado
+      tr.setAttribute('data-index', index);
       if(c.verifiedRole === 'Administrativo') tr.classList.add('verified-admin');
       if(c.verifiedRole === 'Gerente') tr.classList.add('verified-gerente');
       
@@ -379,7 +395,6 @@ function renderConsigns(){
         <td style="width:160px">${obsText}</td>
         <td style="width:160px">${c.verifiedRole ? (c.verifiedRole === 'Gerente' ? 'Verificado (G)' : 'Verificado (A)') : 'Pendiente'}</td>
       `;
-      // Click en fila para seleccionar
       tr.addEventListener('click', (e)=>{
         if(e.target.type !== 'checkbox') {
             activeRowIndex = index;
@@ -392,12 +407,10 @@ function renderConsigns(){
   });
 }
 
-/* LÓGICA DE TECLADO Y SELECCIÓN (SOLUCIONADO SHIFT) */
+/* LÓGICA DE TECLADO Y SELECCIÓN (Unchanged from previous version) */
 let activeRowIndex = -1;
-let anchorRowIndex = -1; // Donde empezó la selección
-
-function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr:not(.separator)')); }
-
+let anchorRowIndex = -1;
+function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
 function highlightRow(idx){
     const rows = getRows();
     rows.forEach(r => r.classList.remove('keyboard-focus'));
@@ -406,67 +419,39 @@ function highlightRow(idx){
         rows[idx].scrollIntoView({block:'nearest'});
     }
 }
-
-// Escuchar checkboxes para actualizar el ancla si se hace click manual
 $('consigns-body').addEventListener('change', (e)=>{
     if(e.target.type === 'checkbox'){
         const idx = parseInt(e.target.dataset.idx);
-        // Si no hay shift presionado, este click se convierte en el nuevo ancla
-        // (La deteccion de shift se hace en el evento 'click' o mousedown, 
-        // pero aqui asumimos que si cambias uno manualmente reseteas el ancla logico)
         if(!lastShiftState) anchorRowIndex = idx;
     }
 });
-
 let lastShiftState = false;
 document.addEventListener('keydown', e => { if(e.key === 'Shift') lastShiftState = true; });
 document.addEventListener('keyup', e => { if(e.key === 'Shift') lastShiftState = false; });
-
 document.addEventListener('keydown', e => {
     if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
-    
     const rows = getRows();
     if(rows.length === 0) return;
-
     if(['ArrowUp','ArrowDown'].includes(e.key)){
         e.preventDefault();
-        
-        // Si es la primera vez que movemos, inicializar
         if(activeRowIndex === -1) { activeRowIndex = 0; anchorRowIndex = 0; }
-
         let newIndex = activeRowIndex;
         if(e.key === 'ArrowDown') newIndex++;
         if(e.key === 'ArrowUp') newIndex--;
-        
-        // Limites
         newIndex = Math.max(0, Math.min(newIndex, rows.length - 1));
-
         if(e.shiftKey){
-            // SELECCIÓN CON SHIFT
-            // 1. Definir rango desde Ancla hasta Nuevo Foco
             const start = Math.min(anchorRowIndex, newIndex);
             const end = Math.max(anchorRowIndex, newIndex);
-
-            // 2. Recorrer y marcar SOLO los que están en rango, desmarcar los que no
-            // (Esta es la lógica de Excel: la selección es elastica desde el ancla)
             rows.forEach((r, i) => {
                 const chk = r.querySelector('input[type="checkbox"]');
-                if(chk){
-                    if(i >= start && i <= end) chk.checked = true;
-                    else chk.checked = false; 
-                }
+                if(chk) chk.checked = (i >= start && i <= end);
             });
         } else {
-            // MOVIMIENTO SIMPLE (SIN SHIFT)
-            // Actualizamos el ancla al nuevo punto
             anchorRowIndex = newIndex;
         }
-
         activeRowIndex = newIndex;
         highlightRow(activeRowIndex);
     }
-
-    // ESPACIO para marcar/desmarcar el actual (y resetea ancla)
     if(e.key === ' '){
         e.preventDefault();
         if(activeRowIndex >= 0 && activeRowIndex < rows.length){
@@ -479,61 +464,132 @@ document.addEventListener('keydown', e => {
     }
 });
 
-
-/* BOTÓN EXPORTAR EXCEL */
+/* BOTÓN EXPORTAR CUENTA SELECCIONADA (Mantenido) */
 $('btn-export-excel').addEventListener('click', () => {
   if(!selectedAccountId || currentConsignsSnapshot.length === 0) return alert("No hay datos para exportar");
 
-  // Filtrar datos: quitar separadores y formatear
   const dataForExcel = currentConsignsSnapshot
     .filter(c => !c.isSeparator)
     .map(c => {
-      const fecha = c.fecha && c.fecha.toDate ? new Date(c.fecha.toDate()).toLocaleDateString() : '';
-      const obs = c.obsdate && c.obsdate.toDate ? new Date(c.obsdate.toDate()).toLocaleDateString() : '';
+      // Usar objetos Date reales para que SheetJS pueda formatearlos
+      const fechaDate = c.fecha && c.fecha.toDate ? c.fecha.toDate() : null;
+      const obsDate = c.obsdate && c.obsdate.toDate ? c.obsdate.toDate() : null;
+      
       return {
-        FECHA: fecha,
+        // En Excel, si el tipo es Date, se puede formatear.
+        FECHA: fechaDate, 
         VALOR: Number(c.valor || 0),
-        OBSERVACIONES: obs
+        OBSERVACIONES: obsDate
       };
     });
 
   if(dataForExcel.length === 0) return alert("No hay movimientos válidos (solo separadores).");
 
-  // Crear Workbook y Worksheet
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(dataForExcel);
+  const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES"] });
 
-  // Ajustar anchos de columna (opcional pero estético)
-  const wscols = [
-    {wch: 15}, // Fecha
-    {wch: 15}, // Valor
-    {wch: 20}  // Observaciones
-  ];
-  ws['!cols'] = wscols;
+  // Aplicar formatos a las columnas
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
+      const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); 
+      const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); 
+      const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); 
 
-  XLSX.utils.book_append_sheet(wb, ws, selectedAccountName.substring(0, 31)); // Max 31 chars para nombre hoja excel
+      // FECHA (Larga)
+      if (ws[cell_fecha_addr]) ws[cell_fecha_addr].z = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
+      // VALOR (Moneda)
+      if (ws[cell_valor_addr]) ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
+      // OBSERVACIONES (Corta)
+      if (ws[cell_obs_addr]) ws[cell_obs_addr].z = 'dd/mm/yyyy'; 
+  }
 
-  // Descargar
-  const fileName = `Consignaciones_${selectedAccountName.replace(/\s+/g,'_')}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+  // Ajustar anchos
+  ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}];
+  
+  XLSX.utils.book_append_sheet(wb, ws, selectedAccountName.substring(0, 31)); 
+  XLSX.writeFile(wb, `Consignaciones_${selectedAccountName.replace(/\s+/g,'_')}.xlsx`);
 });
 
 
-/* OPERACIONES DE DATOS */
+/* NUEVO BOTÓN EXPORTAR MAESTRA (Gerente) */
+$('btn-export-master').addEventListener('click', async () => {
+  if (sessionRole !== 'Gerente') return alert("Esta función es solo para Gerente.");
+
+  const pass = prompt("Para descargar toda la Maestra, ingrese la CLAVE DE GERENTE:");
+  if (pass !== managerPass) return alert("Clave incorrecta. Descarga cancelada.");
+  
+  try {
+    const accountsSnapshot = await db.collection('cuentas').get();
+    const wb = XLSX.utils.book_new();
+
+    for (const doc of accountsSnapshot.docs) {
+      const account = { id: doc.id, ...doc.data() };
+      const accountName = account.name.substring(0, 31).replace(/[\/\?\[\]\*\\\: ]/g, '_'); // Nombre de hoja limpio
+
+      // Obtener consignaciones de la subcolección
+      const consignsSnapshot = await db.collection('cuentas').doc(account.id).collection('consignaciones').orderBy('fecha').get();
+
+      const dataForExcel = consignsSnapshot.docs
+        .map(d => d.data())
+        .filter(c => !c.isSeparator)
+        .map(c => {
+          const fechaDate = c.fecha && c.fecha.toDate ? c.fecha.toDate() : null;
+          const obsDate = c.obsdate && c.obsdate.toDate ? c.obsdate.toDate() : null;
+          return {
+            FECHA: fechaDate, 
+            VALOR: Number(c.valor || 0),
+            OBSERVACIONES: obsDate
+          };
+        });
+
+      if (dataForExcel.length === 0) continue; 
+
+      const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES"] });
+
+      // Aplicar formatos a las columnas de esta hoja
+      if (ws['!ref']) {
+          const range = XLSX.utils.decode_range(ws['!ref']);
+          for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
+              const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); 
+              const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); 
+              const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); 
+
+              // FECHA (Larga)
+              if (ws[cell_fecha_addr]) ws[cell_fecha_addr].z = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
+              // VALOR (Moneda)
+              if (ws[cell_valor_addr]) ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
+              // OBSERVACIONES (Corta)
+              if (ws[cell_obs_addr]) ws[cell_obs_addr].z = 'dd/mm/yyyy'; 
+          }
+           // Ajustar anchos
+           ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}];
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, accountName);
+    }
+    
+    if (wb.SheetNames.length > 0) {
+      XLSX.writeFile(wb, `Maestra_Consignaciones_${new Date().toLocaleDateString().replace(/\//g,'-')}.xlsx`);
+    } else {
+      alert("No se encontraron movimientos en ninguna cuenta para exportar.");
+    }
+  } catch (e) {
+    console.error("Error al exportar la maestra:", e);
+    alert("Ocurrió un error al intentar exportar la maestra: " + e.message);
+  }
+});
+
+
+/* OPERACIONES DE DATOS (Omitting for brevity, mostly unchanged) */
 $('add-consign').addEventListener('click', async ()=>{
   if(!selectedAccountId) return alert('Seleccione cuenta.');
   const fecha = parseDateRadio('dateOpt','date-picker'); const obsdate = parseDateRadio('obsOpt','obsdate-picker'); const valor = Number($('valor').value || 0);
   if(!fecha) return alert('Fecha inválida.');
   try{ 
     await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-        fecha: firebase.firestore.Timestamp.fromDate(fecha), 
-        obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, 
-        valor, 
-        verifiedBy:null, 
-        verifiedRole:null 
+        fecha: firebase.firestore.Timestamp.fromDate(fecha), obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, valor, verifiedBy:null, verifiedRole:null 
     }); 
-    $('valor').value=''; 
-    $('valor').focus();
+    $('valor').value=''; $('valor').focus();
   }catch(e){ alert('Error: '+e.message); }
 });
 
@@ -550,14 +606,21 @@ $('btn-verify').addEventListener('click', async ()=>{
 
 $('btn-unverify').addEventListener('click', async ()=>{
   const ids=getSelectedConsignIds(); if(ids.length===0) return;
+  const selectedData = currentConsignsSnapshot.filter(c => ids.includes(c.id));
+  if(!checkSensitiveAction(selectedData)) return;
+
   const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
   ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null })); 
   await batch.commit();
 });
 
 $('btn-delete').addEventListener('click', async ()=>{ 
-  if(sessionRole!=='Gerente') return; const ids=getSelectedConsignIds(); if(ids.length===0) return;
-  if(!confirm('¿Eliminar '+ids.length+' items?')) return; 
+  if(sessionRole!=='Gerente') return; 
+  const ids=getSelectedConsignIds(); if(ids.length===0) return;
+  const selectedData = currentConsignsSnapshot.filter(c => ids.includes(c.id));
+  if(!checkSensitiveAction(selectedData)) return;
+
+  if(!confirm('¿Eliminar '+ids.length+' items permanentemente?')) return; 
   const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
   ids.forEach(id=> batch.delete(col.doc(id))); await batch.commit(); 
 });
@@ -565,7 +628,6 @@ $('btn-delete').addEventListener('click', async ()=>{
 $('btn-cuadrar').addEventListener('click', async () => {
   if (!selectedAccountId) return;
   
-  // Buscar pendientes después del último corte
   let pendingItems = [];
   for(const item of currentConsignsSnapshot){
     if(item.isSeparator) pendingItems = [];
@@ -573,7 +635,6 @@ $('btn-cuadrar').addEventListener('click', async () => {
   }
   if(pendingItems.length === 0) return alert("Nada nuevo para cuadrar.");
 
-  // Validar amarillos
   const nonYellow = pendingItems.filter(i => i.verifiedRole !== 'Gerente');
   if(nonYellow.length > 0) return alert(`Hay ${nonYellow.length} items sin verificar por Gerente.`);
 
@@ -601,7 +662,7 @@ $('btn-sumar').addEventListener('click', ()=>{
   alert('Suma selección: '+fmtCOP(suma));
 });
 
-/* CALCULOS TOTALES */
+/* CALCULOS TOTALES (Unchanged from previous version) */
 async function updateSelectedTotals(){ 
   if(!selectedAccountId){ $('total-cuenta').textContent = 0; return; }
   let total = 0; 
@@ -619,7 +680,7 @@ async function updateTotalGeneral(){
 }
 setInterval(updateTotalGeneral,15000); updateTotalGeneral();
 
-/* BUSQUEDA */
+/* BUSQUEDA (Unchanged from previous version) */
 const filter = (id) => {
     const q = $(id).value.toLowerCase();
     document.querySelectorAll('#accounts-list .account-item').forEach(it => {
