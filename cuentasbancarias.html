@@ -276,8 +276,7 @@ $('user-info').textContent = usuario.usuario;
 $('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
 
 let sessionRole = 'Administrativo';
-// *** MODIFICACIÓN: La clave de Gerente ahora se gestiona desde Firebase ***
-let managerPass = '0000'; // Valor predeterminado hasta que se cargue
+let managerPass = '0000'; 
 const settingsRef = db.collection('settings').doc('managerPassword');
 
 function loadManagerPass() {
@@ -296,11 +295,11 @@ function loadManagerPass() {
     });
 }
 loadManagerPass();
-// *************************************************************************
 
 let selectedAccountId = null;
 let selectedAccountName = "SinNombre";
 let currentConsignsSnapshot = []; 
+let selectedConsignIds = new Set(); // <-- NUEVO: Almacenamiento local de IDs seleccionados (para persistencia en UI)
 
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
@@ -525,7 +524,7 @@ $('save-manager-pass').addEventListener('click', async ()=>{
   if(!p){ showModal('Atención', 'Ingrese nueva clave.', false); return; }
   
   try {
-    // *** MODIFICACIÓN: Guardar la nueva clave en Firebase ***
+    // Guardar la nueva clave en Firebase
     await settingsRef.set({ password: p }, { merge: true }); 
     managerPass = p; // Actualiza el estado local inmediatamente
     showModal('Éxito', 'Clave actualizada en el sistema.', false); 
@@ -617,6 +616,10 @@ function subscribeAccounts(){
       div.onclick = ()=>{ 
         selectedAccountId = a.id; 
         selectedAccountName = a.name;
+        
+        // LIMPIAR LA SELECCIÓN AL CAMBIAR DE CUENTA (Nuevo)
+        selectedConsignIds.clear(); 
+        
         // La actualización de la UI se maneja mejor forzando el resalto localmente 
         // y dejando que la próxima snapshot de cuentas actualice todo el sidebar.
         document.querySelectorAll('#accounts-list .account-item').forEach(el => el.classList.remove('selected'));
@@ -726,13 +729,22 @@ function renderConsigns(){
 
   if(!selectedAccountId) return;
 
-  // *** MODIFICADO: Ordenar por fecha DESCENDENTE (más nuevas arriba) ***
+  // Ordenar por fecha DESCENDENTE (más nuevas arriba)
   consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha', 'desc').onSnapshot(snapshot=>{
     tbody.innerHTML = '';
     currentConsignsSnapshot = [];
+    
+    // 1. FILTRAR LA SELECCIÓN: Eliminar de la "memoria" IDs que ya no existen en el snapshot
+    const newSnapshotIds = new Set(snapshot.docs.map(doc => doc.id));
+    selectedConsignIds = new Set([...selectedConsignIds].filter(id => newSnapshotIds.has(id)));
+    
     snapshot.forEach(doc => currentConsignsSnapshot.push({id: doc.id, ...doc.data()}));
 
     currentConsignsSnapshot.forEach((c, index)=>{
+      
+      const isSelected = selectedConsignIds.has(c.id); // <-- Verificar el estado en la "memoria"
+      const checkedAttr = isSelected ? 'checked' : ''; // <-- Atributo 'checked'
+
       if(c.isSeparator){
         const tr=document.createElement('tr');
         tr.classList.add('separator');
@@ -741,7 +753,7 @@ function renderConsigns(){
         let labelText = `--- ${c.label} ---`;
         if(c.type === 'green') labelText = `💰 TOTAL: ${fmtCOP(c.total)}`;
         if(c.type === 'red') labelText = `🛑 CORTE (${c.label})`;
-        tr.innerHTML = `<td><input type="checkbox" data-id="${c.id}" data-idx="${index}" data-separator="true"></td><td colspan="3">${labelText}</td><td></td>`;
+        tr.innerHTML = `<td><input type="checkbox" data-id="${c.id}" data-idx="${index}" data-separator="true" ${checkedAttr}></td><td colspan="3">${labelText}</td><td></td>`;
         tbody.appendChild(tr);
         return;
       }
@@ -755,7 +767,7 @@ function renderConsigns(){
       const obsText = c.obsdate && c.obsdate.toDate ? new Date(c.obsdate.toDate()).toLocaleDateString() : '';
       
       tr.innerHTML = `
-        <td style="width:56px; text-align:center;"><input type="checkbox" data-id="${c.id}" data-idx="${index}"></td>
+        <td style="width:56px; text-align:center;"><input type="checkbox" data-id="${c.id}" data-idx="${index}" ${checkedAttr}></td>
         <td style="width:160px">${fechaText}</td>
         <td style="width:140px">${fmtCOP(c.valor)}</td>
         <td style="width:160px">${obsText}</td>
@@ -772,13 +784,13 @@ function renderConsigns(){
 
       tbody.appendChild(tr);
     });
-    // *** Actualización de totales aquí, cada vez que la lista cambia ***
+    // Actualización de totales aquí, cada vez que la lista cambia
     updateSelectedTotals(); 
     updateTotalGeneral();
   });
 }
 
-/* LÓGICA DE TECLADO Y SELECCIÓN (Sin cambios) */
+/* LÓGICA DE TECLADO Y SELECCIÓN */
 let activeRowIndex = -1;
 let anchorRowIndex = -1;
 function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
@@ -790,15 +802,28 @@ function highlightRow(idx){
         rows[idx].scrollIntoView({block:'nearest'});
     }
 }
+
+// SINCRONIZA LA SELECCIÓN DEL CHECKBOX CON LA MEMORIA LOCAL
 $('consigns-body').addEventListener('change', (e)=>{
     if(e.target.type === 'checkbox'){
+        const id = e.target.dataset.id;
         const idx = parseInt(e.target.dataset.idx);
+        
+        // ACTUALIZA EL SET GLOBAL DE SELECCIÓN (MEMORIA LOCAL)
+        if(e.target.checked) {
+            selectedConsignIds.add(id);
+        } else {
+            selectedConsignIds.delete(id);
+        }
+        
         if(!lastShiftState) anchorRowIndex = idx;
     }
 });
+
 let lastShiftState = false;
 document.addEventListener('keydown', e => { if(e.key === 'Shift') lastShiftState = true; });
 document.addEventListener('keyup', e => { if(e.key === 'Shift') lastShiftState = false; });
+
 document.addEventListener('keydown', e => {
     if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
     const rows = getRows();
@@ -810,25 +835,49 @@ document.addEventListener('keydown', e => {
         if(e.key === 'ArrowDown') newIndex++;
         if(e.key === 'ArrowUp') newIndex--;
         newIndex = Math.max(0, Math.min(newIndex, rows.length - 1));
+        
         if(e.shiftKey){
             const start = Math.min(anchorRowIndex, newIndex);
             const end = Math.max(anchorRowIndex, newIndex);
+            
+            // LÓGICA DE SINCRONIZACIÓN SHIFT+SELECCIÓN (Nuevo)
+            selectedConsignIds.clear(); // Limpia la selección antes de re-aplicar
+            
             rows.forEach((r, i) => {
                 const chk = r.querySelector('input[type="checkbox"]');
-                if(chk) chk.checked = (i >= start && i <= end);
+                if(!chk) return;
+                
+                if(i >= start && i <= end){
+                    chk.checked = true;
+                    selectedConsignIds.add(chk.dataset.id); // Agrega al Set
+                } else {
+                    chk.checked = false;
+                }
             });
+            
         } else {
             anchorRowIndex = newIndex;
         }
         activeRowIndex = newIndex;
         highlightRow(activeRowIndex);
     }
+    
+    // Toggle Checkbox con barra espaciadora
     if(e.key === ' '){
         e.preventDefault();
         if(activeRowIndex >= 0 && activeRowIndex < rows.length){
             const chk = rows[activeRowIndex].querySelector('input[type="checkbox"]');
             if(chk) {
+                // Toggla el estado del checkbox
                 chk.checked = !chk.checked;
+                
+                // SINCRONIZA EL ESTADO CON EL SET
+                if(chk.checked) {
+                    selectedConsignIds.add(chk.dataset.id);
+                } else {
+                    selectedConsignIds.delete(chk.dataset.id);
+                }
+                
                 anchorRowIndex = activeRowIndex;
             }
         }
@@ -1008,13 +1057,19 @@ $('add-consign').addEventListener('click', async ()=>{
 
 $('valor').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-consign').click(); });
 
-function getSelectedConsignIds(){ return Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]:checked')).map(c=>c.dataset.id); }
+// Función para obtener los IDs seleccionados usando la memoria local (Nuevo)
+function getSelectedConsignIds(){ 
+    return Array.from(selectedConsignIds); 
+}
 
 $('btn-verify').addEventListener('click', async ()=>{
   const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para verificar.', false);
   const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); 
-  const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); 
+  const batch = db.batch(); 
+  ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); 
   await batch.commit();
+  // Limpia la selección después de la acción
+  selectedConsignIds.clear();
   showModal('Éxito', `${ids.length} movimientos verificados.`, false);
 });
 
@@ -1027,6 +1082,8 @@ $('btn-unverify').addEventListener('click', async ()=>{
   const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
   ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null })); 
   await batch.commit();
+  // Limpia la selección después de la acción
+  selectedConsignIds.clear();
   showModal('Éxito', `${ids.length} movimientos desverificados.`, false);
 });
 
@@ -1120,8 +1177,12 @@ $('btn-delete').addEventListener('click', async ()=>{
             }
             
             await updateBatch.commit();
+            // Limpia la selección después de la acción
+            selectedConsignIds.clear();
             showModal('¡Atención!', `Eliminación exitosa. ${recalculationCount} CORTES afectados han sido recalculados y corregidos.`, false);
         } else {
+            // Limpia la selección después de la acción
+            selectedConsignIds.clear();
             showModal('Éxito', `${ids.length} items eliminados.`, false);
         }
 
@@ -1135,7 +1196,7 @@ $('btn-delete').addEventListener('click', async ()=>{
 $('btn-cuadrar').addEventListener('click', async () => {
   if (!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   
-  // *** MODIFICADO: Adaptación a la lista DESCENDENTE (más nueva arriba) ***
+  // Adaptación a la lista DESCENDENTE (más nueva arriba)
   let pendingItems = [];
   for(const item of currentConsignsSnapshot){
     // Al ir de lo nuevo a lo viejo, sumamos hasta que encontramos el primer separador de corte (el más reciente)
@@ -1165,16 +1226,17 @@ $('btn-cuadrar').addEventListener('click', async () => {
     batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString(), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1)) });
 
     await batch.commit();
+    // Limpia la selección después de la acción
+    selectedConsignIds.clear();
     showModal('Éxito', '¡Corte realizado con éxito!', false);
   });
 });
 
 $('btn-sumar').addEventListener('click', ()=>{
-  const rows = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]:checked'));
+  const ids = getSelectedConsignIds();
   let suma = 0;
-  rows.forEach(ch=>{
-    const index = parseInt(ch.dataset.idx);
-    const item = currentConsignsSnapshot[index];
+  ids.forEach(id=>{
+    const item = currentConsignsSnapshot.find(c => c.id === id);
     if(item && !item.isSeparator) {
         suma += Number(item.valor || 0);
     }
@@ -1183,7 +1245,7 @@ $('btn-sumar').addEventListener('click', ()=>{
 });
 
 /* CALCULOS TOTALES */
-// ** CORREGIDO: Total de Cuenta Actual (Depende de la lista actual en memoria) **
+// ** Total de Cuenta Actual (Depende de la lista actual en memoria) **
 async function updateSelectedTotals(){ 
   if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; }
   let total = 0; 
@@ -1194,7 +1256,7 @@ async function updateSelectedTotals(){
   $('total-cuenta').textContent = fmtCOP(total); 
 }
 
-// ** CORREGIDO: Total General (Implementación más robusta sin CollectionGroup) **
+// ** Total General (Implementación más robusta sin CollectionGroup) **
 async function updateTotalGeneral(){ 
   try{ 
     // 1. Obtener todas las cuentas
