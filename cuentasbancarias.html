@@ -299,7 +299,6 @@ function showPasswordModal(title, message){
                 showModal('Error de Seguridad', 'Clave incorrecta. Intente de nuevo.', false);
                 $('modal-password-input').value = '';
                 $('modal-password-input').focus();
-                // No resolve/reject here, just wait for retry
             }
         };
 
@@ -558,7 +557,7 @@ document.addEventListener('keydown', e => {
     }
 });
 
-/* BOTONES DE EXPORTACIÓN (Unchanged) */
+/* BOTONES DE EXPORTACIÓN (Actualizados para incluir ESTADO/COLOR) */
 // Función de exportación de cuenta seleccionada
 $('btn-export-excel').addEventListener('click', () => {
   if(!selectedAccountId || currentConsignsSnapshot.length === 0) return showModal('Atención', "No hay datos para exportar.", false);
@@ -569,17 +568,24 @@ $('btn-export-excel').addEventListener('click', () => {
       const fechaDate = c.fecha && c.fecha.toDate ? c.fecha.toDate() : null;
       const obsDate = c.obsdate && c.obsdate.toDate ? c.obsdate.toDate() : null;
       
+      const estado = !c.verifiedRole 
+          ? 'Pendiente' 
+          : c.verifiedRole === 'Administrativo' 
+            ? 'Verificado (Gris)' 
+            : 'Verificado (Amarillo)';
+
       return {
         FECHA: fechaDate, 
         VALOR: Number(c.valor || 0),
-        OBSERVACIONES: obsDate
+        OBSERVACIONES: obsDate,
+        ESTADO: estado // Nuevo campo
       };
     });
 
   if(dataForExcel.length === 0) return showModal('Atención', "No hay movimientos válidos (solo separadores).", false);
 
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES"] });
+  const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES", "ESTADO"] }); // Nuevo header
 
   const range = XLSX.utils.decode_range(ws['!ref']);
   for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
@@ -590,9 +596,11 @@ $('btn-export-excel').addEventListener('click', () => {
       if (ws[cell_fecha_addr]) ws[cell_fecha_addr].z = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
       if (ws[cell_valor_addr]) ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
       if (ws[cell_obs_addr]) ws[cell_obs_addr].z = 'dd/mm/yyyy'; 
+      // El nuevo campo ESTADO (columna 3) no necesita formato numérico o de fecha.
   }
 
-  ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}];
+  // Ajuste de anchos para incluir la nueva columna
+  ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}, {wch: 20}];
   
   XLSX.utils.book_append_sheet(wb, ws, selectedAccountName.substring(0, 31)); 
   XLSX.writeFile(wb, `Consignaciones_${selectedAccountName.replace(/\s+/g,'_')}.xlsx`);
@@ -623,16 +631,24 @@ $('btn-export-master').addEventListener('click', async () => {
         .map(c => {
           const fechaDate = c.fecha && c.fecha.toDate ? c.fecha.toDate() : null;
           const obsDate = c.obsdate && c.obsdate.toDate ? c.obsdate.toDate() : null;
+          
+          const estado = !c.verifiedRole 
+              ? 'Pendiente' 
+              : c.verifiedRole === 'Administrativo' 
+                ? 'Verificado (Gris)' 
+                : 'Verificado (Amarillo)';
+
           return {
             FECHA: fechaDate, 
             VALOR: Number(c.valor || 0),
-            OBSERVACIONES: obsDate
+            OBSERVACIONES: obsDate,
+            ESTADO: estado // Nuevo campo
           };
         });
 
       if (dataForExcel.length === 0) continue; 
 
-      const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES"] });
+      const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES", "ESTADO"] }); // Nuevo header
 
       if (ws['!ref']) {
           const range = XLSX.utils.decode_range(ws['!ref']);
@@ -640,11 +656,13 @@ $('btn-export-master').addEventListener('click', async () => {
               const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); 
               const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); 
               const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); 
+              
               if (ws[cell_fecha_addr]) ws[cell_fecha_addr].z = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
               if (ws[cell_valor_addr]) ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
               if (ws[cell_obs_addr]) ws[cell_obs_addr].z = 'dd/mm/yyyy'; 
           }
-           ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}];
+           // Ajuste de anchos para incluir la nueva columna
+           ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}, {wch: 20}];
       }
 
       XLSX.utils.book_append_sheet(wb, ws, accountName);
@@ -699,7 +717,7 @@ $('btn-unverify').addEventListener('click', async ()=>{
   showModal('Éxito', `${ids.length} movimientos desverificados.`, false);
 });
 
-// FUNCIÓN DE ELIMINACIÓN CORREGIDA CON RECALCULO GENERAL
+// FUNCIÓN DE ELIMINACIÓN CORREGIDA CON RECALCULO GENERAL (Unchanged since last fix)
 $('btn-delete').addEventListener('click', async ()=>{ 
   if(sessionRole!=='Gerente') return showModal('Error', 'Solo Gerente puede eliminar movimientos.', false); 
   const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para eliminar.', false);
