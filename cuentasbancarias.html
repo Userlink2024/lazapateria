@@ -10,7 +10,7 @@
       --bg:#f3f6fb; --card:#fff; --accent:#2563eb; --muted:#6b7280;
       --border:#e6e9ef; --danger:#dc2626; --ok:#10b981;
       --admin-gray:#e5e7eb; /* gris pedido */
-      --manager-yellow:#ffff00; /* amarillo pedido */
+      --manager-yellow:#fff7c2; /* amarillo pedido */
     }
     *{box-sizing:border-box}
     body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:var(--bg);color:#0f172a}
@@ -310,11 +310,30 @@ function renderConsigns(){ if(consignsUnsub) consignsUnsub(); const tbody = $('c
         <td style="width:160px">${c.verifiedRole ? (c.verifiedRole === 'Gerente' ? 'Verificado (Gerente)' : 'Verificado (Admin)') : 'Sin verificar'}</td>
       `; tbody.appendChild(tr);
     });
-    updateSelectedTotals(); updateTotalGeneral();
+    updateSelectedTotals(); updateTotalGeneral(); setupShiftSelection();
   });
 }
 
 /* ACCIONES */
+// ENTER PARA AGREGAR CONSIGNACIÓN
+$('valor').addEventListener('keydown', e=>{
+  if(e.key==='Enter') $('add-consign').click();
+});
+
+// SHIFT SELECCIÓN MÚLTIPLE
+let lastCheckedIndex = null;
+function setupShiftSelection(){
+  const checks = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
+  checks.forEach((chk, idx)=>{
+    chk.addEventListener('click', e=>{
+      if(!e.shiftKey || lastCheckedIndex===null){ lastCheckedIndex = idx; return; }
+      const start = Math.min(lastCheckedIndex, idx);
+      const end = Math.max(lastCheckedIndex, idx);
+      for(let i=start;i<=end;i++) checks[i].checked = true;
+    });
+  });
+}
+
 $('add-account').addEventListener('click', async ()=>{
   const name = $('new-account-name').value.trim(); const number = $('new-account-number').value.trim(); if(!name||!number) return alert('Nombre y número requeridos.');
   try{ await db.collection('cuentas').add({ name, number }); $('new-account-name').value=''; $('new-account-number').value=''; }catch(e){ console.error(e); alert('Error creando cuenta: '+e.message); }
