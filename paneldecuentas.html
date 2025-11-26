@@ -1,373 +1,572 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sistema de Consignaciones (Con Firebase)</title>
-  <style>
-    :root{--bg:#f7f7f9;--card:#fff;--accent:#0d6efd;--muted:#6c757d}
-    body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans",sans-serif;background:var(--bg);margin:0;padding:20px;color:#222}
-    .container{max-width:1200px;margin:0 auto}
-    .card{background:var(--card);border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.06);margin-bottom:16px}
-    .row{display:flex;gap:12px;align-items:center}
-    .col{flex:1}
-    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
-    input[type=text], input[type=number], select, textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px}
-    button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
-    button.ghost{background:#eee;color:#222}
-    .account-list{max-height:220px;overflow:auto;border:1px dashed #e3e3e3;padding:8px;border-radius:6px}
-    .account-item{padding:8px;border-radius:6px;cursor:pointer}
-    .account-item:hover{background:#f1f7ff}
-    .account-item.selected{background:#e8f0ff;border-left:4px solid var(--accent)}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border:1px solid #e9e9ee;text-align:left;font-size:14px}
-    tr.verified-admin{background:#e9ecef;color:#555}
-    tr.verified-manager{background:#fff3bf;color:#555}
-    tr.separator{background:#f8f9fa;font-weight:700;text-align:center}
-    .small{font-size:13px;color:var(--muted)}
-    .controls{display:flex;gap:8px;flex-wrap:wrap}
-    .modal{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center}
-    .modal .card{width:720px;max-width:95%}
-    .hidden{display:none}
-    .gear{cursor:pointer;padding:6px;border-radius:6px;border:1px solid #ddd;background:#fafafa}
-    .muted{color:var(--muted)}
-    .center{display:flex;align-items:center;justify-content:center}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Control - Sistema Moderno</title>
+    <!-- Iconos Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Fuente Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- LIBRERÍAS FIREBASE -->
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #2e7d32;
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-secondary: #666666;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --hover-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Oculta el contenido principal si el acceso es denegado o está cargando */
+        .content-hidden {
+            display: none !important;
+        }
+
+        /* --- HEADER --- */
+        header {
+            background-color: var(--card-bg);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left, .header-right {
+            display: flex;
+            align-items: center;
+        }
+        .header-left { gap: 20px; }
+        .header-right { gap: 10px; }
+
+        .back-btn {
+            background-color: #f0f2f5;
+            color: var(--text-main);
+            border: 1px solid #ddd;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-size: 1.1rem;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .user-details h3 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .user-details span {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* Botones del Header */
+        .header-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+        }
+
+        .logout-btn {
+            background: transparent;
+            border: 1px solid #dc3545;
+            color: #dc3545;
+        }
+
+        .switch-user-btn {
+            background-color: #0d47a1;
+            color: white;
+        }
+        .switch-user-btn:hover {
+            background-color: #002171;
+            transform: translateY(-1px);
+        }
+
+        /* --- DASHBOARD GRID --- */
+        .main-canvas {
+            max-width: 1200px;
+            width: 90%;
+            margin: 40px auto;
+            flex-grow: 1;
+        }
+
+        .section-title {
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            color: #1a1a1a;
+            position: relative;
+            padding-left: 15px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 25px;
+        }
+
+        .dashboard-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(0,0,0,0.02);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 180px;
+        }
+        .dashboard-card:hover { transform: translateY(-8px); box-shadow: var(--hover-shadow); }
+
+        .card-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+            /* REESTABLECIMIENTO DE ESTILOS DE ICONO */
+            padding: 15px;
+            border-radius: 50%; 
+            width: 50px; 
+            height: 50px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+        }
+
+        /* Icon Colors - CORREGIDOS */
+        .icon-blue { color: #3b82f6; background: #eff6ff; }
+        .icon-orange { color: #f97316; background: #fff7ed; }
+        .icon-green { color: #22c55e; background: #f0fdf4; }
+        .icon-purple { color: #a855f7; background: #faf5ff; }
+        .icon-red { color: #ef4444; background: #fef2f2; }
+        .icon-teal { color: #14b8a6; background: #f0fdfa; }
+        .icon-gold { color: #eab308; background: #fefce8; }
+        /* FIN DE CORRECCIÓN DE COLORES */
+
+        .dashboard-card:hover .card-icon { transform: scale(1.1) rotate(5deg); }
+        .card-title { font-weight: 600; font-size: 1.1rem; color: var(--text-main); }
+
+        /* --- MODAL BASE STYLES --- */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s;
+        }
+        
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+            text-align: center;
+            position: relative;
+            animation: slideUp 0.3s;
+        }
+
+        /* Estilos específicos para el Modal de Alerta de Acceso */
+        #modalAccesoDenegado .modal-content {
+            border-top: 5px solid #ff9800; /* Naranja para advertencia */
+        }
+        #modalAccesoDenegado h2 {
+            color: #ff9800;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        #modalAccesoDenegado .redirect-message {
+            margin-top: 15px;
+            font-size: 0.95rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
+        @keyframes slideUp { from {transform:translateY(50px);} to {transform:translateY(0);} }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #aaa;
+        }
+        .close-modal:hover { color: #333; }
+
+        .modal h2 { color: #0d47a1; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #555; }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        .form-group input:focus { outline: none; border-color: #0d47a1; }
+
+        .btn-login {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px;
+            width: 100%;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .btn-login:hover { background-color: #45a049; }
+
+        .error-msg { color: #dc3545; margin-top: 10px; font-size: 0.9rem; font-weight: 600; }
+
+        footer { text-align: center; padding: 20px; color: var(--text-secondary); margin-top: auto; }
+
+        @media (max-width: 600px) {
+            header { flex-direction: column; gap: 15px; padding: 1rem; }
+            .header-right { width: 100%; justify-content: center; flex-direction: column; }
+            .header-btn { width: 100%; justify-content: center; }
+            .back-btn { position: absolute; left: 0; }
+            .dashboard-grid { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Sistema de Consignaciones (Firebase)</h2>
 
-    <div class="card" id="auth-panel">
-      <div id="welcome" class="row">
-        <div style="flex:1">
-          <label>Usuario autenticado:</label>
-          <div id="user-info" class="small muted">No autenticado</div>
+    <!-- Header -->
+    <header id="app-header">
+        <div class="header-left">
+            <a href="https://userlink2024.github.io/lazapateria/TABLERO.HTML" class="back-btn" title="Volver al Tablero">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <div class="user-info">
+                <div class="user-avatar" id="avatar-initial">U</div>
+                <div class="user-details">
+                    <h3 id="user-name">Cargando...</h3>
+                    <span id="user-role">...</span>
+                </div>
+            </div>
         </div>
-        <div style="flex:0.4;display:flex;gap:8px;align-items:end">
-          <button id="btn-signin">Iniciar Sesión</button>
-          <button id="btn-signout" class="ghost hidden">Cerrar sesión</button>
+
+        <div class="header-right">
+            <!-- Botón para abrir la ventana modal -->
+            <button class="header-btn switch-user-btn" onclick="abrirModalCambioUsuario()">
+                <i class="fas fa-user-friends"></i> Cambiar Usuario
+            </button>
+            <button class="header-btn logout-btn" onclick="cerrarSesion()">
+                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+            </button>
         </div>
-      </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="main-canvas" id="main-content">
+        <h1 class="section-title">Panel Principal</h1>
+
+        <div class="dashboard-grid">
+            <div class="dashboard-card" onclick="redirigir('cuentas')">
+                <div class="card-icon icon-blue"><i class="fas fa-university"></i></div>
+                <div class="card-title">Cuentas Bancarias</div>
+            </div>
+            <div class="dashboard-card" onclick="redirigir('fabricantes')">
+                <div class="card-icon icon-orange"><i class="fas fa-industry"></i></div>
+                <div class="card-title">Ingreso de Fabricantes</div>
+            </div>
+            <div class="dashboard-card" onclick="redirigir('ventas')">
+                <div class="card-icon icon-green"><i class="fas fa-file-invoice-dollar"></i></div>
+                <div class="card-title">Historial de Ventas</div>
+            </div>
+            <div class="dashboard-card" onclick="redirigir('guias')">
+                <div class="card-icon icon-purple"><i class="fas fa-truck-fast"></i></div>
+                <div class="card-title">Historial Guías</div>
+            </div>
+            <div class="dashboard-card" onclick="redirigir('grafica_general')">
+                <div class="card-icon icon-red"><i class="fas fa-chart-line"></i></div>
+                <div class="card-title">Gráfica General</div>
+            </div>
+            <div class="dashboard-card" onclick="redirigir('grafica_asesor')">
+                <div class="card-icon icon-teal"><i class="fas fa-chart-pie"></i></div>
+                <div class="card-title">Gráfica por Asesor</div>
+            </div>
+            <div class="dashboard-card" onclick="redirigir('nomina')">
+                <div class="card-icon icon-gold"><i class="fas fa-users-cog"></i></div>
+                <div class="card-title">Nómina de Propulsar</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 1. MODAL DE ACCESO DENEGADO -->
+    <div id="modalAccesoDenegado" class="modal">
+        <div class="modal-content">
+            <h2><i class="fas fa-lock"></i> Acceso Restringido</h2>
+            <p style="color: #333;">Su tipo de usuario (**OPERADOR**) no tiene permisos para acceder al Panel de Control Principal.</p>
+            <p class="redirect-message">Será redirigido a su panel de trabajo en <span id="redirect-countdown">10</span> segundos...</p>
+        </div>
     </div>
 
-    <div id="app" class="hidden">
-      <div class="card" id="main-panel">
-        <div class="row">
-          <div class="col" style="flex:0.6">
-            <label>Buscar por nombre</label>
-            <input id="search-name" type="text" placeholder="Escribe nombre...">
-          </div>
-          <div class="col" style="flex:0.6">
-            <label>Buscar por número de cuenta</label>
-            <input id="search-account" type="text" placeholder="1234567890">
-          </div>
-          <div style="flex:0.8">
-            <label>Agregar nueva cuenta</label>
-            <div style="display:flex;gap:8px">
-              <input id="new-account-name" type="text" placeholder="Nombre">
-              <input id="new-account-number" type="text" placeholder="Número de cuenta">
-              <button id="add-account">Agregar</button>
+    <!-- 2. MODAL PARA CAMBIO DE USUARIO -->
+    <div id="modalCambioUsuario" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="cerrarModalCambioUsuario()">&times;</span>
+            <h2><i class="fas fa-user-circle"></i> Iniciar Otra Sesión</h2>
+            <p style="color: #666; margin-bottom: 20px;">Ingresa las credenciales del nuevo usuario</p>
+            
+            <div class="form-group">
+                <label for="nuevo_usuario">Usuario:</label>
+                <input type="text" id="nuevo_usuario" placeholder="Ej: admin">
             </div>
-          </div>
-          <div style="flex:0.3">
-            <label>Opciones</label>
-            <div style="display:flex;gap:8px">
-              <button id="open-options">Opciones</button>
+            <div class="form-group">
+                <label for="nuevo_password">Contraseña:</label>
+                <input type="password" id="nuevo_password" placeholder="******">
             </div>
-          </div>
+            
+            <button class="btn-login" onclick="autenticarNuevoUsuario()">Ingresar</button>
+            <p id="error-login" class="error-msg"></p>
         </div>
-
-        <div style="display:flex;gap:12px;margin-top:12px">
-          <div style="width:320px">
-            <div class="card">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <strong>Cuentas</strong>
-                <span class="small" id="accounts-count">0</span>
-              </div>
-              <div class="account-list" id="accounts-list"></div>
-            </div>
-          </div>
-
-          <div style="flex:1">
-            <div class="card">
-              <strong>Consignación - cuenta seleccionada</strong>
-              <div id="selected-account-info" class="small muted">Ninguna cuenta seleccionada</div>
-              <hr>
-              <div class="row">
-                <div class="col">
-                  <label>FECHA (DD/MM/AAAA)</label>
-                  <div style="display:flex;gap:8px;align-items:center">
-                    <label><input type="radio" name="date-option" value="today"> Hoy</label>
-                    <label><input type="radio" name="date-option" value="yesterday"> Ayer</label>
-                    <label><input type="radio" name="date-option" value="daybefore"> Antier</label>
-                    <input id="date-picker" type="date">
-                  </div>
-                </div>
-                <div class="col">
-                  <label>FECHA DE OBSERVACIÓN (DD/MM/AAAA)</label>
-                  <div style="display:flex;gap:8px;align-items:center">
-                    <label><input type="radio" name="obsdate-option" value="today"> Hoy</label>
-                    <label><input type="radio" name="obsdate-option" value="yesterday"> Ayer</label>
-                    <label><input type="radio" name="obsdate-option" value="daybefore"> Antier</label>
-                    <input id="obsdate-picker" type="date">
-                  </div>
-                </div>
-              </div>
-
-              <div style="margin-top:8px">
-                <label>OBSERVACIONES (texto)</label>
-                <textarea id="observations" rows="2" placeholder="Observaciones..."></textarea>
-              </div>
-
-              <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-                <div style="flex:1">
-                  <label>VALOR (COP)</label>
-                  <input id="valor" type="number" placeholder="0">
-                </div>
-                <div style="width:180px;align-self:flex-end">
-                  <button id="add-consign">Agregar consignación</button>
-                </div>
-              </div>
-
-            </div>
-
-            <div class="card">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <strong>Lista de consignaciones</strong>
-                <div class="controls">
-                  <button id="btn-verify">Verificado (marcar)</button>
-                  <button id="btn-unverify" class="ghost">Desverificar</button>
-                  <button id="btn-delete" class="ghost hidden">Eliminar (Gerente)</button>
-                  <button id="btn-cuadrar" class="ghost hidden">Cuadrar (Gerente)</button>
-                </div>
-              </div>
-              <div style="margin-top:8px;overflow:auto;max-height:360px">
-                <table id="consigns-table">
-                  <thead>
-                    <tr><th style="width:40px">Sel</th><th>FECHA</th><th>VALOR</th><th>OBSERVACION</th><th>ESTADO</th></tr>
-                  </thead>
-                  <tbody id="consigns-body">
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </div>
     </div>
 
-    <!-- Login Modal -->
-    <div id="modal-login" class="modal hidden">
-      <div class="card">
-        <h3>Iniciar sesión</h3>
-        <div style="margin-top:8px">
-          <label>Email</label>
-          <input id="login-email" type="text">
-        </div>
-        <div style="margin-top:8px">
-          <label>Contraseña</label>
-          <input id="login-pass" type="password">
-        </div>
-        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-          <button id="login-submit">Entrar</button>
-          <button id="login-cancel" class="ghost">Cancelar</button>
-        </div>
-      </div>
-    </div>
+    <footer>&copy; 2026 La Zapatería System v2.0</footer>
 
-    <!-- Options modal (shows role info) -->
-    <div id="modal-options" class="modal hidden">
-      <div class="card">
-        <h3>Acceso y Opciones</h3>
-        <div id="role-info" class="small muted">Cargando...</div>
-        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-          <button id="close-options" class="ghost">Cerrar</button>
-        </div>
-      </div>
-    </div>
+    <script>
+        // 1. CONFIGURACIÓN FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+            authDomain: "lazapateria-c4157.firebaseapp.com",
+            projectId: "lazapateria-c4157",
+            storageBucket: "lazapateria-c4157.firebasestorage.app",
+            messagingSenderId: "300241769138",
+            appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+            measurementId: "G-HVG7615JEE"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
 
-  </div>
+        // 2. LÓGICA DE USUARIO ACTUAL Y FILTRO DE ACCESO
+        document.addEventListener('DOMContentLoaded', () => {
+            // Ocultar contenido por defecto para evitar parpadeo si no hay acceso
+            document.getElementById('main-content').classList.add('content-hidden');
+            document.getElementById('app-header').classList.add('content-hidden');
+            verificarUsuarioActual();
+        });
 
-  <!-- Firebase SDK (compat) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+        function verificarUsuarioActual() {
+            const datosUsuarioJSON = localStorage.getItem('datosUsuario');
+            
+            if (!datosUsuarioJSON) {
+                // Si no hay datos, redirigir al login
+                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                return;
+            }
 
-  <script>
-    // ------------------------------------------------
-    // CONFIG: usar la configuración encontrada en tu archivo
-    // (la extracción del archivo 'generar_pedidos (1).html').
-    // ------------------------------------------------
-    const firebaseConfig = {
-      apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
-      authDomain: "lazapateria-c4157.firebaseapp.com",
-      projectId: "lazapateria-c4157",
-      storageBucket: "lazapateria-c4157.firebasestorage.app",
-      measurementId: "G-HVG7615JEE"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+            try {
+                const datosUsuario = JSON.parse(datosUsuarioJSON);
+                // Aseguramos que los permisos sean tratados consistentemente como mayúsculas
+                const permisos = datosUsuario.permisos ? datosUsuario.permisos.toUpperCase() : 'INVITADO';
+                
+                // === FILTRO DE ACCESO PRINCIPAL: Si es OPERADOR, denegar acceso ===
+                if (permisos === 'OPERADOR') {
+                    mostrarMensajeAccesoDenegado();
+                    return; // Detiene la carga del panel
+                }
+                // =================================================================
 
-    // Estado
-    let currentUser = null;
-    let currentUserDoc = null; // documento de 'usuarios'
-    let role = null; // 'Administrador' => gerente
-    let selectedAccountId = null;
+                // Si tiene acceso (no es OPERADOR), mostrar contenido y actualizar UI
+                document.getElementById('user-name').textContent = datosUsuario.nombreCompleto || 'Usuario';
+                document.getElementById('avatar-initial').textContent = (datosUsuario.nombreCompleto || 'U').charAt(0).toUpperCase();
+                document.getElementById('user-role').textContent = permisos;
+                
+                document.getElementById('main-content').classList.remove('content-hidden');
+                document.getElementById('app-header').classList.remove('content-hidden');
 
-    // Elementos
-    const $ = id => document.getElementById(id);
 
-    // ----------------- Auth UI -----------------
-    $('btn-signin').addEventListener('click', ()=>{ $('modal-login').classList.remove('hidden'); });
-    $('login-cancel').addEventListener('click', ()=>{ $('modal-login').classList.add('hidden'); });
-    $('login-submit').addEventListener('click', async ()=>{ const email=$('login-email').value.trim(); const pass=$('login-pass').value; if(!email||!pass){ alert('Email y contraseña son requeridos'); return } try{ await auth.signInWithEmailAndPassword(email,pass); $('modal-login').classList.add('hidden'); }catch(e){ alert('Error login: '+e.message) } });
-    $('btn-signout').addEventListener('click', ()=>{ auth.signOut(); });
+            } catch (e) {
+                console.error("Error al leer usuario:", e);
+                localStorage.removeItem('datosUsuario');
+                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+            }
+        }
 
-    // ----------------- On Auth State -----------------
-    auth.onAuthStateChanged(async user =>{
-      if(user){
-        currentUser = user;
-        $('user-info').textContent = user.email + ' (verificando rol...)';
-        $('btn-signin').classList.add('hidden');
-        $('btn-signout').classList.remove('hidden');
-        // buscar doc de usuario en collection 'usuarios' (según tu archivo fuente)
-        try{
-          const docRef = db.collection('usuarios').doc(user.uid);
-          const docSnap = await docRef.get();
-          if(!docSnap.exists){
-            alert('Usuario no registrado en colección usuarios. Acceso denegado.');
-            await auth.signOut();
-            return;
-          }
-          currentUserDoc = docSnap.data();
-          role = currentUserDoc.permisos || currentUserDoc.role || 'Operador';
-          $('user-info').textContent = user.email + ' — ' + role;
+        // 3. FUNCIÓN DE MENSAJE DE ACCESO DENEGADO
+        function mostrarMensajeAccesoDenegado() {
+            const modal = document.getElementById('modalAccesoDenegado');
+            modal.style.display = 'flex';
+            
+            let countdown = 10;
+            const countdownEl = document.getElementById('redirect-countdown');
+            countdownEl.textContent = countdown;
+            
+            // Intervalo de 1 segundo para la cuenta regresiva
+            const intervalo = setInterval(() => {
+                countdown--;
+                countdownEl.textContent = countdown;
 
-          // SOLO permitimos Administrador
-          if(role.toLowerCase() !== 'administrador'){
-            alert('Acceso denegado. Solo administradores pueden ingresar.');
-            await auth.signOut();
-            return;
-          }
+                if (countdown <= 0) {
+                    clearInterval(intervalo);
+                    // Redirigir al link del operador
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/TABLERO.HTML';
+                }
+            }, 1000);
+        }
+        
+        // 4. FUNCIONES DE MANEJO DE SESIÓN Y MODAL DE CAMBIO DE USUARIO
+        function abrirModalCambioUsuario() {
+            document.getElementById('modalCambioUsuario').style.display = 'flex';
+            document.getElementById('nuevo_usuario').value = '';
+            document.getElementById('nuevo_password').value = '';
+            document.getElementById('error-login').textContent = '';
+            document.getElementById('nuevo_usuario').focus();
+        }
 
-          // si pasa, mostrar app
-          $('app').classList.remove('hidden');
-          $('auth-panel').classList.add('hidden');
-          initAppListeners();
-          subscribeAccounts();
-        }catch(err){ console.error(err); alert('Error comprobando rol: '+err.message); await auth.signOut(); }
-      } else {
-        // salir a estado no autenticado
-        currentUser = null; currentUserDoc = null; role = null; selectedAccountId=null;
-        $('user-info').textContent = 'No autenticado';
-        $('btn-signin').classList.remove('hidden');
-        $('btn-signout').classList.add('hidden');
-        $('app').classList.add('hidden');
-        $('auth-panel').classList.remove('hidden');
-      }
-    });
+        function cerrarModalCambioUsuario() {
+            document.getElementById('modalCambioUsuario').style.display = 'none';
+        }
 
-    // ----------------- Firestore: accounts & consigns -----------------
-    function uid(prefix='id'){return prefix + '_' + Math.random().toString(36).slice(2,9)}
-    function fmtDateISOToDDMMYYYY(iso){ if(!iso) return ''; const d=new Date(iso); const dd=String(d.getDate()).padStart(2,'0'); const mm=String(d.getMonth()+1).padStart(2,'0'); const yy=d.getFullYear(); return `${dd}/${mm}/${yy}` }
+        window.onclick = function(event) {
+            const modal1 = document.getElementById('modalCambioUsuario');
+            const modal2 = document.getElementById('modalAccesoDenegado');
+            if (event.target == modal1) {
+                cerrarModalCambioUsuario();
+            }
+            // NOTA: El modalAccesoDenegado se cierra solo por redirección
+        }
 
-    // Real-time subscribe accounts list
-    let accountsUnsub = null;
-    function subscribeAccounts(){ if(accountsUnsub) accountsUnsub(); accountsUnsub = db.collection('cuentas').orderBy('name').onSnapshot(snapshot=>{
-      const list = $('accounts-list'); list.innerHTML=''; snapshot.forEach(doc=>{ const a = { id: doc.id, ...doc.data() }; const div=document.createElement('div'); div.className='account-item'+(selectedAccountId===a.id? ' selected':''); div.innerHTML=`<strong>${a.name}</strong><div class="small">${a.number||''}</div>`; div.onclick=()=>{ selectedAccountId=a.id; renderSelectedAccount(); }; list.appendChild(div); }); $('accounts-count').textContent = snapshot.size; if(!selectedAccountId && snapshot.size>0){ const first = snapshot.docs[0].data(); selectedAccountId = snapshot.docs[0].id; renderSelectedAccount(); } }); }
+        async function autenticarNuevoUsuario() {
+            let usuarioInput = document.getElementById('nuevo_usuario').value.trim();
+            let passwordInput = document.getElementById('nuevo_password').value.trim();
+            let errorMsg = document.getElementById('error-login');
+            let btn = document.querySelector('.btn-login');
 
-    // Render consigns for selected account via real-time listener
-    let consignsUnsub = null;
-    function renderSelectedAccount(){ const info=$('selected-account-info'); if(!selectedAccountId){ info.textContent='Ninguna cuenta seleccionada'; $('consigns-body').innerHTML=''; return } db.collection('cuentas').doc(selectedAccountId).get().then(d=>{ const acc = d.data(); info.innerHTML = `<strong>${acc.name}</strong> — <span class="small">${acc.number||''}</span>`; subscribeConsigns(selectedAccountId); }); }
+            if (!usuarioInput || !passwordInput) {
+                errorMsg.textContent = 'Por favor, complete todos los campos.';
+                return;
+            }
 
-    function subscribeConsigns(accId){ if(consignsUnsub) consignsUnsub(); const tbody=$('consigns-body'); tbody.innerHTML=''; consignsUnsub = db.collection('cuentas').doc(accId).collection('consignaciones').orderBy('fecha','asc').onSnapshot(snapshot=>{
-      tbody.innerHTML=''; snapshot.forEach(doc=>{ const c = doc.data(); const tr=document.createElement('tr'); if(c.isSeparator){ tr.className='separator'; tr.innerHTML=`<td></td><td colspan="3">--- CUADRE: ${c.label} — TOTAL HASTA AHÍ: ${new Intl.NumberFormat('es-CO').format(c.total)}</td><td></td>`; tbody.appendChild(tr); return } let stateText='Sin verificar'; if(c.verifiedBy){ stateText = c.verifiedRole==='Administrador' ? 'Verificado (Gerente)' : 'Verificado (Admin)'; tr.className = c.verifiedRole==='Administrador' ? 'verified-manager' : 'verified-admin' } tr.innerHTML = `
-          <td><input type="checkbox" data-id="${doc.id}"></td>
-          <td>${fmtDateISOToDDMMYYYY(c.fecha && c.fecha.toDate ? c.fecha.toDate().toISOString() : c.fecha)}<br><small class="small">ObsFecha: ${fmtDateISOToDDMMYYYY(c.obsdate && c.obsdate.toDate ? c.obsdate.toDate().toISOString() : c.obsdate)}</small></td>
-          <td>${new Intl.NumberFormat('es-CO').format(c.valor||0)}</td>
-          <td>${(c.observaciones||'')}</td>
-          <td>${stateText}</td>
-        `; tbody.appendChild(tr);
-      }); }); }
+            btn.disabled = true;
+            btn.textContent = 'Verificando...';
+            errorMsg.textContent = '';
 
-    // ----------------- Actions -----------------
-    function parseDateOption(name){const els=[...document.querySelectorAll(`input[name="${name}"]`)]; for(const e of els){ if(e.checked) return e.value } return null }
+            try {
+                const snapshot = await db.collection('usuarios').where('usuario', '==', usuarioInput).get();
+                let loginExitoso = false;
+                
+                if (!snapshot.empty) {
+                    snapshot.forEach(doc => {
+                        const usuarioEncontrado = doc.data();
+                        if (usuarioEncontrado.contraseña && usuarioEncontrado.contraseña === passwordInput) {
+                            loginExitoso = true;
+                            localStorage.setItem('datosUsuario', JSON.stringify(usuarioEncontrado));
+                            location.reload(); 
+                        }
+                    });
+                }
 
-    $('add-account').addEventListener('click', async ()=>{
-      const name = $('new-account-name').value.trim(); const number = $('new-account-number').value.trim(); if(!name||!number){ alert('Nombre y número requerido'); return }
-      try{ await db.collection('cuentas').add({ name, number }); $('new-account-name').value=''; $('new-account-number').value=''; }catch(e){ alert('Error creando cuenta: '+e.message) }
-    });
+                if (!loginExitoso) {
+                    errorMsg.textContent = 'Usuario o contraseña incorrectos.';
+                    btn.disabled = false;
+                    btn.textContent = 'Ingresar';
+                }
 
-    $('search-name').addEventListener('input', (e)=>{ const q=e.target.value.toLowerCase(); Array.from(document.querySelectorAll('.account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none' }) });
-    $('search-account').addEventListener('input', (e)=>{ const q=e.target.value.toLowerCase(); Array.from(document.querySelectorAll('.account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none' }) });
+            } catch (error) {
+                errorMsg.textContent = 'Error: ' + error.message;
+                btn.disabled = false;
+                btn.textContent = 'Ingresar';
+                console.error(error);
+            }
+        }
 
-    $('add-consign').addEventListener('click', async ()=>{
-      if(!selectedAccountId){ alert('Seleccione una cuenta'); return }
-      // fecha
-      let fecha=null; const dateOpt = parseDateOption('date-option'); if(dateOpt==='today') fecha=new Date(); else if(dateOpt==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); fecha=d } else if(dateOpt==='daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); fecha=d } else { const v=$('date-picker').value; if(v) fecha=new Date(v); }
-      let obsdate=null; const od=parseDateOption('obsdate-option'); if(od==='today') obsdate=new Date(); else if(od==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); obsdate=d } else if(od==='daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); obsdate=d } else { const v=$('obsdate-picker').value; if(v) obsdate=new Date(v); }
-      const observaciones = $('observations').value.trim(); const valor = Number($('valor').value) || 0; if(!fecha){ alert('Seleccione o indique una fecha válida'); return }
-      const obj = { fecha: firebase.firestore.Timestamp.fromDate(fecha), obsdate: obsdate ? firebase.firestore.Timestamp.fromDate(obsdate) : null, observaciones, valor, verifiedBy:null, verifiedAt:null, verifiedRole:null }
-      try{ await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add(obj); $('observations').value=''; $('valor').value=''; }catch(e){ alert('Error agregando consignación: '+e.message) }
-    });
+        function cerrarSesion() {
+            // Se utiliza console.log en lugar de alert/confirm
+            if(window.confirm("¿Estás seguro de que deseas cerrar sesión?")) {
+                localStorage.removeItem('datosUsuario');
+                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+            }
+        }
 
-    function getSelectedConsignIds(){ return Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]')).filter(c=>c.checked).map(c=>c.dataset.id) }
-
-    $('btn-verify').addEventListener('click', async ()=>{
-      if(!selectedAccountId){ alert('Seleccione cuenta'); return }
-      const ids = getSelectedConsignIds(); if(ids.length===0){ alert('Seleccione al menos una consignación'); return }
-      const batch = db.batch(); const colRef = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); ids.forEach(id=>{ const ref = colRef.doc(id); batch.update(ref,{ verifiedBy: currentUser.uid, verifiedAt: firebase.firestore.FieldValue.serverTimestamp(), verifiedRole: 'Administrador' }); });
-      try{ await batch.commit(); }catch(e){ alert('Error al verificar: '+e.message) }
-    });
-
-    $('btn-unverify').addEventListener('click', async ()=>{
-      if(!selectedAccountId){ alert('Seleccione cuenta'); return }
-      const ids = getSelectedConsignIds(); if(ids.length===0){ alert('Seleccione al menos una consignación'); return }
-      const batch = db.batch(); const colRef = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); ids.forEach(id=>{ const ref = colRef.doc(id); batch.update(ref,{ verifiedBy: null, verifiedAt: null, verifiedRole: null }); });
-      try{ await batch.commit(); }catch(e){ alert('Error al desverificar: '+e.message) }
-    });
-
-    $('btn-delete').addEventListener('click', async ()=>{
-      // solo visible para admin
-      if(role.toLowerCase()!=='administrador'){ alert('Solo administrador puede eliminar'); return }
-      if(!selectedAccountId){ alert('Seleccione cuenta'); return }
-      const ids = getSelectedConsignIds(); if(ids.length===0){ alert('Seleccione al menos una consignación'); return }
-      if(!confirm('Eliminar '+ids.length+' consignación(es)?')) return;
-      const batch = db.batch(); const colRef = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); ids.forEach(id=>{ batch.delete(colRef.doc(id)); });
-      try{ await batch.commit(); }catch(e){ alert('Error al eliminar: '+e.message) }
-    });
-
-    $('btn-cuadrar').addEventListener('click', async ()=>{
-      if(role.toLowerCase()!=='administrador'){ alert('Solo administrador puede cuadrar'); return }
-      if(!selectedAccountId){ alert('Seleccione cuenta'); return }
-      // sumar todas las consignaciones que no sean separators
-      const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-      const snap = await col.get(); let total=0; snap.forEach(d=>{ const data=d.data(); if(!data.isSeparator) total += Number(data.valor||0); });
-      const sep = { isSeparator:true, label: new Date().toLocaleString(), total }; try{ await col.add(sep); }catch(e){ alert('Error al cuadrar: '+e.message) }
-    });
-
-    // UI: open options modal
-    $('open-options').addEventListener('click', ()=>{ $('modal-options').classList.remove('hidden'); $('role-info').textContent = `Usuario: ${currentUser.email} — Rol: ${role}`; if(role.toLowerCase()==='administrador'){ $('btn-delete').classList.remove('hidden'); $('btn-cuadrar').classList.remove('hidden'); } else { $('btn-delete').classList.add('hidden'); $('btn-cuadrar').classList.add('hidden'); } });
-    $('close-options').addEventListener('click', ()=>{ $('modal-options').classList.add('hidden'); });
-
-    function initAppListeners(){ /* reserved for any extra listeners */ }
-
-    // Initialize: render nothing until auth
-    // but expose a manual function to subscribe accounts after auth
-
-    // Helper: in case we need to programmatically subscribe after successful auth
-    async function subscribeAccountsIfNeeded(){ if(currentUser){ subscribeAccounts(); } }
-
-    // Ensure sign-in modal appears if user clicks sign-in and if auth state is null user can log in.
-
-    // Before unload, clean listeners
-    window.addEventListener('beforeunload', ()=>{ if(accountsUnsub) accountsUnsub(); if(consignsUnsub) consignsUnsub(); });
-
-    // Small convenience: if developer wants to auto-login for testing, uncomment below and put a test account
-    // auth.signInWithEmailAndPassword('test@example.com','password123')
-  </script>
+        function redirigir(seccion) {
+            console.log("Navegando a: " + seccion);
+            // Reemplaza con tus enlaces reales
+            switch(seccion) {
+                case 'cuentas': window.location.href = 'ruta/a/cuentas.html'; break;
+                case 'fabricantes': window.location.href = 'ruta/a/fabricantes.html'; break;
+                case 'ventas': window.location.href = 'ruta/a/ventas.html'; break;
+                case 'guias': window.location.href = 'ruta/a/guias.html'; break;
+                case 'grafica_general': window.location.href = 'ruta/a/grafica_gen.html'; break;
+                case 'grafica_asesor': window.location.href = 'ruta/a/grafica_ase.html'; break;
+                case 'nomina': window.location.href = 'ruta/a/nomina.html'; break;
+                default: console.warn("Ruta no configurada: " + seccion);
+            }
+        }
+    </script>
 </body>
 </html>
