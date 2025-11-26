@@ -451,12 +451,12 @@ async function handleDoubleClick(clickedConsign, index) {
         const userFecha = new Date(fechaStr);
         const userObsdate = obsdateStr ? new Date(obsdateStr) : null;
         
-        // El truco para forzar el orden: el nuevo documento tendrá un timestamp 1ms ANTES que el seleccionado.
-        const finalTimestampForSorting = firebase.firestore.Timestamp.fromMillis(clickedTimestamp - 1);
+        // *** MODIFICADO: Ahora suma 1ms para que sea cronológicamente más reciente y suba en la lista descendente ***
+        const finalTimestampForSorting = firebase.firestore.Timestamp.fromMillis(clickedTimestamp + 1);
         
         try {
             await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-                fecha: finalTimestampForSorting, // Usamos 1ms menos para forzar la posición
+                fecha: finalTimestampForSorting, // Usamos 1ms más para forzar la posición superior (en lista descendente)
                 obsdate: userObsdate ? firebase.firestore.Timestamp.fromDate(userObsdate) : null,
                 valor: valor, 
                 verifiedBy: usuario.usuario, 
@@ -548,12 +548,25 @@ async function checkSensitiveAction(selectedData) {
 function subscribeAccounts(){
   db.collection('cuentas').orderBy('name').onSnapshot(snapshot=>{
     const container = $('accounts-list'); container.innerHTML = '';
-    snapshot.forEach(doc=>{
-      const a = { id: doc.id, ...doc.data() };
+    
+    let firstAccount = null;
+    let accountsData = [];
+    snapshot.forEach(doc => accountsData.push({ id: doc.id, ...doc.data() }));
+
+    // Si no hay ninguna cuenta seleccionada, seleccionamos la primera
+    if(!selectedAccountId && accountsData.length > 0){
+        firstAccount = accountsData[0];
+        selectedAccountId = firstAccount.id; 
+        selectedAccountName = firstAccount.name;
+    }
+
+    // Renderizar cuentas
+    accountsData.forEach(a=>{
       const isClosed = a.closed || false; 
       const isMgr = (sessionRole === 'Gerente');
 
       const div = document.createElement('div'); 
+      // *** FIX 1: Aplicar el resalte visual correctamente ***
       div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
       div.innerHTML = `
         <div style="font-weight:600; padding-right:20px;">${a.name} ${isClosed ? ' (🔒 CERRADA)' : ''}</div>
@@ -575,17 +588,25 @@ function subscribeAccounts(){
       div.onclick = ()=>{ 
         selectedAccountId = a.id; 
         selectedAccountName = a.name;
-        renderConsigns(); 
-        $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}${isClosed ? ' (🔒 CERRADA)' : ''}`; 
+        // La actualización de la UI se maneja mejor forzando el resalto localmente 
+        // y dejando que la próxima snapshot de cuentas actualice todo el sidebar.
+        document.querySelectorAll('#accounts-list .account-item').forEach(el => el.classList.remove('selected'));
+        div.classList.add('selected');
+
+        const isClosedState = a.closed || false;
+        $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}${isClosedState ? ' (🔒 CERRADA)' : ''}`; 
         updateSelectedTotals(); 
+        renderConsigns(); 
       };
       container.appendChild(div);
     });
-    if(!selectedAccountId && snapshot.docs.length>0){ 
-      const first = snapshot.docs[0];
-      selectedAccountId = first.id; 
-      selectedAccountName = first.data().name;
-      renderConsigns(); 
+
+    // *** FIX 2: Asegurar que el título se actualice en la carga inicial si se seleccionó la primera cuenta ***
+    if(firstAccount){ 
+        const isClosed = firstAccount.closed || false;
+        $('selected-account-info').textContent = `Cuenta: ${selectedAccountName} — ${firstAccount.number || ''}${isClosed ? ' (🔒 CERRADA)' : ''}`; 
+        renderConsigns(); 
+        updateSelectedTotals(); 
     }
   });
 }
@@ -597,13 +618,17 @@ document.addEventListener('change', async (e) => {
         const accountId = e.target.dataset.id;
         const newState = e.target.checked;
         
+        // Obtener el nombre de la cuenta para el modal de confirmación
+        const accountDoc = await db.collection('cuentas').doc(accountId).get();
+        const accountName = accountDoc.data()?.name || 'Seleccionada';
+
         try {
             if (newState) {
                 // Requiere clave para CERRAR
-                await showPasswordModal("Confirmación de Cierre", `¿Desea CERRAR la cuenta "${selectedAccountName}" permanentemente? Esto evitará nuevas consignaciones, a menos que se fuerce la acción.`);
+                await showPasswordModal("Confirmación de Cierre", `¿Desea CERRAR la cuenta "${accountName}" permanentemente? Esto evitará nuevas consignaciones, a menos que se fuerce la acción.`);
             } else {
                 // REQUISITO NUEVO: Requiere clave para REABRIR (quitar el cerrado)
-                await showPasswordModal("Confirmación de Apertura", `¿Desea REABRIR la cuenta "${selectedAccountName}"? Esto permitirá nuevas consignaciones. Ingrese CLAVE DE GERENTE.`);
+                await showPasswordModal("Confirmación de Apertura", `¿Desea REABRIR la cuenta "${accountName}"? Esto permitirá nuevas consignaciones. Ingrese CLAVE DE GERENTE.`);
             }
             
             await db.collection('cuentas').doc(accountId).update({ closed: newState });
@@ -670,7 +695,8 @@ function renderConsigns(){
 
   if(!selectedAccountId) return;
 
-  consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha').onSnapshot(snapshot=>{
+  // *** MODIFICADO: Ordenar por fecha DESCENDENTE (más nuevas arriba) ***
+  consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha', 'desc').onSnapshot(snapshot=>{
     tbody.innerHTML = '';
     currentConsignsSnapshot = [];
     snapshot.forEach(doc => currentConsignsSnapshot.push({id: doc.id, ...doc.data()}));
@@ -835,6 +861,7 @@ $('btn-export-excel').addEventListener('click', () => {
   if(dataForExcel.length === 0) return showModal('Atención', "No hay movimientos válidos (solo separadores).", false);
 
   const wb = XLSX.utils.book_new();
+  // El orden de la exportación es el mismo que el del snapshot (descendente), que es lo que el usuario ve.
   const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES", "ESTADO/COLOR"] }); 
 
   applyExcelDateFormats(ws);
@@ -860,6 +887,7 @@ $('btn-export-master').addEventListener('click', async () => {
       const account = { id: doc.id, ...doc.data() };
       const accountName = account.name.substring(0, 31).replace(/[\/\?\[\]\*\\\: ]/g, '_'); 
 
+      // Las consignaciones se ordenan cronológicamente para la maestra (por convención de archivo histórico)
       const consignsSnapshot = await db.collection('cuentas').doc(account.id).collection('consignaciones').orderBy('fecha').get();
 
       const dataForExcel = consignsSnapshot.docs
@@ -919,10 +947,6 @@ $('add-consign').addEventListener('click', async ()=>{
   const accountDoc = await db.collection('cuentas').doc(selectedAccountId).get();
   const isClosed = accountDoc.data()?.closed || false;
   
-  // *** BLOQUE ELIMINADO: Ya no se verifica ni se advierte sobre un corte (cuadre) reciente. ***
-  // const lastConsign = currentConsignsSnapshot.length > 0 ? currentConsignsSnapshot[currentConsignsSnapshot.length - 1] : null;
-  // const isSquared = lastConsign && lastConsign.isSeparator && lastConsign.type === 'red'; 
-
   let proceed = true;
 
   if (isClosed) {
@@ -933,16 +957,6 @@ $('add-consign').addEventListener('click', async ()=>{
     );
   } 
   
-  // *** Advertencia de CORTE/CUADRE eliminada según su solicitud. ***
-  // if (proceed && isSquared) {
-  //     const squaredDate = lastConsign.fecha.toDate().toLocaleDateString();
-  //     proceed = await showSuperWarning(
-  //         "ADVERTENCIA DE CORTE (CUADRE)", 
-  //         `La cuenta "${selectedAccountName}" fue CORTADA y Cuadrada por última vez el ${squaredDate}. Si agrega una consignación AHORA, esta NO será incluida en el último corte.`,
-  //         null
-  //     );
-  // }
-
   if (!proceed) {
       return; // Detiene la acción si el usuario selecciona "Cancelar Acción"
   }
@@ -1008,7 +1022,8 @@ $('btn-delete').addEventListener('click', async ()=>{
         deletedVerifiedConsigns.forEach(deletedConsign => {
             const deletedDate = deletedConsign.fecha.toDate().getTime();
 
-            // Buscar el NEXT green separator en el snapshot local (pre-delete)
+            // Buscar el Green separator cronológicamente más NUEVO que la consignación eliminada.
+            // (Este es el que debía haber cerrado el ciclo, y el que necesita corrección de su total)
             const affectedGreenSeparator = currentConsignsSnapshot.find(c => 
                 c.type === 'green' && c.fecha.toDate().getTime() > deletedDate
             );
@@ -1021,6 +1036,7 @@ $('btn-delete').addEventListener('click', async ()=>{
         if (affectedGreenSeparatorIds.size > 0) {
             
             // 3. Obtener la lista de consignaciones REMANENTES (data fresca post-eliminación)
+            // Se usa el orden ascendente (orderBy('fecha')) para un cálculo cronológico más fácil de los períodos
             const updatedSnapshot = await col.orderBy('fecha').get();
             const updatedConsigns = [];
             updatedSnapshot.forEach(doc => updatedConsigns.push({id: doc.id, ...doc.data()}));
@@ -1034,16 +1050,20 @@ $('btn-delete').addEventListener('click', async ()=>{
                 if (!affectedGreenSeparator) continue; 
 
                 // Encontrar el RED separator inmediatamente precedente al corte afectado
+                // Como el snapshot local (currentConsignsSnapshot) está en orden descendente, 
+                // el Red Separator (1ms más nuevo) está justo ANTES del Green Separator.
                 const greenIndex = currentConsignsSnapshot.indexOf(affectedGreenSeparator);
                 let precedingRedSeparator = null;
-                for (let i = greenIndex - 1; i >= 0; i--) {
-                    if (currentConsignsSnapshot[i].type === 'red') {
-                        precedingRedSeparator = currentConsignsSnapshot[i];
-                        break;
-                    }
+                if (greenIndex > 0) {
+                    precedingRedSeparator = currentConsignsSnapshot[greenIndex - 1];
+                }
+                // Si el precedingRedSeparator no es un red (o no existe) se usa el inicio de los tiempos
+                if (!precedingRedSeparator || precedingRedSeparator.type !== 'red') {
+                     precedingRedSeparator = null;
                 }
 
-                // Definir el inicio del periodo de cálculo (fecha del rojo, o fecha de inicio)
+
+                // Definir el inicio del periodo de cálculo
                 const queryStart = precedingRedSeparator ? precedingRedSeparator.fecha.toDate().getTime() : new Date(0).getTime();
                 const queryEnd = affectedGreenSeparator.fecha.toDate().getTime();
 
@@ -1082,11 +1102,18 @@ $('btn-delete').addEventListener('click', async ()=>{
 $('btn-cuadrar').addEventListener('click', async () => {
   if (!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   
+  // *** MODIFICADO: Adaptación a la lista DESCENDENTE (más nueva arriba) ***
   let pendingItems = [];
   for(const item of currentConsignsSnapshot){
-    if(item.isSeparator) pendingItems = [];
-    else pendingItems.push(item);
+    // Al ir de lo nuevo a lo viejo, sumamos hasta que encontramos el primer separador de corte (el más reciente)
+    if(item.isSeparator && item.type === 'red') {
+        break; 
+    }
+    if (!item.isSeparator) {
+        pendingItems.push(item);
+    }
   }
+  
   if(pendingItems.length === 0) return showModal('Atención', "Nada nuevo para cuadrar. No hay movimientos pendientes desde el último corte.", false);
 
   const nonYellow = pendingItems.filter(i => i.verifiedRole !== 'Gerente');
@@ -1101,8 +1128,8 @@ $('btn-cuadrar').addEventListener('click', async () => {
     
     // Inserta separador Verde (Total del Corte)
     batch.set(col.doc(), { isSeparator:true, type:'green', label: now.toLocaleDateString(), total: total, fecha: firebase.firestore.Timestamp.fromDate(now) });
-    // Inserta separador Rojo (Nuevo punto de partida)
-    batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString(), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1000)) });
+    // Inserta separador Rojo (Nuevo punto de partida) - 1ms más nuevo que el verde para aparecer ARRIBA en la lista descendente
+    batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString(), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1)) });
 
     await batch.commit();
     showModal('Éxito', '¡Corte realizado con éxito!', false);
