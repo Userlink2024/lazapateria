@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sistema de Consignaciones - Gerencia</title>
+  <title>Sistema de Consignaciones - Final</title>
+
+  <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
 
   <style>
     :root{
@@ -25,8 +27,9 @@
     .btn{background:var(--accent);color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
     .btn.ghost{background:#f1f5f9;color:#0f172a}
     .btn.danger{background:var(--danger)}
+    .btn.success{background:var(--ok)} /* Estilo boton excel */
     .panel{background:var(--card);padding:12px;border-radius:8px;border:1px solid var(--border);box-shadow:0 2px 6px rgba(15,23,42,0.03);margin-bottom:12px}
-    /* Estilos de la lista de cuentas */
+    
     .account-item{padding:10px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;cursor:pointer;background:#fff; position: relative;}
     .account-item.selected{border-left:4px solid var(--accent);background:#f0f6ff}
     .account-item .del-btn {
@@ -47,6 +50,9 @@
     tr.sep-green{background:#d1fae5!important; color: #065f46;}
     tr.sep-red{background:#fee2e2!important; color: #991b1b;}
     
+    /* Foco teclado */
+    tr.keyboard-focus { outline: 2px solid var(--accent); z-index: 10; position: relative; }
+
     .muted{color:var(--muted);font-size:13px}
     .top-totals{display:flex;gap:12px;align-items:center}
     .top-totals .card{padding:8px;border-radius:8px;border:1px solid var(--border);background:#fff}
@@ -62,21 +68,21 @@
   <div id="topbar">
     <div style="display:flex;gap:12px;align-items:center">
       <strong>Sistema de Consignaciones</strong>
-      <div class="small">Formato: FECHA / VALOR / FECHA OBS</div>
+      <div class="small">Gerencia</div>
     </div>
 
     <div class="top-totals">
       <div class="card small">
-        <div class="muted">Total general (todas las cuentas)</div>
+        <div class="muted">Total general</div>
         <div id="total-general">0</div>
       </div>
       <div class="card small">
-        <div class="muted">Total cuenta seleccionada</div>
+        <div class="muted">Total cuenta actual</div>
         <div id="total-cuenta">0</div>
       </div>
       <div class="card small">
-        <div class="muted">Sesión</div>
-        <div id="user-info">cargando...</div>
+        <div class="muted">Usuario</div>
+        <div id="user-info">...</div>
       </div>
       <button id="open-options" class="btn ghost">Opciones</button>
       <button id="logout" class="btn ghost">Salir</button>
@@ -86,15 +92,13 @@
   <div class="layout">
     <div class="sidebar">
       <h3>Buscar / Cuentas</h3>
-
       <label>Buscar por nombre</label>
       <input id="search-name" type="text" placeholder="Nombre...">
-
-      <label style="margin-top:10px">Buscar por número de cuenta</label>
+      <label style="margin-top:10px">Buscar por número</label>
       <input id="search-account" type="text" placeholder="000000...">
 
       <div style="margin-top:12px" class="panel">
-        <h4 style="margin-bottom:8px">Agregar nueva cuenta</h4>
+        <h4 style="margin-bottom:8px">Nueva cuenta</h4>
         <label>Nombre</label>
         <input id="new-account-name" type="text">
         <label style="margin-top:8px">Número</label>
@@ -105,17 +109,15 @@
       </div>
 
       <div>
-        <div class="muted" style="margin-bottom:6px">Cuentas</div>
+        <div class="muted" style="margin-bottom:6px">Lista de Cuentas</div>
         <div id="accounts-list" style="max-height:50vh;overflow:auto"></div>
       </div>
     </div>
 
     <div class="main">
-
       <div class="panel">
         <h3>Agregar consignación</h3>
         <div id="selected-account-info" class="muted" style="margin-bottom:8px">Ninguna cuenta seleccionada</div>
-
         <div style="display:flex;gap:12px">
           <div style="flex:1">
             <label>FECHA</label>
@@ -127,7 +129,6 @@
               <input id="date-picker" type="date">
             </div>
           </div>
-
           <div style="flex:1">
             <label>FECHA DE OBSERVACIÓN</label>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -139,7 +140,6 @@
             </div>
           </div>
         </div>
-
         <div style="margin-top:10px;display:flex;gap:8px;align-items:end">
           <div style="flex:1">
             <label>VALOR (COP)</label>
@@ -152,18 +152,20 @@
       </div>
 
       <div class="panel">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <h3 style="margin:0">Lista de consignaciones</h3>
-          <div>
+        <div style="display:flex;justify-content:space-between;align-items:center; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0">Movimientos</h3>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button id="btn-export-excel" class="btn success">📥 Descargar Excel</button>
+            <div style="width:1px; background:#e5e7eb; margin:0 4px;"></div>
             <button id="btn-verify" class="btn">Verificado</button>
             <button id="btn-unverify" class="btn ghost">Desverificar</button>
-            <button id="btn-delete" class="btn danger" style="display:none">Eliminar (Gerente)</button>
-            <button id="btn-sumar" class="btn ghost">Sumar selección</button>
+            <button id="btn-delete" class="btn danger" style="display:none">Eliminar</button>
+            <button id="btn-sumar" class="btn ghost">Sumar</button>
             <button id="btn-cuadrar" class="btn ghost" style="display:none; border:1px solid var(--accent); color:var(--accent)">✅ Cuadrar (Corte)</button>
           </div>
         </div>
 
-        <div style="margin-top:12px;max-height:52vh;overflow:auto">
+        <div style="margin-top:12px;max-height:52vh;overflow:auto" tabindex="0" id="table-container">
           <table>
             <thead>
               <tr><th>Sel</th><th>FECHA</th><th>VALOR</th><th>FECHA OBS</th><th>ESTADO</th></tr>
@@ -172,39 +174,35 @@
           </table>
         </div>
       </div>
-
     </div>
   </div>
 
   <div id="modal-options" class="modal hidden">
     <div class="panel card" style="width:720px;max-width:96%">
-      <h3>Opciones de Acceso (seleccione)</h3>
+      <h3>Opciones de Acceso</h3>
       <div style="margin-top:8px">
         <label><input type="radio" name="sessionRole" value="Administrativo" checked> Administrativo</label>
         <label style="margin-left:12px"><input type="radio" name="sessionRole" value="Gerente"> Gerente</label>
       </div>
-
       <div id="manager-pass-area" class="hidden" style="margin-top:12px">
         <label>Clave Gerente</label>
-        <input id="manager-pass" type="password" value="">
+        <input id="manager-pass" type="password">
       </div>
-
       <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
         <div>
           <span class="gear" id="gear-change" title="Cambiar clave">⚙️</span>
-          <small class="muted" style="margin-left:8px">Usa la tuerca para cambiar la clave por defecto (0000)</small>
+          <small class="muted" style="margin-left:8px">Configurar clave</small>
         </div>
         <div>
           <button id="options-continue" class="btn">Continuar</button>
           <button id="options-cancel" class="btn ghost">Cancelar</button>
         </div>
       </div>
-
       <div id="gear-panel" class="hidden" style="margin-top:14px">
         <label>Nueva clave Gerente</label>
-        <input id="new-manager-pass" type="text" placeholder="Nueva clave (ej. 1234)">
+        <input id="new-manager-pass" type="text" placeholder="Nueva clave">
         <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
-          <button id="save-manager-pass" class="btn">Guardar clave</button>
+          <button id="save-manager-pass" class="btn">Guardar</button>
           <button id="cancel-gear" class="btn ghost">Cerrar</button>
         </div>
       </div>
@@ -214,7 +212,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
 <script>
-/* ============= CONFIG FIREBASE ============= */
+/* CONFIGURACIÓN FIREBASE */
 const firebaseConfig = {
   apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
   authDomain:"lazapateria-c4157.firebaseapp.com",
@@ -226,25 +224,26 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-/* ============= ESTADO ============= */
+/* ESTADO GLOBAL */
 const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
 if(!usuario){ alert('No hay sesión activa.'); location.href='index.html'; }
-// Validación simple de seguridad
-if(usuario.permisos !== 'Administrador'){ alert('Acceso denegado. Solo administradores.'); location.href='index.html'; }
+if(usuario.permisos !== 'Administrador'){ alert('Acceso denegado.'); location.href='index.html'; }
 
-document.getElementById('user-info').textContent = usuario.usuario + ' — ' + usuario.permisos;
-document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
+$('user-info').textContent = usuario.usuario;
+$('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
 
-let sessionRole = 'Administrativo'; // 'Administrativo' | 'Gerente'
+let sessionRole = 'Administrativo';
 let managerPass = localStorage.getItem('managerPass') || '0000';
 let selectedAccountId = null;
-let currentConsignsSnapshot = []; // Cache local para validaciones rápidas
+let selectedAccountName = "SinNombre";
+let currentConsignsSnapshot = []; // Cache de datos visibles
 
-/* UTIL */
-const $ = id => document.getElementById(id);
+/* UTILIDADES */
+function $(id){ return document.getElementById(id); }
 function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)); }
+function parseDateRadio(name, pickerId){ const opts = document.getElementsByName(name); let sel=null; for(const r of opts) if(r.checked) sel=r.value; if(sel==='today') return new Date(); if(sel==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); return d; } if(sel==='daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); return d; } const v=$(pickerId).value; return v? new Date(v): null; }
 
-/* MODAL OPCIONES */
+/* MODAL DE OPCIONES Y ROLES */
 $('open-options').addEventListener('click', ()=> {
   $('modal-options').classList.remove('hidden');
   document.querySelector('input[name="sessionRole"][value="Administrativo"]').checked = true;
@@ -265,87 +264,73 @@ $('gear-change').addEventListener('click', ()=> $('gear-panel').classList.toggle
 $('cancel-gear').addEventListener('click', ()=> $('gear-panel').classList.add('hidden'));
 $('save-manager-pass').addEventListener('click', ()=>{
   const p = $('new-manager-pass').value.trim(); if(!p){ alert('Ingrese nueva clave'); return; }
-  managerPass = p; localStorage.setItem('managerPass', managerPass); alert('Clave de gerente actualizada'); $('gear-panel').classList.add('hidden');
+  managerPass = p; localStorage.setItem('managerPass', managerPass); alert('Clave actualizada'); $('gear-panel').classList.add('hidden');
 });
 
 $('options-continue').addEventListener('click', ()=>{
   const chosen = document.querySelector('input[name="sessionRole"]:checked').value;
   if(chosen === 'Gerente'){
-    const pass = $('manager-pass').value;
-    if(pass !== managerPass){ alert('Clave de gerente incorrecta'); return; }
+    if($('manager-pass').value !== managerPass){ alert('Clave incorrecta'); return; }
     sessionRole = 'Gerente';
   } else sessionRole = 'Administrativo';
 
-  // Mostrar/Ocultar botones según rol
-  if(sessionRole === 'Gerente'){
-    $('btn-delete').style.display = 'inline-block';
-    $('btn-cuadrar').style.display = 'inline-block';
-    // Mostrar botones de borrar cuenta en el sidebar
-    document.querySelectorAll('.del-btn').forEach(b => b.style.display = 'block');
-  } else {
-    $('btn-delete').style.display = 'none';
-    $('btn-cuadrar').style.display = 'none';
-    document.querySelectorAll('.del-btn').forEach(b => b.style.display = 'none');
-  }
+  const isMgr = (sessionRole === 'Gerente');
+  $('btn-delete').style.display = isMgr ? 'inline-block' : 'none';
+  $('btn-cuadrar').style.display = isMgr ? 'inline-block' : 'none';
+  document.querySelectorAll('.del-btn').forEach(b => b.style.display = isMgr ? 'block' : 'none');
+  
   $('modal-options').classList.add('hidden');
-  alert('Sesión como: ' + sessionRole);
+  alert('Rol activo: ' + sessionRole);
 });
 
-/* SUBSCRIBE CUENTAS */
+/* GESTIÓN DE CUENTAS */
 function subscribeAccounts(){
   db.collection('cuentas').orderBy('name').onSnapshot(snapshot=>{
     const container = $('accounts-list'); container.innerHTML = '';
     snapshot.forEach(doc=>{
       const a = { id: doc.id, ...doc.data() };
-      
       const div = document.createElement('div'); 
       div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
-      
-      // Contenido de la cuenta
-      const content = `
+      div.innerHTML = `
         <div style="font-weight:600; padding-right:20px;">${a.name}</div>
         <div class="muted">${a.number || ''}</div>
       `;
-      div.innerHTML = content;
-
-      // === BOTÓN DE ELIMINAR CUENTA (NUEVO) ===
+      
       const delBtn = document.createElement('span');
       delBtn.className = 'del-btn';
       delBtn.textContent = '🗑️';
       delBtn.title = "Eliminar cuenta";
-      // Solo visible si ya es gerente al cargar, o se actualiza al cambiar rol
       if(sessionRole === 'Gerente') delBtn.style.display = 'block';
-      
-      delBtn.onclick = (e) => {
-        e.stopPropagation(); // Evitar seleccionar la cuenta al hacer click en borrar
-        deleteAccount(a.id, a.name);
-      };
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteAccount(a.id, a.name); };
       div.appendChild(delBtn);
 
-      div.onclick = ()=>{ selectedAccountId = a.id; renderConsigns(); $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}`; updateSelectedTotals(); };
+      div.onclick = ()=>{ 
+        selectedAccountId = a.id; 
+        selectedAccountName = a.name;
+        renderConsigns(); 
+        $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}`; 
+        updateSelectedTotals(); 
+      };
       container.appendChild(div);
     });
-    if(!selectedAccountId && snapshot.docs.length>0){ selectedAccountId = snapshot.docs[0].id; renderConsigns(); }
+    if(!selectedAccountId && snapshot.docs.length>0){ 
+      const first = snapshot.docs[0];
+      selectedAccountId = first.id; 
+      selectedAccountName = first.data().name;
+      renderConsigns(); 
+    }
   });
 }
 subscribeAccounts();
 
 async function deleteAccount(id, name){
-    if(sessionRole !== 'Gerente') return alert("Solo el Gerente puede eliminar cuentas.");
-    if(!confirm(`¿ATENCIÓN: Está seguro que desea eliminar la cuenta bancaria "${name}"?\nEsta acción no se puede deshacer.`)) return;
-    
+    if(sessionRole !== 'Gerente') return alert("Solo Gerente.");
+    if(!confirm(`¿Eliminar cuenta "${name}" permanentemente?`)) return;
     try {
         await db.collection('cuentas').doc(id).delete();
-        if(selectedAccountId === id) {
-             selectedAccountId = null;
-             $('consigns-body').innerHTML = '';
-             $('selected-account-info').textContent = 'Ninguna cuenta seleccionada';
-        }
-        alert("Cuenta eliminada correctamente.");
-    } catch(e) {
-        console.error(e);
-        alert("Error al eliminar: " + e.message);
-    }
+        if(selectedAccountId === id) { selectedAccountId=null; $('consigns-body').innerHTML=''; $('selected-account-info').textContent='...'; }
+        alert("Cuenta eliminada.");
+    } catch(e) { alert("Error: " + e.message); }
 }
 
 /* RENDER CONSIGNACIONES */
@@ -353,195 +338,274 @@ let consignsUnsub = null;
 function renderConsigns(){ 
   if(consignsUnsub) consignsUnsub(); 
   const tbody = $('consigns-body'); tbody.innerHTML = '';
-  currentConsignsSnapshot = []; // reset cache
+  currentConsignsSnapshot = [];
 
   if(!selectedAccountId) return;
 
   consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha').onSnapshot(snapshot=>{
     tbody.innerHTML = '';
-    currentConsignsSnapshot = []; // Actualizar cache
+    currentConsignsSnapshot = [];
     snapshot.forEach(doc => currentConsignsSnapshot.push({id: doc.id, ...doc.data()}));
 
-    snapshot.forEach(doc=>{
-      const c = doc.data();
-
+    // Renderizado
+    currentConsignsSnapshot.forEach((c, index)=>{
+      // Separadores
       if(c.isSeparator){
         const tr=document.createElement('tr');
         tr.classList.add('separator');
         if(c.type==='green') tr.classList.add('sep-green');
         if(c.type==='red') tr.classList.add('sep-red');
-        
-        // Texto diferenciado según tipo
         let labelText = `--- ${c.label} ---`;
-        if(c.type === 'green') labelText = `💰 TOTAL CUADRE: ${fmtCOP(c.total)}`;
-        if(c.type === 'red') labelText = `🛑 CORTE REALIZADO CON CLIENTE (${c.label})`;
-
+        if(c.type === 'green') labelText = `💰 TOTAL: ${fmtCOP(c.total)}`;
+        if(c.type === 'red') labelText = `🛑 CORTE (${c.label})`;
         tr.innerHTML = `<td></td><td colspan="3">${labelText}</td><td></td>`;
         tbody.appendChild(tr);
         return;
       }
 
+      // Filas normales
       const tr = document.createElement('tr');
+      tr.setAttribute('data-index', index); // Indice visual para el teclado
       if(c.verifiedRole === 'Administrativo') tr.classList.add('verified-admin');
       if(c.verifiedRole === 'Gerente') tr.classList.add('verified-gerente');
+      
       const fechaText = c.fecha && c.fecha.toDate ? new Date(c.fecha.toDate()).toLocaleDateString() : '';
       const obsText = c.obsdate && c.obsdate.toDate ? new Date(c.obsdate.toDate()).toLocaleDateString() : '';
+      
       tr.innerHTML = `
-        <td style="width:56px"><input type="checkbox" data-id="${doc.id}"></td>
+        <td style="width:56px; text-align:center;"><input type="checkbox" data-id="${c.id}" data-idx="${index}"></td>
         <td style="width:160px">${fechaText}</td>
         <td style="width:140px">${fmtCOP(c.valor)}</td>
         <td style="width:160px">${obsText}</td>
-        <td style="width:160px">${c.verifiedRole ? (c.verifiedRole === 'Gerente' ? 'Verificado (Gerente)' : 'Verificado (Admin)') : 'Sin verificar'}</td>
-      `; tbody.appendChild(tr);
+        <td style="width:160px">${c.verifiedRole ? (c.verifiedRole === 'Gerente' ? 'Verificado (G)' : 'Verificado (A)') : 'Pendiente'}</td>
+      `;
+      // Click en fila para seleccionar
+      tr.addEventListener('click', (e)=>{
+        if(e.target.type !== 'checkbox') {
+            activeRowIndex = index;
+            highlightRow(index);
+        }
+      });
+      tbody.appendChild(tr);
     });
-    updateSelectedTotals(); updateTotalGeneral(); setupShiftSelection();
+    updateSelectedTotals(); updateTotalGeneral();
   });
 }
 
-// ENTER PARA AGREGAR
-$('valor').addEventListener('keydown', e=>{
-  if(e.key==='Enter') $('add-consign').click();
-});
+/* LÓGICA DE TECLADO Y SELECCIÓN (SOLUCIONADO SHIFT) */
+let activeRowIndex = -1;
+let anchorRowIndex = -1; // Donde empezó la selección
 
-// SHIFT SELECCIÓN
-let lastCheckedIndex = null;
-function setupShiftSelection(){
-  const checks = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
-  checks.forEach((chk, idx)=>{
-    chk.addEventListener('click', e=>{
-      if(!e.shiftKey || lastCheckedIndex===null){ lastCheckedIndex = idx; return; }
-      const start = Math.min(lastCheckedIndex, idx);
-      const end = Math.max(lastCheckedIndex, idx);
-      for(let i=start;i<=end;i++) checks[i].checked = true;
-    });
-  });
+function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr:not(.separator)')); }
+
+function highlightRow(idx){
+    const rows = getRows();
+    rows.forEach(r => r.classList.remove('keyboard-focus'));
+    if(idx >= 0 && idx < rows.length){
+        rows[idx].classList.add('keyboard-focus');
+        rows[idx].scrollIntoView({block:'nearest'});
+    }
 }
 
-$('add-account').addEventListener('click', async ()=>{
-  const name = $('new-account-name').value.trim(); const number = $('new-account-number').value.trim(); if(!name||!number) return alert('Nombre y número requeridos.');
-  try{ await db.collection('cuentas').add({ name, number }); $('new-account-name').value=''; $('new-account-number').value=''; }catch(e){ console.error(e); alert('Error creando cuenta: '+e.message); }
+// Escuchar checkboxes para actualizar el ancla si se hace click manual
+$('consigns-body').addEventListener('change', (e)=>{
+    if(e.target.type === 'checkbox'){
+        const idx = parseInt(e.target.dataset.idx);
+        // Si no hay shift presionado, este click se convierte en el nuevo ancla
+        // (La deteccion de shift se hace en el evento 'click' o mousedown, 
+        // pero aqui asumimos que si cambias uno manualmente reseteas el ancla logico)
+        if(!lastShiftState) anchorRowIndex = idx;
+    }
 });
 
-function parseDateRadio(name, pickerId){ const opts = document.getElementsByName(name); let sel=null; for(const r of opts) if(r.checked) sel=r.value; if(sel==='today') return new Date(); if(sel==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); return d; } if(sel==='daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); return d; } const v=$(pickerId).value; return v? new Date(v): null; }
+let lastShiftState = false;
+document.addEventListener('keydown', e => { if(e.key === 'Shift') lastShiftState = true; });
+document.addEventListener('keyup', e => { if(e.key === 'Shift') lastShiftState = false; });
 
+document.addEventListener('keydown', e => {
+    if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
+    
+    const rows = getRows();
+    if(rows.length === 0) return;
+
+    if(['ArrowUp','ArrowDown'].includes(e.key)){
+        e.preventDefault();
+        
+        // Si es la primera vez que movemos, inicializar
+        if(activeRowIndex === -1) { activeRowIndex = 0; anchorRowIndex = 0; }
+
+        let newIndex = activeRowIndex;
+        if(e.key === 'ArrowDown') newIndex++;
+        if(e.key === 'ArrowUp') newIndex--;
+        
+        // Limites
+        newIndex = Math.max(0, Math.min(newIndex, rows.length - 1));
+
+        if(e.shiftKey){
+            // SELECCIÓN CON SHIFT
+            // 1. Definir rango desde Ancla hasta Nuevo Foco
+            const start = Math.min(anchorRowIndex, newIndex);
+            const end = Math.max(anchorRowIndex, newIndex);
+
+            // 2. Recorrer y marcar SOLO los que están en rango, desmarcar los que no
+            // (Esta es la lógica de Excel: la selección es elastica desde el ancla)
+            rows.forEach((r, i) => {
+                const chk = r.querySelector('input[type="checkbox"]');
+                if(chk){
+                    if(i >= start && i <= end) chk.checked = true;
+                    else chk.checked = false; 
+                }
+            });
+        } else {
+            // MOVIMIENTO SIMPLE (SIN SHIFT)
+            // Actualizamos el ancla al nuevo punto
+            anchorRowIndex = newIndex;
+        }
+
+        activeRowIndex = newIndex;
+        highlightRow(activeRowIndex);
+    }
+
+    // ESPACIO para marcar/desmarcar el actual (y resetea ancla)
+    if(e.key === ' '){
+        e.preventDefault();
+        if(activeRowIndex >= 0 && activeRowIndex < rows.length){
+            const chk = rows[activeRowIndex].querySelector('input[type="checkbox"]');
+            if(chk) {
+                chk.checked = !chk.checked;
+                anchorRowIndex = activeRowIndex;
+            }
+        }
+    }
+});
+
+
+/* BOTÓN EXPORTAR EXCEL */
+$('btn-export-excel').addEventListener('click', () => {
+  if(!selectedAccountId || currentConsignsSnapshot.length === 0) return alert("No hay datos para exportar");
+
+  // Filtrar datos: quitar separadores y formatear
+  const dataForExcel = currentConsignsSnapshot
+    .filter(c => !c.isSeparator)
+    .map(c => {
+      const fecha = c.fecha && c.fecha.toDate ? new Date(c.fecha.toDate()).toLocaleDateString() : '';
+      const obs = c.obsdate && c.obsdate.toDate ? new Date(c.obsdate.toDate()).toLocaleDateString() : '';
+      return {
+        FECHA: fecha,
+        VALOR: Number(c.valor || 0),
+        OBSERVACIONES: obs
+      };
+    });
+
+  if(dataForExcel.length === 0) return alert("No hay movimientos válidos (solo separadores).");
+
+  // Crear Workbook y Worksheet
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(dataForExcel);
+
+  // Ajustar anchos de columna (opcional pero estético)
+  const wscols = [
+    {wch: 15}, // Fecha
+    {wch: 15}, // Valor
+    {wch: 20}  // Observaciones
+  ];
+  ws['!cols'] = wscols;
+
+  XLSX.utils.book_append_sheet(wb, ws, selectedAccountName.substring(0, 31)); // Max 31 chars para nombre hoja excel
+
+  // Descargar
+  const fileName = `Consignaciones_${selectedAccountName.replace(/\s+/g,'_')}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+});
+
+
+/* OPERACIONES DE DATOS */
 $('add-consign').addEventListener('click', async ()=>{
-  if(!selectedAccountId) return alert('Seleccione una cuenta.');
+  if(!selectedAccountId) return alert('Seleccione cuenta.');
   const fecha = parseDateRadio('dateOpt','date-picker'); const obsdate = parseDateRadio('obsOpt','obsdate-picker'); const valor = Number($('valor').value || 0);
-  if(!fecha) return alert('Seleccione una fecha válida.');
-  try{ await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ fecha: firebase.firestore.Timestamp.fromDate(fecha), obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, valor, verifiedBy:null, verifiedRole:null }); $('valor').value=''; }catch(e){ console.error(e); alert('Error agregando consignación: '+e.message); }
+  if(!fecha) return alert('Fecha inválida.');
+  try{ 
+    await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
+        fecha: firebase.firestore.Timestamp.fromDate(fecha), 
+        obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, 
+        valor, 
+        verifiedBy:null, 
+        verifiedRole:null 
+    }); 
+    $('valor').value=''; 
+    $('valor').focus();
+  }catch(e){ alert('Error: '+e.message); }
 });
 
-function getSelectedConsignIds(){ return Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]')).filter(c=>c.checked).map(c=>c.dataset.id); }
+$('valor').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-consign').click(); });
+
+function getSelectedConsignIds(){ return Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]:checked')).map(c=>c.dataset.id); }
 
 $('btn-verify').addEventListener('click', async ()=>{
-  if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); await batch.commit(); }catch(e){ console.error(e); alert('Error verificando: '+e.message); }
+  const ids=getSelectedConsignIds(); if(ids.length===0) return;
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); 
+  const batch = db.batch(); ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); 
+  await batch.commit();
 });
 
 $('btn-unverify').addEventListener('click', async ()=>{
-  if(!selectedAccountId) return alert('Seleccione cuenta.');
-  const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.');
-  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-  // Chequeo de seguridad simple: si admin intenta quitar verificado de gerente
-  // Nota: Esto requeriría leer doc por doc, para agilidad lo dejamos al backend o confianza del frontend simple
-  try{
-    const batch = db.batch();
-    ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null }));
-    await batch.commit();
-  }catch(e){ console.error(e); alert('Error desverificando: '+e.message); }
+  const ids=getSelectedConsignIds(); if(ids.length===0) return;
+  const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null })); 
+  await batch.commit();
 });
 
-$('btn-delete').addEventListener('click', async ()=>{ if(sessionRole!=='Gerente') return alert('Solo Gerente puede eliminar.'); if(!selectedAccountId) return alert('Seleccione cuenta.'); const ids=getSelectedConsignIds(); if(ids.length===0) return alert('Seleccione al menos una consignación.'); if(!confirm('Eliminar '+ids.length+' consignación(es)?')) return; const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); try{ const batch = db.batch(); ids.forEach(id=> batch.delete(col.doc(id))); await batch.commit(); }catch(e){ console.error(e); alert('Error eliminando: '+e.message); } });
+$('btn-delete').addEventListener('click', async ()=>{ 
+  if(sessionRole!=='Gerente') return; const ids=getSelectedConsignIds(); if(ids.length===0) return;
+  if(!confirm('¿Eliminar '+ids.length+' items?')) return; 
+  const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  ids.forEach(id=> batch.delete(col.doc(id))); await batch.commit(); 
+});
 
-/* =========== LÓGICA DE CUADRE (CORTE) ACTUALIZADA =========== */
 $('btn-cuadrar').addEventListener('click', async () => {
-  if (!selectedAccountId) return alert('Seleccione una cuenta.');
-
-  // 1. Identificar items pendientes de cuadre
-  // Recorremos el snapshot actual. Si encontramos un separador, reiniciamos la lista de pendientes.
-  // Así obtenemos solo lo que está DESPUÉS del último corte.
+  if (!selectedAccountId) return;
+  
+  // Buscar pendientes después del último corte
   let pendingItems = [];
-  
   for(const item of currentConsignsSnapshot){
-    if(item.isSeparator){
-      pendingItems = []; // Hubo un corte previo, descartar lo anterior
-    } else {
-      pendingItems.push(item);
-    }
+    if(item.isSeparator) pendingItems = [];
+    else pendingItems.push(item);
   }
+  if(pendingItems.length === 0) return alert("Nada nuevo para cuadrar.");
 
-  if(pendingItems.length === 0) return alert("No hay consignaciones nuevas para cuadrar desde el último corte.");
-
-  // 2. Validar que TODOS estén en Amarillo (Gerente)
-  // Constraint: "no deje cuadrar si no estan todas en amarillo"
+  // Validar amarillos
   const nonYellow = pendingItems.filter(i => i.verifiedRole !== 'Gerente');
-  
-  if(nonYellow.length > 0){
-    // Highlight visual simple (opcional) o solo alerta
-    return alert(`NO SE PUEDE CUADRAR.\nHay ${nonYellow.length} consignación(es) que no han sido verificadas por el Gerente (Color Amarillo).\nVerifique todo antes de hacer el corte.`);
-  }
+  if(nonYellow.length > 0) return alert(`Hay ${nonYellow.length} items sin verificar por Gerente.`);
 
-  // 3. Calcular Suma
   const total = pendingItems.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
-  const fechaTxt = new Date().toLocaleDateString();
-
-  // 4. Agregar Separadores (Verde y Rojo)
-  if(!confirm(`¿Confirmar cuadre?\n\nTotal a cortar: ${fmtCOP(total)}\n\nEsto agregará el corte verde (total) y el rojo (separador).`)) return;
+  if(!confirm(`¿Realizar corte?\nTotal: ${fmtCOP(total)}`)) return;
 
   const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
   const batch = db.batch();
-
-  // Crear referencias para asegurar orden. Usamos fechas actuales.
-  // Truco: Ponemos unos milisegundos de diferencia para que queden en orden Verde -> Rojo
   const now = new Date();
-  const nowPlus1 = new Date(now.getTime() + 1000);
+  
+  batch.set(col.doc(), { isSeparator:true, type:'green', label: now.toLocaleDateString(), total: total, fecha: firebase.firestore.Timestamp.fromDate(now) });
+  batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString(), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1000)) });
 
-  // Registro Verde: El Total
-  const refGreen = col.doc();
-  batch.set(refGreen, {
-    isSeparator: true,
-    type: 'green',
-    label: fechaTxt,
-    total: total,
-    fecha: firebase.firestore.Timestamp.fromDate(now) // Fecha para ordenamiento
-  });
-
-  // Registro Rojo: El Corte
-  const refRed = col.doc();
-  batch.set(refRed, {
-    isSeparator: true,
-    type: 'red',
-    label: fechaTxt,
-    total: 0, // No suma, solo corta
-    fecha: firebase.firestore.Timestamp.fromDate(nowPlus1)
-  });
-
-  try {
-    await batch.commit();
-    alert("Cuadre y corte realizados exitosamente.");
-  } catch (e) {
-    console.error(e);
-    alert("Error al realizar el cuadre: " + e.message);
-  }
+  await batch.commit();
 });
 
 $('btn-sumar').addEventListener('click', ()=>{
-  const rows = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
+  const rows = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]:checked'));
   let suma = 0;
   rows.forEach(ch=>{
-    if(ch.checked){ const tr=ch.closest('tr'); const val = tr.children[2].textContent.replace(/\./g,'').replace(/,/g,''); suma += Number(val)||0; }
+    const tr=ch.closest('tr'); 
+    const val = tr.children[2].textContent.replace(/\./g,'').replace(/,/g,''); 
+    suma += Number(val)||0; 
   });
-  alert('Total seleccionado: '+fmtCOP(suma));
+  alert('Suma selección: '+fmtCOP(suma));
 });
 
-/* TOTALES - IGNORAR SEPARADORES */
+/* CALCULOS TOTALES */
 async function updateSelectedTotals(){ 
-  if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; } 
-  // Nota: Usamos la data en memoria currentConsignsSnapshot para evitar otra llamada,
-  // pero cuidado con filtrado. La lógica original sumaba TODO lo no separador.
+  if(!selectedAccountId){ $('total-cuenta').textContent = 0; return; }
   let total = 0; 
-  currentConsignsSnapshot.forEach(d=>{ 
-    if(!d.isSeparator) total += Number(d.valor || 0); 
-  }); 
+  currentConsignsSnapshot.forEach(d=>{ if(!d.isSeparator) total += Number(d.valor || 0); }); 
   $('total-cuenta').textContent = fmtCOP(total); 
 }
 
@@ -549,45 +613,21 @@ async function updateTotalGeneral(){
   try{ 
     const snap = await db.collectionGroup('consignaciones').get(); 
     let total = 0; 
-    snap.forEach(d=>{ 
-      const data=d.data(); 
-      if(!data.isSeparator) total += Number(data.valor || 0); 
-    }); 
+    snap.forEach(d=>{ if(!d.data().isSeparator) total += Number(d.data().valor || 0); }); 
     $('total-general').textContent = fmtCOP(total); 
-  }catch(e){ console.error(e); } 
+  }catch(e){} 
 }
-
 setInterval(updateTotalGeneral,15000); updateTotalGeneral();
 
-/* BUSCADOR */
-$('search-name').addEventListener('input', ()=>{ const q=$('search-name').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
-$('search-account').addEventListener('input', ()=>{ const q=$('search-account').value.toLowerCase(); Array.from(document.querySelectorAll('#accounts-list .account-item')).forEach(it=>{ it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
-
-/* NAV KEYBOARD */
-let activeRowIndex = -1;
-function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
-function highlightActive(){ getRows().forEach((r,i)=>{ r.style.outline = (i===activeRowIndex)? '2px solid #3b82f6' : 'none'; }); }
-function moveActive(delta){ const rows=getRows(); if(rows.length===0) return; activeRowIndex = Math.min(rows.length-1, Math.max(0, activeRowIndex+delta)); highlightActive(); rows[activeRowIndex].scrollIntoView({block:'nearest'}); }
-$('consigns-body').addEventListener('click', e=>{
-  const row = e.target.closest('tr'); if(!row) return;
-  const rows=getRows(); activeRowIndex = rows.indexOf(row); highlightActive();
-});
-document.addEventListener('keydown', e=>{
-  if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
-  if(['ArrowUp','ArrowDown','Shift',' '].includes(e.key)) e.preventDefault();
-  const rows=getRows(); if(rows.length===0) return;
-  if(e.key==='ArrowDown') moveActive(1);
-  if(e.key==='ArrowUp') moveActive(-1);
-  if(e.key===' ' && activeRowIndex>=0){ const chk=rows[activeRowIndex].querySelector('input[type="checkbox"]'); if(chk){ chk.checked=!chk.checked; }}
-  if(e.shiftKey && (e.key==='ArrowDown' || e.key==='ArrowUp')){
-    const target=activeRowIndex;
-    const prev=lastCheckedIndex ?? target;
-    const start=Math.min(prev,target);
-    const end=Math.max(prev,target);
-    const checks = Array.from(document.querySelectorAll('#consigns-body input[type="checkbox"]'));
-    for(let i=start;i<=end;i++) checks[i].checked = true;
-  }
-});
+/* BUSQUEDA */
+const filter = (id) => {
+    const q = $(id).value.toLowerCase();
+    document.querySelectorAll('#accounts-list .account-item').forEach(it => {
+        it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+};
+$('search-name').addEventListener('input', () => filter('search-name'));
+$('search-account').addEventListener('input', () => filter('search-account'));
 
 window.addEventListener('load', ()=>{ $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; });
 window.addEventListener('beforeunload', ()=>{ if(consignsUnsub) consignsUnsub(); });
