@@ -1864,6 +1864,16 @@
                 pedidosListenerUnsubscribe = null;
                 console.log("Listener de pedidos detenido.");
             }
+            if (id === 'modal_cuentas_no_admitidas' && cuentasListenerUnsubscribe) {
+                cuentasListenerUnsubscribe();
+                cuentasListenerUnsubscribe = null;
+                console.log("Listener de cuentas detenido.");
+            }
+            if (id === 'modal_gestionar_cuentas' && cuentasGestionListenerUnsubscribe) {
+                cuentasGestionListenerUnsubscribe();
+                cuentasGestionListenerUnsubscribe = null;
+                console.log("Listener de cuentas gestión detenido.");
+            }
             if (id === 'modal_pares_warning') {
                 // Optionally do something when the warning modal is closed
             }
@@ -3565,8 +3575,10 @@
         const cuentasNoAdmitidasCollection = db.collection('cuentas_no_admitidas');
         let todasLasCuentas = []; // Array para almacenar todas las cuentas
         let todasLasCuentasGestion = []; // Array para almacenar todas las cuentas en gestión
+        let cuentasListenerUnsubscribe = null; // Listener para actualizaciones en tiempo real
+        let cuentasGestionListenerUnsubscribe = null; // Listener para modal de gestión
 
-        async function loadCuentasNoAdmitidas() {
+        function loadCuentasNoAdmitidas() {
             const listContainer = document.getElementById('lista_cuentas_no_admitidas');
             const gearIcon = document.getElementById('gear_icon_cuentas');
             
@@ -3578,8 +3590,14 @@
             }
 
             listContainer.innerHTML = '<p>Cargando cuentas...</p>';
-            try {
-                const snapshot = await cuentasNoAdmitidasCollection.orderBy('nombre').get();
+            
+            // Detener listener anterior si existe
+            if (cuentasListenerUnsubscribe) {
+                cuentasListenerUnsubscribe();
+            }
+            
+            // Configurar listener en tiempo real
+            cuentasListenerUnsubscribe = cuentasNoAdmitidasCollection.orderBy('nombre').onSnapshot(snapshot => {
                 if (snapshot.empty) {
                     listContainer.innerHTML = '<p>No hay cuentas no admitidas registradas.</p>';
                     todasLasCuentas = [];
@@ -3597,12 +3615,17 @@
                     });
                 });
                 
-                // Renderizar todas las cuentas
-                renderCuentas(todasLasCuentas);
-            } catch (error) {
-                console.error("Error cargando cuentas no admitidas:", error);
+                // Aplicar filtro actual si existe
+                const searchInput = document.getElementById('buscar_cuenta');
+                if (searchInput && searchInput.value.trim()) {
+                    filtrarCuentas();
+                } else {
+                    renderCuentas(todasLasCuentas);
+                }
+            }, error => {
+                console.error("Error en listener de cuentas:", error);
                 listContainer.innerHTML = '<p>Error al cargar cuentas.</p>';
-            }
+            });
         }
 
         function renderCuentas(cuentas) {
@@ -3640,11 +3663,17 @@
             renderCuentas(cuentasFiltradas);
         }
 
-        async function loadCuentasParaGestion() {
+        function loadCuentasParaGestion() {
             const listContainer = document.getElementById('lista_cuentas_gestion');
             listContainer.innerHTML = '<p>Cargando cuentas...</p>';
-            try {
-                const snapshot = await cuentasNoAdmitidasCollection.orderBy('nombre').get();
+            
+            // Detener listener anterior si existe
+            if (cuentasGestionListenerUnsubscribe) {
+                cuentasGestionListenerUnsubscribe();
+            }
+            
+            // Configurar listener en tiempo real
+            cuentasGestionListenerUnsubscribe = cuentasNoAdmitidasCollection.orderBy('nombre').onSnapshot(snapshot => {
                 if (snapshot.empty) {
                     listContainer.innerHTML = '<p>No hay cuentas registradas.</p>';
                     todasLasCuentasGestion = [];
@@ -3662,12 +3691,17 @@
                     });
                 });
                 
-                // Renderizar todas las cuentas
-                renderCuentasGestion(todasLasCuentasGestion);
-            } catch (error) {
-                console.error("Error cargando cuentas para gestión:", error);
+                // Aplicar filtro actual si existe
+                const searchInput = document.getElementById('buscar_cuenta_gestion');
+                if (searchInput && searchInput.value.trim()) {
+                    filtrarCuentasGestion();
+                } else {
+                    renderCuentasGestion(todasLasCuentasGestion);
+                }
+            }, error => {
+                console.error("Error en listener de cuentas gestión:", error);
                 listContainer.innerHTML = '<p>Error al cargar cuentas.</p>';
-            }
+            });
         }
 
         function renderCuentasGestion(cuentas) {
@@ -3732,8 +3766,7 @@
                 nombreInput.value = '';
                 numeroInput.value = '';
                 playConfirmationSound();
-                await loadCuentasParaGestion();
-                await loadCuentasNoAdmitidas();
+                // No es necesario recargar manualmente, el listener lo hará automáticamente
             } catch (error) {
                 console.error("Error agregando cuenta:", error);
                 errorMessageDisplay.textContent = 'Error al agregar la cuenta.';
@@ -3761,8 +3794,7 @@
                     numero: nuevoNumero.trim()
                 });
                 playConfirmationSound();
-                await loadCuentasParaGestion();
-                await loadCuentasNoAdmitidas();
+                // No es necesario recargar manualmente, el listener lo hará automáticamente
             } catch (error) {
                 console.error("Error actualizando cuenta:", error);
                 errorMessageDisplay.textContent = 'Error al actualizar la cuenta.';
@@ -3777,8 +3809,7 @@
                 try {
                     await cuentasNoAdmitidasCollection.doc(id).delete();
                     playConfirmationSound();
-                    await loadCuentasParaGestion();
-                    await loadCuentasNoAdmitidas();
+                    // No es necesario recargar manualmente, el listener lo hará automáticamente
                 } catch (error) {
                     console.error("Error eliminando cuenta:", error);
                     errorMessageDisplay.textContent = 'Error al eliminar la cuenta.';
