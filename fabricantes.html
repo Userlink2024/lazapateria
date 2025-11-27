@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Factura de Fabricantes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+
+<style>
+    body{
+        font-family: 'Roboto', sans-serif;
+        background:#f4f6f9;
+        margin:0;
+        padding:0;
+    }
+    header{
+        background:#2d3436;
+        padding:15px 20px;
+        color:white;
+        font-size:18px;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+    }
+    #logout{
+        cursor:pointer;
+        background:#d63031;
+        padding:7px 15px;
+        border-radius:5px;
+    }
+    .main{
+        display:flex;
+        padding:20px;
+        gap:25px;
+    }
+    .card{
+        background:white;
+        border-radius:8px;
+        padding:20px;
+        box-shadow:0 3px 8px rgba(0,0,0,0.1);
+    }
+    .left{
+        width:30%;
+    }
+    .right{
+        width:70%;
+    }
+    input, select{
+        width:100%;
+        padding:10px;
+        margin-top:5px;
+        margin-bottom:15px;
+        border:1px solid #ddd;
+        border-radius:6px;
+    }
+    button{
+        width:100%;
+        padding:12px;
+        background:#0984e3;
+        color:white;
+        border:none;
+        border-radius:6px;
+        cursor:pointer;
+        font-size:16px;
+    }
+    button:hover{
+        background:#076bb6;
+    }
+    table{
+        width:100%;
+        border-collapse:collapse;
+        margin-top:10px;
+    }
+    th, td{
+        border-bottom:1px solid #eee;
+        padding:8px;
+        text-align:left;
+        font-size:14px;
+    }
+    th{
+        background:#dfe6e9;
+        font-weight:bold;
+    }
+    #totalGeneral{
+        font-size:20px;
+        margin-top:10px;
+        font-weight:bold;
+        text-align:right;
+        color:#2d3436;
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <div>👟 Factura de Fabricantes</div>
+    <div>
+        <span id="user-info"></span>
+        <span id="logout">Cerrar sesión</span>
+    </div>
+</header>
+
+<div class="main">
+
+    <!-- FORMULARIO -->
+    <div class="card left">
+        <h2>Formulario</h2>
+
+        <label>Fecha:</label>
+        <input type="date" id="fecha">
+        
+        <label>NIT:</label>
+        <input type="text" id="nit">
+
+        <label>Nombre Fabricante:</label>
+        <input type="text" id="nombre">
+
+        <label>N° Factura:</label>
+        <input type="text" id="numFactura">
+
+        <label>Valor:</label>
+        <input type="number" id="valor">
+
+        <label>Abono:</label>
+        <input type="number" id="abono">
+
+        <label>
+            <input type="checkbox" id="soloAbonar"> Solo Abonar
+        </label>
+
+        <button onclick="guardarFactura()">INGRESAR</button>
+    </div>
+
+    <!-- LISTA -->
+    <div class="card right">
+        <h2>Buscar Fabricante</h2>
+        <input type="text" id="buscar" placeholder="Buscar por nombre o NIT..." onkeyup="filtrar()">
+
+        <table>
+            <thead>
+                <tr>
+                    <th>NIT</th>
+                    <th>Nombre</th>
+                    <th>N° Factura</th>
+                    <th>Valor</th>
+                    <th>Abono</th>
+                    <th>Fecha</th>
+                </tr>
+            </thead>
+            <tbody id="tablaFabricantes"></tbody>
+        </table>
+
+        <div id="totalGeneral"></div>
+    </div>
+
+</div>
+
+<script>
+// =========================
+//   FIREBASE CONFIG
+// =========================
+const firebaseConfig = {
+  apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+  authDomain:"lazapateria-c4157.firebaseapp.com",
+  projectId:"lazapateria-c4157",
+  storageBucket:"lazapateria-c4157.firebasestorage.app",
+  messagingSenderId:"300241769138",
+  appId:"1:300241769138:web:8ca1847de3c4fb5042afab"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+
+// =========================
+// VALIDAR SESIÓN - SOLO ADMIN
+// =========================
+const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
+
+if(!usuario){
+    alert("No hay sesión activa");
+    location.href = "index.html";
+}
+if(usuario.permisos !== "Administrador"){
+    alert("Solo administradores");
+    location.href = "index.html";
+}
+
+document.getElementById("user-info").textContent = `${usuario.usuario} — ${usuario.permisos}`;
+document.getElementById("logout").onclick = ()=>{
+    localStorage.removeItem("datosUsuario");
+    location.href="index.html";
+};
+
+
+// =========================
+// CARGAR DATOS
+// =========================
+let fabricantes = [];
+
+async function cargarFabricantes(){
+    const snapshot = await db.collection("fabricantes").orderBy("fecha","desc").get();
+    fabricantes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderTabla(fabricantes);
+    calcularTotal();
+}
+
+function renderTabla(data){
+    const tbody = document.getElementById("tablaFabricantes");
+    tbody.innerHTML = "";
+
+    data.forEach(f => {
+        tbody.innerHTML += `
+            <tr>
+                <td>${f.nit}</td>
+                <td>${f.nombre}</td>
+                <td>${f.numFactura}</td>
+                <td>$${Number(f.valor).toLocaleString()}</td>
+                <td>$${Number(f.abono).toLocaleString()}</td>
+                <td>${f.fecha}</td>
+            </tr>
+        `;
+    });
+}
+
+function filtrar(){
+    const q = document.getElementById("buscar").value.toLowerCase();
+    const filtrados = fabricantes.filter(
+        f =>
+            f.nombre.toLowerCase().includes(q) ||
+            f.nit.toLowerCase().includes(q)
+    );
+    renderTabla(filtrados);
+}
+
+// =========================
+// CALCULAR TOTAL GENERAL
+// =========================
+function calcularTotal(){
+    let total = 0;
+    fabricantes.forEach(f=>{
+        total += Number(f.valor) - Number(f.abono);
+    });
+    document.getElementById("totalGeneral").textContent =
+        "TOTAL DEUDA GENERAL: $" + total.toLocaleString();
+}
+
+// =========================
+// GUARDAR FACTURA
+// =========================
+async function guardarFactura(){
+
+    const fecha = document.getElementById("fecha").value;
+    const nit = document.getElementById("nit").value;
+    const nombre = document.getElementById("nombre").value;
+    const numFactura = document.getElementById("numFactura").value;
+    const valor = Number(document.getElementById("valor").value);
+    const abono = Number(document.getElementById("abono").value);
+    const soloAbonar = document.getElementById("soloAbonar").checked;
+
+    if(!fecha || !nit || !nombre){
+        alert("Fecha, NIT y Nombre son obligatorios.");
+        return;
+    }
+
+    const data = {
+        fecha,
+        nit,
+        nombre,
+        numFactura,
+        valor: soloAbonar ? 0 : valor,
+        abono,
+        creadoPor: usuario.usuario,
+        creadoFecha: new Date()
+    };
+
+    await db.collection("fabricantes").add(data);
+
+    alert("Registro guardado!");
+    cargarFabricantes();
+}
+
+cargarFabricantes();
+</script>
+
+</body>
+</html>
