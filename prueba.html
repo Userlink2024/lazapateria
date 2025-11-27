@@ -1281,7 +1281,7 @@
                 <!-- BOTÓN PARA ABRIR MODAL DE FILTRADO DE TRANSPORTADORAS -->
                 <button id="abrir_filtrar_transportadoras_btn" onclick="mostrarModal('modal_transportadoras_filter')">Transportadoras</button>
                 <button id="ver_progreso_btn" onclick="window.open('https://userlink2024.github.io/lazapateria/progreso.html', '_blank')">Ver Progreso</button>
-                <button id="Bodeguero_btn" onclick="location.href='https://userlink2024.github.io/lazapateria/indicadordebodega.html'">Bodegueros</button>
+                <button id="Bodeguero_btn" onclick="window.open('https://userlink2024.github.io/lazapateria/indicadordebodega.html', '_blank')">Bodegueros</button>
                 <button id="cuentas_no_admitidas_btn" onclick="mostrarModal('modal_cuentas_no_admitidas')">Cuentas no admitidas</button>
             </div>
         </div>
@@ -1544,6 +1544,9 @@
             <span class="close" onclick="cerrarModal('modal_cuentas_no_admitidas')">&times;</span>
             <h2>Cuentas No Admitidas</h2>
             <span id="gear_icon_cuentas" title="Gestionar Cuentas" onclick="mostrarModal('modal_gestionar_cuentas')" style="display: none;">&#9881;</span>
+            <div class="search-bar-container" style="margin-top: 20px;">
+                <input type="text" id="buscar_cuenta" placeholder="Buscar por nombre o número de cuenta..." oninput="filtrarCuentas()">
+            </div>
             <div id="lista_cuentas_no_admitidas" style="margin-top: 20px;">
                 <!-- Las cuentas se cargarán aquí -->
             </div>
@@ -1566,6 +1569,9 @@
             </div>
             <button type="button" onclick="agregarCuentaNoAdmitida()">Agregar Cuenta</button>
             <h3 style="margin-top: 30px;">Cuentas Existentes</h3>
+            <div class="search-bar-container">
+                <input type="text" id="buscar_cuenta_gestion" placeholder="Buscar por nombre o número de cuenta..." oninput="filtrarCuentasGestion()">
+            </div>
             <div id="lista_cuentas_gestion" style="margin-top: 20px;">
                 <!-- Las cuentas con opciones de editar/eliminar se cargarán aquí -->
             </div>
@@ -3557,6 +3563,8 @@
 
         // ========== FUNCIONES PARA CUENTAS NO ADMITIDAS ==========
         const cuentasNoAdmitidasCollection = db.collection('cuentas_no_admitidas');
+        let todasLasCuentas = []; // Array para almacenar todas las cuentas
+        let todasLasCuentasGestion = []; // Array para almacenar todas las cuentas en gestión
 
         async function loadCuentasNoAdmitidas() {
             const listContainer = document.getElementById('lista_cuentas_no_admitidas');
@@ -3574,23 +3582,62 @@
                 const snapshot = await cuentasNoAdmitidasCollection.orderBy('nombre').get();
                 if (snapshot.empty) {
                     listContainer.innerHTML = '<p>No hay cuentas no admitidas registradas.</p>';
+                    todasLasCuentas = [];
                     return;
                 }
-                let html = '';
+                
+                // Guardar todas las cuentas en el array
+                todasLasCuentas = [];
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    html += `
-                        <div class="cuenta-item">
-                            <p><strong>Nombre:</strong> ${data.nombre}</p>
-                            <p><strong>Número de Cuenta:</strong> ${data.numero}</p>
-                        </div>
-                    `;
+                    todasLasCuentas.push({
+                        id: doc.id,
+                        nombre: data.nombre,
+                        numero: data.numero
+                    });
                 });
-                listContainer.innerHTML = html;
+                
+                // Renderizar todas las cuentas
+                renderCuentas(todasLasCuentas);
             } catch (error) {
                 console.error("Error cargando cuentas no admitidas:", error);
                 listContainer.innerHTML = '<p>Error al cargar cuentas.</p>';
             }
+        }
+
+        function renderCuentas(cuentas) {
+            const listContainer = document.getElementById('lista_cuentas_no_admitidas');
+            if (cuentas.length === 0) {
+                listContainer.innerHTML = '<p>No se encontraron cuentas.</p>';
+                return;
+            }
+            
+            let html = '';
+            cuentas.forEach(cuenta => {
+                html += `
+                    <div class="cuenta-item">
+                        <p><strong>Nombre:</strong> ${cuenta.nombre}</p>
+                        <p><strong>Número de Cuenta:</strong> ${cuenta.numero}</p>
+                    </div>
+                `;
+            });
+            listContainer.innerHTML = html;
+        }
+
+        function filtrarCuentas() {
+            const searchTerm = document.getElementById('buscar_cuenta').value.toLowerCase().trim();
+            
+            if (!searchTerm) {
+                renderCuentas(todasLasCuentas);
+                return;
+            }
+            
+            const cuentasFiltradas = todasLasCuentas.filter(cuenta => 
+                cuenta.nombre.toLowerCase().includes(searchTerm) || 
+                cuenta.numero.toLowerCase().includes(searchTerm)
+            );
+            
+            renderCuentas(cuentasFiltradas);
         }
 
         async function loadCuentasParaGestion() {
@@ -3600,25 +3647,64 @@
                 const snapshot = await cuentasNoAdmitidasCollection.orderBy('nombre').get();
                 if (snapshot.empty) {
                     listContainer.innerHTML = '<p>No hay cuentas registradas.</p>';
+                    todasLasCuentasGestion = [];
                     return;
                 }
-                let html = '';
+                
+                // Guardar todas las cuentas en el array
+                todasLasCuentasGestion = [];
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    html += `
-                        <div class="cuenta-item">
-                            <p><strong>Nombre:</strong> <span class="cuenta-nombre">${data.nombre}</span></p>
-                            <p><strong>Número:</strong> <span class="cuenta-numero">${data.numero}</span></p>
-                            <button class="edit" onclick="editarCuenta('${doc.id}', '${data.nombre}', '${data.numero}')">Editar</button>
-                            <button class="delete" onclick="eliminarCuenta('${doc.id}')">Eliminar</button>
-                        </div>
-                    `;
+                    todasLasCuentasGestion.push({
+                        id: doc.id,
+                        nombre: data.nombre,
+                        numero: data.numero
+                    });
                 });
-                listContainer.innerHTML = html;
+                
+                // Renderizar todas las cuentas
+                renderCuentasGestion(todasLasCuentasGestion);
             } catch (error) {
                 console.error("Error cargando cuentas para gestión:", error);
                 listContainer.innerHTML = '<p>Error al cargar cuentas.</p>';
             }
+        }
+
+        function renderCuentasGestion(cuentas) {
+            const listContainer = document.getElementById('lista_cuentas_gestion');
+            if (cuentas.length === 0) {
+                listContainer.innerHTML = '<p>No se encontraron cuentas.</p>';
+                return;
+            }
+            
+            let html = '';
+            cuentas.forEach(cuenta => {
+                html += `
+                    <div class="cuenta-item">
+                        <p><strong>Nombre:</strong> <span class="cuenta-nombre">${cuenta.nombre}</span></p>
+                        <p><strong>Número:</strong> <span class="cuenta-numero">${cuenta.numero}</span></p>
+                        <button class="edit" onclick="editarCuenta('${cuenta.id}', '${cuenta.nombre}', '${cuenta.numero}')">Editar</button>
+                        <button class="delete" onclick="eliminarCuenta('${cuenta.id}')">Eliminar</button>
+                    </div>
+                `;
+            });
+            listContainer.innerHTML = html;
+        }
+
+        function filtrarCuentasGestion() {
+            const searchTerm = document.getElementById('buscar_cuenta_gestion').value.toLowerCase().trim();
+            
+            if (!searchTerm) {
+                renderCuentasGestion(todasLasCuentasGestion);
+                return;
+            }
+            
+            const cuentasFiltradas = todasLasCuentasGestion.filter(cuenta => 
+                cuenta.nombre.toLowerCase().includes(searchTerm) || 
+                cuenta.numero.toLowerCase().includes(searchTerm)
+            );
+            
+            renderCuentasGestion(cuentasFiltradas);
         }
 
         async function agregarCuentaNoAdmitida() {
