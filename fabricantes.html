@@ -230,9 +230,9 @@ document.getElementById('user-info').textContent = `${usuario.usuario} — ${usu
 document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
 
 /* ========== ESTADO ========== */
-let registros = []; // todos los docs
+let registros = []; 
 let currentModalNit = null;
-let grouped = {}; // agrupados por numFactura
+let grouped = {}; 
 let editingDocId = null;
 let chartBar = null, chartDonut = null;
 
@@ -249,12 +249,12 @@ toggleDark.onclick = ()=>{
 
 /* ========== CARGAR TODOS ========== */
 async function cargarTodos(){
-  const snap = await db.collection(COLECCION).orderBy('fecha','desc').get();
+  const snap = await db.collection(COLECCION).get();
   registros = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-  // normalizar fecha string
-  registros = registros.map(r => {
-    if(r.fecha && r.fecha.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10);
-    return r;
+  registros = registros.map(r=>{ 
+    if(r.fecha && r.fecha.seconds) 
+      r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); 
+    return r; 
   });
   renderTabla(registros);
   actualizarTotales(registros);
@@ -270,6 +270,7 @@ function renderTabla(list){
     const abono = Number(r.abono||0);
     const saldo = valor - abono;
     const tipo = valor>0 ? 'Factura' : 'ABONO GENERAL';
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.nit||''}</td>
@@ -281,10 +282,15 @@ function renderTabla(list){
       <td>${r.fecha||''}</td>
       <td>${tipo}</td>
     `;
-    // double click -> modal
-    tr.ondblclick = ()=> openModal(r.nit, r.nombre);
-    // click nombre -> autollenar
-    tr.querySelector('.name-link').onclick = (e)=>{ e.stopPropagation(); document.getElementById('nit').value = r.nit||''; document.getElementById('nombre').value = r.nombre||''; document.getElementById('numFactura').focus(); };
+
+    tr.ondblclick = ()=> openModal(r.nit?.toString().trim(), r.nombre?.toString().trim());
+    tr.querySelector('.name-link').onclick = (e)=>{ 
+      e.stopPropagation();  
+      document.getElementById('nit').value = r.nit||''; 
+      document.getElementById('nombre').value = r.nombre||''; 
+      document.getElementById('numFactura').focus(); 
+    };
+
     tbody.appendChild(tr);
   });
   document.getElementById('countRegs').textContent = list.length;
@@ -294,7 +300,10 @@ function renderTabla(list){
 function filtrar(){
   const q = document.getElementById('buscar').value.trim().toLowerCase();
   const out = registros.filter(r=>{
-    return (!q) || ( (r.nit||'').toLowerCase().includes(q) || (r.nombre||'').toLowerCase().includes(q) || (r.numFactura||'').toLowerCase().includes(q) );
+    return (!q) || 
+      ( (r.nit||'').toLowerCase().includes(q) || 
+        (r.nombre||'').toLowerCase().includes(q) || 
+        (r.numFactura||'').toLowerCase().includes(q) );
   });
   renderTabla(out);
   actualizarTotales(out);
@@ -305,16 +314,7 @@ function actualizarTotales(list){
   const totalFact = list.reduce((s,x)=> s + Number(x.valor||0), 0);
   const totalAb = list.reduce((s,x)=> s + Number(x.abono||0), 0);
   document.getElementById('totalGeneral').textContent = '$' + (totalFact - totalAb).toLocaleString();
-
-  // deuda filtro
-  document.getElementById('deudaFiltro').textContent = '$' + ((totalFact - totalAb).toLocaleString());
-}
-
-/* ========== AUTOLLENAR ========== */
-function autollenar(nit, nombre){
-  document.getElementById('nit').value = nit;
-  document.getElementById('nombre').value = nombre;
-  document.getElementById('numFactura').focus();
+  document.getElementById('deudaFiltro').textContent = '$' + (totalFact - totalAb).toLocaleString();
 }
 
 /* ========== SOLO ABONAR ========== */
@@ -328,7 +328,7 @@ document.getElementById('soloAbonar').onchange = function(){
   }
 };
 
-/* ========== GUARDAR (Factura o Abono como doc independiente) ========== */
+/* ========== GUARDAR ========== */
 document.getElementById('btnGuardar').onclick = async function(){
   const fecha = document.getElementById('fecha').value || new Date().toISOString().slice(0,10);
   const nit = (document.getElementById('nit').value||'').trim();
@@ -340,13 +340,11 @@ document.getElementById('btnGuardar').onclick = async function(){
 
   if(!nit || !nombre){ alert('Completa NIT y Nombre'); return; }
 
-  // Si solo abonar -> creamos documento con abono
   if(solo || abono>0){
-    await db.collection(COLECCION).add({ fecha, nit, nombre, numFactura, valor:0, abono: abono, creadoPor: usuario.usuario, creadoEn: new Date() });
+    await db.collection(COLECCION).add({ fecha, nit, nombre, numFactura, valor:0, abono: abono });
   }
-  // Si valor > 0 -> crear factura documento
   if(!solo && valor>0){
-    await db.collection(COLECCION).add({ fecha, nit, nombre, numFactura, valor: valor, abono: 0, creadoPor: usuario.usuario, creadoEn: new Date() });
+    await db.collection(COLECCION).add({ fecha, nit, nombre, numFactura, valor: valor, abono: 0 });
   }
 
   alert('Guardado correctamente');
@@ -367,214 +365,228 @@ function limpiarFormulario(){
   document.getElementById('valor').disabled = false;
 }
 
-/* ========== MODAL: abrir, agrupar por factura, mostrar resumen y gráficos ========== */
+/* ========== MODAL: abrir ========== */
 async function openModal(nit, nombre){
+
+  nit = nit?.toString().trim();
+  nombre = nombre?.toString().trim();
+
   currentModalNit = nit;
+
   document.getElementById('modalTitle').textContent = `Historial: ${nombre || nit}`;
   document.getElementById('modalNit').textContent = nit;
-  document.getElementById('modalBackdrop').style.display = 'flex';
-  // traer docs por nit
-  const snap = await db.collection(COLECCION).where('nit','==',nit).orderBy('fecha','desc').get();
-  const rows = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-  // normalizar fecha
-  rows.forEach(r=> { if(r.fecha && r.fecha.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); });
+  document.getElementById('modalBackdrop').style.display = "flex";
 
-  // agrupar por numFactura
+  const snapshot = await db.collection(COLECCION)
+        .where("nit", "==", nit)
+        .get();
+
+  if(snapshot.empty){
+      document.getElementById("modalSummary").innerHTML =
+          "<tr><td colspan='6'>No existen registros para este fabricante.</td></tr>";
+      document.getElementById("modalTotal").textContent = "$0";
+      return;
+  }
+
+  const rows = snapshot.docs.map(d=>({ id:d.id, ...d.data() }));
+  rows.forEach(r=>{ 
+    if(r.fecha && r.fecha.seconds) 
+      r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); 
+  });
+
   grouped = {};
   rows.forEach(r=>{
-    const key = r.numFactura || '__sin__';
-    if(!grouped[key]) grouped[key] = { numFactura: key, facturas: [], abonos: [], docs: [] };
+    const key = r.numFactura || '-';
+    if(!grouped[key]) grouped[key] = { numFactura:key, facturas:[], abonos:[], docs:[] };
     grouped[key].docs.push(r);
-    if(Number(r.valor||0) > 0) grouped[key].facturas.push(r);
-    if(Number(r.abono||0) > 0) grouped[key].abonos.push(r);
+    if(r.valor>0) grouped[key].facturas.push(r);
+    if(r.abono>0) grouped[key].abonos.push(r);
   });
 
   renderModalSummaryAndCharts();
   renderDetalleRows(rows);
 }
 
-/* render resumen (tabla agrupada) y generar gráficos */
+/* ========== RESUMEN + GRÁFICOS ========== */
 function renderModalSummaryAndCharts(){
-  const tbody = document.getElementById('modalSummary'); tbody.innerHTML = '';
-  let totalFact = 0, totalAb = 0;
+  const tbody = document.getElementById('modalSummary');
+  tbody.innerHTML = '';
+
   const keys = Object.keys(grouped);
+  let totalFact = 0, totalAb = 0;
+
   keys.forEach((k,i)=>{
     const g = grouped[k];
     const sumFact = g.facturas.reduce((s,x)=> s + Number(x.valor||0), 0);
     const sumAb = g.abonos.reduce((s,x)=> s + Number(x.abono||0), 0);
-    const saldo = sumFact - sumAb;
     totalFact += sumFact; totalAb += sumAb;
+    const saldo = sumFact - sumAb;
+
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${i+1}</td>
-      <td>${escapeHtml(g.numFactura)}</td>
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td>${k}</td>
       <td>$${sumFact.toLocaleString()}</td>
       <td>$${sumAb.toLocaleString()}</td>
       <td>$${saldo.toLocaleString()}</td>
-      <td><button class="btn" onclick="mostrarDetalles('${escapeForJs(g.numFactura)}')">Ver</button></td>`;
+      <td><button class='btn' onclick="mostrarDetalles('${escapeForJs(k)}')">Ver</button></td>
+    `;
     tbody.appendChild(tr);
   });
 
-  document.getElementById('modalTotal').textContent = '$' + (totalFact - totalAb).toLocaleString();
+  document.getElementById('modalTotal').textContent = "$" + (totalFact - totalAb).toLocaleString();
 
-  // charts: barra (facturas vs abonos por factura)
-  const labels = keys.map(k=> k);
+  const labels = keys;
   const dataFact = keys.map(k=> grouped[k].facturas.reduce((s,x)=> s + Number(x.valor||0),0));
-  const dataAbonos = keys.map(k=> grouped[k].abonos.reduce((s,x)=> s + Number(x.abono||0),0));
-  renderCharts(labels, dataFact, dataAbonos, totalFact, totalAb);
+  const dataAb = keys.map(k=> grouped[k].abonos.reduce((s,x)=> s + Number(x.abono||0),0));
+
+  renderCharts(labels, dataFact, dataAb, totalFact, totalAb);
 }
 
-/* render detalle (lista doc) */
-function renderDetalleRows(rows){
-  const cont = document.getElementById('detalleList');
-  cont.innerHTML = `<h4 style="margin:8px 0">Detalles (facturas y abonos)</h4>`;
-  let html = `<table style="width:100%; border-collapse:collapse;"><thead><tr><th>#</th><th>Tipo</th><th>N° Factura</th><th>Valor</th><th>Abono</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>`;
-  rows.forEach((r,i)=>{
-    const tipo = Number(r.valor||0) > 0 ? 'Factura' : 'ABONO GENERAL';
-    html += `<tr><td>${i+1}</td><td>${tipo}</td><td>${r.numFactura||''}</td><td>$${Number(r.valor||0).toLocaleString()}</td><td>$${Number(r.abono||0).toLocaleString()}</td><td>${r.fecha||''}</td>
-      <td>
-        <button class="btn" onclick="startEdit('${r.id}')">Editar</button>
-        <button class="btn" style="background:${'#d63031'}; color:#fff" onclick="confirmDelete('${r.id}')">Eliminar</button>
-      </td></tr>`;
-  });
-  html += `</tbody></table>`;
-  cont.innerHTML += html;
-}
-
-/* mostrar solo los docs de una factura (botón ver) */
-async function mostrarDetalles(numFactura){
-  const snap = await db.collection(COLECCION).where('nit','==',currentModalNit).where('numFactura','==',numFactura).orderBy('fecha','desc').get();
-  const rows = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-  rows.forEach(r=>{ if(r.fecha && r.fecha.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); });
-  renderDetalleRows(rows);
-}
-
-/* ========== GRÁFICOS ========== */
-function renderCharts(labels, dataFact, dataAbonos, totalFact, totalAb){
-  // destroy previous
+function renderCharts(labels, fact, abonos, totalFact, totalAb){
   if(chartBar) chartBar.destroy();
   if(chartDonut) chartDonut.destroy();
 
-  const ctxBar = document.getElementById('chartBar').getContext('2d');
-  chartBar = new Chart(ctxBar, {
+  chartBar = new Chart(document.getElementById('chartBar'), {
     type:'bar',
     data:{
       labels,
       datasets:[
-        { label:'Facturas', data: dataFact, backgroundColor:'#0984e3' },
-        { label:'Abonos', data: dataAbonos, backgroundColor:'#00b894' }
+        { label:'Facturas', data:fact, backgroundColor:'#0984e3' },
+        { label:'Abonos', data:abonos, backgroundColor:'#00b894' }
       ]
     },
-    options:{ responsive:true, plugins:{legend:{position:'bottom'}} }
+    options:{plugins:{legend:{position:'bottom'}}}
   });
 
-  const ctxDonut = document.getElementById('chartDonut').getContext('2d');
-  chartDonut = new Chart(ctxDonut, {
+  chartDonut = new Chart(document.getElementById('chartDonut'), {
     type:'doughnut',
     data:{
       labels:['Facturas','Abonos'],
-      datasets:[{ data:[totalFact || 0, totalAb || 0], backgroundColor:['#0984e3','#00b894'] }]
+      datasets:[{ data:[totalFact, totalAb], backgroundColor:['#0984e3','#00b894'] }]
     },
-    options:{ responsive:true, plugins:{legend:{position:'bottom'}} }
+    options:{plugins:{legend:{position:'bottom'}}}
   });
 }
 
-/* ========== EDIT INLINE ========== */
-function startEdit(docId){
-  editingDocId = docId;
-  // find doc in registros (if present) otherwise fetch
-  const doc = registros.find(r=> r.id === docId);
-  if(doc){
-    document.getElementById('edit_numFactura').value = doc.numFactura || '';
-    document.getElementById('edit_valor').value = doc.valor || 0;
-    document.getElementById('edit_abono').value = doc.abono || 0;
-    document.getElementById('edit_fecha').value = doc.fecha || '';
-  } else {
-    // fetch single doc
-    db.collection(COLECCION).doc(docId).get().then(d=>{
-      if(d.exists){ const data = d.data();
-        document.getElementById('edit_numFactura').value = data.numFactura||'';
-        document.getElementById('edit_valor').value = data.valor||0;
-        document.getElementById('edit_abono').value = data.abono||0;
-        document.getElementById('edit_fecha').value = data.fecha || '';
-      }
-    });
-  }
-  document.getElementById('editorPanel').style.display = 'block';
-  document.getElementById('editorPanel').scrollIntoView({behavior:'smooth'});
+/* ========== DETALLE ========== */
+function renderDetalleRows(rows){
+  const cont = document.getElementById('detalleList');
+  cont.innerHTML = `<h4>Detalles (facturas y abonos)</h4>`;
+
+  let html = `<table style='width:100%;border-collapse:collapse;'>
+    <thead><tr><th>#</th><th>Tipo</th><th>N° Factura</th><th>Valor</th><th>Abono</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>`;
+
+  rows.forEach((r,i)=>{
+    const tipo = r.valor>0 ? "Factura" : "ABONO GENERAL";
+    html += `<tr>
+      <td>${i+1}</td>
+      <td>${tipo}</td>
+      <td>${r.numFactura}</td>
+      <td>$${Number(r.valor||0).toLocaleString()}</td>
+      <td>$${Number(r.abono||0).toLocaleString()}</td>
+      <td>${r.fecha||''}</td>
+      <td>
+        <button class='btn' onclick="startEdit('${r.id}')">Editar</button>
+        <button class='btn' style='background:#d63031;color:white' onclick="confirmDelete('${r.id}')">Eliminar</button>
+      </td>
+    </tr>`;
+  });
+
+  html += "</tbody></table>";
+  cont.innerHTML += html;
 }
 
-document.getElementById('saveEditBtn').onclick = async function(){
-  if(!editingDocId) return alert('No hay documento seleccionado');
-  const numFactura = document.getElementById('edit_numFactura').value.trim();
-  const valor = Number(document.getElementById('edit_valor').value || 0);
-  const abono = Number(document.getElementById('edit_abono').value || 0);
-  const fecha = document.getElementById('edit_fecha').value || new Date().toISOString().slice(0,10);
+/* ========== VER SOLO UNA FACTURA ========== */
+async function mostrarDetalles(numFactura){
+  const snap = await db.collection(COLECCION)
+    .where("nit","==",currentModalNit)
+    .where("numFactura","==",numFactura)
+    .get();
 
-  await db.collection(COLECCION).doc(editingDocId).update({ numFactura, valor, abono, fecha });
-  alert('Documento actualizado');
+  const rows = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+  rows.forEach(r=>{ if(r.fecha?.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); });
+  renderDetalleRows(rows);
+}
+
+/* ========== EDITAR INLINE ========== */
+function startEdit(id){
+  editingDocId = id;
+  const doc = registros.find(x=> x.id === id);
+  if(doc){
+    document.getElementById('edit_numFactura').value = doc.numFactura;
+    document.getElementById('edit_valor').value = doc.valor;
+    document.getElementById('edit_abono').value = doc.abono;
+    document.getElementById('edit_fecha').value = doc.fecha;
+  }
+  document.getElementById('editorPanel').style.display = 'block';
+}
+
+document.getElementById('saveEditBtn').onclick = async ()=>{
+  if(!editingDocId) return;
+  await db.collection(COLECCION).doc(editingDocId).update({
+    numFactura: document.getElementById('edit_numFactura').value,
+    valor: Number(document.getElementById('edit_valor').value||0),
+    abono: Number(document.getElementById('edit_abono').value||0),
+    fecha: document.getElementById('edit_fecha').value
+  });
   editingDocId = null;
   document.getElementById('editorPanel').style.display = 'none';
   await cargarTodos();
-  if(currentModalNit) openModal(currentModalNit, document.getElementById('modalTitle').textContent.replace('Historial: ',''));
+  openModal(currentModalNit, document.getElementById('modalTitle').textContent.replace("Historial: ",""));
 };
 
-function cancelEdit(){ editingDocId = null; document.getElementById('editorPanel').style.display = 'none'; }
+function cancelEdit(){
+  editingDocId = null;
+  document.getElementById('editorPanel').style.display = 'none';
+}
 
 /* ========== ELIMINAR ========== */
-function confirmDelete(docId){
-  if(confirm('¿Eliminar este documento?')) {
-    db.collection(COLECCION).doc(docId).delete().then(()=>{ alert('Eliminado'); cargarTodos(); if(currentModalNit) openModal(currentModalNit, document.getElementById('modalTitle').textContent.replace('Historial: ','')); });
+function confirmDelete(id){
+  if(confirm("¿Eliminar documento?")){
+    db.collection(COLECCION).doc(id).delete().then(()=>{
+      alert("Eliminado");
+      cargarTodos();
+      openModal(currentModalNit, document.getElementById('modalTitle').textContent.replace("Historial: ",""));
+    })
   }
 }
 
 /* ========== CERRAR MODAL ========== */
 function cerrarModal(){
-  document.getElementById('modalBackdrop').style.display = 'none';
-  grouped = {}; currentModalNit = null;
-  if(chartBar){ chartBar.destroy(); chartBar = null; }
-  if(chartDonut){ chartDonut.destroy(); chartDonut = null; }
+  document.getElementById('modalBackdrop').style.display = "none";
+  grouped = {};
+  if(chartBar){ chartBar.destroy(); chartBar=null; }
+  if(chartDonut){ chartDonut.destroy(); chartDonut=null; }
 }
 
-/* ========== EXPORTAR A EXCEL (FORMATO IGUAL A TU EXCEL) ========== */
+/* ========== EXPORTAR A EXCEL ========== */
 function exportarExcel(){
-  // Usar la lista actual filtrada
   const q = document.getElementById('buscar').value.trim().toLowerCase();
-  const data = registros.filter(r => {
+  const data = registros.filter(r=>{
     if(!q) return true;
-    return (r.nit||'').toLowerCase().includes(q) || (r.nombre||'').toLowerCase().includes(q) || (r.numFactura||'').toLowerCase().includes(q);
+    return r.nit?.toLowerCase().includes(q) || r.nombre?.toLowerCase().includes(q) || r.numFactura?.toLowerCase().includes(q);
   }).map(r=>({
-    NIT: r.nit || '',
-    NOMBRE: r.nombre || '',
-    "NÚMERO DE FACTURA": r.numFactura || '',
-    VALOR: Number(r.valor||0),
-    ABONO: Number(r.abono||0),
-    "VALOR TOT": Number(r.valor||0) - Number(r.abono||0),
-    FECHA: r.fecha || ''
+    NIT:r.nit,
+    NOMBRE:r.nombre,
+    "NÚMERO DE FACTURA":r.numFactura,
+    VALOR:r.valor,
+    ABONO:r.abono,
+    "VALOR TOT":(r.valor - r.abono),
+    FECHA:r.fecha
   }));
 
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Fabricantes");
-  XLSX.writeFile(wb, "Fabricantes.xlsx");
+  const hoja = XLSX.utils.json_to_sheet(data);
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, "Fabricantes");
+  XLSX.writeFile(libro, "Fabricantes.xlsx");
 }
 
-/* ========== UTIL ========== */
-function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function escapeForJs(s){ if(s===undefined||s===null) return ''; return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"'); }
-
-/* ========== RECARGAR DATOS PRINCIPALES Y UI ========== */
-async function cargarTodos(){
-  const snap = await db.collection(COLECCION).orderBy('fecha','desc').get();
-  registros = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-  registros = registros.map(r=>{ if(r.fecha && r.fecha.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); return r; });
-  renderTabla(registros);
-  actualizarTotales(registros);
-}
-window.cargarTodos = cargarTodos;
-
-/* iniciar */
-cargarTodos();
+/* === util === */
+function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function escapeForJs(s){ return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
 </script>
+
 </body>
 </html>
