@@ -1662,10 +1662,22 @@
         }
 
 
-        const mostrarModal = id => {
+        const mostrarModal = async id => {
             document.getElementById(id).style.display = 'flex';
             // Si el modal de opciones de bloqueo se abre, actualiza el estado de los checkboxes
             if (id === 'block_options_modal') {
+                // Consultar Firebase directamente para obtener el estado más reciente
+                try {
+                    const doc = await globalSettingsRef.get();
+                    if (doc.exists) {
+                        const data = doc.data();
+                        isAutoBlockEnabled = data.isAutoBlockEnabled || false;
+                        isGlobalManualBlock = data.isBlocked || false;
+                    }
+                } catch (error) {
+                    console.error("Error al obtener estado de Firebase:", error);
+                }
+                
                 // El checkbox de auto_block_checkbox ahora refleja isAutoBlockEnabled
                 document.getElementById('auto_block_checkbox').checked = isAutoBlockEnabled;
                 document.getElementById('global_manual_block_checkbox').checked = isGlobalManualBlock;
@@ -3794,7 +3806,10 @@
             } else { // Si se está marcando (poner el chulo)
                 try {
                     await globalSettingsRef.set({ isBlocked: true }, { merge: true });
-                    isGlobalManualBlock = true;
+                    // Esperar confirmación de Firebase antes de actualizar estado local
+                    const doc = await globalSettingsRef.get();
+                    isGlobalManualBlock = doc.data().isBlocked || false;
+                    checkbox.checked = isGlobalManualBlock; // Sincronizar checkbox con Firebase
                     playConfirmationSound(); // Play sound
                     console.log("Bloqueo inmediato activado globalmente.");
                 } catch (error) {
@@ -3827,9 +3842,13 @@
                     // 2. Desactivar el estado de bloqueo permanente (isAutoBlockedPermanently = false)
                     // 3. Establecer lastAutoBlockTriggerDate a null para que se pueda activar al día siguiente
                     await globalSettingsRef.set({ isAutoBlockEnabled: true, isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: null }, { merge: true });
-                    isAutoBlockEnabled = true;
-                    isAutoBlockedPermanently = false; // Actualizar estado local
-                    lastAutoBlockTriggerDate = null; // Actualizar estado local
+                    // Esperar confirmación de Firebase antes de actualizar estado local
+                    const doc = await globalSettingsRef.get();
+                    const data = doc.data();
+                    isAutoBlockEnabled = data.isAutoBlockEnabled || false;
+                    isAutoBlockedPermanently = data.isAutoBlockedPermanently || false;
+                    lastAutoBlockTriggerDate = data.lastAutoBlockTriggerDate || null;
+                    checkbox.checked = isAutoBlockEnabled; // Sincronizar checkbox con Firebase
                     playConfirmationSound(); // Play sound
                     console.log("Mecanismo de Bloqueo Automático habilitado y estado de bloqueo permanente y fecha de activación reiniciados.");
                 } catch (error) {
@@ -3958,7 +3977,12 @@
                 if (blockType === 'global_manual') {
                     try {
                         await globalSettingsRef.set({ isBlocked: false }, { merge: true });
-                        isGlobalManualBlock = false;
+                        // Esperar confirmación de Firebase antes de actualizar estado local
+                        const doc = await globalSettingsRef.get();
+                        isGlobalManualBlock = doc.data().isBlocked || false;
+                        if (currentPasswordModalTargetCheckbox) {
+                            currentPasswordModalTargetCheckbox.checked = isGlobalManualBlock; // Sincronizar checkbox
+                        }
                         playConfirmationSound(); // Play sound
                         console.log("Bloqueo inmediato deshabilitado globalmente.");
                     }
@@ -3977,9 +4001,15 @@
                         // 2. Desactivar el estado de bloqueo permanente (isAutoBlockedPermanently = false)
                         // 3. Marcar la fecha actual para que no se reactive HOY.
                         await globalSettingsRef.set({ isAutoBlockEnabled: false, isAutoBlockedPermanently: false, lastAutoBlockTriggerDate: todayDate }, { merge: true });
-                        isAutoBlockEnabled = false; // Actualizar estado local
-                        isAutoBlockedPermanently = false; // Actualizar estado local
-                        lastAutoBlockTriggerDate = todayDate; // Actualizar estado local
+                        // Esperar confirmación de Firebase antes de actualizar estado local
+                        const doc = await globalSettingsRef.get();
+                        const data = doc.data();
+                        isAutoBlockEnabled = data.isAutoBlockEnabled || false;
+                        isAutoBlockedPermanently = data.isAutoBlockedPermanently || false;
+                        lastAutoBlockTriggerDate = data.lastAutoBlockTriggerDate || null;
+                        if (currentPasswordModalTargetCheckbox) {
+                            currentPasswordModalTargetCheckbox.checked = isAutoBlockEnabled; // Sincronizar checkbox
+                        }
                         playConfirmationSound(); // Play sound
                         console.log("Mecanismo de Bloqueo Automático deshabilitado y Bloqueo Permanente desactivado para hoy.");
                     } catch (error) {
