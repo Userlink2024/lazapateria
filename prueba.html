@@ -146,9 +146,19 @@
             background-image: linear-gradient(135deg, #800000 0%, #804000 100%); /* Brown for distinction */
             box-shadow: 0 4px 10px rgba(23, 162, 184, 0.2);
         }
-                #Bodeguero_btn:hover {
+        #Bodeguero_btn:hover {
             background-image: linear-gradient(135deg, #804000 0%, #800000 100%);
             box-shadow: 0 6px 15px rgba(23, 162, 184, 0.3);
+        }
+        
+        /* Style for the "Cuentas no admitidas" button */
+        #cuentas_no_admitidas_btn {
+            background-image: linear-gradient(135deg, #4a4a4a 0%, #2c2c2c 100%); /* Dark gray gradient */
+            box-shadow: 0 4px 10px rgba(74, 74, 74, 0.2);
+        }
+        #cuentas_no_admitidas_btn:hover {
+            background-image: linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 100%);
+            box-shadow: 0 6px 15px rgba(74, 74, 74, 0.3);
         }
         /* Modals */
         .modal {
@@ -892,6 +902,42 @@
         .search-bar-container {
             margin-bottom: 20px;
         }
+
+        /* Cuentas No Admitidas Styles */
+        .cuenta-item {
+            background-color: #fdfdfd;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+        }
+        .cuenta-item p {
+            margin: 5px 0;
+            font-size: 0.95em;
+        }
+        .cuenta-item strong {
+            color: #28a745;
+        }
+        .cuenta-item button {
+            margin-top: 10px;
+            margin-right: 10px;
+            padding: 8px 15px;
+            font-size: 0.9em;
+        }
+        .cuenta-item button.delete {
+            background-image: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+        .cuenta-item button.delete:hover {
+            background-image: linear-gradient(135deg, #c82333 0%, #bb2d3b 100%);
+        }
+        .cuenta-item button.edit {
+            background-image: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+            color: #333;
+        }
+        .cuenta-item button.edit:hover {
+            background-image: linear-gradient(135deg, #e0a800 0%, #c28800 100%);
+        }
         .search-bar-container input {
             width: calc(100% - 30px); /* Adjust for padding */
         }
@@ -1005,6 +1051,21 @@
         }
         #gear_icon:hover {
             transform: rotate(30deg); /* Slight rotation on hover */
+        }
+
+        /* Gear Icon for Cuentas Modal */
+        #gear_icon_cuentas {
+            font-size: 2em;
+            cursor: pointer;
+            color: #28a745;
+            position: absolute;
+            top: 20px;
+            right: 60px;
+            z-index: 10;
+            transition: transform 0.3s ease-out;
+        }
+        #gear_icon_cuentas:hover {
+            transform: rotate(30deg);
         }
 
         /* Back Arrow Button */
@@ -1221,6 +1282,7 @@
                 <button id="abrir_filtrar_transportadoras_btn" onclick="mostrarModal('modal_transportadoras_filter')">Transportadoras</button>
                 <button id="ver_progreso_btn" onclick="window.open('https://userlink2024.github.io/lazapateria/progreso.html', '_blank')">Ver Progreso</button>
                 <button id="Bodeguero_btn" onclick="location.href='https://userlink2024.github.io/lazapateria/indicadordebodega.html'">Bodegueros</button>
+                <button id="cuentas_no_admitidas_btn" onclick="mostrarModal('modal_cuentas_no_admitidas')">Cuentas no admitidas</button>
             </div>
         </div>
         <div id="resumen_asesores" style="margin-top: 20px;">
@@ -1475,6 +1537,41 @@
         </div>
     </div>
 
+
+    <!-- MODAL PARA CUENTAS NO ADMITIDAS -->
+    <div id="modal_cuentas_no_admitidas" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_cuentas_no_admitidas')">&times;</span>
+            <h2>Cuentas No Admitidas</h2>
+            <span id="gear_icon_cuentas" title="Gestionar Cuentas" onclick="mostrarModal('modal_gestionar_cuentas')" style="display: none;">&#9881;</span>
+            <div id="lista_cuentas_no_admitidas" style="margin-top: 20px;">
+                <!-- Las cuentas se cargarán aquí -->
+            </div>
+            <button type="button" onclick="cerrarModal('modal_cuentas_no_admitidas')">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- MODAL PARA GESTIONAR CUENTAS NO ADMITIDAS (SOLO ADMIN) -->
+    <div id="modal_gestionar_cuentas" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="cerrarModal('modal_gestionar_cuentas')">&times;</span>
+            <h2>Gestionar Cuentas No Admitidas</h2>
+            <div class="form-field">
+                <label>Nombre:</label>
+                <input type="text" id="cuenta_nombre" placeholder="Nombre de la cuenta">
+            </div>
+            <div class="form-field">
+                <label>Número de Cuenta:</label>
+                <input type="text" id="cuenta_numero" placeholder="Número de cuenta">
+            </div>
+            <button type="button" onclick="agregarCuentaNoAdmitida()">Agregar Cuenta</button>
+            <h3 style="margin-top: 30px;">Cuentas Existentes</h3>
+            <div id="lista_cuentas_gestion" style="margin-top: 20px;">
+                <!-- Las cuentas con opciones de editar/eliminar se cargarán aquí -->
+            </div>
+            <p id="cuenta_error_message" class="error-message"></p>
+        </div>
+    </div>
 
     <div id="block_overlay" class="block-overlay">
         <div class="block-circle">
@@ -1742,6 +1839,16 @@
                 document.getElementById('filtro_transportadora_select').value = ''; // Reset selected transportadora
                 document.getElementById('pending_orders_list_container').innerHTML = '<p>Seleccione una transportadora para ver los pedidos pendientes.</p>';
             }
+            if (id === 'modal_cuentas_no_admitidas') {
+                loadCuentasNoAdmitidas(); // Cargar cuentas no admitidas
+            }
+            if (id === 'modal_gestionar_cuentas') {
+                document.getElementById('cuenta_error_message').textContent = ''; // Limpiar mensaje de error
+                document.getElementById('cuenta_nombre').value = ''; // Limpiar campos
+                document.getElementById('cuenta_numero').value = '';
+                loadCuentasParaGestion(); // Cargar cuentas para gestión
+            }
+        }
             // La limpieza del campo de búsqueda se maneja ahora en iniciarVistaPedidosEnTiempoReal() y los listeners de los botones de filtro.
         };
 
@@ -3447,6 +3554,151 @@
                 }, 3000);
                 return []; // Return empty array to prevent further issues
             }
+        }
+
+        // ========== FUNCIONES PARA CUENTAS NO ADMITIDAS ==========
+        const cuentasNoAdmitidasCollection = db.collection('cuentas_no_admitidas');
+
+        async function loadCuentasNoAdmitidas() {
+            const listContainer = document.getElementById('lista_cuentas_no_admitidas');
+            const gearIcon = document.getElementById('gear_icon_cuentas');
+            
+            // Mostrar tuerca solo para administradores
+            if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+                gearIcon.style.display = 'inline';
+            } else {
+                gearIcon.style.display = 'none';
+            }
+
+            listContainer.innerHTML = '<p>Cargando cuentas...</p>';
+            try {
+                const snapshot = await cuentasNoAdmitidasCollection.orderBy('nombre').get();
+                if (snapshot.empty) {
+                    listContainer.innerHTML = '<p>No hay cuentas no admitidas registradas.</p>';
+                    return;
+                }
+                let html = '';
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    html += `
+                        <div class="cuenta-item">
+                            <p><strong>Nombre:</strong> ${data.nombre}</p>
+                            <p><strong>Número de Cuenta:</strong> ${data.numero}</p>
+                        </div>
+                    `;
+                });
+                listContainer.innerHTML = html;
+            } catch (error) {
+                console.error("Error cargando cuentas no admitidas:", error);
+                listContainer.innerHTML = '<p>Error al cargar cuentas.</p>';
+            }
+        }
+
+        async function loadCuentasParaGestion() {
+            const listContainer = document.getElementById('lista_cuentas_gestion');
+            listContainer.innerHTML = '<p>Cargando cuentas...</p>';
+            try {
+                const snapshot = await cuentasNoAdmitidasCollection.orderBy('nombre').get();
+                if (snapshot.empty) {
+                    listContainer.innerHTML = '<p>No hay cuentas registradas.</p>';
+                    return;
+                }
+                let html = '';
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    html += `
+                        <div class="cuenta-item">
+                            <p><strong>Nombre:</strong> <span class="cuenta-nombre">${data.nombre}</span></p>
+                            <p><strong>Número:</strong> <span class="cuenta-numero">${data.numero}</span></p>
+                            <button class="edit" onclick="editarCuenta('${doc.id}', '${data.nombre}', '${data.numero}')">Editar</button>
+                            <button class="delete" onclick="eliminarCuenta('${doc.id}')">Eliminar</button>
+                        </div>
+                    `;
+                });
+                listContainer.innerHTML = html;
+            } catch (error) {
+                console.error("Error cargando cuentas para gestión:", error);
+                listContainer.innerHTML = '<p>Error al cargar cuentas.</p>';
+            }
+        }
+
+        async function agregarCuentaNoAdmitida() {
+            const nombreInput = document.getElementById('cuenta_nombre');
+            const numeroInput = document.getElementById('cuenta_numero');
+            const errorMessageDisplay = document.getElementById('cuenta_error_message');
+            
+            const nombre = nombreInput.value.trim();
+            const numero = numeroInput.value.trim();
+            
+            errorMessageDisplay.textContent = '';
+
+            if (!nombre || !numero) {
+                errorMessageDisplay.textContent = 'Por favor complete todos los campos.';
+                return;
+            }
+
+            try {
+                await cuentasNoAdmitidasCollection.add({
+                    nombre: nombre,
+                    numero: numero,
+                    fechaCreacion: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                nombreInput.value = '';
+                numeroInput.value = '';
+                playConfirmationSound();
+                await loadCuentasParaGestion();
+                await loadCuentasNoAdmitidas();
+            } catch (error) {
+                console.error("Error agregando cuenta:", error);
+                errorMessageDisplay.textContent = 'Error al agregar la cuenta.';
+            }
+        }
+
+        async function editarCuenta(id, nombreActual, numeroActual) {
+            const nuevoNombre = prompt('Ingrese el nuevo nombre:', nombreActual);
+            if (nuevoNombre === null) return;
+            
+            const nuevoNumero = prompt('Ingrese el nuevo número de cuenta:', numeroActual);
+            if (nuevoNumero === null) return;
+
+            const errorMessageDisplay = document.getElementById('cuenta_error_message');
+            errorMessageDisplay.textContent = '';
+
+            if (!nuevoNombre.trim() || !nuevoNumero.trim()) {
+                errorMessageDisplay.textContent = 'Los campos no pueden estar vacíos.';
+                return;
+            }
+
+            try {
+                await cuentasNoAdmitidasCollection.doc(id).update({
+                    nombre: nuevoNombre.trim(),
+                    numero: nuevoNumero.trim()
+                });
+                playConfirmationSound();
+                await loadCuentasParaGestion();
+                await loadCuentasNoAdmitidas();
+            } catch (error) {
+                console.error("Error actualizando cuenta:", error);
+                errorMessageDisplay.textContent = 'Error al actualizar la cuenta.';
+            }
+        }
+
+        async function eliminarCuenta(id) {
+            showConfirm("¿Está seguro de que desea eliminar esta cuenta?", async () => {
+                const errorMessageDisplay = document.getElementById('cuenta_error_message');
+                errorMessageDisplay.textContent = '';
+
+                try {
+                    await cuentasNoAdmitidasCollection.doc(id).delete();
+                    playConfirmationSound();
+                    await loadCuentasParaGestion();
+                    await loadCuentasNoAdmitidas();
+                } catch (error) {
+                    console.error("Error eliminando cuenta:", error);
+                    errorMessageDisplay.textContent = 'Error al eliminar la cuenta.';
+                }
+            });
         }
 
 
