@@ -1,167 +1,244 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Factura de Fabricantes</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Factura de Fabricantes — Avanzado</title>
 
-<!-- Firebase -->
+<!-- Firebase (compat) -->
 <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
 
 <style>
-    body{
-        font-family: 'Roboto', sans-serif;
-        background:#f4f6f9;
-        margin:0;
-        padding:0;
-    }
-    header{
-        background:#2d3436;
-        padding:15px 20px;
-        color:white;
-        font-size:18px;
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-    }
-    #logout{
-        cursor:pointer;
-        background:#d63031;
-        padding:7px 15px;
-        border-radius:5px;
-    }
-    .main{
-        display:flex;
-        padding:20px;
-        gap:25px;
-    }
-    .card{
-        background:white;
-        border-radius:8px;
-        padding:20px;
-        box-shadow:0 3px 8px rgba(0,0,0,0.1);
-    }
-    .left{
-        width:30%;
-    }
-    .right{
-        width:70%;
-    }
-    input, select{
-        width:100%;
-        padding:10px;
-        margin-top:5px;
-        margin-bottom:15px;
-        border:1px solid #ddd;
-        border-radius:6px;
-    }
-    button{
-        width:100%;
-        padding:12px;
-        background:#0984e3;
-        color:white;
-        border:none;
-        border-radius:6px;
-        cursor:pointer;
-        font-size:16px;
-    }
-    button:hover{
-        background:#076bb6;
-    }
-    table{
-        width:100%;
-        border-collapse:collapse;
-        margin-top:10px;
-    }
-    th, td{
-        border-bottom:1px solid #eee;
-        padding:8px;
-        text-align:left;
-        font-size:14px;
-    }
-    th{
-        background:#dfe6e9;
-        font-weight:bold;
-    }
-    #totalGeneral{
-        font-size:20px;
-        margin-top:10px;
-        font-weight:bold;
-        text-align:right;
-        color:#2d3436;
-    }
+  :root{
+    --bg:#f4f7fb;
+    --card:#ffffff;
+    --accent:#0984e3;
+    --accent-2:#00b894;
+    --danger:#d63031;
+    --muted:#6b7280;
+    --radius:10px;
+    font-family: Inter, Roboto, Arial, sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:#222;
+  }
+
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:18px 28px;
+    background:linear-gradient(90deg,#2d3436,#1e272e);
+    color:white;
+  }
+  header .brand{font-weight:600; font-size:18px}
+  header .user {display:flex; gap:12px; align-items:center}
+  .badge{background:rgba(255,255,255,0.08); padding:8px 12px; border-radius:8px; font-size:14px}
+  #logout{background:var(--danger); color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer}
+
+  .container{display:flex; gap:22px; padding:22px; align-items:flex-start; max-width:1200px; margin:18px auto;}
+  .panel{background:var(--card); border-radius:var(--radius); box-shadow:0 6px 20px rgba(20,30,40,0.06); padding:18px;}
+  .left{width:340px}
+  .right{flex:1; min-width:0}
+
+  h2{margin:4px 0 12px; font-size:18px}
+  label{display:block; font-size:13px; color:var(--muted); margin-top:8px}
+  input[type="text"], input[type="number"], input[type="date"], select {
+    width:100%;
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px solid #e6eef5;
+    margin-top:6px;
+    font-size:14px;
+    background:transparent;
+  }
+  .row{display:flex; gap:12px}
+  .small{width:48%}
+  .btn{display:inline-block; padding:10px 14px; border-radius:8px; background:var(--accent); color:white; border:none; cursor:pointer; margin-top:12px; width:100%}
+  .btn.secondary{background:#2d3436}
+  .muted{color:var(--muted); font-size:13px}
+
+  /* table */
+  .search{display:flex; gap:12px; align-items:center; margin-bottom:10px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th, td{padding:8px 10px; border-bottom:1px solid #f0f3f7}
+  th{background:#f7fafc; text-align:left; font-weight:600; color:#333}
+  tbody tr:hover{background:#fbfdff; cursor:pointer}
+  .name-link{color:var(--accent); text-decoration:underline; cursor:pointer}
+
+  .totals{margin-top:10px; display:flex; justify-content:space-between; align-items:center}
+  .total-big{font-weight:700; font-size:18px; color:#111}
+
+  /* modal */
+  .modal-backdrop{position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(10,10,12,0.45); z-index:60}
+  .modal{background:white; width:95%; max-width:900px; border-radius:12px; padding:18px; max-height:85vh; overflow:auto}
+  .modal .modal-header{display:flex; justify-content:space-between; align-items:center}
+  .modal table{margin-top:12px}
+  .action-btn{padding:6px 8px;border-radius:8px;border: none;cursor:pointer}
+  .action-btn.edit{background:#00b894;color:white}
+  .action-btn.delete{background:var(--danger); color:white}
+
+  /* responsive */
+  @media(max-width:900px){
+    .container{flex-direction:column; padding:12px}
+    .left{width:100%}
+    .right{width:100%}
+  }
 </style>
 </head>
 <body>
 
 <header>
-    <div>👟 Factura de Fabricantes</div>
-    <div>
-        <span id="user-info"></span>
-        <span id="logout">Cerrar sesión</span>
-    </div>
+  <div class="brand">👟 La Zapatería — Facturas de Fabricantes</div>
+  <div class="user">
+    <div id="user-info" class="badge">Cargando usuario...</div>
+    <button id="logout">Cerrar sesión</button>
+  </div>
 </header>
 
-<div class="main">
+<div class="container">
+  <!-- FORM -->
+  <div class="panel left">
+    <h2>Formulario de factura</h2>
 
-    <!-- FORMULARIO -->
-    <div class="card left">
-        <h2>Formulario</h2>
+    <label>Fecha</label>
+    <input type="date" id="fecha">
 
-        <label>Fecha:</label>
-        <input type="date" id="fecha">
-        
-        <label>NIT:</label>
-        <input type="text" id="nit">
+    <label>NIT</label>
+    <input type="text" id="nit" placeholder="Ej: 3014428937">
 
-        <label>Nombre Fabricante:</label>
-        <input type="text" id="nombre">
+    <label>Nombre fabricante</label>
+    <input type="text" id="nombre" placeholder="Ej: FABISA">
 
-        <label>N° Factura:</label>
+    <div class="row">
+      <div class="small">
+        <label>N° Factura</label>
         <input type="text" id="numFactura">
-
-        <label>Valor:</label>
-        <input type="number" id="valor">
-
-        <label>Abono:</label>
-        <input type="number" id="abono">
-
-        <label>
-            <input type="checkbox" id="soloAbonar"> Solo Abonar
-        </label>
-
-        <button onclick="guardarFactura()">INGRESAR</button>
+      </div>
+      <div class="small">
+        <label>Documento / Tipo</label>
+        <input type="text" id="tipoDoc" placeholder="(opcional)">
+      </div>
     </div>
 
-    <!-- LISTA -->
-    <div class="card right">
-        <h2>Buscar Fabricante</h2>
-        <input type="text" id="buscar" placeholder="Buscar por nombre o NIT..." onkeyup="filtrar()">
+    <label>Valor</label>
+    <input type="number" id="valor" min="0" step="1" value="0">
 
-        <table>
-            <thead>
-                <tr>
-                    <th>NIT</th>
-                    <th>Nombre</th>
-                    <th>N° Factura</th>
-                    <th>Valor</th>
-                    <th>Abono</th>
-                    <th>Fecha</th>
-                </tr>
-            </thead>
-            <tbody id="tablaFabricantes"></tbody>
-        </table>
+    <label>Abono</label>
+    <input type="number" id="abono" min="0" step="1" value="0">
 
-        <div id="totalGeneral"></div>
+    <label style="margin-top:6px">
+      <input type="checkbox" id="soloAbonar"> Solo Abonar (mover a Abono y deshabilitar Valor)
+    </label>
+
+    <button class="btn" id="btnGuardar">INGRESAR / ACTUALIZAR</button>
+    <button class="btn secondary" id="btnLimpiar" style="margin-top:8px">Limpiar formulario</button>
+
+    <p class="muted" style="margin-top:12px">Al guardar: si existe <strong>nit + número de factura</strong> se sumará el nuevo abono al documento existente (comportamiento A)</p>
+  </div>
+
+  <!-- LIST -->
+  <div class="panel right">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+      <div>
+        <h2 style="margin:0">Buscar / Lista</h2>
+        <div class="muted">Haz doble clic en una fila para abrir el historial del fabricante</div>
+      </div>
+      <div style="text-align:right">
+        <div class="muted">Total deuda general</div>
+        <div id="totalGeneral" class="total-big">$0</div>
+      </div>
     </div>
 
+    <div class="search">
+      <input type="text" id="buscar" placeholder="Buscar por NIT o nombre..." style="flex:1" />
+      <select id="filtroEmpresa" style="width:220px">
+        <option value="">Ver todas</option>
+      </select>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:120px">NIT</th>
+          <th>Nombre</th>
+          <th style="width:120px">N° Factura</th>
+          <th style="width:110px">Valor</th>
+          <th style="width:110px">Abono</th>
+          <th style="width:120px">Saldo</th>
+          <th style="width:110px">Fecha</th>
+        </tr>
+      </thead>
+      <tbody id="tablaFabricantes"></tbody>
+    </table>
+
+    <div class="totals">
+      <div class="muted">Registros: <span id="countRegs">0</span></div>
+      <div class="muted">Deuda filtro: <strong id="deudaFiltro">$0</strong></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modalBackdrop" class="modal-backdrop">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <div>
+        <h3 id="modalTitle" style="margin:0">Historial</h3>
+        <div class="muted" id="modalSub"></div>
+      </div>
+      <div>
+        <button onclick="closeModal()" class="action-btn" style="background:#666;color:white;border:none;padding:8px 10px;border-radius:8px">Cerrar</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <table id="modalTable">
+        <thead>
+          <tr>
+            <th>N°</th><th>NIT</th><th>Nombre</th><th>N° Factura</th><th>Valor</th><th>Abono</th><th>Saldo</th><th>Fecha</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px">
+        <div class="muted">Total facturas en modal: <span id="modalCount">0</span></div>
+        <div style="text-align:right">
+          <div class="muted">Total deuda del fabricante</div>
+          <div id="modalTotal" class="total-big">$0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- edición rápida en modal -->
+    <div id="editorRow" style="margin-top:16px; display:none; border-top:1px dashed #eef2f4; padding-top:12px">
+      <h4 style="margin:0 0 8px">Editar factura</h4>
+      <div class="row">
+        <input type="text" id="edit_numFactura" placeholder="N° Factura" style="flex:1">
+        <input type="number" id="edit_valor" placeholder="Valor" style="flex:1">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="number" id="edit_abono" placeholder="Abono" style="flex:1">
+        <input type="date" id="edit_fecha" style="flex:1">
+      </div>
+      <div style="margin-top:10px; display:flex; gap:8px">
+        <button class="action-btn edit" id="saveEditBtn">Guardar cambios</button>
+        <button class="action-btn" onclick="hideEditor()">Cancelar</button>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <script>
-// =========================
-//   FIREBASE CONFIG
-// =========================
+/* ============================
+   CONFIG FIREBASE & DB
+   ============================ */
 const firebaseConfig = {
   apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
   authDomain:"lazapateria-c4157.firebaseapp.com",
@@ -170,121 +247,334 @@ const firebaseConfig = {
   messagingSenderId:"300241769138",
   appId:"1:300241769138:web:8ca1847de3c4fb5042afab"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const COLECCION = "fabricantes"; // la colección que ya usas
 
-
-// =========================
-// VALIDAR SESIÓN - SOLO ADMIN
-// =========================
+/* ============================
+   SESIÓN Y PERMISOS (SOLO ADMIN)
+   ============================ */
 const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
+if(!usuario){ alert('No hay sesión activa'); location.href='index.html'; }
+if(usuario.permisos !== 'Administrador'){ alert('Acceso denegado. Solo administradores'); location.href='index.html'; }
+document.getElementById('user-info').textContent = usuario.usuario + ' — ' + usuario.permisos;
+document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
 
-if(!usuario){
-    alert("No hay sesión activa");
-    location.href = "index.html";
-}
-if(usuario.permisos !== "Administrador"){
-    alert("Solo administradores");
-    location.href = "index.html";
-}
+/* ============================
+   ELEMENTOS & ESTADO
+   ============================ */
+const tabla = document.getElementById('tablaFabricantes');
+const buscar = document.getElementById('buscar');
+const filtroEmpresa = document.getElementById('filtroEmpresa');
+let registros = []; // caché local
+let modalCurrentNit = null;
+let modalRows = [];
+let editingDocId = null;
 
-document.getElementById("user-info").textContent = `${usuario.usuario} — ${usuario.permisos}`;
-document.getElementById("logout").onclick = ()=>{
-    localStorage.removeItem("datosUsuario");
-    location.href="index.html";
-};
-
-
-// =========================
-// CARGAR DATOS
-// =========================
-let fabricantes = [];
-
-async function cargarFabricantes(){
-    const snapshot = await db.collection("fabricantes").orderBy("fecha","desc").get();
-    fabricantes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    renderTabla(fabricantes);
-    calcularTotal();
-}
-
-function renderTabla(data){
-    const tbody = document.getElementById("tablaFabricantes");
-    tbody.innerHTML = "";
-
-    data.forEach(f => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${f.nit}</td>
-                <td>${f.nombre}</td>
-                <td>${f.numFactura}</td>
-                <td>$${Number(f.valor).toLocaleString()}</td>
-                <td>$${Number(f.abono).toLocaleString()}</td>
-                <td>${f.fecha}</td>
-            </tr>
-        `;
-    });
-}
-
-function filtrar(){
-    const q = document.getElementById("buscar").value.toLowerCase();
-    const filtrados = fabricantes.filter(
-        f =>
-            f.nombre.toLowerCase().includes(q) ||
-            f.nit.toLowerCase().includes(q)
-    );
-    renderTabla(filtrados);
-}
-
-// =========================
-// CALCULAR TOTAL GENERAL
-// =========================
-function calcularTotal(){
-    let total = 0;
-    fabricantes.forEach(f=>{
-        total += Number(f.valor) - Number(f.abono);
-    });
-    document.getElementById("totalGeneral").textContent =
-        "TOTAL DEUDA GENERAL: $" + total.toLocaleString();
-}
-
-// =========================
-// GUARDAR FACTURA
-// =========================
-async function guardarFactura(){
-
-    const fecha = document.getElementById("fecha").value;
-    const nit = document.getElementById("nit").value;
-    const nombre = document.getElementById("nombre").value;
-    const numFactura = document.getElementById("numFactura").value;
-    const valor = Number(document.getElementById("valor").value);
-    const abono = Number(document.getElementById("abono").value);
-    const soloAbonar = document.getElementById("soloAbonar").checked;
-
-    if(!fecha || !nit || !nombre){
-        alert("Fecha, NIT y Nombre son obligatorios.");
-        return;
+/* ============================
+   CARGAR TODOS LOS REGISTROS
+   ============================ */
+async function cargarTodos(){
+  const snap = await db.collection(COLECCION).orderBy('fecha','desc').get();
+  registros = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+  // asegúrate de que fecha se muestre legible (si la guardaste como string o timestamp)
+  registros = registros.map(r=>{
+    if(r.fecha && r.fecha.seconds){ // timestamp de firestore
+      r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10);
     }
+    return r;
+  });
+  poblarFiltro();
+  renderTabla(registros);
+  calcularTotales(registros);
+}
 
-    const data = {
-        fecha,
-        nit,
-        nombre,
-        numFactura,
-        valor: soloAbonar ? 0 : valor,
-        abono,
-        creadoPor: usuario.usuario,
-        creadoFecha: new Date()
+/* poblar select de filtro con nombres únicos */
+function poblarFiltro(){
+  const nombres = Array.from(new Set(registros.map(r => r.nombre))).sort();
+  filtroEmpresa.innerHTML = '<option value="">Ver todas</option>';
+  nombres.forEach(n => {
+    const opt = document.createElement('option'); opt.value = n; opt.textContent = n;
+    filtroEmpresa.appendChild(opt);
+  });
+}
+
+/* render tabla principal */
+function renderTabla(data){
+  tabla.innerHTML = '';
+  data.forEach(r=>{
+    const saldo = Number(r.valor||0) - Number(r.abono||0);
+    const tr = document.createElement('tr');
+
+    tr.innerHTML = `
+      <td>${r.nit || ''}</td>
+      <td><span class="name-link">${escapeHtml(r.nombre||'')}</span></td>
+      <td>${r.numFactura || ''}</td>
+      <td>$${Number(r.valor||0).toLocaleString()}</td>
+      <td>$${Number(r.abono||0).toLocaleString()}</td>
+      <td>$${saldo.toLocaleString()}</td>
+      <td>${r.fecha || ''}</td>
+    `;
+
+    // doble click -> abrir modal con historial del fabricante (por nit)
+    tr.ondblclick = () => openModalPorFabricante(r.nit, r.nombre);
+
+    // click en nombre -> autocompletar nit + nombre en el form
+    tr.querySelector('.name-link').onclick = (ev) => {
+      ev.stopPropagation();
+      document.getElementById('nit').value = r.nit || '';
+      document.getElementById('nombre').value = r.nombre || '';
+      // opcional: enfocar N° factura
+      document.getElementById('numFactura').focus();
     };
 
-    await db.collection("fabricantes").add(data);
+    tabla.appendChild(tr);
+  });
 
-    alert("Registro guardado!");
-    cargarFabricantes();
+  document.getElementById('countRegs').textContent = data.length;
 }
 
-cargarFabricantes();
-</script>
+/* calculo totales */
+function calcularTotales(lista){
+  let total = 0;
+  lista.forEach(r => total += (Number(r.valor||0) - Number(r.abono||0)));
+  document.getElementById('totalGeneral').textContent = '$' + total.toLocaleString();
+  // deuda por el filtro actual
+  const filtroTexto = buscar.value.trim().toLowerCase();
+  const filtrados = lista.filter(r => {
+    if(!filtroTexto) return true;
+    return (r.nit||'').toLowerCase().includes(filtroTexto) || (r.nombre||'').toLowerCase().includes(filtroTexto);
+  });
+  let deudaFiltro = 0;
+  filtrados.forEach(r => deudaFiltro += (Number(r.valor||0) - Number(r.abono||0)));
+  document.getElementById('deudaFiltro').textContent = '$' + deudaFiltro.toLocaleString();
+  document.getElementById('deudaFiltro').dataset.valor = deudaFiltro;
+}
 
+/* event listeners: búsqueda / filtro */
+buscar.oninput = () => {
+  const q = buscar.value.trim().toLowerCase();
+  const filtro = filtroEmpresa.value;
+  let out = registros.filter(r => {
+    const matchesQ = !q || (r.nit||'').toLowerCase().includes(q) || (r.nombre||'').toLowerCase().includes(q) || (r.numFactura||'').toLowerCase().includes(q);
+    const matchesFiltro = !filtro || r.nombre === filtro;
+    return matchesQ && matchesFiltro;
+  });
+  renderTabla(out);
+  calcularTotales(out);
+};
+filtroEmpresa.onchange = ()=> buscar.oninput();
+
+/* ============================
+   GUARDAR / ACTUALIZAR (LOGICA A)
+   ============================ */
+document.getElementById('soloAbonar').onchange = (e)=>{
+  const checked = e.target.checked;
+  const valorInput = document.getElementById('valor');
+  const abonoInput = document.getElementById('abono');
+  if(checked){
+    // mover valor al abono (si hay valor)
+    const v = Number(valorInput.value || 0);
+    if(v>0){
+      abonoInput.value = (Number(abonoInput.value||0) + v);
+      valorInput.value = 0;
+    }
+    valorInput.disabled = true;
+    abonoInput.focus();
+  }else{
+    valorInput.disabled = false;
+  }
+};
+
+document.getElementById('btnLimpiar').onclick = ()=> {
+  limpiarFormulario();
+};
+
+document.getElementById('btnGuardar').onclick = async ()=>{
+  // obtener campos
+  const fecha = document.getElementById('fecha').value || new Date().toISOString().slice(0,10);
+  const nit = (document.getElementById('nit').value || '').trim();
+  const nombre = (document.getElementById('nombre').value || '').trim();
+  const numFactura = (document.getElementById('numFactura').value || '').trim();
+  const valor = Number(document.getElementById('valor').value || 0);
+  const abono = Number(document.getElementById('abono').value || 0);
+
+  if(!nit || !nombre || !numFactura){
+    alert('Completa NIT, Nombre y N° Factura.');
+    return;
+  }
+
+  // Buscar si ya existe documento con ese nit + numFactura (comportamiento A)
+  const query = await db.collection(COLECCION)
+    .where('nit','==',nit)
+    .where('numFactura','==',numFactura)
+    .limit(1)
+    .get();
+
+  if(!query.empty){
+    // existe: sumar abono y (si proporcionaron valor distinto de 0, actualizar valor también)
+    const doc = query.docs[0];
+    const data = doc.data();
+    const nuevoAbono = Number(data.abono||0) + abono;
+    const nuevoValor = (valor>0) ? Number(data.valor||0) + valor : Number(data.valor||0);
+    await db.collection(COLECCION).doc(doc.id).update({
+      abono: nuevoAbono,
+      valor: nuevoValor,
+      fecha // actualizamos fecha si quieres
+    });
+    alert('Abono sumado al documento existente.');
+  } else {
+    // crear nuevo documento
+    await db.collection(COLECCION).add({
+      fecha,
+      nit,
+      nombre,
+      numFactura,
+      valor,
+      abono,
+      creadoPor: usuario.usuario,
+      creadoEn: new Date()
+    });
+    alert('Factura creada correctamente.');
+  }
+
+  limpiarFormulario();
+  await cargarTodos();
+};
+
+/* limpiar */
+function limpiarFormulario(){
+  document.getElementById('fecha').value = '';
+  document.getElementById('nit').value = '';
+  document.getElementById('nombre').value = '';
+  document.getElementById('numFactura').value = '';
+  document.getElementById('valor').value = 0;
+  document.getElementById('abono').value = 0;
+  document.getElementById('soloAbonar').checked = false;
+  document.getElementById('valor').disabled = false;
+}
+
+/* ============================
+   MODAL: abrir historial por fabricante
+   ============================ */
+async function openModalPorFabricante(nit, nombre){
+  modalCurrentNit = nit;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+  document.getElementById('modalTitle').textContent = `Historial: ${nombre || nit}`;
+  document.getElementById('modalSub').textContent = `NIT: ${nit}`;
+
+  // traer todas las facturas con mismo nit (orden por fecha desc)
+  const snap = await db.collection(COLECCION).where('nit','==',nit).orderBy('fecha','desc').get();
+  modalRows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+  // normalizar fechas
+  modalRows = modalRows.map((r,i)=>{
+    if(r.fecha && r.fecha.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10);
+    if(!r.fecha) r.fecha = r.fecha || '';
+    r.__index = i+1;
+    return r;
+  });
+
+  renderModalTable();
+}
+
+function renderModalTable(){
+  const tbody = document.querySelector('#modalTable tbody');
+  tbody.innerHTML = '';
+  let total = 0;
+  modalRows.forEach(r=>{
+    const saldo = Number(r.valor||0) - Number(r.abono||0);
+    total += saldo;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.__index}</td>
+      <td>${r.nit||''}</td>
+      <td>${escapeHtml(r.nombre||'')}</td>
+      <td>${r.numFactura||''}</td>
+      <td>$${Number(r.valor||0).toLocaleString()}</td>
+      <td>$${Number(r.abono||0).toLocaleString()}</td>
+      <td>$${saldo.toLocaleString()}</td>
+      <td>${r.fecha||''}</td>
+      <td>
+        <button class="action-btn edit" onclick="startEdit('${r.id}')">Editar</button>
+        <button class="action-btn delete" onclick="confirmEliminar('${r.id}')">Eliminar</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('modalCount').textContent = modalRows.length;
+  document.getElementById('modalTotal').textContent = '$' + total.toLocaleString();
+}
+
+/* cerrar modal */
+function closeModal(){
+  modalCurrentNit = null;
+  document.getElementById('modalBackdrop').style.display = 'none';
+  hideEditor();
+}
+
+/* ============================
+   EDITAR / ELIMINAR desde modal
+   ============================ */
+function startEdit(docId){
+  editingDocId = docId;
+  const row = modalRows.find(r=>r.id===docId);
+  if(!row) return alert('Registro no encontrado');
+  document.getElementById('editorRow').style.display = 'block';
+  document.getElementById('edit_numFactura').value = row.numFactura || '';
+  document.getElementById('edit_valor').value = row.valor || 0;
+  document.getElementById('edit_abono').value = row.abono || 0;
+  // si la fecha está en formato ISO yyyy-mm-dd, dejarla; si no, intentar parsear
+  document.getElementById('edit_fecha').value = row.fecha || '';
+  // desplazar viewport modal
+  document.getElementById('editorRow').scrollIntoView({behavior:'smooth'});
+}
+
+function hideEditor(){
+  editingDocId = null;
+  document.getElementById('editorRow').style.display = 'none';
+}
+
+/* guardar edición */
+document.getElementById('saveEditBtn').onclick = async ()=>{
+  if(!editingDocId) return;
+  const numFactura = document.getElementById('edit_numFactura').value.trim();
+  const valor = Number(document.getElementById('edit_valor').value || 0);
+  const abono = Number(document.getElementById('edit_abono').value || 0);
+  const fecha = document.getElementById('edit_fecha').value || new Date().toISOString().slice(0,10);
+
+  // actualizar documento (la lógica A implica que abono queda como el valor indicado)
+  await db.collection(COLECCION).doc(editingDocId).update({
+    numFactura, valor, abono, fecha
+  });
+  alert('Registro actualizado.');
+  hideEditor();
+  await openModalPorFabricante(modalCurrentNit, document.getElementById('modalTitle').textContent);
+  await cargarTodos();
+};
+
+/* eliminar */
+async function confirmEliminar(docId){
+  if(!confirm('¿Eliminar esta factura? Esta acción no se puede deshacer.')) return;
+  await db.collection(COLECCION).doc(docId).delete();
+  alert('Registro eliminado.');
+  // actualizar modal y tabla
+  await openModalPorFabricante(modalCurrentNit, document.getElementById('modalTitle').textContent);
+  await cargarTodos();
+}
+
+/* ============================
+   UTIL: escapar HTML
+   ============================ */
+function escapeHtml(str){
+  if(!str) return '';
+  return String(str).replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; });
+}
+
+/* ============================
+   Inicializar
+   ============================ */
+cargarTodos();
+</script>
 </body>
 </html>
