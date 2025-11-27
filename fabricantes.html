@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>La Zapatería — Facturas de Fabricantes (Final)</title>
+<title>La Zapatería — Facturas de Fabricantes</title>
 
 <!-- Firebase compat -->
 <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
 
-<!-- SheetJS para exportar -->
+<!-- SheetJS (exportar Excel) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-<!-- Chart.js para gráficos -->
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -55,21 +55,17 @@ table{width:100%; border-collapse:collapse; font-size:14px}
 th, td{padding:8px 10px; border-bottom:1px solid #f2f5f7; text-align:left}
 th{background:#f7fafc; font-weight:700}
 .name-link{color:var(--accent); cursor:pointer; text-decoration:underline}
-
 .footer-stats{display:flex; justify-content:space-between; margin-top:8px; align-items:center}
 
 /* modal */
 .modal-back{position:fixed; inset:0; display:none; background:rgba(0,0,0,0.45); justify-content:center; align-items:flex-start; padding-top:48px; z-index:80}
 .modal{background:white; width:94%; max-width:980px; border-radius:12px; padding:16px; max-height:84vh; overflow:auto}
-.modal .row{display:flex; gap:10px}
-.small{flex:1}
-.editor-row{display:none; margin-top:12px; border-top:1px dashed #eef2f4; padding-top:12px}
 
 /* dark mode */
 body.dark{background:#121217; color:#e8e8e8}
 body.dark .panel{background:#15161a}
 body.dark .topbar{background:#0d0f11}
-body.dark input, body.dark select{background:#0f1113; border:1px solid #222; color:#ddd}
+body.dark input{background:#0f1113; border:1px solid #222; color:#ddd}
 body.dark th{background:#0b0c0e}
 body.dark table, body.dark td{border-color:#17181a}
 </style>
@@ -89,18 +85,25 @@ body.dark table, body.dark td{border-color:#17181a}
 </div>
 
 <div class="container">
-  <!-- LEFT: FORM -->
+  <!-- LEFT -->
   <div class="panel left">
     <h2>Formulario de factura / abono</h2>
+
+    <!-- BANNER MODO ABONO -->
+    <div id="bannerAbono" 
+         style="display:none; background:#0984e3; color:white; padding:8px;
+                text-align:center; margin-bottom:10px; border-radius:8px; font-weight:600;">
+      MODO ABONO GENERAL
+    </div>
 
     <label>Fecha</label>
     <input type="date" id="fecha">
 
     <label>NIT</label>
-    <input type="text" id="nit" placeholder="Ej: 3014428937">
+    <input type="text" id="nit">
 
     <label>Nombre fabricante</label>
-    <input type="text" id="nombre" placeholder="Ej: FABISA">
+    <input type="text" id="nombre">
 
     <label>N° Factura</label>
     <input type="text" id="numFactura">
@@ -111,37 +114,36 @@ body.dark table, body.dark td{border-color:#17181a}
     <label>Abono (ABONO GENERAL)</label>
     <input type="number" id="abono" value="0">
 
-    <label class="checkbox"><input type="checkbox" id="soloAbonar"> Solo abonar (ABONO GENERAL)</label>
+    <label class="checkbox">
+      <input type="checkbox" id="soloAbonar"> Solo abonar (ABONO GENERAL)
+    </label>
 
-    <button class="btn btn-primary" id="btnGuardar">GUARDAR (Factura o Abono)</button>
-    <button class="btn btn-secondary" id="btnLimpiar" style="margin-top:8px">Limpiar formulario</button>
+    <button class="btn btn-primary" id="btnGuardar">GUARDAR</button>
+    <button class="btn btn-secondary" id="btnLimpiar" style="margin-top:8px">Limpiar</button>
 
-    <p class="muted" style="margin-top:12px">Cada abono crea un documento independiente. El saldo se calcula como suma(VALOR) - suma(ABONO).</p>
   </div>
 
-  <!-- RIGHT: LIST -->
+  <!-- RIGHT -->
   <div class="panel right">
     <div style="display:flex; justify-content:space-between; align-items:center;">
-      <div>
-        <h2 style="margin:0">Buscar / Lista</h2>
-        <div class="muted">Doble clic → historial (agrupado por factura)</div>
-      </div>
+      <h2 style="margin:0">Lista de cuentas</h2>
       <div style="text-align:right">
-        <div class="muted">Total deuda general</div>
+        <div class="muted">Deuda total</div>
         <div id="totalGeneral" style="font-weight:700; font-size:18px">$0</div>
       </div>
     </div>
 
     <div class="search-row" style="margin-top:12px">
-      <input type="text" id="buscar" placeholder="Buscar NIT o nombre..." style="flex:1" oninput="filtrar()">
-      <button class="btn btn-excel" onclick="exportarExcel()">Exportar Excel</button>
+      <input type="text" id="buscar" placeholder="Buscar..." style="flex:1" oninput="filtrar()">
+      <button class="btn btn-excel" onclick="exportarExcel()">Excel</button>
     </div>
 
-    <div class="table-wrap" id="tableWrap">
+    <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>NIT</th><th>Nombre</th><th>N° Factura</th><th>Valor</th><th>Abono</th><th>Saldo</th><th>Fecha</th><th>Tipo</th>
+            <th>NIT</th><th>Nombre</th><th>N° Factura</th><th>Valor</th>
+            <th>Abono</th><th>Saldo</th><th>Fecha</th><th>Tipo</th>
           </tr>
         </thead>
         <tbody id="tablaFabricantes"></tbody>
@@ -160,56 +162,35 @@ body.dark table, body.dark td{border-color:#17181a}
   <div class="modal">
     <div style="display:flex; justify-content:space-between; align-items:center;">
       <div>
-        <h3 id="modalTitle" style="margin:0">Historial</h3>
+        <h3 id="modalTitle" style="margin:0"></h3>
         <div class="muted">NIT: <span id="modalNit"></span></div>
       </div>
-      <div>
-        <button class="btn btn-secondary" onclick="cerrarModal()">Cerrar</button>
-      </div>
+      <button class="btn btn-secondary" onclick="cerrarModal()">Cerrar</button>
     </div>
 
     <div style="display:flex; gap:12px; margin-top:12px;">
       <div style="flex:1">
-        <table style="width:100%;">
+        <table>
           <thead>
-            <tr><th>#</th><th>N° Factura</th><th>Total Factura</th><th>Total Abonos</th><th>Saldo</th><th>Acciones</th></tr>
+            <tr><th>#</th><th>N° Factura</th><th>Total Factura</th><th>Total Abonos</th><th>Saldo</th><th></th></tr>
           </thead>
           <tbody id="modalSummary"></tbody>
         </table>
       </div>
 
       <div style="width:340px; background:#fafbfd; padding:8px; border-radius:8px">
-        <canvas id="chartBar" style="width:100%;height:180px"></canvas>
-        <canvas id="chartDonut" style="width:100%;height:160px;margin-top:8px"></canvas>
+        <canvas id="chartBar"></canvas>
+        <canvas id="chartDonut" style="margin-top:8px"></canvas>
         <div style="margin-top:8px; text-align:right; font-weight:700">Total deuda: <span id="modalTotal">$0</span></div>
       </div>
     </div>
 
-    <!-- detalle (facturas y abonos) -->
     <div id="detalleList" style="margin-top:12px"></div>
-
-    <!-- editor inline -->
-    <div id="editorPanel" class="editor-row">
-      <h4 style="margin:6px 0">Editar documento</h4>
-      <div class="row">
-        <input id="edit_numFactura" class="small" placeholder="N° Factura">
-        <input id="edit_valor" class="small" type="number" placeholder="Valor">
-      </div>
-      <div class="row" style="margin-top:8px">
-        <input id="edit_abono" class="small" type="number" placeholder="Abono">
-        <input id="edit_fecha" class="small" type="date">
-      </div>
-      <div style="margin-top:8px; display:flex; gap:8px">
-        <button class="btn btn-primary" id="saveEditBtn">Guardar cambios</button>
-        <button class="btn btn-secondary" onclick="cancelEdit()">Cancelar</button>
-      </div>
-    </div>
-
   </div>
 </div>
 
 <script>
-/* ========== FIREBASE ========== */
+/* FIREBASE */
 const firebaseConfig = {
   apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
   authDomain:"lazapateria-c4157.firebaseapp.com",
@@ -222,60 +203,56 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const COLECCION = "fabricantes";
 
-/* ========== SESIÓN ========== */
-const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
-if(!usuario){ alert('No hay sesión activa'); location.href='index.html'; }
-if(usuario.permisos !== 'Administrador'){ alert('Acceso denegado. Solo administradores'); location.href='index.html'; }
-document.getElementById('user-info').textContent = `${usuario.usuario} — ${usuario.permisos}`;
-document.getElementById('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
+/* SESIÓN */
+const usuario = JSON.parse(localStorage.getItem('datosUsuario')||'null');
+if(!usuario){ alert("No hay sesión activa"); location.href="index.html"; }
+if(usuario.permisos !== "Administrador"){ alert("Acceso denegado"); location.href="index.html"; }
+document.getElementById("user-info").textContent = usuario.usuario + " — " + usuario.permisos;
+document.getElementById("logout").onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href="index.html"; };
 
-/* ========== ESTADO ========== */
-let registros = []; 
-let currentModalNit = null;
-let grouped = {}; 
-let editingDocId = null;
-let chartBar = null, chartDonut = null;
-
-/* ========== DARK MODE ========== */
-const body = document.body;
-const toggleDark = document.getElementById('toggleDark');
-if(localStorage.getItem('dark')==='1'){ body.classList.add('dark'); toggleDark.textContent='☀️' }
+/* DARK MODE */
+if(localStorage.getItem("dark")==="1"){ document.body.classList.add("dark"); toggleDark.textContent="☀️"; }
 toggleDark.onclick = ()=>{
-  body.classList.toggle('dark');
-  const on = body.classList.contains('dark');
-  toggleDark.textContent = on ? '☀️' : '🌙';
-  localStorage.setItem('dark', on? '1':'0');
+  document.body.classList.toggle("dark");
+  const on = document.body.classList.contains("dark");
+  toggleDark.textContent = on ? "☀️" : "🌙";
+  localStorage.setItem("dark", on ? "1":"0");
 };
 
-/* ========== CARGAR TODOS ========== */
+let registros = [];
+let currentModalNit = null;
+let grouped = {};
+let chartBar=null, chartDonut=null;
+
+/* CARGAR TODO */
 async function cargarTodos(){
   const snap = await db.collection(COLECCION).get();
-  registros = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-  registros = registros.map(r=>{ 
-    if(r.fecha && r.fecha.seconds) 
-      r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); 
-    return r; 
+  registros = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+  registros.forEach(r=>{
+    if(r.fecha?.seconds)
+      r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10);
   });
   renderTabla(registros);
   actualizarTotales(registros);
 }
 cargarTodos();
 
-/* ========== RENDER TABLA PRINCIPAL ========== */
+/* TABLA PRINCIPAL */
 function renderTabla(list){
-  const tbody = document.getElementById('tablaFabricantes');
-  tbody.innerHTML = '';
+  const tbody = document.getElementById("tablaFabricantes");
+  tbody.innerHTML = "";
+
   list.forEach(r=>{
     const valor = Number(r.valor||0);
     const abono = Number(r.abono||0);
     const saldo = valor - abono;
-    const tipo = valor>0 ? 'Factura' : 'ABONO GENERAL';
+    const tipo = valor>0 ? "Factura" : "ABONO GENERAL";
 
-    const tr = document.createElement('tr');
+    const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.nit||''}</td>
-      <td><span class="name-link">${escapeHtml(r.nombre||'')}</span></td>
-      <td>${r.numFactura||''}</td>
+      <td>${r.nit}</td>
+      <td><span class="name-link">${r.nombre}</span></td>
+      <td>${r.numFactura}</td>
       <td>$${valor.toLocaleString()}</td>
       <td>$${abono.toLocaleString()}</td>
       <td>$${saldo.toLocaleString()}</td>
@@ -283,309 +260,244 @@ function renderTabla(list){
       <td>${tipo}</td>
     `;
 
-    tr.ondblclick = ()=> openModal(r.nit?.toString().trim(), r.nombre?.toString().trim());
-    tr.querySelector('.name-link').onclick = (e)=>{ 
-      e.stopPropagation();  
-      document.getElementById('nit').value = r.nit||''; 
-      document.getElementById('nombre').value = r.nombre||''; 
-      document.getElementById('numFactura').focus(); 
+    tr.ondblclick = ()=> openModal(r.nit, r.nombre);
+    tr.querySelector(".name-link").onclick = e=>{
+      e.stopPropagation();
+      document.getElementById("nit").value = r.nit;
+      document.getElementById("nombre").value = r.nombre;
     };
 
     tbody.appendChild(tr);
   });
-  document.getElementById('countRegs').textContent = list.length;
+
+  document.getElementById("countRegs").textContent = list.length;
 }
 
-/* ========== FILTRAR ========== */
+/* FILTRAR */
 function filtrar(){
-  const q = document.getElementById('buscar').value.trim().toLowerCase();
-  const out = registros.filter(r=>{
-    return (!q) || 
-      ( (r.nit||'').toLowerCase().includes(q) || 
-        (r.nombre||'').toLowerCase().includes(q) || 
-        (r.numFactura||'').toLowerCase().includes(q) );
-  });
+  const q = buscar.value.trim().toLowerCase();
+  const out = registros.filter(r => 
+     r.nit.toLowerCase().includes(q) ||
+     r.nombre.toLowerCase().includes(q) ||
+     r.numFactura.toLowerCase().includes(q)
+  );
   renderTabla(out);
   actualizarTotales(out);
 }
 
-/* ========== TOTALES ========== */
+/* TOTALES */
 function actualizarTotales(list){
-  const totalFact = list.reduce((s,x)=> s + Number(x.valor||0), 0);
-  const totalAb = list.reduce((s,x)=> s + Number(x.abono||0), 0);
-  document.getElementById('totalGeneral').textContent = '$' + (totalFact - totalAb).toLocaleString();
-  document.getElementById('deudaFiltro').textContent = '$' + (totalFact - totalAb).toLocaleString();
+  let totF = list.reduce((s,x)=> s+Number(x.valor||0),0);
+  let totA = list.reduce((s,x)=> s+Number(x.abono||0),0);
+  let saldo = totF - totA;
+  document.getElementById("totalGeneral").textContent = "$" + saldo.toLocaleString();
+  document.getElementById("deudaFiltro").textContent = "$" + saldo.toLocaleString();
 }
 
-/* ========== SOLO ABONAR ========== */
-document.getElementById('soloAbonar').onchange = function(){
+/* SOLO ABONAR */
+document.getElementById("soloAbonar").onchange = function(){
+  const numFact = document.getElementById("numFactura");
+  const valor = document.getElementById("valor");
+  const abono = document.getElementById("abono");
+  const banner = document.getElementById("bannerAbono");
+
   if(this.checked){
-    document.getElementById('valor').value = 0;
-    document.getElementById('valor').disabled = true;
-    document.getElementById('abono').focus();
+    banner.style.display = "block";
+    valor.value = 0;
+    valor.disabled = true;
+
+    numFact.value = "ABONO";
+    numFact.disabled = true;
+
+    abono.focus();
   } else {
-    document.getElementById('valor').disabled = false;
+    banner.style.display = "none";
+    valor.disabled = false;
+
+    numFact.disabled = false;
+    numFact.value = "";
   }
 };
 
-/* ========== GUARDAR ========== */
-document.getElementById('btnGuardar').onclick = async function(){
-  const fecha = document.getElementById('fecha').value || new Date().toISOString().slice(0,10);
-  const nit = (document.getElementById('nit').value||'').trim();
-  const nombre = (document.getElementById('nombre').value||'').trim();
-  const numFactura = (document.getElementById('numFactura').value||'').trim() || '-';
-  const valor = Number(document.getElementById('valor').value||0);
-  const abono = Number(document.getElementById('abono').value||0);
-  const solo = document.getElementById('soloAbonar').checked;
+/* GUARDAR */
+btnGuardar.onclick = async ()=>{
+  const fecha = fechaInput.value || new Date().toISOString().slice(0,10);
+  const nit = nitInput.value.trim();
+  const nombre = nombreInput.value.trim();
+  const numFactura = numFacturaInput.value.trim() || "-";
+  const valor = Number(valorInput.value||0);
+  const abono = Number(abonoInput.value||0);
+  const solo = soloAbonar.checked;
 
-  if(!nit || !nombre){ alert('Completa NIT y Nombre'); return; }
+  if(!nit || !nombre){ alert("Completa NIT y Nombre"); return; }
 
-  if(solo || abono>0){
-    await db.collection(COLECCION).add({ fecha, nit, nombre, numFactura, valor:0, abono: abono });
+  if(solo){
+    if(abono<=0){ alert("Debes ingresar un valor en Abono."); return; }
+    await db.collection(COLECCION).add({fecha,nit,nombre,numFactura:"ABONO",valor:0,abono});
+    alert("Abono registrado.");
+  } else {
+    if(valor<=0){ alert("Debes ingresar un Valor mayor a 0."); return; }
+    await db.collection(COLECCION).add({fecha,nit,nombre,numFactura,valor,abono:0});
+    alert("Factura registrada.");
   }
-  if(!solo && valor>0){
-    await db.collection(COLECCION).add({ fecha, nit, nombre, numFactura, valor: valor, abono: 0 });
-  }
 
-  alert('Guardado correctamente');
-  limpiarFormulario();
-  await cargarTodos();
+  limpiar();
+  cargarTodos();
 };
 
-/* limpiar */
-document.getElementById('btnLimpiar').onclick = limpiarFormulario;
-function limpiarFormulario(){
-  document.getElementById('fecha').value = '';
-  document.getElementById('nit').value = '';
-  document.getElementById('nombre').value = '';
-  document.getElementById('numFactura').value = '';
-  document.getElementById('valor').value = 0;
-  document.getElementById('abono').value = 0;
-  document.getElementById('soloAbonar').checked = false;
-  document.getElementById('valor').disabled = false;
+/* LIMPIAR */
+function limpiar(){
+  fechaInput.value="";
+  nitInput.value="";
+  nombreInput.value="";
+  numFacturaInput.value="";
+  valorInput.value=0;
+  abonoInput.value=0;
+  soloAbonar.checked=false;
+  numFacturaInput.disabled=false;
+  valorInput.disabled=false;
+  document.getElementById("bannerAbono").style.display="none";
 }
 
-/* ========== MODAL: abrir ========== */
+/* MODAL */
 async function openModal(nit, nombre){
-
-  nit = nit?.toString().trim();
-  nombre = nombre?.toString().trim();
-
   currentModalNit = nit;
+  modalTitle.textContent = "Historial: " + nombre;
+  modalNit.textContent = nit;
+  modalBackdrop.style.display = "flex";
 
-  document.getElementById('modalTitle').textContent = `Historial: ${nombre || nit}`;
-  document.getElementById('modalNit').textContent = nit;
-  document.getElementById('modalBackdrop').style.display = "flex";
-
-  const snapshot = await db.collection(COLECCION)
-        .where("nit", "==", nit)
-        .get();
-
-  if(snapshot.empty){
-      document.getElementById("modalSummary").innerHTML =
-          "<tr><td colspan='6'>No existen registros para este fabricante.</td></tr>";
-      document.getElementById("modalTotal").textContent = "$0";
-      return;
+  const snap = await db.collection(COLECCION).where("nit","==",nit).get();
+  if(snap.empty){
+    modalSummary.innerHTML = "<tr><td colspan='6'>Sin datos</td></tr>";
+    modalTotal.textContent = "$0";
+    return;
   }
 
-  const rows = snapshot.docs.map(d=>({ id:d.id, ...d.data() }));
-  rows.forEach(r=>{ 
-    if(r.fecha && r.fecha.seconds) 
-      r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); 
-  });
+  const rows = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  rows.forEach(r=>{ if(r.fecha?.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); });
 
   grouped = {};
   rows.forEach(r=>{
-    const key = r.numFactura || '-';
-    if(!grouped[key]) grouped[key] = { numFactura:key, facturas:[], abonos:[], docs:[] };
-    grouped[key].docs.push(r);
-    if(r.valor>0) grouped[key].facturas.push(r);
-    if(r.abono>0) grouped[key].abonos.push(r);
+    const k = r.numFactura || "-";
+    if(!grouped[k]) grouped[k] = {fact:[], abo:[]};
+    if(r.valor>0) grouped[k].fact.push(r);
+    if(r.abono>0) grouped[k].abo.push(r);
   });
 
-  renderModalSummaryAndCharts();
-  renderDetalleRows(rows);
+  renderSummary(rows);
+  renderDetalle(rows);
 }
 
-/* ========== RESUMEN + GRÁFICOS ========== */
-function renderModalSummaryAndCharts(){
-  const tbody = document.getElementById('modalSummary');
-  tbody.innerHTML = '';
+function renderSummary(rows){
+  modalSummary.innerHTML="";
+  let totF=0, totA=0;
+  let i=1;
 
-  const keys = Object.keys(grouped);
-  let totalFact = 0, totalAb = 0;
+  for(const f in grouped){
+    const sumF = grouped[f].fact.reduce((s,x)=>s+Number(x.valor),0);
+    const sumA = grouped[f].abo.reduce((s,x)=>s+Number(x.abono),0);
+    totF += sumF; totA += sumA;
+    const saldo = sumF - sumA;
 
-  keys.forEach((k,i)=>{
-    const g = grouped[k];
-    const sumFact = g.facturas.reduce((s,x)=> s + Number(x.valor||0), 0);
-    const sumAb = g.abonos.reduce((s,x)=> s + Number(x.abono||0), 0);
-    totalFact += sumFact; totalAb += sumAb;
-    const saldo = sumFact - sumAb;
-
-    const tr = document.createElement('tr');
+    const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${i+1}</td>
-      <td>${k}</td>
-      <td>$${sumFact.toLocaleString()}</td>
-      <td>$${sumAb.toLocaleString()}</td>
+      <td>${i++}</td>
+      <td>${f}</td>
+      <td>$${sumF.toLocaleString()}</td>
+      <td>$${sumA.toLocaleString()}</td>
       <td>$${saldo.toLocaleString()}</td>
-      <td><button class='btn' onclick="mostrarDetalles('${escapeForJs(k)}')">Ver</button></td>
+      <td><button onclick="verFactura('${f}')">Ver</button></td>
     `;
-    tbody.appendChild(tr);
-  });
+    modalSummary.appendChild(tr);
+  }
 
-  document.getElementById('modalTotal').textContent = "$" + (totalFact - totalAb).toLocaleString();
-
-  const labels = keys;
-  const dataFact = keys.map(k=> grouped[k].facturas.reduce((s,x)=> s + Number(x.valor||0),0));
-  const dataAb = keys.map(k=> grouped[k].abonos.reduce((s,x)=> s + Number(x.abono||0),0));
-
-  renderCharts(labels, dataFact, dataAb, totalFact, totalAb);
+  modalTotal.textContent = "$" + (totF - totA).toLocaleString();
+  drawCharts(Object.keys(grouped), grouped);
 }
 
-function renderCharts(labels, fact, abonos, totalFact, totalAb){
+function renderDetalle(rows){
+  detalleList.innerHTML="<h4>Detalles</h4>";
+  let html=`<table style="width:100%"><thead>
+  <tr><th>#</th><th>Tipo</th><th>Factura</th><th>Valor</th><th>Abono</th><th>Fecha</th></tr>
+  </thead><tbody>`;
+  rows.forEach((r,i)=>{
+    html += `
+      <tr>
+        <td>${i+1}</td>
+        <td>${r.valor>0?'Factura':'ABONO GENERAL'}</td>
+        <td>${r.numFactura}</td>
+        <td>$${Number(r.valor).toLocaleString()}</td>
+        <td>$${Number(r.abono).toLocaleString()}</td>
+        <td>${r.fecha}</td>
+      </tr>`;
+  });
+  html+="</tbody></table>";
+  detalleList.innerHTML += html;
+}
+
+/* GRÁFICOS */
+function drawCharts(keys, grouped){
   if(chartBar) chartBar.destroy();
   if(chartDonut) chartDonut.destroy();
 
-  chartBar = new Chart(document.getElementById('chartBar'), {
-    type:'bar',
-    data:{
-      labels,
-      datasets:[
-        { label:'Facturas', data:fact, backgroundColor:'#0984e3' },
-        { label:'Abonos', data:abonos, backgroundColor:'#00b894' }
-      ]
-    },
-    options:{plugins:{legend:{position:'bottom'}}}
+  let dataF = keys.map(k=> grouped[k].fact.reduce((s,x)=>s+Number(x.valor),0));
+  let dataA = keys.map(k=> grouped[k].abo.reduce((s,x)=>s+Number(x.abono),0));
+
+  chartBar = new Chart(chartBarCanvas,{
+    type:"bar",
+    data:{labels:keys, datasets:[
+      {label:"Facturas", data:dataF, backgroundColor:"#0984e3"},
+      {label:"Abonos", data:dataA, backgroundColor:"#00b894"}
+    ]}
   });
 
-  chartDonut = new Chart(document.getElementById('chartDonut'), {
-    type:'doughnut',
-    data:{
-      labels:['Facturas','Abonos'],
-      datasets:[{ data:[totalFact, totalAb], backgroundColor:['#0984e3','#00b894'] }]
-    },
-    options:{plugins:{legend:{position:'bottom'}}}
+  let totF = dataF.reduce((a,b)=>a+b,0);
+  let totA = dataA.reduce((a,b)=>a+b,0);
+
+  chartDonut = new Chart(chartDonutCanvas,{
+    type:"doughnut",
+    data:{labels:["Facturas","Abonos"], datasets:[{data:[totF,totA], backgroundColor:["#0984e3","#00b894"]}]}
   });
 }
 
-/* ========== DETALLE ========== */
-function renderDetalleRows(rows){
-  const cont = document.getElementById('detalleList');
-  cont.innerHTML = `<h4>Detalles (facturas y abonos)</h4>`;
-
-  let html = `<table style='width:100%;border-collapse:collapse;'>
-    <thead><tr><th>#</th><th>Tipo</th><th>N° Factura</th><th>Valor</th><th>Abono</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>`;
-
-  rows.forEach((r,i)=>{
-    const tipo = r.valor>0 ? "Factura" : "ABONO GENERAL";
-    html += `<tr>
-      <td>${i+1}</td>
-      <td>${tipo}</td>
-      <td>${r.numFactura}</td>
-      <td>$${Number(r.valor||0).toLocaleString()}</td>
-      <td>$${Number(r.abono||0).toLocaleString()}</td>
-      <td>${r.fecha||''}</td>
-      <td>
-        <button class='btn' onclick="startEdit('${r.id}')">Editar</button>
-        <button class='btn' style='background:#d63031;color:white' onclick="confirmDelete('${r.id}')">Eliminar</button>
-      </td>
-    </tr>`;
-  });
-
-  html += "</tbody></table>";
-  cont.innerHTML += html;
-}
-
-/* ========== VER SOLO UNA FACTURA ========== */
-async function mostrarDetalles(numFactura){
+/* VER SOLO UNA FACTURA */
+async function verFactura(num){
   const snap = await db.collection(COLECCION)
-    .where("nit","==",currentModalNit)
-    .where("numFactura","==",numFactura)
-    .get();
-
-  const rows = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-  rows.forEach(r=>{ if(r.fecha?.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10); });
-  renderDetalleRows(rows);
+        .where("nit","==",currentModalNit)
+        .where("numFactura","==",num)
+        .get();
+  const rows = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  rows.forEach(r=>{if(r.fecha?.seconds) r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10);});
+  renderDetalle(rows);
 }
 
-/* ========== EDITAR INLINE ========== */
-function startEdit(id){
-  editingDocId = id;
-  const doc = registros.find(x=> x.id === id);
-  if(doc){
-    document.getElementById('edit_numFactura').value = doc.numFactura;
-    document.getElementById('edit_valor').value = doc.valor;
-    document.getElementById('edit_abono').value = doc.abono;
-    document.getElementById('edit_fecha').value = doc.fecha;
-  }
-  document.getElementById('editorPanel').style.display = 'block';
-}
-
-document.getElementById('saveEditBtn').onclick = async ()=>{
-  if(!editingDocId) return;
-  await db.collection(COLECCION).doc(editingDocId).update({
-    numFactura: document.getElementById('edit_numFactura').value,
-    valor: Number(document.getElementById('edit_valor').value||0),
-    abono: Number(document.getElementById('edit_abono').value||0),
-    fecha: document.getElementById('edit_fecha').value
-  });
-  editingDocId = null;
-  document.getElementById('editorPanel').style.display = 'none';
-  await cargarTodos();
-  openModal(currentModalNit, document.getElementById('modalTitle').textContent.replace("Historial: ",""));
-};
-
-function cancelEdit(){
-  editingDocId = null;
-  document.getElementById('editorPanel').style.display = 'none';
-}
-
-/* ========== ELIMINAR ========== */
-function confirmDelete(id){
-  if(confirm("¿Eliminar documento?")){
-    db.collection(COLECCION).doc(id).delete().then(()=>{
-      alert("Eliminado");
-      cargarTodos();
-      openModal(currentModalNit, document.getElementById('modalTitle').textContent.replace("Historial: ",""));
-    })
-  }
-}
-
-/* ========== CERRAR MODAL ========== */
+/* CERRAR MODAL */
 function cerrarModal(){
-  document.getElementById('modalBackdrop').style.display = "none";
-  grouped = {};
-  if(chartBar){ chartBar.destroy(); chartBar=null; }
-  if(chartDonut){ chartDonut.destroy(); chartDonut=null; }
+  modalBackdrop.style.display="none";
+  grouped={};
+  if(chartBar) chartBar.destroy();
+  if(chartDonut) chartDonut.destroy();
 }
 
-/* ========== EXPORTAR A EXCEL ========== */
+/* EXPORTAR */
 function exportarExcel(){
-  const q = document.getElementById('buscar').value.trim().toLowerCase();
-  const data = registros.filter(r=>{
-    if(!q) return true;
-    return r.nit?.toLowerCase().includes(q) || r.nombre?.toLowerCase().includes(q) || r.numFactura?.toLowerCase().includes(q);
-  }).map(r=>({
-    NIT:r.nit,
-    NOMBRE:r.nombre,
-    "NÚMERO DE FACTURA":r.numFactura,
-    VALOR:r.valor,
-    ABONO:r.abono,
-    "VALOR TOT":(r.valor - r.abono),
-    FECHA:r.fecha
+  const q = buscar.value.trim().toLowerCase();
+  const out = registros.filter(r=>
+     r.nit.toLowerCase().includes(q) ||
+     r.nombre.toLowerCase().includes(q) ||
+     r.numFactura.toLowerCase().includes(q)
+  ).map(r=>({
+    NIT:r.nit, Nombre:r.nombre,
+    "Factura":r.numFactura,
+    Valor:r.valor, Abono:r.abono,
+    "Saldo":r.valor-r.abono,
+    Fecha:r.fecha
   }));
-
-  const hoja = XLSX.utils.json_to_sheet(data);
-  const libro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(libro, hoja, "Fabricantes");
-  XLSX.writeFile(libro, "Fabricantes.xlsx");
+  let ws = XLSX.utils.json_to_sheet(out);
+  let wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Reporte");
+  XLSX.writeFile(wb,"Fabricantes.xlsx");
 }
-
-/* === util === */
-function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function escapeForJs(s){ return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
-
 </script>
 
 </body>
