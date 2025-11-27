@@ -332,14 +332,7 @@ body.dark .table-wrap{border-color:#333;}
     <div id="detalleList" style="margin-top:20px;"></div>
   </div>
 </div>
-
-<!-- ========================== -->
-<!-- FIN PARTE 1 -->
-<!-- ========================== -->
 <script>
-/* =======================================================
-   FIREBASE
-======================================================= */
 const firebaseConfig = {
   apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
   authDomain:"lazapateria-c4157.firebaseapp.com",
@@ -351,10 +344,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const COLECCION = "fabricantes";
-
-/* =======================================================
-   SESIÓN
-======================================================= */
 const usuario = JSON.parse(localStorage.getItem("datosUsuario") || "null");
 if(!usuario){ alert("No hay sesión activa."); location.href="index.html"; }
 if(usuario.permisos !== "Administrador"){ alert("Acceso denegado."); location.href="index.html"; }
@@ -367,9 +356,6 @@ document.getElementById("logout").onclick = ()=>{
   location.href="index.html";
 };
 
-/* =======================================================
-   DARK MODE
-======================================================= */
 const toggleDark = document.getElementById("toggleDark");
 
 if(localStorage.getItem("dark")==="1"){
@@ -384,9 +370,6 @@ toggleDark.onclick = ()=>{
   localStorage.setItem("dark", isDark ? "1":"0");
 };
 
-/* =======================================================
-   VARIABLES
-======================================================= */
 let registros = [];
 let currentModalNit = null;
 let currentModalNombre = null;
@@ -394,9 +377,6 @@ let grouped = {};
 let chartBar = null;
 let chartDonut = null;
 
-/* =======================================================
-   CARGAR TODOS LOS REGISTROS
-======================================================= */
 async function cargarTodos(){
   const snap = await db.collection(COLECCION).get();
   registros = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -411,10 +391,6 @@ async function cargarTodos(){
   actualizarTotales(registros);
 }
 cargarTodos();
-
-/* =======================================================
-   RENDER TABLA PRINCIPAL
-======================================================= */
 function renderTabla(list){
   const tbody = document.getElementById("tablaFabricantes");
   tbody.innerHTML = "";
@@ -457,9 +433,6 @@ function renderTabla(list){
   document.getElementById("countRegs").textContent = list.length;
 }
 
-/* =======================================================
-   FILTRAR
-======================================================= */
 function filtrar(){
   const q = document.getElementById("buscar").value.trim().toLowerCase();
 
@@ -472,10 +445,6 @@ function filtrar(){
   renderTabla(out);
   actualizarTotales(out);
 }
-
-/* =======================================================
-   TOTALES
-======================================================= */
 function actualizarTotales(list){
   let totF = list.reduce((s,x)=> s + Number(x.valor||0), 0);
   let totA = list.reduce((s,x)=> s + Number(x.abono||0), 0);
@@ -487,9 +456,6 @@ function actualizarTotales(list){
     "$" + (totF-totA).toLocaleString();
 }
 
-/* =======================================================
-   MODO ABONO GENERAL
-======================================================= */
 document.getElementById("soloAbonar").onchange = function(){
   const banner = document.getElementById("bannerAbono");
   const numFactura = document.getElementById("numFactura");
@@ -513,10 +479,6 @@ document.getElementById("soloAbonar").onchange = function(){
     numFactura.value = "";
   }
 };
-
-/* =======================================================
-   GUARDAR FACTURA / ABONO
-======================================================= */
 document.getElementById("btnGuardar").onclick = async function(){
 
   const fecha = document.getElementById("fecha").value || new Date().toISOString().slice(0,10);
@@ -785,26 +747,21 @@ function exportarExcel(){
 
   XLSX.writeFile(wb,"Fabricantes.xlsx");
 }
-</script>
 /* =======================================================
-    =====================  PARTE 3  ======================
-          SISTEMA DE EDICIÓN COMPLETO
+    =============  PARTE 3 - EDICIÓN COMPLETA  ============
 ======================================================= */
 
-/* =======================================================
-   VARIABLES DE EDICIÓN
-======================================================= */
-let editandoGrupo = null;     // factura y sus abonos
-let editandoDocumento = null; // un documento individual
+let editandoGrupo = null;
+let editandoDocumento = null;
 
 /* =======================================================
-   INICIAR EDICIÓN DE UNA FACTURA COMPLETA (GRUPO)
+   EDITAR GRUPO COMPLETO (FACTURA + ABONOS)
 ======================================================= */
 function editarGrupo(numFactura){
   editandoGrupo = numFactura;
   editandoDocumento = null;
 
-  // Marcar fila en amarillo
+  // Resaltar fila en resumen
   document.querySelectorAll("#modalSummary tr").forEach(tr=>{
     if(tr.children[1].textContent === numFactura){
       tr.classList.add("editing-row");
@@ -815,7 +772,7 @@ function editarGrupo(numFactura){
     }
   });
 
-  // Cargar datos en el formulario izquierdo usando la factura principal
+  // Cargar datos de la factura principal en el formulario
   const facturaPrincipal = registros.find(r => r.numFactura === numFactura && r.valor > 0);
 
   if(facturaPrincipal){
@@ -826,13 +783,14 @@ function editarGrupo(numFactura){
     document.getElementById("abono").value = 0;
     document.getElementById("soloAbonar").checked = false;
     document.getElementById("bannerAbono").style.display = "none";
+    document.getElementById("fecha").value = facturaPrincipal.fecha;
   }
 
-  alert("Editando factura principal. Modifica en el formulario y presiona GUARDAR.");
+  alert("Editando factura principal. Modifica los datos en el formulario y presiona GUARDAR.");
 }
 
 /* =======================================================
-   GUARDAR CAMBIOS DE FACTURA COMPLETA
+   GUARDAR GRUPO COMPLETO
 ======================================================= */
 async function guardarGrupo(numFactura){
 
@@ -852,7 +810,7 @@ async function guardarGrupo(numFactura){
     return;
   }
 
-  // Buscar la factura principal
+  // Buscar factura principal
   const snap = await db.collection(COLECCION)
     .where("nit","==",currentModalNit)
     .where("numFactura","==",numFactura)
@@ -860,7 +818,7 @@ async function guardarGrupo(numFactura){
     .get();
 
   if(snap.empty){
-    alert("No se encontró la factura principal.");
+    alert("Factura principal no encontrada.");
     return;
   }
 
@@ -872,7 +830,7 @@ async function guardarGrupo(numFactura){
     valor
   });
 
-  alert("Factura actualizada correctamente.");
+  alert("Factura principal actualizada.");
 
   editandoGrupo = null;
   cerrarModal();
@@ -881,7 +839,7 @@ async function guardarGrupo(numFactura){
 }
 
 /* =======================================================
-   CANCELAR EDICIÓN GENERAL
+   CANCELAR EDICIÓN
 ======================================================= */
 function cancelarEdicion(){
   editandoGrupo = null;
@@ -896,15 +854,15 @@ function cancelarEdicion(){
 }
 
 /* =======================================================
-   ELIMINAR GRUPO COMPLETO (FACTURA + ABONOS)
+   ELIMINAR TODO EL GRUPO (FACTURA + ABONOS)
 ======================================================= */
 async function eliminarGrupo(numFactura){
-  if(!confirm("¿Eliminar ESTA factura y TODOS sus abonos?")) return;
+  if(!confirm("¿Eliminar la factura y TODOS sus abonos?")) return;
 
   const snap = await db.collection(COLECCION)
-      .where("nit","==",currentModalNit)
-      .where("numFactura","==",numFactura)
-      .get();
+    .where("nit","==",currentModalNit)
+    .where("numFactura","==",numFactura)
+    .get();
 
   const batch = db.batch();
   snap.docs.forEach(d => batch.delete(d.ref));
@@ -918,7 +876,7 @@ async function eliminarGrupo(numFactura){
 }
 
 /* =======================================================
-   EDITAR DOCUMENTO INDIVIDUAL (Factura o Abono)
+   EDITAR DOCUMENTO INDIVIDUAL (FACTURA / ABONO)
 ======================================================= */
 async function editarDocumento(id){
   editandoDocumento = id;
@@ -930,14 +888,18 @@ async function editarDocumento(id){
     return;
   }
 
-  // Marcar visualmente el documento en el detalle
-  document.querySelectorAll("#detalleList tr").forEach(tr=>{
-    if(tr.children[0].textContent === (Number(doc.index)+1+"")){
+  // Resaltar fila del detalle (CORREGIDO)
+  document.querySelectorAll("#detalleList tbody tr").forEach(tr=>{
+    const num = tr.children[2].textContent;
+    const val = Number(tr.children[3].textContent.replace(/[^0-9]/g,''));
+    const abo = Number(tr.children[4].textContent.replace(/[^0-9]/g,''));
+
+    if(num === doc.numFactura && (val === doc.valor || abo === doc.abono)){
       tr.classList.add("editing-row");
     }
   });
 
-  // Cargar al formulario
+  // Cargar en formulario
   document.getElementById("nit").value = doc.nit;
   document.getElementById("nombre").value = doc.nombre;
   document.getElementById("numFactura").value = doc.numFactura;
@@ -945,12 +907,16 @@ async function editarDocumento(id){
 
   if(doc.valor > 0){
     // Es FACTURA
+    document.getElementById("soloAbonar").checked = false;
+    document.getElementById("bannerAbono").style.display="none";
+    document.getElementById("numFactura").disabled = false;
+
     document.getElementById("valor").disabled = false;
     document.getElementById("valor").value = doc.valor;
 
     document.getElementById("abono").value = 0;
-    document.getElementById("soloAbonar").checked = false;
-  }else{
+  }
+  else{
     // Es ABONO
     document.getElementById("soloAbonar").checked = true;
     document.getElementById("bannerAbono").style.display="block";
@@ -964,7 +930,7 @@ async function editarDocumento(id){
     document.getElementById("abono").value = doc.abono;
   }
 
-  // Cambiar botón guardar → guardar individual
+  // Cambiar botón guardar
   document.getElementById("btnGuardar").textContent = "Guardar Edición";
   document.getElementById("btnGuardar").onclick = ()=> guardarDocumento(id);
 
@@ -972,9 +938,10 @@ async function editarDocumento(id){
 }
 
 /* =======================================================
-   GUARDAR CAMBIOS DE DOCUMENTO INDIVIDUAL
+   GUARDAR DOCUMENTO INDIVIDUAL
 ======================================================= */
 async function guardarDocumento(id){
+
   const fecha = document.getElementById("fecha").value || new Date().toISOString().slice(0,10);
   const nit = document.getElementById("nit").value.trim();
   const nombre = document.getElementById("nombre").value.trim();
@@ -1023,7 +990,7 @@ async function guardarDocumento(id){
   document.getElementById("btnGuardar").textContent = "Guardar";
   document.getElementById("btnGuardar").onclick = guardar;
 
-  editarDocumento = null;
+  editandoDocumento = null;
 
   limpiar();
   cerrarModal();
@@ -1045,12 +1012,4 @@ async function eliminarDocumento(id){
   cargarTodos();
   openModal(currentModalNit, currentModalNombre);
 }
-
-/* =======================================================
-   =======================================================
-   FIN PARTE 3
-   =======================================================
-======================================================= */
 </script>
-</body>
-</html>
