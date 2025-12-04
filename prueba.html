@@ -1082,11 +1082,20 @@
                         .get();
                     
                     console.log(`Total de registros encontrados desde inicio de mes: ${registrosSnapshot.size}`);
+                    console.log(`Buscando registros para asesor: "${asesorNombreCompleto}"`);
                     
                     // Filtrar por asesor y calcular totales
+                    let registrosEncontrados = 0;
                     registrosSnapshot.forEach(doc => {
                         const data = doc.data();
+                        
+                        // Log de los primeros 3 registros para debug
+                        if (registrosEncontrados < 3) {
+                            console.log(`  -> Registro ejemplo: asesor="${data.asesor}", fecha=${data.fecha_hora?.toDate().toLocaleDateString()}`);
+                        }
+                        
                         if (data.asesor === asesorNombreCompleto) {
+                            registrosEncontrados++;
                             const fechaRegistro = data.fecha_hora.toDate();
                             fechaRegistro.setHours(0, 0, 0, 0);
                             
@@ -1112,6 +1121,7 @@
                         }
                     });
                     
+                    console.log(`Registros que coinciden con el asesor: ${registrosEncontrados}`);
                     console.log(`Totales históricos calculados desde registros:`);
                     console.log(`  - Semana: pares=${tempAccumulatedWeekPares}, valor=${tempAccumulatedWeekValor}`);
                     console.log(`  - Mes: pares=${tempAccumulatedMonthPares}, valor=${tempAccumulatedMonthValor}`);
@@ -1184,7 +1194,7 @@
         }
 
 
-        window.onload = function() {
+        window.onload = async function() {
             // No longer checking specific permissions, accessible to all users.
             if (!datosUsuario || !datosUsuario.usuario) {
                 // If no user data or user ID, assign a generic ID for testing/demo
@@ -1213,8 +1223,9 @@
                     asesorId = asesorVistaAdmin; // Cambiar temporalmente el asesorId
                     console.log('Cambiando a vista de asesor:', asesorId);
                     
-                    // Obtener nombre del asesor seleccionado
-                    db.collection('usuarios').doc(asesorVistaAdmin).get().then(doc => {
+                    // Obtener nombre del asesor seleccionado (AWAIT para esperar antes de continuar)
+                    try {
+                        const doc = await db.collection('usuarios').doc(asesorVistaAdmin).get();
                         if (doc.exists) {
                             const asesorData = doc.data();
                             asesorNombreCompleto = asesorData.nombreCompleto || asesorVistaAdmin;
@@ -1223,9 +1234,9 @@
                         } else {
                             console.error('No se encontró el documento del asesor');
                         }
-                    }).catch(err => {
+                    } catch (err) {
                         console.error('Error al obtener datos del asesor:', err);
-                    });
+                    }
                 }
                 
                 document.getElementById('asesor_selector_container').style.display = 'block';
