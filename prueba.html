@@ -1221,24 +1221,28 @@
             
             // Si es administrador, verificar si está viendo el progreso de otro asesor
             if (esAdministrador) {
-                const asesorVistaAdmin = sessionStorage.getItem('asesorVistaAdmin');
-                console.log('Asesor en sessionStorage:', asesorVistaAdmin);
+                const asesorDocIdVistaAdmin = sessionStorage.getItem('asesorVistaAdmin');
+                console.log('Asesor Doc ID en sessionStorage:', asesorDocIdVistaAdmin);
                 console.log('Asesor ID actual:', asesorId);
                 
-                if (asesorVistaAdmin && asesorVistaAdmin !== datosUsuario.usuario) {
+                if (asesorDocIdVistaAdmin && asesorDocIdVistaAdmin !== datosUsuario.usuario) {
                     // El administrador está viendo el progreso de otro asesor
-                    asesorSeleccionado = asesorVistaAdmin;
-                    asesorId = asesorVistaAdmin; // Cambiar temporalmente el asesorId
-                    console.log('Cambiando a vista de asesor:', asesorId);
+                    console.log('Cambiando a vista de asesor con Doc ID:', asesorDocIdVistaAdmin);
                     
-                    // Obtener nombre del asesor seleccionado (AWAIT para esperar antes de continuar)
+                    // Obtener datos del asesor seleccionado (AWAIT para esperar antes de continuar)
                     try {
-                        const doc = await db.collection('usuarios').doc(asesorVistaAdmin).get();
+                        const doc = await db.collection('usuarios').doc(asesorDocIdVistaAdmin).get();
                         if (doc.exists) {
                             const asesorData = doc.data();
-                            asesorNombreCompleto = asesorData.nombreCompleto || asesorVistaAdmin;
+                            // IMPORTANTE: Usar el campo 'usuario' del documento, NO el ID del documento
+                            asesorId = asesorData.usuario || asesorDocIdVistaAdmin;
+                            asesorSeleccionado = asesorId;
+                            asesorNombreCompleto = asesorData.nombreCompleto || asesorId;
                             document.getElementById('welcome_message').textContent = `Viendo progreso de: ${asesorNombreCompleto}`;
-                            console.log('Nombre del asesor cargado:', asesorNombreCompleto);
+                            console.log('Datos del asesor cargados:');
+                            console.log('  - Doc ID:', asesorDocIdVistaAdmin);
+                            console.log('  - Usuario ID (para snapshots):', asesorId);
+                            console.log('  - Nombre completo:', asesorNombreCompleto);
                         } else {
                             console.error('No se encontró el documento del asesor');
                         }
