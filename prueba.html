@@ -1245,13 +1245,33 @@
                 console.log(`Configurando listener de registros para: ${asesorNombreCompleto}`);
                 console.log(`Rango de fechas: ${startOfDay.toISOString()} a ${endOfDay.toISOString()}`);
 
+                // Consulta solo por fecha (no requiere índice compuesto)
+                // Luego filtramos por asesor en el código
                 db.collection('registros')
-                .where('asesor', '==', asesorNombreCompleto)
                 .where('fecha_hora', '>=', startOfDay)
                 .where('fecha_hora', '<=', endOfDay)
                 .onSnapshot(snapshot => {
-                    console.log(`Listener de registros activado. Documentos encontrados: ${snapshot.size}`);
-                    updateDailySummary(snapshot); // Update "Hoy" cards and trigger accumulated updates
+                    console.log(`Listener de registros activado. Total documentos del día: ${snapshot.size}`);
+                    
+                    // Filtrar por asesor en el código
+                    const registrosDelAsesor = [];
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        if (data.asesor === asesorNombreCompleto) {
+                            registrosDelAsesor.push(doc);
+                        }
+                    });
+                    
+                    console.log(`Registros del asesor ${asesorNombreCompleto}: ${registrosDelAsesor.length}`);
+                    
+                    // Crear un snapshot filtrado
+                    const filteredSnapshot = {
+                        size: registrosDelAsesor.length,
+                        forEach: (callback) => registrosDelAsesor.forEach(callback),
+                        docs: registrosDelAsesor
+                    };
+                    
+                    updateDailySummary(filteredSnapshot); // Update "Hoy" cards and trigger accumulated updates
                 }, error => {
                     console.error("Error al escuchar los despachos de hoy:", error);
                 });
