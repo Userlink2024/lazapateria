@@ -1047,7 +1047,7 @@
         }
 
         // Centralized function to calculate and display accumulated progress
-        function _calculateAndDisplayAccumulatedProgress(historicalSnapshotsData) {
+        async function _calculateAndDisplayAccumulatedProgress(historicalSnapshotsData) {
             let tempAccumulatedWeekPares = 0;
             let tempAccumulatedWeekValor = 0; 
             let tempAccumulatedMonthPares = 0;
@@ -1070,7 +1070,58 @@
             console.log(`Inicio de Mes Normalizado (Local): ${startOfMonth.toLocaleString()}`);
             console.log(`Número de Snapshots Históricos a Procesar: ${historicalSnapshotsData.length}`);
 
-            historicalSnapshotsData.forEach(data => {
+            // Si no hay snapshots históricos, calcular desde registros
+            if (historicalSnapshotsData.length === 0) {
+                console.log(`No hay snapshots históricos. Calculando desde la colección 'registros'...`);
+                
+                try {
+                    // Consultar registros desde el inicio del mes
+                    const registrosSnapshot = await db.collection('registros')
+                        .where('fecha_hora', '>=', startOfMonth)
+                        .where('fecha_hora', '<', new Date(today.getTime() + 86400000)) // Hasta el final de hoy
+                        .get();
+                    
+                    console.log(`Total de registros encontrados desde inicio de mes: ${registrosSnapshot.size}`);
+                    
+                    // Filtrar por asesor y calcular totales
+                    registrosSnapshot.forEach(doc => {
+                        const data = doc.data();
+                        if (data.asesor === asesorNombreCompleto) {
+                            const fechaRegistro = data.fecha_hora.toDate();
+                            fechaRegistro.setHours(0, 0, 0, 0);
+                            
+                            const pares = parseInt(data.pares) || 0;
+                            const valor = parseFloat(data.valor) || 0;
+                            
+                            // Excluir el día de hoy (se suma por separado)
+                            if (fechaRegistro.getTime() < today.getTime()) {
+                                // Acumular para la semana
+                                if (fechaRegistro.getTime() >= startOfWeek.getTime()) {
+                                    tempAccumulatedWeekPares += pares;
+                                    tempAccumulatedWeekValor += valor;
+                                    console.log(`  -> Registro histórico (semana): ${fechaRegistro.toLocaleDateString()}, pares=${pares}, valor=${valor}`);
+                                }
+                                
+                                // Acumular para el mes
+                                if (fechaRegistro.getTime() >= startOfMonth.getTime()) {
+                                    tempAccumulatedMonthPares += pares;
+                                    tempAccumulatedMonthValor += valor;
+                                    console.log(`  -> Registro histórico (mes): ${fechaRegistro.toLocaleDateString()}, pares=${pares}, valor=${valor}`);
+                                }
+                            }
+                        }
+                    });
+                    
+                    console.log(`Totales históricos calculados desde registros:`);
+                    console.log(`  - Semana: pares=${tempAccumulatedWeekPares}, valor=${tempAccumulatedWeekValor}`);
+                    console.log(`  - Mes: pares=${tempAccumulatedMonthPares}, valor=${tempAccumulatedMonthValor}`);
+                    
+                } catch (error) {
+                    console.error('Error al calcular desde registros:', error);
+                }
+            } else {
+                // Usar snapshots históricos como antes
+                historicalSnapshotsData.forEach(data => {
                 // MODIFICACIÓN CLAVE AQUÍ: Parsear la fecha del snapshot para asegurar que se interprete en hora local
                 const parts = data.id.split('-');
                 const snapshotDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
@@ -1106,7 +1157,8 @@
                 console.log(`    -> Fecha Snapshot Normalizada: ${snapshotDate.toLocaleString()}`);
                 console.log(`    -> Comparación Semana (>= ${startOfWeek.toLocaleString()}): ${snapshotDate.getTime() >= startOfWeek.getTime()} (Incluido en Semana: ${includedInWeek})`);
                 console.log(`    -> Comparación Mes (>= ${startOfMonth.toLocaleString()}): ${snapshotDate.getTime() >= startOfMonth.getTime()} (Incluido en Mes: ${includedInMonth})`);
-            });
+                });
+            }
 
             // Always add today's real-time values (which come from 'registros' collection)
             // This ensures today's current progress is always reflected accurately and only once.
@@ -1280,14 +1332,17 @@
                 // This listener will primarily handle updates when the 6 PM auto-save happens for past days,
                 // or when a manual save from a different session/device happens.
                 // When this fires, it will trigger the _calculateAndDisplayAccumulatedProgress.
+                console.log(`Configurando listener de snapshots para: users/${asesorId}/daily_sales_snapshot`);
                 db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
                     .onSnapshot(async (snapshot) => { // Made async to use await for batch
+                        console.log(`Listener de snapshots activado. Total documentos: ${snapshot.size}`);
                         const historicalData = [];
                         const batch = db.batch();
                         let documentsToDeleteCount = 0;
 
                         snapshot.forEach(doc => {
                             const data = doc.data();
+                            console.log(`Snapshot encontrado: ${doc.id}, pares=${data.pares}, valor=${data.valor}`);
                             // Check if 'pares' and 'valor' are 0 or undefined/null
                             const pares = data.pares || 0;
                             const valor = data.valor || 0;
