@@ -17,7 +17,7 @@
       --border: #e8f5e8;
       --danger: #f44336;
       --ok: #4CAF50;
-      --admin-gray: rgba(76, 175, 80, 0.1);
+      --admin-gray: #e5e7eb;
       --manager-yellow: rgba(255, 193, 7, 0.2);
       --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
       --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.15);
@@ -292,23 +292,34 @@
       font-size: 13px;
     }
 
+    /* Filas sin verificar - fondo blanco */
     tr:nth-child(even) {
-      background: rgba(76, 175, 80, 0.05);
+      background: transparent;
     }
 
     tr:hover {
-      background: rgba(76, 175, 80, 0.1);
+      background: rgba(76, 175, 80, 0.08);
       transition: all 0.3s ease;
     }
     
+    /* Filas verificadas por administrador - gris intenso */
     tr.verified-admin{
-      background: var(--admin-gray);
-      border-left: 4px solid var(--accent);
+      background: var(--admin-gray) !important;
+      border-left: 4px solid #6b7280;
     }
     
+    tr.verified-admin:hover{
+      background: #d1d5db !important;
+    }
+    
+    /* Filas verificadas por gerente - amarillo */
     tr.verified-gerente{
-      background: var(--manager-yellow);
+      background: var(--manager-yellow) !important;
       border-left: 4px solid #FFC107;
+    }
+    
+    tr.verified-gerente:hover{
+      background: rgba(255, 193, 7, 0.3) !important;
     }
     
     /* Separadores */
@@ -742,7 +753,33 @@ let selectedConsignIds = new Set(); // Almacenamiento local de IDs seleccionados
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
 function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)); }
-function parseDateRadio(name, pickerId){ const opts = document.getElementsByName(name); let sel=null; for(const r of opts) if(r.checked) sel=r.value; if(sel==='today') return new Date(); if(sel==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); return d; } if(sel==='daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); return d; } const v=$(pickerId).value; return v? new Date(v): null; }
+function parseDateRadio(name, pickerId){ 
+  const opts = document.getElementsByName(name); 
+  let sel = null; 
+  for(const r of opts) if(r.checked) sel = r.value; 
+  
+  if(sel === 'today') return new Date(); 
+  if(sel === 'yesterday'){ 
+    const d = new Date(); 
+    d.setDate(d.getDate()-1); 
+    return d; 
+  } 
+  if(sel === 'daybefore'){ 
+    const d = new Date(); 
+    d.setDate(d.getDate()-2); 
+    return d; 
+  } 
+  
+  // Si no hay radio button seleccionado, usar el date picker
+  const v = $(pickerId).value; 
+  if(v) {
+    // Crear fecha local correctamente para evitar problemas de zona horaria
+    const parts = v.split('-');
+    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  }
+  
+  return null; 
+}
 
 /* FUNCIONES DE MODAL GENÉRICO */
 function showModal(title, message, isConfirm, onOk, onCancel){
@@ -1525,6 +1562,49 @@ $('add-consign').addEventListener('click', async ()=>{
 });
 
 $('valor').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-consign').click(); });
+
+// Funcionalidad para deseleccionar radio buttons
+let lastSelectedDate = null;
+let lastSelectedObs = null;
+
+// Event listeners para radio buttons de fecha
+document.querySelectorAll('input[name="dateOpt"]').forEach(radio => {
+  radio.addEventListener('click', function() {
+    if (lastSelectedDate === this) {
+      this.checked = false;
+      lastSelectedDate = null;
+    } else {
+      lastSelectedDate = this;
+    }
+  });
+});
+
+// Event listeners para radio buttons de fecha de observación
+document.querySelectorAll('input[name="obsOpt"]').forEach(radio => {
+  radio.addEventListener('click', function() {
+    if (lastSelectedObs === this) {
+      this.checked = false;
+      lastSelectedObs = null;
+    } else {
+      lastSelectedObs = this;
+    }
+  });
+});
+
+// Limpiar selección cuando se usa el date picker
+$('date-picker').addEventListener('change', function() {
+  document.querySelectorAll('input[name="dateOpt"]').forEach(radio => {
+    radio.checked = false;
+  });
+  lastSelectedDate = null;
+});
+
+$('obsdate-picker').addEventListener('change', function() {
+  document.querySelectorAll('input[name="obsOpt"]').forEach(radio => {
+    radio.checked = false;
+  });
+  lastSelectedObs = null;
+});
 
 // Función para obtener los IDs seleccionados usando la memoria local (Nuevo)
 function getSelectedConsignIds(){ 
