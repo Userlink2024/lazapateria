@@ -1088,27 +1088,40 @@ async function handleDoubleClick(clickedConsign, index) {
             userObsdate = new Date(parseInt(obsParts[0]), parseInt(obsParts[1]) - 1, parseInt(obsParts[2]), 12, 0, 0, 0);
         }
         
-        // Usar la fecha que el usuario especificó, pero con timestamp ligeramente anterior al registro clickeado
-        // para que aparezca justo encima en la lista descendente
-        const userTimestamp = userFecha.getTime();
-        const finalTimestampForSorting = firebase.firestore.Timestamp.fromMillis(clickedTimestamp - 1);
+        // CLAVE: Para que aparezca justo encima de la fila clickeada, usar timestamp ligeramente anterior
+        // pero guardar la fecha original que el usuario especificó para mostrar
+        const timestampParaOrden = new Date(clickedTimestamp - 1); // 1ms antes del clickeado
+        
+        console.log('🔄 INSERCIÓN RETROACTIVA:');
+        console.log('  - Fecha clickeada:', clickedDate);
+        console.log('  - Timestamp clickeado:', clickedTimestamp);
+        console.log('  - Fecha usuario:', userFecha);
+        console.log('  - Timestamp para orden:', timestampParaOrden);
         
         try {
             await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-                fecha: firebase.firestore.Timestamp.fromDate(userFecha), // Usar la fecha que especificó el usuario
+                fecha: firebase.firestore.Timestamp.fromDate(timestampParaOrden), // Para ordenamiento
+                fechaOriginal: firebase.firestore.Timestamp.fromDate(userFecha), // Para mostrar
                 obsdate: userObsdate ? firebase.firestore.Timestamp.fromDate(userObsdate) : null,
                 valor: valor, 
                 verifiedBy: usuario.usuario, 
                 verifiedRole: 'Gerente'
             });
             
+            console.log('✅ Consignación retroactiva agregada exitosamente');
+            
             // Forzar actualización de totales después de inserción retroactiva
             setTimeout(() => {
+              console.log('🔄 Actualizando totales después de inserción retroactiva...');
               updateSelectedTotals();
               updateTotalGeneral();
-              // También forzar re-render de la tabla para mostrar cambios
-              renderConsigns();
             }, 1000);
+            
+            setTimeout(() => {
+              console.log('🔄 Segunda actualización de totales...');
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 2500);
             
         } catch(e) { 
             showModal('Error', 'Error al insertar consignación: '+e.message, false); 
