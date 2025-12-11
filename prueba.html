@@ -1,686 +1,1780 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configuración de Usuarios</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sistema de Consignaciones - Blindado y Final</title>
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%);
-            min-height: 100vh;
-            padding: 20px;
-            animation: fadeIn 0.8s ease-in;
-        }
+  <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+  <style>
+    :root{
+      --bg: linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%);
+      --card: rgba(255, 255, 255, 0.95);
+      --accent: #4CAF50;
+      --accent-hover: #45a049;
+      --muted: #555;
+      --border: #e8f5e8;
+      --danger: #f44336;
+      --ok: #4CAF50;
+      --admin-gray: rgba(76, 175, 80, 0.1);
+      --manager-yellow: rgba(255, 193, 7, 0.2);
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+    *{
+      box-sizing:border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body{
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin:0;
+      background: var(--bg);
+      color: #2e7d32;
+      animation: fadeIn 0.8s ease-in;
+    }
 
-        .container {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 30px;
-            width: 100%;
-            max-width: 700px;
-            margin: 0 auto;
-            animation: slideUp 0.6s ease-out;
-        }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    #topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:15px 20px;
+      background: var(--card);
+      backdrop-filter: blur(10px);
+      border-bottom: 2px solid var(--border);
+      box-shadow: var(--shadow);
+      position: relative;
+      z-index: 100;
+    }
+    
+    .layout{
+      display:flex;
+      height:calc(100vh - 70px);
+    }
+    
+    .sidebar{
+      width:340px;
+      padding:20px;
+      background: var(--card);
+      backdrop-filter: blur(10px);
+      border-right: 2px solid var(--border);
+      overflow:auto;
+      box-shadow: var(--shadow);
+    }
+    
+    .main{
+      flex:1;
+      padding:20px;
+      overflow:auto;
+    }
+    h2,h3{
+      margin:0 0 15px 0;
+      color: #2e7d32;
+      font-weight: 600;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
 
-        h1 {
-            color: #2e7d32;
-            text-align: center;
-            font-size: 2.2em;
-            margin-bottom: 10px;
-            font-weight: 600;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
+    h3 {
+      position: relative;
+    }
 
-        h2 {
-            color: #388e3c;
-            text-align: center;
-            font-size: 1.5em;
-            margin: 30px 0 20px 0;
-            font-weight: 500;
-            position: relative;
-        }
+    h3::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 0;
+      width: 40px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), #66BB6A);
+      border-radius: 2px;
+    }
+    
+    label{
+      display:block;
+      font-size:14px;
+      color: var(--muted);
+      margin-bottom:8px;
+      font-weight: 600;
+    }
+    
+    input[type=text], input[type=number], input[type=date], select, textarea, input[type=password]{
+      width:100%;
+      padding:12px 15px;
+      border: 2px solid var(--border);
+      border-radius:10px;
+      background: rgba(255, 255, 255, 0.9);
+      font-size: 16px;
+      transition: all 0.3s ease;
+      color: #2e7d32;
+    }
 
-        h2::after {
-            content: '';
-            position: absolute;
-            bottom: -8px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 60px;
-            height: 3px;
-            background: linear-gradient(90deg, #4CAF50, #66BB6A);
-            border-radius: 2px;
-        }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+      transform: translateY(-1px);
+    }
 
-        #estadoUsuarios {
-            text-align: center;
-            color: #555;
-            font-style: italic;
-            margin-bottom: 20px;
-            padding: 10px;
-            background: rgba(76, 175, 80, 0.1);
-            border-radius: 10px;
-            border-left: 4px solid #4CAF50;
-        }
+    input:hover, select:hover, textarea:hover {
+      border-color: #66BB6A;
+    }
+    
+    textarea{resize:vertical}
+    
+    .btn{
+      background: linear-gradient(135deg, var(--accent), #66BB6A);
+      color:white;
+      border:none;
+      padding:10px 16px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: relative;
+      overflow: hidden;
+    }
 
-        label {
-            display: block;
-            margin-top: 15px;
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #2e7d32;
-            font-size: 0.95em;
-        }
+    .btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.5s;
+    }
 
-        input, select {
-            width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e8f5e8;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            background: rgba(255, 255, 255, 0.9);
-        }
+    .btn:hover::before {
+      left: 100%;
+    }
 
-        input:focus, select:focus {
-            outline: none;
-            border-color: #4CAF50;
-            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
-            transform: translateY(-1px);
-        }
+    .btn:hover {
+      background: linear-gradient(135deg, var(--accent-hover), #5cb85c);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
+    }
+    
+    .btn.ghost{
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--accent);
+      border: 2px solid var(--accent);
+    }
 
-        input:hover, select:hover {
-            border-color: #66BB6A;
-        }
+    .btn.ghost:hover {
+      background: var(--accent);
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
+    }
+    
+    .btn.danger{
+      background: linear-gradient(135deg, var(--danger), #ef5350);
+    }
 
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            position: relative;
-            overflow: hidden;
-        }
+    .btn.danger:hover {
+      background: linear-gradient(135deg, #d32f2f, #e53935);
+      box-shadow: 0 8px 25px rgba(244, 67, 54, 0.3);
+    }
+    
+    .btn.success{
+      background: linear-gradient(135deg, var(--ok), #66BB6A);
+    }
 
-        button::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
-        }
+    .btn.success:hover {
+      background: linear-gradient(135deg, var(--accent-hover), #5cb85c);
+      box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
+    }
+    
+    .panel{
+      background: var(--card);
+      backdrop-filter: blur(10px);
+      padding:20px;
+      border-radius:15px;
+      border: 2px solid var(--border);
+      box-shadow: var(--shadow);
+      margin-bottom:20px;
+      animation: slideUp 0.6s ease-out;
+    }
 
-        button:hover::before {
-            left: 100%;
-        }
+    .panel:hover {
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-2px);
+      transition: all 0.3s ease;
+    }
+    
+    .account-item{
+      padding:15px;
+      border-radius:12px;
+      border: 2px solid var(--border);
+      margin-bottom:12px;
+      cursor:pointer;
+      background: rgba(255, 255, 255, 0.9);
+      position: relative;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(5px);
+    }
 
-        button[type="submit"] {
-            background: linear-gradient(135deg, #4CAF50, #66BB6A);
-            color: white;
-            width: 100%;
-            margin-top: 20px;
-        }
+    .account-item:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(76, 175, 80, 0.15);
+    }
+    
+    .account-item.selected{
+      border-left: 6px solid var(--accent);
+      background: rgba(76, 175, 80, 0.1);
+      box-shadow: 0 8px 25px rgba(76, 175, 80, 0.2);
+    }
+    
+    .account-item .del-btn {
+      position: absolute; 
+      top: 12px; 
+      right: 12px; 
+      color: var(--danger); 
+      font-size: 18px; 
+      display: none; 
+      padding: 6px;
+      border-radius: 8px;
+      transition: all 0.3s ease;
+    }
+    
+    .account-item .del-btn:hover { 
+      background: rgba(244, 67, 54, 0.1);
+      transform: scale(1.1);
+    }
 
-        button[type="submit"]:hover {
-            background: linear-gradient(135deg, #45a049, #5cb85c);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
-        }
+    .flex-row{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap: wrap;
+    }
+    
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:14px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    
+    th,td{
+      padding:12px;
+      border: 1px solid var(--border);
+      background:transparent;
+      text-align: center;
+    }
 
-        .actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 20px;
-        }
+    th {
+      background: linear-gradient(135deg, var(--accent), #66BB6A);
+      color: white;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 13px;
+    }
 
-        .actions button {
-            margin: 0;
-        }
+    tr:nth-child(even) {
+      background: rgba(76, 175, 80, 0.05);
+    }
 
-        .actions button:nth-child(1) {
-            background: linear-gradient(135deg, #2196F3, #42A5F5);
-            color: white;
-        }
+    tr:hover {
+      background: rgba(76, 175, 80, 0.1);
+      transition: all 0.3s ease;
+    }
+    
+    tr.verified-admin{
+      background: var(--admin-gray);
+      border-left: 4px solid var(--accent);
+    }
+    
+    tr.verified-gerente{
+      background: var(--manager-yellow);
+      border-left: 4px solid #FFC107;
+    }
+    
+    /* Separadores */
+    tr.separator{
+      font-weight:700;
+      text-align:center;
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    tr.sep-green{
+      background: linear-gradient(135deg, #d1fae5, #a7f3d0)!important; 
+      color: #065f46;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2);
+    }
+    
+    tr.sep-red{
+      background: linear-gradient(135deg, #fee2e2, #fecaca)!important; 
+      color: #991b1b;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2);
+    }
+    
+    /* Foco teclado */
+    tr.keyboard-focus { 
+      outline: 3px solid var(--accent); 
+      z-index: 10; 
+      position: relative;
+      box-shadow: 0 0 0 6px rgba(76, 175, 80, 0.2);
+    }
 
-        .actions button:nth-child(1):hover {
-            background: linear-gradient(135deg, #1976D2, #1E88E5);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(33, 150, 243, 0.3);
-        }
+    .muted{
+      color:var(--muted);
+      font-size:14px;
+      font-style: italic;
+    }
+    
+    .top-totals{
+      display:flex;
+      gap:15px;
+      align-items:center;
+      flex-wrap: wrap;
+    }
+    
+    .top-totals .card{
+      padding:12px 16px;
+      border-radius:12px;
+      border: 2px solid var(--border);
+      background: var(--card);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      transition: all 0.3s ease;
+    }
 
-        .actions button:nth-child(2) {
-            background: linear-gradient(135deg, #f44336, #ef5350);
-            color: white;
-        }
+    .top-totals .card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hover);
+    }
+    
+    .small{
+      font-size:13px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    
+    .modal{
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(5px);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      z-index:999;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    .modal .card{
+      width:750px;
+      max-width:96%;
+      padding:25px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      animation: slideUp 0.4s ease;
+    }
+    
+    .hidden{display:none}
+    
+    .gear{
+      cursor:pointer;
+      padding:8px;
+      border-radius:10px;
+      border: 2px solid var(--border);
+      background: var(--card);
+      transition: all 0.3s ease;
+      font-size: 16px;
+    }
 
-        .actions button:nth-child(2):hover {
-            background: linear-gradient(135deg, #d32f2f, #e53935);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(244, 67, 54, 0.3);
-        }
+    .gear:hover {
+      border-color: var(--accent);
+      background: rgba(76, 175, 80, 0.1);
+      transform: scale(1.1);
+    }
+    
+    /* Nuevo modal genérico */
+    #generic-modal .card{
+      width:500px!important; 
+      max-width:96%; 
+      padding:25px; 
+      position:relative;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+    
+    #modal-title{
+      color: var(--accent); 
+      margin-bottom:20px;
+      font-size: 1.4em;
+      font-weight: 600;
+      text-align: center;
+    }
+    
+    #modal-body{
+      margin-bottom:20px;
+      line-height: 1.6;
+      color: #2e7d32;
+    }
+    
+    #modal-password-input{
+      margin-top:10px;
+    }
 
-        #usuariosSelect {
-            margin-bottom: 20px;
-            font-weight: 500;
-        }
+    /* ESTILO DINÁMICO DE ADVERTENCIA MODERNIZADO */
+    .warning-icon {
+        font-size: 36px;
+        color: var(--danger);
+        margin-right: 15px;
+        animation: pulse 2s infinite;
+    }
 
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .container {
-                margin: 10px;
-                padding: 20px;
-                border-radius: 15px;
-            }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    
+    .warning-title-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        padding: 15px 0;
+        border-bottom: 2px solid var(--border);
+        background: rgba(244, 67, 54, 0.05);
+        border-radius: 10px;
+        padding: 15px;
+    }
+    
+    .warning-message {
+        font-weight: 500;
+        line-height: 1.6;
+        padding-top: 10px;
+        color: #2e7d32;
+        background: rgba(76, 175, 80, 0.05);
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 4px solid var(--accent);
+    }
 
-            h1 {
-                font-size: 1.8em;
-            }
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .layout {
+        flex-direction: column;
+        height: auto;
+      }
 
-            h2 {
-                font-size: 1.3em;
-            }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 2px solid var(--border);
+      }
 
-            .actions {
-                grid-template-columns: 1fr;
-            }
+      .top-totals {
+        flex-direction: column;
+        gap: 10px;
+      }
 
-            input, select, button {
-                font-size: 16px; /* Prevents zoom on iOS */
-            }
-        }
+      .flex-row {
+        flex-direction: column;
+        gap: 8px;
+      }
 
-        /* Loading animation */
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(76, 175, 80, 0.3);
-            border-radius: 50%;
-            border-top-color: #4CAF50;
-            animation: spin 1s ease-in-out infinite;
-        }
+      .modal .card {
+        width: 95%;
+        padding: 20px;
+      }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+      table {
+        font-size: 12px;
+      }
 
-        /* Form sections */
-        .form-section {
-            background: rgba(76, 175, 80, 0.05);
-            padding: 20px;
-            border-radius: 15px;
-            margin: 20px 0;
-            border: 1px solid rgba(76, 175, 80, 0.1);
-        }
-
-        /* Success/Error states */
-        .success {
-            background: rgba(76, 175, 80, 0.1);
-            color: #2e7d32;
-            border-left: 4px solid #4CAF50;
-        }
-
-        .error {
-            background: rgba(244, 67, 54, 0.1);
-            color: #c62828;
-            border-left: 4px solid #f44336;
-        }
-
-        /* Modal Styles */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(5px);
-            animation: fadeIn 0.3s ease;
-        }
-
-        .modal-content {
-            background: white;
-            margin: 10% auto;
-            padding: 0;
-            border-radius: 15px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-            animation: slideDown 0.3s ease;
-            overflow: hidden;
-        }
-
-        @keyframes slideDown {
-            from { transform: translateY(-50px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .modal-header {
-            background: linear-gradient(135deg, #4CAF50, #66BB6A);
-            color: white;
-            padding: 20px;
-            position: relative;
-        }
-
-        .modal-header h3 {
-            margin: 0;
-            font-size: 1.3em;
-            font-weight: 600;
-        }
-
-        .close {
-            position: absolute;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .close:hover {
-            transform: translateY(-50%) scale(1.1);
-            opacity: 0.7;
-        }
-
-        .modal-body {
-            padding: 30px;
-            text-align: center;
-            color: #333;
-            font-size: 1.1em;
-            line-height: 1.5;
-        }
-
-        .modal-footer {
-            padding: 20px 30px;
-            text-align: center;
-            border-top: 1px solid #eee;
-        }
-
-        .modal-btn {
-            background: linear-gradient(135deg, #4CAF50, #66BB6A);
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .modal-btn:hover {
-            background: linear-gradient(135deg, #45a049, #5cb85c);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
-        }
-    </style>
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
-    <script>
-        // Configuración de Firebase
-const firebaseConfig = {
-    apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
-    authDomain: "lazapateria-c4157.firebaseapp.com",
-    projectId: "lazapateria-c4157",
-    storageBucket: "lazapateria-c4157.firebasestorage.app",
-    messagingSenderId: "300241769138",
-    appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
-    measurementId: "G-HVG7615JEE"
-};
-
-        // Inicializar Firebase
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-
-        window.onload = () => {
-            cargarUsuarios();
-            cargarEmpresas();
-        };
-    </script>
+      th, td {
+        padding: 8px 4px;
+      }
+    }
+  </style>
 </head>
 <body>
-    <!-- Custom Modal -->
-    <div id="customModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalTitle">Información</h3>
-                <span class="close" onclick="closeModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <p id="modalMessage"></p>
-            </div>
-            <div class="modal-footer">
-                <button onclick="closeModal()" class="modal-btn">Aceptar</button>
-            </div>
-        </div>
+
+  <div id="topbar">
+    <div style="display:flex;gap:15px;align-items:center">
+      <strong style="font-size: 1.3em; color: #2e7d32; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">💰 Sistema de Consignaciones</strong>
+      <div class="small" style="background: rgba(76, 175, 80, 0.1); padding: 4px 12px; border-radius: 20px; color: #2e7d32; font-weight: 600;">Gerencia</div>
     </div>
 
-    <div class="container">
-        <h1>Configuración de Usuarios</h1>
-        <p id="estadoUsuarios"></p>
-    <script>
-        async function cargarUsuarios() {
-            document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
-            try {
-                const snapshot = await db.collection('usuarios').get();
-                const usuariosSelect = document.getElementById('usuariosSelect');
-                if (!usuariosSelect) {
-                    throw new Error("usuariosSelect no está definido.");
-                }
-                usuariosSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
-                snapshot.forEach(doc => {
-                    const usuario = doc.data().nombreCompleto;
-                    const option = document.createElement('option');
-                    option.value = doc.id;
-                    option.textContent = usuario;
-                    usuariosSelect.appendChild(option);
-                });
-                document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
-            } catch (error) {
-                document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
-            }
-        }
+    <div class="top-totals">
+      <div class="card small">
+        <div class="muted">💵 Total general</div>
+        <div id="total-general" style="font-weight: 700; color: #2e7d32; font-size: 1.1em;">0</div>
+      </div>
+      <div class="card small">
+        <div class="muted">🏦 Total cuenta actual</div>
+        <div id="total-cuenta" style="font-weight: 700; color: #2e7d32; font-size: 1.1em;">0</div>
+      </div>
+      <div class="card small">
+        <div class="muted">👤 Usuario</div>
+        <div id="user-info" style="font-weight: 600; color: #2e7d32;">...</div>
+      </div>
+      <button id="open-options" class="btn ghost">⚙️ Opciones</button>
+      <button id="logout" class="btn ghost">🚪 Salir</button>
+    </div>
+  </div>
 
-        async function cargarEmpresas() {
-            const empresaSelect = document.getElementById('empresaSeleccionadaRegistro');
-            empresaSelect.innerHTML = '<option value="">Seleccionar Empresa</option>';
-            try {
-                const snapshot = await db.collection('empresas').get();
-                snapshot.forEach(doc => {
-                    const option = document.createElement('option');
-                    option.value = doc.data().nombre;
-                    option.textContent = doc.data().nombre;
-                    empresaSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error("Error cargando empresas: ", error);
-            }
-        }
-    </script>
-        <div class="form-section">
-            <h2>Registrar un nuevo usuario</h2>
-            <form onsubmit="event.preventDefault(); registrarUsuario();">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div>
-                        <label for="usuarioRegistro">Usuario:</label>
-                        <input type="text" id="usuarioRegistro" name="usuarioRegistro" required>
-                    </div>
-                    <div>
-                        <label for="nombreCompleto">Nombre completo:</label>
-                        <input type="text" id="nombreCompleto" name="nombreCompleto" required>
-                    </div>
-                </div>
+  <div class="layout">
+    <div class="sidebar">
+      <h3>🔍 Buscar / Cuentas</h3>
+      <label>🏷️ Buscar por nombre</label>
+      <input id="search-name" type="text" placeholder="Ingrese nombre de cuenta...">
+      <label style="margin-top:15px">🔢 Buscar por número</label>
+      <input id="search-account" type="text" placeholder="Ingrese número de cuenta...">
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div>
-                        <label for="tipoDocumento">Tipo de documento:</label>
-                        <input type="text" id="tipoDocumento" name="tipoDocumento">
-                    </div>
-                    <div>
-                        <label for="celular">Celular:</label>
-                        <input type="text" id="celular" name="celular">
-                    </div>
-                </div>
-
-                <label for="correo">Correo:</label>
-                <input type="email" id="correo" name="correo" required>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div>
-                        <label for="direccion">Dirección:</label>
-                        <input type="text" id="direccion" name="direccion">
-                    </div>
-                    <div>
-                        <label for="municipio">Municipio:</label>
-                        <input type="text" id="municipio" name="municipio">
-                    </div>
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div>
-                        <label for="tipoContrato">Tipo de contrato:</label>
-                        <select id="tipoContrato" name="tipoContrato">
-                            <option value="Fijo">Fijo</option>
-                            <option value="Temporal">Temporal</option>
-                            <option value="Indefinido">Indefinido</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="permisos">Permisos:</label>
-                        <select id="permisos" name="permisos">
-                            <option value="Administrador">Administrador</option>
-                            <option value="Operador">Operador</option>
-                            <option value="Bodeguero">Bodeguero</option>
-                        </select>
-                    </div>
-                </div>
-
-                <label for="nuevaEmpresa">Nueva Empresa (si no está en la lista):</label>
-                <input type="text" id="nuevaEmpresa" name="nuevaEmpresa" placeholder="Dejar vacío si selecciona empresa existente">
-
-                <label for="empresaSeleccionadaRegistro">Seleccionar Empresa:</label>
-                <select id="empresaSeleccionadaRegistro" name="empresaSeleccionadaRegistro">
-                    <option value="">Seleccionar Empresa</option>
-                </select>
-
-                <label for="contraseña">Contraseña:</label>
-                <input type="password" id="contraseña" name="contraseña" required>
-
-                <button type="submit">Registrar Usuario</button>
-                
-                <div class="actions">
-                    <button type="button" onclick="modificarUsuario()">Modificar Usuario</button>
-                    <button type="button" onclick="eliminarUsuario()">Eliminar Usuario</button>
-                </div>
-            </form>
+      <div style="margin-top:20px" class="panel">
+        <h4 style="margin-bottom:15px; color: #2e7d32; font-weight: 600;">➕ Nueva cuenta</h4>
+        <label>📝 Nombre</label>
+        <input id="new-account-name" type="text" placeholder="Nombre de la cuenta">
+        <label style="margin-top:12px">🔢 Número</label>
+        <input id="new-account-number" type="text" placeholder="Número de cuenta">
+        <div style="margin-top:15px" class="flex-row">
+          <button id="add-account" class="btn" style="flex:1">✅ Agregar Cuenta</button>
         </div>
-    <script>
-        async function registrarUsuario() {
-            const nombreCompleto = document.getElementById("nombreCompleto").value;
-            const tipoDocumento = document.getElementById("tipoDocumento").value;
-            const celular = document.getElementById("celular").value;
-            const correo = document.getElementById("correo").value;
-            const direccion = document.getElementById("direccion").value;
-            const municipio = document.getElementById("municipio").value;
-            const tipoContrato = document.getElementById("tipoContrato").value;
-            const permisos = document.getElementById("permisos").value;
-            const nuevaEmpresa = document.getElementById("nuevaEmpresa").value;
-            const empresaSeleccionada = document.getElementById("empresaSeleccionadaRegistro").value;
-            const usuario = document.getElementById("usuarioRegistro").value;
-            const contraseña = document.getElementById("contraseña").value;
-            const empresa = nuevaEmpresa || empresaSeleccionada;
+      </div>
 
-            if (!nombreCompleto || !empresa || !usuario || !contraseña) {
-                showAlert("Por favor, complete todos los campos obligatorios.");
-                return;
-            }
+      <div>
+        <div class="muted" style="margin-bottom:12px; font-weight: 600; color: #2e7d32;">📋 Lista de Cuentas</div>
+        <div id="accounts-list" style="max-height:50vh;overflow:auto;padding-right:5px;"></div>
+      </div>
+    </div>
 
-            if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
-                await db.collection('empresas').add({ nombre: nuevaEmpresa });
-            }
-
-            try {
-                await db.collection('usuarios').add({
-                    nombreCompleto,
-                    tipoDocumento,
-                    celular,
-                    correo,
-                    direccion,
-                    municipio,
-                    tipoContrato,
-                    permisos,
-                    empresa,
-                    usuario,
-                    contraseña // ¡Importante! Considera la seguridad de almacenar contraseñas en Firestore
-                });
-                showAlert("Usuario registrado: " + nombreCompleto + " (Usuario: " + usuario + ") en la empresa " + empresa);
-                cargarUsuarios();
-                cargarEmpresas();
-                document.querySelector('form').reset();
-            } catch (error) {
-                console.error("Error registrando usuario: ", error);
-            }
-        }
-
-        async function empresaExiste(nombreEmpresa) {
-            const snapshot = await db.collection('empresas').where('nombre', '==', nombreEmpresa).get();
-            return !snapshot.empty;
-        }
-
-        async function modificarUsuario() {
-            const usuarioId = document.getElementById('usuariosSelect').value;
-            const nombreCompleto = document.getElementById("nombreCompleto").value;
-            const tipoDocumento = document.getElementById("tipoDocumento").value;
-            const celular = document.getElementById("celular").value;
-            const correo = document.getElementById("correo").value;
-            const direccion = document.getElementById("direccion").value;
-            const municipio = document.getElementById("municipio").value;
-            const tipoContrato = document.getElementById("tipoContrato").value;
-            const permisos = document.getElementById("permisos").value;
-            const empresa = document.getElementById("empresaSeleccionadaRegistro").value;
-            const contraseña = document.getElementById("contraseña").value;
-            const usuarioRegistro = document.getElementById("usuarioRegistro").value;
-
-            if (!nombreCompleto || !empresa || !usuarioId || !contraseña || !usuarioRegistro || !correo) {
-                showAlert("Por favor, complete todos los campos obligatorios.");
-                return;
-            }
-
-            try {
-                await db.collection('usuarios').doc(usuarioId).update({
-                    nombreCompleto,
-                    tipoDocumento,
-                    celular,
-                    correo,
-                    direccion,
-                    municipio,
-                    tipoContrato,
-                    permisos,
-                    empresa,
-                    usuario: usuarioRegistro,
-                    contraseña // ¡Importante! Considera la seguridad de almacenar contraseñas en Firestore
-                });
-                showAlert("Usuario modificado con éxito.");
-                cargarUsuarios();
-            } catch (error) {
-                console.error("Error modificando usuario: ", error);
-            }
-        }
-
-        async function eliminarUsuario() {
-            const usuarioId = document.getElementById('usuariosSelect').value;
-
-            if (!usuarioId) {
-                showAlert("Por favor, seleccione un usuario.");
-                return;
-            }
-
-            try {
-                await db.collection('usuarios').doc(usuarioId).delete();
-                showAlert("Usuario eliminado con éxito.");
-                cargarUsuarios();
-                document.querySelector('form').reset();
-            } catch (error) {
-                console.error("Error eliminando usuario: ", error);
-            }
-        }
-    </script>
-
-        <div class="form-section">
-            <h2>Usuarios Registrados</h2>
-            <label for="usuariosSelect">Seleccionar usuario para editar:</label>
-            <select id="usuariosSelect" onchange="mostrarDatosUsuario()">
-                <option value="">Seleccionar Usuario</option>
-            </select>
+    <div class="main">
+      <div class="panel">
+        <h3>💰 Agregar consignación</h3>
+        <div id="selected-account-info" class="muted" style="margin-bottom:15px; padding: 10px; background: rgba(76, 175, 80, 0.1); border-radius: 8px; border-left: 4px solid var(--accent);">Ninguna cuenta seleccionada</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:300px;">
+            <label>📅 FECHA DE CONSIGNACIÓN</label>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+              <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="dateOpt" value="today"> 📅 Hoy</label>
+              <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="dateOpt" value="yesterday"> 📅 Ayer</label>
+              <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="dateOpt" value="daybefore"> 📅 Antier</label>
+              <label style="margin-left:10px;font-weight:600;">📝 Manual:</label>
+            </div>
+            <input id="date-picker" type="date">
+          </div>
+          <div style="flex:1;min-width:300px;">
+            <label>👁️ FECHA DE OBSERVACIÓN</label>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+              <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="obsOpt" value="today"> 📅 Hoy</label>
+              <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="obsOpt" value="yesterday"> 📅 Ayer</label>
+              <label style="display:flex;align-items:center;gap:5px;"><input type="radio" name="obsOpt" value="daybefore"> 📅 Antier</label>
+              <label style="margin-left:10px;font-weight:600;">📝 Manual:</label>
+            </div>
+            <input id="obsdate-picker" type="date">
+          </div>
         </div>
-    <script>
-        async function mostrarDatosUsuario() {
-            const usuarioId = document.getElementById('usuariosSelect').value;
-            if (usuarioId) {
-                try {
-                    const usuarioDoc = await db.collection('usuarios').doc(usuarioId).get();
-                    if (usuarioDoc.exists) {
-                        const usuario = usuarioDoc.data();
-                        document.getElementById('usuarioRegistro').value = usuario.usuario || '';
-                        document.getElementById('nombreCompleto').value = usuario.nombreCompleto || '';
-                        document.getElementById('tipoDocumento').value = usuario.tipoDocumento || '';
-                        document.getElementById('celular').value = usuario.celular || '';
-                        document.getElementById('correo').value = usuario.correo || '';
-                        document.getElementById('direccion').value = usuario.direccion || '';
-                        document.getElementById('municipio').value = usuario.municipio || '';
-                        document.getElementById('tipoContrato').value = usuario.tipoContrato || '';
-                        document.getElementById('permisos').value = usuario.permisos || '';
-                        document.getElementById('empresaSeleccionadaRegistro').value = usuario.empresa || '';
-                        document.getElementById('contraseña').value = usuario.contraseña || ''; // Mostrar la contraseña
-                    }
-                } catch (error) {
-                    console.error("Error obteniendo datos del usuario: ", error);
-                }
+        <div style="margin-top:20px;display:flex;gap:15px;align-items:end;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <label>💵 VALOR (COP)</label>
+            <input id="valor" type="number" placeholder="Ingrese el valor..." style="font-size:16px;font-weight:600;">
+          </div>
+          <div style="min-width:250px;">
+            <button id="add-consign" class="btn" style="width:100%;padding:15px;font-size:16px;">✅ Agregar Consignación</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center; flex-wrap:wrap; gap:15px;">
+          <h3 style="margin:0">📊 Movimientos</h3>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="btn-export-excel" class="btn success">📥 Descargar Cuenta</button>
+            <button id="btn-export-master" class="btn success" style="display:none; background:linear-gradient(135deg, #7c3aed, #8b5cf6); color:white;">📥 Descargar Maestra (G)</button>
+
+            <div style="width:2px; background:var(--border); margin:0 8px; border-radius:1px;"></div>
+            <button id="btn-verify" class="btn">✅ Verificado</button>
+            <button id="btn-unverify" class="btn ghost">❌ Desverificar</button>
+            <button id="btn-delete" class="btn danger" style="display:none">🗑️ Eliminar</button>
+            <button id="btn-sumar" class="btn ghost">➕ Sumar</button>
+            <button id="btn-cuadrar" class="btn ghost" style="display:none; border:2px solid var(--accent); color:var(--accent); font-weight:600;">✅ Cuadrar (Corte)</button>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;max-height:52vh;overflow:auto;border-radius:12px;" tabindex="0" id="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>☑️ Sel</th>
+                <th>📅 FECHA</th>
+                <th>💵 VALOR</th>
+                <th>👁️ FECHA OBS</th>
+                <th>📋 ESTADO</th>
+              </tr>
+            </thead>
+            <tbody id="consigns-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-options" class="modal hidden">
+    <div class="panel card" style="width:750px;max-width:96%">
+      <h3 style="text-align:center; color:#2e7d32; margin-bottom:25px;">⚙️ Opciones de Acceso</h3>
+      <div style="margin-top:20px; display:flex; gap:20px; justify-content:center;">
+        <label style="display:flex; align-items:center; gap:8px; padding:10px 20px; border:2px solid var(--border); border-radius:10px; cursor:pointer; transition:all 0.3s ease;">
+          <input type="radio" name="sessionRole" value="Administrativo" checked> 
+          <span style="font-weight:600;">👤 Administrativo</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; padding:10px 20px; border:2px solid var(--border); border-radius:10px; cursor:pointer; transition:all 0.3s ease;">
+          <input type="radio" name="sessionRole" value="Gerente"> 
+          <span style="font-weight:600;">👑 Gerente</span>
+        </label>
+      </div>
+      <div id="manager-pass-area" class="hidden" style="margin-top:20px">
+        <label>🔐 Clave Gerente</label>
+        <input id="manager-pass" type="password" placeholder="Ingrese la clave de gerente">
+      </div>
+      <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:15px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="gear" id="gear-change" title="Cambiar clave">⚙️</span>
+          <small class="muted" style="font-weight:500;">Configurar clave</small>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button id="options-continue" class="btn">✅ Continuar</button>
+          <button id="options-cancel" class="btn ghost">❌ Cancelar</button>
+        </div>
+      </div>
+      <div id="gear-panel" class="hidden" style="margin-top:20px; padding:15px; background:rgba(76,175,80,0.05); border-radius:10px; border:2px solid var(--border);">
+        <label>🔑 Nueva clave Gerente</label>
+        <input id="new-manager-pass" type="text" placeholder="Ingrese nueva clave">
+        <div style="margin-top:15px;display:flex;gap:10px;justify-content:flex-end">
+          <button id="save-manager-pass" class="btn">💾 Guardar</button>
+          <button id="cancel-gear" class="btn ghost">❌ Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="generic-modal" class="modal hidden">
+    <div class="panel card">
+        <h4 id="modal-title" style="margin-top:0;"></h4>
+        <div id="modal-body"></div>
+        <div id="modal-password-area" class="hidden" style="margin-top:20px">
+            <label>🔐 CLAVE DE GERENTE</label>
+            <input id="modal-password-input" type="password" placeholder="Ingrese la clave de gerente">
+        </div>
+        <div style="margin-top:25px;display:flex;gap:12px;justify-content:flex-end">
+            <button id="modal-cancel-btn" class="btn ghost hidden">❌ Cancelar</button>
+            <button id="modal-ok-btn" class="btn">✅ Aceptar</button>
+        </div>
+    </div>
+  </div>
+
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+<script>
+/* CONFIGURACIÓN FIREBASE */
+const firebaseConfig = {
+  apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+  authDomain:"lazapateria-c4157.firebaseapp.com",
+  projectId:"lazapateria-c4157",
+  storageBucket:"lazapateria-c4157.firebasestorage.app",
+  messagingSenderId:"300241769138",
+  appId:"1:300241769138:web:8ca1847de3c4fb5042afab"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* ESTADO GLOBAL */
+const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
+if(!usuario){ showModal('Error', 'No hay sesión activa.', false, ()=>location.href='index.html'); }
+if(usuario.permisos !== 'Administrador'){ showModal('Error', 'Acceso denegado.', false, ()=>location.href='index.html'); }
+
+$('user-info').textContent = usuario.usuario;
+$('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
+
+let sessionRole = 'Administrativo';
+let managerPass = '0000'; 
+const settingsRef = db.collection('settings').doc('managerPassword');
+
+function loadManagerPass() {
+    settingsRef.onSnapshot(doc => {
+        if (doc.exists && doc.data().password) {
+            managerPass = doc.data().password;
+        } else {
+            // Si el documento no existe, lo creamos con una clave por defecto
+            if (!doc.exists) {
+                settingsRef.set({ password: '0000' }).catch(e => console.error("Error creando clave por defecto:", e));
+            }
+            managerPass = '0000'; 
+        }
+    }, error => {
+        console.error("Error al cargar la clave de gerente:", error);
+    });
+}
+loadManagerPass();
+
+let selectedAccountId = null;
+let selectedAccountName = "SinNombre";
+let currentConsignsSnapshot = []; 
+let selectedConsignIds = new Set(); // Almacenamiento local de IDs seleccionados (para persistencia en UI)
+
+/* UTILIDADES */
+function $(id){ return document.getElementById(id); }
+function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)); }
+function parseDateRadio(name, pickerId){ const opts = document.getElementsByName(name); let sel=null; for(const r of opts) if(r.checked) sel=r.value; if(sel==='today') return new Date(); if(sel==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); return d; } if(sel==='daybefore'){ const d=new Date(); d.setDate(d.getDate()-2); return d; } const v=$(pickerId).value; return v? new Date(v): null; }
+
+/* FUNCIONES DE MODAL GENÉRICO */
+function showModal(title, message, isConfirm, onOk, onCancel){
+    $('modal-title').textContent = title;
+    $('modal-body').innerHTML = message;
+    $('modal-password-area').classList.add('hidden');
+    $('modal-password-input').value = '';
+
+    $('modal-cancel-btn').textContent = "Cancelar";
+    $('modal-cancel-btn').classList.toggle('hidden', !isConfirm);
+    $('modal-ok-btn').textContent = "Aceptar";
+    $('modal-ok-btn').onclick = () => { $('generic-modal').classList.add('hidden'); if(onOk) onOk(); };
+    $('modal-cancel-btn').onclick = () => { $('generic-modal').classList.add('hidden'); if(onCancel) onCancel(); };
+
+    $('generic-modal').classList.remove('hidden');
+}
+
+function showPasswordModal(title, message){
+    return new Promise((resolve, reject) => {
+        $('modal-title').textContent = title;
+        $('modal-body').textContent = message;
+        $('modal-password-area').classList.remove('hidden');
+        $('modal-password-input').value = '';
+        $('modal-password-input').focus();
+        
+        $('modal-cancel-btn').textContent = "Cancelar";
+        $('modal-cancel-btn').classList.remove('hidden');
+        $('modal-ok-btn').textContent = "Aceptar";
+
+        const checkPass = () => {
+            const pass = $('modal-password-input').value;
+            if (pass === managerPass) {
+                $('generic-modal').classList.add('hidden');
+                resolve(true);
             } else {
-                document.querySelector('form').reset();
+                showModal('Error de Seguridad', 'Clave incorrecta. Intente de nuevo.', false);
+                $('modal-password-input').value = '';
+                $('modal-password-input').focus();
+            }
+        };
+
+        const handleCancel = () => {
+            $('generic-modal').classList.add('hidden');
+            reject(new Error("Acción cancelada."));
+        };
+
+        $('modal-ok-btn').onclick = checkPass;
+        $('modal-cancel-btn').onclick = handleCancel;
+        
+        // Permite usar Enter en el input de contraseña
+        $('modal-password-input').onkeydown = (e) => {
+            if(e.key === 'Enter') { e.preventDefault(); checkPass(); }
+        };
+
+        $('generic-modal').classList.remove('hidden');
+    }).catch(e => {
+        if(e.message !== "Acción cancelada.") {
+            showModal('Error', e.message, false);
+        }
+        throw e; // Re-throw to propagate rejection
+    });
+}
+
+/** Muestra advertencia dinámica (Cierre/Cuadre) y pregunta si continuar */
+function showSuperWarning(title, message, onContinue) {
+    return new Promise((resolve) => {
+        $('modal-title').innerHTML = `
+            <div class="warning-title-container">
+                <span class="warning-icon">🚨</span>
+                <span style="font-size: 1.2em; font-weight: bold; color: var(--danger);">${title}</span>
+            </div>
+        `;
+        $('modal-body').innerHTML = `<p class="warning-message">${message}</p>`;
+        $('modal-password-area').classList.add('hidden');
+        
+        $('modal-cancel-btn').textContent = "Cancelar Acción";
+        $('modal-cancel-btn').classList.remove('hidden');
+        
+        $('modal-ok-btn').textContent = "Sí, Continuar Agregando";
+        $('modal-ok-btn').classList.remove('danger');
+        
+        $('modal-ok-btn').onclick = () => { 
+            $('generic-modal').classList.add('hidden'); 
+            resolve(true);
+        };
+        $('modal-cancel-btn').onclick = () => { 
+            $('generic-modal').classList.add('hidden'); 
+            resolve(false);
+        };
+
+        $('generic-modal').classList.remove('hidden');
+    });
+}
+
+/** Función para Inserción Retroactiva (Doble Clic) */
+async function handleDoubleClick(clickedConsign, index) {
+    if (sessionRole !== 'Gerente') {
+        showModal('Acceso Denegado', 'Solo el **Gerente** puede insertar movimientos retroactivos.', false);
+        return;
+    }
+    
+    if (clickedConsign.isSeparator || !clickedConsign.verifiedRole) {
+         showModal('Atención', 'Solo puede insertar antes de consignaciones verificadas.', false);
+         return;
+    }
+    
+    // 3. Preparar datos
+    const clickedDate = clickedConsign.fecha.toDate();
+    const clickedTimestamp = clickedDate.getTime();
+    const today = new Date().toISOString().substring(0, 10);
+    const clickedDateStr = clickedDate.toLocaleDateString('es-CO');
+
+    // 4. Configurar el Modal Dinámico con inputs de Fecha y Observación
+    $('modal-title').innerHTML = `
+        <div class="warning-title-container">
+            <span class="warning-icon" style="color: var(--accent);">📝</span> 
+            <span style="font-size: 1.2em; font-weight: bold; color: var(--accent);">Inserción Retroactiva</span>
+        </div>
+    `;
+    $('modal-body').innerHTML = `
+        <p class="warning-message">
+            El nuevo movimiento se insertará con la fecha y valor que especifique, garantizando que aparezca **justo encima** de la consignación del **${clickedDateStr}** y se marcará como Verificado (Gerente).
+        </p>
+        <div style="display:flex; gap:10px;">
+            <div style="flex:1">
+                <label style="font-size:13px; color:var(--muted); margin-bottom:6px;">FECHA CONSIGNACIÓN:</label>
+                <input type="date" id="modal-retro-fecha" required value="${today}" style="width: 100%;">
+            </div>
+            <div style="flex:1">
+                <label style="font-size:13px; color:var(--muted); margin-bottom:6px;">FECHA DE OBSERVACIÓN (Opcional):</label>
+                <input type="date" id="modal-retro-obsdate" style="width: 100%;">
+            </div>
+        </div>
+        <div style="margin-top:12px;">
+            <label style="font-size:13px; color:var(--muted); margin-bottom:6px;">VALOR (COP) a insertar:</label>
+            <input type="number" id="modal-retro-valor" placeholder="0.00" style="padding: 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%;">
+        </div>
+    `;
+    
+    $('modal-password-area').classList.add('hidden');
+    $('modal-cancel-btn').textContent = "Cancelar";
+    $('modal-cancel-btn').classList.remove('hidden');
+    $('modal-ok-btn').textContent = "Insertar";
+
+    // 5. Lógica de Aceptar
+    const insertAction = async () => {
+        const valorInput = document.getElementById('modal-retro-valor');
+        const fechaInput = document.getElementById('modal-retro-fecha');
+        const obsdateInput = document.getElementById('modal-retro-obsdate');
+        
+        const valor = Number(valorInput.value);
+        const fechaStr = fechaInput.value;
+        const obsdateStr = obsdateInput.value;
+
+        if (isNaN(valor) || valor <= 0) {
+            showModal('Error', 'Valor inválido o no ingresado. Intente de nuevo.', false);
+            return handleDoubleClick(clickedConsign, index); 
+        }
+        if (!fechaStr) {
+            showModal('Error', 'Debe seleccionar una fecha para la consignación.', false);
+            return handleDoubleClick(clickedConsign, index);
+        }
+
+        const userFecha = new Date(fechaStr);
+        const userObsdate = obsdateStr ? new Date(obsdateStr) : null;
+        
+        // *** MODIFICADO: Ahora suma 1ms para que sea cronológicamente más reciente y suba en la lista descendente ***
+        const finalTimestampForSorting = firebase.firestore.Timestamp.fromMillis(clickedTimestamp + 1);
+        
+        try {
+            await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
+                fecha: finalTimestampForSorting, // Usamos 1ms más para forzar la posición superior (en lista descendente)
+                obsdate: userObsdate ? firebase.firestore.Timestamp.fromDate(userObsdate) : null,
+                valor: valor, 
+                verifiedBy: usuario.usuario, 
+                verifiedRole: 'Gerente'
+            });
+        } catch(e) { 
+            showModal('Error', 'Error al insertar consignación: '+e.message, false); 
+        } finally {
+            $('generic-modal').classList.add('hidden');
+        }
+    };
+
+    $('modal-ok-btn').onclick = insertAction;
+    $('modal-cancel-btn').onclick = () => {
+        $('generic-modal').classList.add('hidden');
+    };
+    
+    $('generic-modal').classList.remove('hidden');
+    document.getElementById('modal-retro-valor').focus();
+}
+
+
+/* MODAL DE OPCIONES Y ROLES */
+$('open-options').addEventListener('click', ()=> {
+  $('modal-options').classList.remove('hidden');
+  document.querySelector('input[name="sessionRole"][value="Administrativo"]').checked = true;
+  $('manager-pass-area').classList.add('hidden');
+  $('manager-pass').value = '';
+  $('gear-panel').classList.add('hidden');
+});
+
+document.querySelectorAll('input[name="sessionRole"]').forEach(r=>{
+  r.addEventListener('change', (e)=>{
+    if(e.target.value === 'Gerente') $('manager-pass-area').classList.remove('hidden');
+    else $('manager-pass-area').classList.add('hidden');
+  });
+});
+
+$('options-cancel').addEventListener('click', ()=> $('modal-options').classList.add('hidden'));
+$('gear-change').addEventListener('click', ()=> $('gear-panel').classList.toggle('hidden'));
+$('cancel-gear').addEventListener('click', ()=> $('gear-panel').classList.add('hidden'));
+
+$('save-manager-pass').addEventListener('click', async ()=>{
+  const p = $('new-manager-pass').value.trim(); 
+  if(!p){ showModal('Atención', 'Ingrese nueva clave.', false); return; }
+  
+  try {
+    // Guardar la nueva clave en Firebase
+    await settingsRef.set({ password: p }, { merge: true }); 
+    managerPass = p; // Actualiza el estado local inmediatamente
+    showModal('Éxito', 'Clave actualizada en el sistema.', false); 
+    $('gear-panel').classList.add('hidden');
+  } catch(e) {
+    showModal('Error', 'Error al guardar la clave: ' + e.message, false);
+  }
+});
+
+$('options-continue').addEventListener('click', ()=>{
+  const chosen = document.querySelector('input[name="sessionRole"]:checked').value;
+  if(chosen === 'Gerente'){
+    if($('manager-pass').value !== managerPass){ showModal('Error', 'Clave incorrecta.', false); return; }
+    sessionRole = 'Gerente';
+  } else sessionRole = 'Administrativo';
+
+  const isMgr = (sessionRole === 'Gerente');
+  $('btn-delete').style.display = isMgr ? 'inline-block' : 'none';
+  $('btn-cuadrar').style.display = isMgr ? 'inline-block' : 'none';
+  $('btn-export-master').style.display = isMgr ? 'inline-block' : 'none';
+  document.querySelectorAll('.del-btn').forEach(b => b.style.display = isMgr ? 'block' : 'none');
+  
+  // Habilita/Deshabilita los toggles de cierre de cuenta
+  document.querySelectorAll('.close-account-toggle').forEach(t => t.disabled = !isMgr);
+
+  $('modal-options').classList.add('hidden');
+  showModal('Acceso', 'Rol activo: ' + sessionRole, false);
+});
+
+/* SEGURIDAD EXTRA: Proteger cambios en items verificados */
+async function checkSensitiveAction(selectedData) {
+  const lockedItems = selectedData.filter(i => i.verifiedRole || i.isSeparator);
+  
+  if (lockedItems.length > 0) {
+    try {
+        await showPasswordModal(
+            "⚠️ ACCIÓN RESTRINGIDA ⚠️", 
+            "Está intentando modificar/eliminar registros VERIFICADOS o CORTES. Ingrese la CLAVE DE GERENTE para continuar:"
+        );
+        return true;
+    } catch (e) {
+        return false;
+    }
+  }
+  return true; 
+}
+
+/* GESTIÓN DE CUENTAS (Incluye lógica de cierre y re-apertura con clave) */
+function subscribeAccounts(){
+  db.collection('cuentas').orderBy('name').onSnapshot(snapshot=>{
+    const container = $('accounts-list'); container.innerHTML = '';
+    
+    let firstAccount = null;
+    let accountsData = [];
+    snapshot.forEach(doc => accountsData.push({ id: doc.id, ...doc.data() }));
+
+    // Si no hay ninguna cuenta seleccionada, seleccionamos la primera
+    if(!selectedAccountId && accountsData.length > 0){
+        firstAccount = accountsData[0];
+        selectedAccountId = firstAccount.id; 
+        selectedAccountName = firstAccount.name;
+    }
+
+    // Renderizar cuentas
+    accountsData.forEach(a=>{
+      const isClosed = a.closed || false; 
+      const isMgr = (sessionRole === 'Gerente');
+
+      const div = document.createElement('div'); 
+      // *** FIX 1: Aplicar el resalte visual correctamente ***
+      div.className = 'account-item' + (selectedAccountId === a.id ? ' selected' : '');
+      div.innerHTML = `
+        <div style="font-weight:600; padding-right:20px;">${a.name} ${isClosed ? ' (🔒 CERRADA)' : ''}</div>
+        <div class="muted">${a.number || ''}</div>
+        <label style="margin-top:4px; display: block; font-size:12px;">
+            <input type="checkbox" data-id="${a.id}" class="close-account-toggle" ${isClosed ? 'checked' : ''} ${isMgr ? '' : 'disabled'}> 
+            ${isClosed ? 'Cuenta Cerrada' : 'Marcar para Cerrar'}
+        </label>
+      `;
+      
+      const delBtn = document.createElement('span');
+      delBtn.className = 'del-btn';
+      delBtn.textContent = '🗑️';
+      delBtn.title = "Eliminar cuenta";
+      if(isMgr) delBtn.style.display = 'block';
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteAccount(a.id, a.name); };
+      div.appendChild(delBtn);
+
+      div.onclick = ()=>{ 
+        selectedAccountId = a.id; 
+        selectedAccountName = a.name;
+        
+        // LIMPIAR LA SELECCIÓN AL CAMBIAR DE CUENTA
+        selectedConsignIds.clear(); 
+        document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+        activeRowIndex = -1; // Limpiar índice activo/ancla
+        anchorRowIndex = -1;
+        
+        // La actualización de la UI se maneja mejor forzando el resalto localmente 
+        // y dejando que la próxima snapshot de cuentas actualice todo el sidebar.
+        document.querySelectorAll('#accounts-list .account-item').forEach(el => el.classList.remove('selected'));
+        div.classList.add('selected');
+
+        const isClosedState = a.closed || false;
+        $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}${isClosedState ? ' (🔒 CERRADA)' : ''}`; 
+        updateSelectedTotals(); 
+        renderConsigns(); 
+      };
+      container.appendChild(div);
+    });
+
+    // *** FIX 2: Asegurar que el título se actualice en la carga inicial si se seleccionó la primera cuenta ***
+    if(firstAccount){ 
+        const isClosed = firstAccount.closed || false;
+        $('selected-account-info').textContent = `Cuenta: ${selectedAccountName} — ${firstAccount.number || ''}${isClosed ? ' (🔒 CERRADA)' : ''}`; 
+        renderConsigns(); 
+        updateSelectedTotals(); 
+    }
+    // Aseguramos que el total general se actualice al cargar las cuentas por primera vez
+    updateTotalGeneral(); 
+  });
+}
+subscribeAccounts();
+
+// Listener para el Toggle de Cierre de Cuenta
+document.addEventListener('change', async (e) => {
+    if (e.target.classList.contains('close-account-toggle')) {
+        const accountId = e.target.dataset.id;
+        const newState = e.target.checked;
+        
+        // Obtener el nombre de la cuenta para el modal de confirmación
+        const accountDoc = await db.collection('cuentas').doc(accountId).get();
+        const accountName = accountDoc.data()?.name || 'Seleccionada';
+
+        try {
+            if (newState) {
+                // Requiere clave para CERRAR
+                await showPasswordModal("Confirmación de Cierre", `¿Desea CERRAR la cuenta "${accountName}" permanentemente? Esto evitará nuevas consignaciones, a menos que se fuerce la acción.`);
+            } else {
+                // REQUISITO NUEVO: Requiere clave para REABRIR (quitar el cerrado)
+                await showPasswordModal("Confirmación de Apertura", `¿Desea REABRIR la cuenta "${accountName}"? Esto permitirá nuevas consignaciones. Ingrese CLAVE DE GERENTE.`);
+            }
+            
+            await db.collection('cuentas').doc(accountId).update({ closed: newState });
+        } catch (error) {
+            e.target.checked = !newState; // Revertir estado en la UI si falla o cancela
+            if (error.message !== "Acción cancelada.") {
+                showModal('Error', "Error al actualizar el estado de la cuenta: " + error.message, false);
             }
         }
+    }
+});
 
-        // Modal functions
-        function showAlert(message, title = "Información") {
-            document.getElementById('modalTitle').textContent = title;
-            document.getElementById('modalMessage').textContent = message;
-            document.getElementById('customModal').style.display = 'block';
+async function deleteAccount(id, name){
+    if(sessionRole !== 'Gerente') return showModal('Error', "Solo Gerente puede eliminar cuentas.", false);
+    
+    showModal('Confirmación', `¿Eliminar cuenta "${name}" permanentemente?`, true, async () => {
+        try {
+            await showPasswordModal(
+                "⚠️ PELIGRO ⚠️",
+                `Va a eliminar la cuenta "${name}" y todo su historial. Ingrese CLAVE DE GERENTE para confirmar:`
+            );
+
+            await db.collection('cuentas').doc(id).delete();
+            if(selectedAccountId === id) { selectedAccountId=null; $('consigns-body').innerHTML=''; $('selected-account-info').textContent='...'; }
+            showModal('Éxito', "Cuenta eliminada.", false);
+        } catch(e) { 
+            if(e.message !== "Acción cancelada.") showModal('Error', "Error: " + e.message, false);
         }
+    });
+}
 
-        function closeModal() {
-            document.getElementById('customModal').style.display = 'none';
+/** Lógica para agregar cuentas nuevas */
+$('add-account').addEventListener('click', async ()=>{
+  const name = $('new-account-name').value.trim();
+  const number = $('new-account-number').value.trim();
+  
+  if(!name){
+    return showModal('Atención', 'El nombre de la cuenta es obligatorio.', false);
+  }
+  
+  try {
+    await db.collection('cuentas').add({
+      name: name,
+      number: number,
+      closed: false // Default to open
+    });
+    
+    // Success: Clear fields and notify user
+    $('new-account-name').value = '';
+    $('new-account-number').value = '';
+    showModal('Éxito', 'Cuenta agregada con éxito. Ya puede seleccionarla de la lista.', false); 
+  } catch(e) {
+    showModal('Error', 'Error al agregar la cuenta: ' + e.message, false);
+  }
+});
+
+
+/* RENDER CONSIGNACIONES */
+let consignsUnsub = null;
+function renderConsigns(){ 
+  if(consignsUnsub) consignsUnsub(); 
+  const tbody = $('consigns-body'); tbody.innerHTML = '';
+  currentConsignsSnapshot = [];
+
+  if(!selectedAccountId) return;
+
+  // Ordenar por fecha DESCENDENTE (más nuevas arriba)
+  consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha', 'desc').onSnapshot(snapshot=>{
+    tbody.innerHTML = '';
+    currentConsignsSnapshot = [];
+    
+    // 1. FILTRAR LA SELECCIÓN: Eliminar de la "memoria" IDs que ya no existen en el snapshot
+    const newSnapshotIds = new Set(snapshot.docs.map(doc => doc.id));
+    selectedConsignIds = new Set([...selectedConsignIds].filter(id => newSnapshotIds.has(id)));
+    
+    snapshot.forEach(doc => currentConsignsSnapshot.push({id: doc.id, ...doc.data()}));
+
+    currentConsignsSnapshot.forEach((c, index)=>{
+      
+      const isSelected = selectedConsignIds.has(c.id); // <-- Verificar el estado en la "memoria"
+      const checkedAttr = isSelected ? 'checked' : ''; // <-- Atributo 'checked'
+
+      if(c.isSeparator){
+        const tr=document.createElement('tr');
+        tr.classList.add('separator');
+        if(c.type==='green') tr.classList.add('sep-green');
+        if(c.type==='red') tr.classList.add('sep-red');
+        let labelText = `--- ${c.label} ---`;
+        if(c.type === 'green') labelText = `💰 TOTAL: ${fmtCOP(c.total)}`;
+        if(c.type === 'red') labelText = `🛑 CORTE (${c.label})`;
+        tr.innerHTML = `<td><input type="checkbox" data-id="${c.id}" data-idx="${index}" data-separator="true" ${checkedAttr}></td><td colspan="3">${labelText}</td><td></td>`;
+        tbody.appendChild(tr);
+        return;
+      }
+
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-index', index);
+      if(c.verifiedRole === 'Administrativo') tr.classList.add('verified-admin');
+      if(c.verifiedRole === 'Gerente') tr.classList.add('verified-gerente');
+      
+      const fechaText = c.fecha && c.fecha.toDate ? new Date(c.fecha.toDate()).toLocaleDateString() : '';
+      const obsText = c.obsdate && c.obsdate.toDate ? new Date(c.obsdate.toDate()).toLocaleDateString() : '';
+      
+      tr.innerHTML = `
+        <td style="width:56px; text-align:center;"><input type="checkbox" data-id="${c.id}" data-idx="${index}" ${checkedAttr}></td>
+        <td style="width:160px">${fechaText}</td>
+        <td style="width:140px">${fmtCOP(c.valor)}</td>
+        <td style="width:160px">${obsText}</td>
+        <td style="width:160px">${c.verifiedRole ? (c.verifiedRole === 'Gerente' ? 'Verificado (Amarillo)' : 'Verificado (Gris)') : 'Pendiente'}</td>
+      `;
+      
+      // *** MODIFICACIÓN CRUCIAL AQUÍ ***
+      tr.addEventListener('click', (e)=>{
+        if(e.target.type !== 'checkbox') {
+            activeRowIndex = index;
+            anchorRowIndex = index; // <-- FIX: Establecer el ancla al hacer clic en la fila
+            
+            // Comportamiento estándar: Un clic simple en la fila limpia la selección previa
+            if(!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                selectedConsignIds.clear();
+                document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+            }
+
+            highlightRow(index);
         }
+      });
+      // Listener para doble clic (inserción retroactiva)
+      tr.addEventListener('dblclick', (e) => handleDoubleClick(c, index));
 
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('customModal');
-            if (event.target === modal) {
-                closeModal();
+      tbody.appendChild(tr);
+    });
+    // Actualización de totales aquí, cada vez que la lista cambia
+    updateSelectedTotals(); 
+    updateTotalGeneral();
+  });
+}
+
+/* LÓGICA DE TECLADO Y SELECCIÓN */
+let activeRowIndex = -1;
+let anchorRowIndex = -1;
+function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
+function highlightRow(idx){
+    const rows = getRows();
+    rows.forEach(r => r.classList.remove('keyboard-focus'));
+    if(idx >= 0 && idx < rows.length){
+        rows[idx].classList.add('keyboard-focus');
+        rows[idx].scrollIntoView({block:'nearest'});
+    }
+}
+
+// SINCRONIZA LA SELECCIÓN DEL CHECKBOX CON LA MEMORIA LOCAL
+$('consigns-body').addEventListener('change', (e)=>{
+    if(e.target.type === 'checkbox'){
+        const id = e.target.dataset.id;
+        const idx = parseInt(e.target.dataset.idx);
+        
+        // ACTUALIZA EL SET GLOBAL DE SELECCIÓN (MEMORIA LOCAL)
+        if(e.target.checked) {
+            selectedConsignIds.add(id);
+        } else {
+            selectedConsignIds.delete(id);
+        }
+        
+        if(!lastShiftState) anchorRowIndex = idx; // Se actualiza el ancla si NO se usa Shift
+    }
+});
+
+let lastShiftState = false;
+document.addEventListener('keydown', e => { if(e.key === 'Shift') lastShiftState = true; });
+document.addEventListener('keyup', e => { if(e.key === 'Shift') lastShiftState = false; });
+
+document.addEventListener('keydown', e => {
+    if(e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
+    const rows = getRows();
+    if(rows.length === 0) return;
+    if(['ArrowUp','ArrowDown'].includes(e.key)){
+        e.preventDefault();
+        
+        // Inicializa o corrige el índice activo/ancla
+        if(activeRowIndex === -1) { 
+            activeRowIndex = 0; 
+            anchorRowIndex = 0; 
+        }
+        
+        let newIndex = activeRowIndex;
+        if(e.key === 'ArrowDown') newIndex++;
+        if(e.key === 'ArrowUp') newIndex--;
+        newIndex = Math.max(0, Math.min(newIndex, rows.length - 1));
+        
+        if(e.shiftKey){
+            // Lógica de selección de rango (Shift + Flechas)
+            
+            // Calcula el rango entre el ancla y la nueva posición
+            const start = Math.min(anchorRowIndex, newIndex);
+            const end = Math.max(anchorRowIndex, newIndex);
+            
+            // Limpia la selección actual para re-aplicar el nuevo rango
+            selectedConsignIds.clear(); 
+            
+            rows.forEach((r, i) => {
+                const chk = r.querySelector('input[type="checkbox"]');
+                if(!chk) return;
+                
+                // Selecciona solo los elementos dentro del nuevo rango
+                if(i >= start && i <= end){
+                    chk.checked = true;
+                    selectedConsignIds.add(chk.dataset.id); 
+                } else {
+                    chk.checked = false; // Deselecciona los que quedan fuera
+                }
+            });
+            
+        } else {
+            // Sin Shift: se mueve el cursor y se establece un nuevo ancla
+            anchorRowIndex = newIndex;
+            // Opcional: limpiar la selección si no se usa Shift (ya manejado en click, pero aquí garantiza que solo se mueva el foco)
+            selectedConsignIds.clear(); 
+            document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+        }
+        
+        activeRowIndex = newIndex;
+        highlightRow(activeRowIndex);
+    }
+    
+    // Toggle Checkbox con barra espaciadora
+    if(e.key === ' '){
+        e.preventDefault();
+        if(activeRowIndex >= 0 && activeRowIndex < rows.length){
+            const chk = rows[activeRowIndex].querySelector('input[type="checkbox"]');
+            if(chk) {
+                // Toggla el estado del checkbox
+                chk.checked = !chk.checked;
+                
+                // SINCRONIZA EL ESTADO CON EL SET
+                if(chk.checked) {
+                    selectedConsignIds.add(chk.dataset.id);
+                } else {
+                    selectedConsignIds.delete(chk.dataset.id);
+                }
+                
+                // Actualiza el ancla si no se usó Shift (aunque ya está en el change listener, lo ponemos aquí por si acaso)
+                if(!e.shiftKey) {
+                    anchorRowIndex = activeRowIndex;
+                }
             }
         }
+    }
+});
 
-        // Close modal with Escape key
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                closeModal();
+/* BOTONES DE EXPORTACIÓN (Con formato de fecha corregido) */
+const longDateFormat = '[$-es-ES]d\ \d\e\ mmmm\ \d\e\ aaaa'; 
+const shortDateFormat = 'DD/MM/YYYY'; 
+
+function applyExcelDateFormats(ws) {
+    if (!ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    
+    for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
+        const cell_fecha_addr = XLSX.utils.encode_cell({ r: R, c: 0 }); // FECHA
+        const cell_valor_addr = XLSX.utils.encode_cell({ r: R, c: 1 }); // VALOR
+        const cell_obs_addr = XLSX.utils.encode_cell({ r: R, c: 2 }); // OBSERVACIONES
+
+        // FECHA: Formato de fecha LARGO
+        if (ws[cell_fecha_addr] && ws[cell_fecha_addr].t === 'n') {
+            ws[cell_fecha_addr].z = longDateFormat; 
+        }
+        // OBSERVACIONES: Formato de fecha CORTO (dd/mm/yyyy)
+        if (ws[cell_obs_addr] && ws[cell_obs_addr].t === 'n') {
+            ws[cell_obs_addr].z = shortDateFormat; 
+        }
+        
+        // Formato de moneda
+        if (ws[cell_valor_addr]) {
+            ws[cell_valor_addr].z = '_("$"* #,##0_);_("$"* (#,##0);_("$"* "-"??_);_(@_)';
+        }
+    }
+    // Ajuste de anchos 
+    ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}];
+}
+
+// Función de exportación de cuenta seleccionada
+$('btn-export-excel').addEventListener('click', () => {
+  if(!selectedAccountId || currentConsignsSnapshot.length === 0) return showModal('Atención', "No hay datos para exportar.", false);
+
+  const dataForExcel = currentConsignsSnapshot
+    .filter(c => !c.isSeparator)
+    .map(c => {
+      // Es crucial pasar los objetos Date para que el formato de Excel funcione
+      const fechaDate = c.fecha && c.fecha.toDate ? c.fecha.toDate() : null;
+      const obsDate = c.obsdate && c.obsdate.toDate ? c.obsdate.toDate() : null;
+      
+      const estado = !c.verifiedRole 
+          ? 'Pendiente' 
+          : c.verifiedRole === 'Administrativo' 
+            ? 'Verificado (Gris)' 
+            : 'Verificado (Amarillo)';
+
+      return {
+        FECHA: fechaDate, 
+        VALOR: Number(c.valor || 0),
+        OBSERVACIONES: obsDate,
+        'ESTADO/COLOR': estado 
+      };
+    });
+
+  if(dataForExcel.length === 0) return showModal('Atención', "No hay movimientos válidos (solo separadores).", false);
+
+  const wb = XLSX.utils.book_new();
+  // El orden de la exportación es el mismo que el del snapshot (descendente), que es lo que el usuario ve.
+  const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES", "ESTADO/COLOR"] }); 
+
+  applyExcelDateFormats(ws);
+  
+  XLSX.utils.book_append_sheet(wb, ws, selectedAccountName.substring(0, 31)); 
+  XLSX.writeFile(wb, `Consignaciones_${selectedAccountName.replace(/\s+/g,'_')}.xlsx`);
+});
+
+// Función de exportación de maestra
+$('btn-export-master').addEventListener('click', async () => {
+  if (sessionRole !== 'Gerente') return;
+  
+  try {
+    await showPasswordModal(
+        "⚠️ DESCARGA DE MAESTRA ⚠️",
+        "Esta acción descarga toda la información del sistema. Ingrese la CLAVE DE GERENTE para continuar:"
+    );
+
+    const accountsSnapshot = await db.collection('cuentas').get();
+    const wb = XLSX.utils.book_new();
+
+    for (const doc of accountsSnapshot.docs) {
+      const account = { id: doc.id, ...doc.data() };
+      const accountName = account.name.substring(0, 31).replace(/[\/\?\[\]\*\\\: ]/g, '_'); 
+
+      // Las consignaciones se ordenan cronológicamente para la maestra (por convención de archivo histórico)
+      const consignsSnapshot = await db.collection('cuentas').doc(account.id).collection('consignaciones').orderBy('fecha').get();
+
+      const dataForExcel = consignsSnapshot.docs
+        .map(d => d.data())
+        .filter(c => !c.isSeparator)
+        .map(c => {
+          const fechaDate = c.fecha && c.fecha.toDate ? c.fecha.toDate() : null;
+          const obsDate = c.obsdate && c.obsdate.toDate ? c.obsdate.toDate() : null;
+          
+          const estado = !c.verifiedRole 
+              ? 'Pendiente' 
+              : c.verifiedRole === 'Administrativo' 
+                ? 'Verificado (Gris)' 
+                : 'Verificado (Amarillo)';
+
+          return {
+            FECHA: fechaDate, 
+            VALOR: Number(c.valor || 0),
+            OBSERVACIONES: obsDate,
+            'ESTADO/COLOR': estado 
+          };
+        });
+
+      if (dataForExcel.length === 0) continue; 
+
+      const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "OBSERVACIONES", "ESTADO/COLOR"] }); 
+
+      applyExcelDateFormats(ws);
+
+      XLSX.utils.book_append_sheet(wb, ws, accountName);
+    }
+    
+    if (wb.SheetNames.length > 0) {
+      XLSX.writeFile(wb, `Maestra_Consignaciones_${new Date().toLocaleDateString().replace(/\//g,'-')}.xlsx`);
+    } else {
+      showModal('Atención', "No se encontraron movimientos en ninguna cuenta para exportar.", false);
+    }
+  } catch (e) {
+    if(e.message !== "Acción cancelada.") showModal('Error', "Ocurrió un error al intentar exportar la maestra: " + e.message, false);
+  }
+});
+
+
+/* OPERACIONES DE DATOS (Sin modal de éxito) */
+$('add-consign').addEventListener('click', async ()=>{
+  if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
+  
+  // 1. Validar datos
+  const fecha = parseDateRadio('dateOpt','date-picker'); 
+  const obsdate = parseDateRadio('obsOpt','obsdate-picker'); 
+  const valor = Number($('valor').value || 0);
+  
+  if(!fecha) return showModal('Atención', 'Fecha inválida.', false);
+
+  // --- LÓGICA DE ADVERTENCIA DINÁMICA ---
+  
+  const accountDoc = await db.collection('cuentas').doc(selectedAccountId).get();
+  const isClosed = accountDoc.data()?.closed || false;
+  
+  let proceed = true;
+
+  if (isClosed) {
+    proceed = await showSuperWarning(
+      "CUENTA CERRADA DETECTADA", 
+      `La cuenta "${selectedAccountName}" ha sido marcada como CERRADA. Agregar una consignación puede indicar un error.`,
+      null
+    );
+  } 
+  
+  if (!proceed) {
+      return; // Detiene la acción si el usuario selecciona "Cancelar Acción"
+  }
+  
+  // --- FIN DE LÓGICA DE ADVERTENCIA ---
+
+  // 2. Ejecutar adición
+  try{ 
+    await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
+        fecha: firebase.firestore.Timestamp.fromDate(fecha), obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, valor, verifiedBy:null, verifiedRole:null 
+    }); 
+    $('valor').value=''; 
+    $('valor').focus();
+  }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
+});
+
+$('valor').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-consign').click(); });
+
+// Función para obtener los IDs seleccionados usando la memoria local (Nuevo)
+function getSelectedConsignIds(){ 
+    return Array.from(selectedConsignIds); 
+}
+
+$('btn-verify').addEventListener('click', async ()=>{
+  const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para verificar.', false);
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); 
+  const batch = db.batch(); 
+  ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); 
+  await batch.commit();
+  // Limpia la selección después de la acción
+  selectedConsignIds.clear();
+  showModal('Éxito', `${ids.length} movimientos verificados.`, false);
+});
+
+$('btn-unverify').addEventListener('click', async ()=>{
+  const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para desverificar.', false);
+  const selectedData = currentConsignsSnapshot.filter(c => ids.includes(c.id));
+  
+  if(!await checkSensitiveAction(selectedData)) return;
+
+  const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null })); 
+  await batch.commit();
+  // Limpia la selección después de la acción
+  selectedConsignIds.clear();
+  showModal('Éxito', `${ids.length} movimientos desverificados.`, false);
+});
+
+// FUNCIÓN DE ELIMINACIÓN CORREGIDA CON RECALCULO GENERAL
+$('btn-delete').addEventListener('click', async ()=>{ 
+  if(sessionRole!=='Gerente') return showModal('Error', 'Solo Gerente puede eliminar movimientos.', false); 
+  const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para eliminar.', false);
+  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+  const selectedData = currentConsignsSnapshot.filter(c => ids.includes(c.id));
+  
+  if(!await checkSensitiveAction(selectedData)) return;
+
+  showModal('Confirmación', `¿Eliminar ${ids.length} items permanentemente?`, true, async () => {
+    try {
+        // 1. Eliminar los documentos seleccionados
+        const deletionBatch = db.batch(); 
+        ids.forEach(id=> deletionBatch.delete(col.doc(id))); 
+        await deletionBatch.commit();
+        
+        // --- LÓGICA DE RECALCULO DE CORTES AFECTADOS ---
+        const affectedGreenSeparatorIds = new Set();
+        // Solo las consignaciones verificadas por Gerente que se acaban de borrar
+        const deletedVerifiedConsigns = selectedData.filter(c => c.verifiedRole === 'Gerente' && !c.isSeparator);
+        
+        // 2. Identificar los cortes (separadores verdes) que contenían el movimiento eliminado
+        deletedVerifiedConsigns.forEach(deletedConsign => {
+            const deletedDate = deletedConsign.fecha.toDate().getTime();
+
+            // Buscar el Green separator cronológicamente más NUEVO que la consignación eliminada.
+            // (Este es el que debía haber cerrado el ciclo, y el que necesita corrección de su total)
+            const affectedGreenSeparator = currentConsignsSnapshot.find(c => 
+                c.type === 'green' && c.fecha.toDate().getTime() > deletedDate
+            );
+            
+            if (affectedGreenSeparator) {
+                affectedGreenSeparatorIds.add(affectedGreenSeparator.id);
             }
         });
-    </script>
-    </div>
+
+        if (affectedGreenSeparatorIds.size > 0) {
+            
+            // 3. Obtener la lista de consignaciones REMANENTES (data fresca post-eliminación)
+            // Se usa el orden ascendente (orderBy('fecha')) para un cálculo cronológico más fácil de los períodos
+            const updatedSnapshot = await col.orderBy('fecha').get();
+            const updatedConsigns = [];
+            updatedSnapshot.forEach(doc => updatedConsigns.push({id: doc.id, ...doc.data()}));
+
+            const updateBatch = db.batch();
+            let recalculationCount = 0;
+
+            // 4. Recalcular cada corte afectado
+            for (const greenId of affectedGreenSeparatorIds) {
+                const affectedGreenSeparator = currentConsignsSnapshot.find(c => c.id === greenId);
+                if (!affectedGreenSeparator) continue; 
+
+                // Encontrar el RED separator inmediatamente precedente al corte afectado
+                // Como el snapshot local (currentConsignsSnapshot) está en orden descendente, 
+                // el Red Separator (1ms más nuevo) está justo ANTES del Green Separator.
+                const greenIndex = currentConsignsSnapshot.indexOf(affectedGreenSeparator);
+                let precedingRedSeparator = null;
+                if (greenIndex > 0) {
+                    precedingRedSeparator = currentConsignsSnapshot[greenIndex - 1];
+                }
+                // Si el precedingRedSeparator no es un red (o no existe) se usa el inicio de los tiempos
+                if (!precedingRedSeparator || precedingRedSeparator.type !== 'red') {
+                     precedingRedSeparator = null;
+                }
+
+
+                // Definir el inicio del periodo de cálculo
+                const queryStart = precedingRedSeparator ? precedingRedSeparator.fecha.toDate().getTime() : new Date(0).getTime();
+                const queryEnd = affectedGreenSeparator.fecha.toDate().getTime();
+
+                // Sumar las consignaciones restantes verificadas por Gerente en ese periodo
+                const remainingConsignsInPeriod = updatedConsigns
+                    .filter(c => 
+                        !c.isSeparator && 
+                        c.verifiedRole === 'Gerente' && 
+                        c.fecha.toDate().getTime() > queryStart && 
+                        c.fecha.toDate().getTime() < queryEnd
+                    );
+
+                const newCutTotal = remainingConsignsInPeriod.reduce((sum, c) => sum + Number(c.valor || 0), 0);
+                
+                // Aplicar la actualización al separador verde
+                updateBatch.update(col.doc(greenId), { 
+                    total: newCutTotal,
+                    label: `🚨 Recalculado ${new Date().toLocaleDateString()}` 
+                });
+                recalculationCount++;
+            }
+            
+            await updateBatch.commit();
+            // Limpia la selección después de la acción
+            selectedConsignIds.clear();
+            showModal('¡Atención!', `Eliminación exitosa. ${recalculationCount} CORTES afectados han sido recalculados y corregidos.`, false);
+        } else {
+            // Limpia la selección después de la acción
+            selectedConsignIds.clear();
+            showModal('Éxito', `${ids.length} items eliminados.`, false);
+        }
+
+    } catch(e) { 
+        if(e.message !== "Acción cancelada.") showModal('Error', 'Error al eliminar: '+e.message, false);
+    }
+  });
+});
+
+/** FUNCIÓN CUADRAR: Solo inserta separadores, no toca el estado de la cuenta */
+$('btn-cuadrar').addEventListener('click', async () => {
+  if (!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
+  
+  // Adaptación a la lista DESCENDENTE (más nueva arriba)
+  let pendingItems = [];
+  for(const item of currentConsignsSnapshot){
+    // Al ir de lo nuevo a lo viejo, sumamos hasta que encontramos el primer separador de corte (el más reciente)
+    if(item.isSeparator && item.type === 'red') {
+        break; 
+    }
+    if (!item.isSeparator) {
+        pendingItems.push(item);
+    }
+  }
+  
+  if(pendingItems.length === 0) return showModal('Atención', "Nada nuevo para cuadrar. No hay movimientos pendientes desde el último corte.", false);
+
+  const nonYellow = pendingItems.filter(i => i.verifiedRole !== 'Gerente');
+  if(nonYellow.length > 0) return showModal('Atención', `Hay ${nonYellow.length} items sin verificar por Gerente. Verifique todos los ítems primero.`, false);
+
+  const total = pendingItems.reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+  
+  showModal('Confirmación', `¿Realizar corte?\nTotal a Cuadrar: ${fmtCOP(total)}`, true, async () => {
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+    const batch = db.batch();
+    const now = new Date();
+    
+    // Inserta separador Verde (Total del Corte)
+    batch.set(col.doc(), { isSeparator:true, type:'green', label: now.toLocaleDateString(), total: total, fecha: firebase.firestore.Timestamp.fromDate(now) });
+    // Inserta separador Rojo (Nuevo punto de partida) - 1ms más nuevo que el verde para aparecer ARRIBA en la lista descendente
+    batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString(), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1)) });
+
+    await batch.commit();
+    // Limpia la selección después de la acción
+    selectedConsignIds.clear();
+    showModal('Éxito', '¡Corte realizado con éxito!', false);
+  });
+});
+
+$('btn-sumar').addEventListener('click', ()=>{
+  const ids = getSelectedConsignIds();
+  let suma = 0;
+  ids.forEach(id=>{
+    const item = currentConsignsSnapshot.find(c => c.id === id);
+    if(item && !item.isSeparator) {
+        suma += Number(item.valor || 0);
+    }
+  });
+  showModal('Suma de Selección', `La suma de los ítems seleccionados es: ${fmtCOP(suma)}`, false);
+});
+
+/* CALCULOS TOTALES */
+// ** Total de Cuenta Actual (Depende de la lista actual en memoria) **
+async function updateSelectedTotals(){ 
+  if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; }
+  let total = 0; 
+  // Usa el snapshot de la cuenta actual que ya está en memoria
+  currentConsignsSnapshot.forEach(d=>{ 
+      if(!d.isSeparator) total += Number(d.valor || 0); 
+  }); 
+  $('total-cuenta').textContent = fmtCOP(total); 
+}
+
+// ** Total General (Implementación más robusta sin CollectionGroup) **
+async function updateTotalGeneral(){ 
+  try{ 
+    // 1. Obtener todas las cuentas
+    const accountsSnapshot = await db.collection('cuentas').get();
+    let total = 0; 
+    
+    // 2. Obtener las consignaciones para cada cuenta (en paralelo)
+    const consignPromises = accountsSnapshot.docs.map(doc => 
+        db.collection('cuentas').doc(doc.id).collection('consignaciones').get()
+    );
+    
+    const allConsignSnapshots = await Promise.all(consignPromises);
+
+    // 3. Sumar todas las consignaciones no-separadoras de todas las cuentas
+    allConsignSnapshots.forEach(snap => {
+        snap.forEach(d => {
+            const data = d.data();
+            if(!data.isSeparator) {
+                total += Number(data.valor || 0);
+            }
+        });
+    });
+
+    $('total-general').textContent = fmtCOP(total); 
+  }catch(e){ 
+    console.error("Error al actualizar total general (VERIFIQUE CONSOLA):", e);
+    // En caso de fallo, se asegura de mostrar 0 para evitar valores incorrectos o vacíos.
+    $('total-general').textContent = fmtCOP(0); 
+  } 
+}
+// Se llama al inicio en subscribeAccounts y luego cada vez que se actualiza una cuenta.
+setInterval(updateTotalGeneral,15000); 
+
+/* BUSQUEDA */
+const filter = (id) => {
+    const q = $(id).value.toLowerCase();
+    document.querySelectorAll('#accounts-list .account-item').forEach(it => {
+        it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+};
+$('search-name').addEventListener('input', () => filter('search-name'));
+$('search-account').addEventListener('input', () => filter('search-account'));
+
+window.addEventListener('load', ()=>{ 
+    if(!usuario){ return; } 
+    $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; 
+});
+window.addEventListener('beforeunload', ()=>{ if(consignsUnsub) consignsUnsub(); });
+
+</script>
 </body>
 </html>
