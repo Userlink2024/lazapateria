@@ -1529,7 +1529,7 @@ $('add-consign').addEventListener('click', async ()=>{
   // 1. Validar datos
   const fecha = parseDateRadio('dateOpt','date-picker'); 
   const obsdate = parseDateRadio('obsOpt','obsdate-picker'); 
-  const valor = Number($('valor').value || 0);
+  const valor = Number(getNumericValue($('valor').value) || 0);
   
   if(!fecha) return showModal('Atención', 'Fecha inválida.', false);
 
@@ -1578,6 +1578,8 @@ document.querySelectorAll('input[name="dateOpt"]').forEach(radio => {
       lastSelectedDate = null;
     } else {
       lastSelectedDate = this;
+      // Limpiar el calendario cuando se selecciona un radio button
+      $('date-picker').value = '';
     }
   });
 });
@@ -1590,6 +1592,8 @@ document.querySelectorAll('input[name="obsOpt"]').forEach(radio => {
       lastSelectedObs = null;
     } else {
       lastSelectedObs = this;
+      // Limpiar el calendario cuando se selecciona un radio button
+      $('obsdate-picker').value = '';
     }
   });
 });
@@ -1607,6 +1611,58 @@ $('obsdate-picker').addEventListener('change', function() {
     radio.checked = false;
   });
   lastSelectedObs = null;
+});
+
+// Formateo de números con separadores de miles
+function formatNumberWithSeparators(value) {
+  // Remover todo excepto números
+  const numericValue = value.replace(/[^\d]/g, '');
+  
+  if (numericValue === '') return '';
+  
+  // Formatear con separadores de miles usando punto
+  return new Intl.NumberFormat('es-CO').format(parseInt(numericValue));
+}
+
+function getNumericValue(formattedValue) {
+  // Remover separadores y devolver solo números
+  return formattedValue.replace(/[^\d]/g, '');
+}
+
+// Event listeners para formateo del campo valor
+$('valor').addEventListener('input', function(e) {
+  const cursorPosition = e.target.selectionStart;
+  const oldValue = e.target.value;
+  const oldLength = oldValue.length;
+  
+  // Formatear el valor
+  const formattedValue = formatNumberWithSeparators(oldValue);
+  e.target.value = formattedValue;
+  
+  // Ajustar posición del cursor
+  const newLength = formattedValue.length;
+  const lengthDiff = newLength - oldLength;
+  const newCursorPosition = cursorPosition + lengthDiff;
+  
+  // Establecer nueva posición del cursor
+  setTimeout(() => {
+    e.target.setSelectionRange(newCursorPosition, newCursorPosition);
+  }, 0);
+});
+
+// Limpiar formato al hacer focus para facilitar edición
+$('valor').addEventListener('focus', function(e) {
+  const numericValue = getNumericValue(e.target.value);
+  if (numericValue !== '') {
+    e.target.value = numericValue;
+  }
+});
+
+// Restaurar formato al perder focus
+$('valor').addEventListener('blur', function(e) {
+  if (e.target.value !== '') {
+    e.target.value = formatNumberWithSeparators(e.target.value);
+  }
 });
 
 // Función para obtener los IDs seleccionados usando la memoria local (Nuevo)
