@@ -492,6 +492,95 @@
         border-left: 4px solid var(--accent);
     }
 
+    /* Modal de datos grandes */
+    #data-modal {
+      display: none;
+      position: fixed;
+      z-index: 1001;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      animation: fadeIn 0.3s ease;
+    }
+
+    #data-modal .modal-content {
+      background: linear-gradient(135deg, #a8e6cf 0%, #dcedc1 100%);
+      margin: 5% auto;
+      padding: 0;
+      border-radius: 20px;
+      width: 80%;
+      max-width: 600px;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+      animation: slideDown 0.4s ease;
+      overflow: hidden;
+    }
+
+    #data-modal .modal-header {
+      background: linear-gradient(135deg, #4CAF50, #66BB6A);
+      color: white;
+      padding: 25px;
+      text-align: center;
+      position: relative;
+    }
+
+    #data-modal .modal-header h2 {
+      margin: 0;
+      font-size: 2em;
+      font-weight: 700;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    #data-modal .modal-header .close {
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 35px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      color: white;
+    }
+
+    #data-modal .modal-header .close:hover {
+      transform: translateY(-50%) scale(1.2);
+      opacity: 0.8;
+    }
+
+    #data-modal .modal-body {
+      padding: 40px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.95);
+    }
+
+    #data-modal .data-value {
+      font-size: 4em;
+      font-weight: 900;
+      color: #2e7d32;
+      text-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      margin: 20px 0;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 2px;
+    }
+
+    #data-modal .data-label {
+      font-size: 1.3em;
+      color: #555;
+      font-weight: 600;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #data-modal .data-icon {
+      font-size: 3em;
+      margin-bottom: 20px;
+      opacity: 0.8;
+    }
+
     /* Responsive Design */
     @media (max-width: 768px) {
       .layout {
@@ -526,6 +615,19 @@
 
       th, td {
         padding: 8px 4px;
+      }
+
+      #data-modal .modal-content {
+        width: 95%;
+        margin: 10% auto;
+      }
+
+      #data-modal .data-value {
+        font-size: 2.5em;
+      }
+
+      #data-modal .modal-body {
+        padding: 25px;
       }
     }
   </style>
@@ -702,6 +804,21 @@
             <button id="modal-cancel-btn" class="btn ghost hidden">❌ Cancelar</button>
             <button id="modal-ok-btn" class="btn">✅ Aceptar</button>
         </div>
+    </div>
+  </div>
+
+  <!-- Modal de Datos Grandes -->
+  <div id="data-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="data-modal-title">Información</h2>
+        <span class="close" onclick="closeDataModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div id="data-modal-icon" class="data-icon">💰</div>
+        <div id="data-modal-label" class="data-label">Total</div>
+        <div id="data-modal-value" class="data-value">0</div>
+      </div>
     </div>
   </div>
 
@@ -2033,63 +2150,37 @@ $('btn-sumar').addEventListener('click', ()=>{
 async function updateSelectedTotals(){ 
   if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; }
   
-  try {
-    // Obtener datos frescos de la base de datos para asegurar precisión
-    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-      .orderBy('fecha', 'desc').get();
-    
-    let total = 0;
-    let foundRedSeparator = false;
-    let greenSeparatorDoc = null;
-    
-    // Recorrer desde el más reciente hasta encontrar un separador rojo (inicio de período)
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      
-      // Si encontramos un separador rojo, paramos el conteo (inicio del período actual)
-      if (data.isSeparator && data.type === 'red') {
-        foundRedSeparator = true;
-        return;
-      }
-      
-      // Si encontramos un separador verde, guardarlo para actualizar después
-      if (data.isSeparator && data.type === 'green' && !foundRedSeparator) {
-        greenSeparatorDoc = doc;
-        return;
-      }
-      
-      // Solo contar consignaciones normales (no separadores) del período actual
-      if (!foundRedSeparator && !data.isSeparator) {
-        total += Number(data.valor || 0);
-      }
-    });
-    
-    // Actualizar el separador verde si existe
-    if (greenSeparatorDoc) {
-      await greenSeparatorDoc.ref.update({ total: total });
+  // Usar el snapshot actual en memoria para cálculo inmediato
+  let total = 0; 
+  let foundRedSeparator = false;
+  
+  // Recorrer desde el más reciente (currentConsignsSnapshot ya está ordenado desc)
+  currentConsignsSnapshot.forEach(d => { 
+    // Si encontramos un separador rojo, paramos el conteo (inicio del período actual)
+    if (d.isSeparator && d.type === 'red') {
+      foundRedSeparator = true;
+      return;
     }
     
-    $('total-cuenta').textContent = fmtCOP(total);
-    console.log('Total actualizado:', total);
-    
+    // Solo contar consignaciones normales (no separadores) del período actual
+    if (!foundRedSeparator && !d.isSeparator) {
+      total += Number(d.valor || 0);
+    }
+  }); 
+  
+  $('total-cuenta').textContent = fmtCOP(total);
+  console.log('Total cuenta actualizado:', total, 'de', currentConsignsSnapshot.length, 'elementos');
+  
+  // Actualizar separador verde en background si existe
+  try {
+    const greenSeparator = currentConsignsSnapshot.find(d => d.isSeparator && d.type === 'green' && !foundRedSeparator);
+    if (greenSeparator && greenSeparator.total !== total) {
+      await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+        .doc(greenSeparator.id).update({ total: total });
+      console.log('Separador verde actualizado con total:', total);
+    }
   } catch(e) {
-    console.error("Error actualizando totales de cuenta:", e);
-    // Fallback: calcular desde currentConsignsSnapshot
-    let total = 0; 
-    let foundRedSeparator = false;
-    
-    currentConsignsSnapshot.forEach(d => { 
-      if (d.isSeparator && d.type === 'red') {
-        foundRedSeparator = true;
-        return;
-      }
-      if (!foundRedSeparator && !d.isSeparator) {
-        total += Number(d.valor || 0);
-      }
-    }); 
-    
-    $('total-cuenta').textContent = fmtCOP(total); 
-    console.log('Total fallback:', total);
+    console.log('Error actualizando separador verde:', e);
   }
 }
 
@@ -2142,6 +2233,71 @@ window.addEventListener('load', ()=>{
     $('modal-options').classList.remove('hidden'); $('manager-pass').value=''; 
 });
 window.addEventListener('beforeunload', ()=>{ if(consignsUnsub) consignsUnsub(); });
+
+// Funciones para el modal de datos grandes
+function showDataModal(title, label, value, icon) {
+    document.getElementById('data-modal-title').textContent = title;
+    document.getElementById('data-modal-label').textContent = label;
+    document.getElementById('data-modal-value').textContent = value;
+    document.getElementById('data-modal-icon').textContent = icon;
+    document.getElementById('data-modal').style.display = 'block';
+}
+
+function closeDataModal() {
+    document.getElementById('data-modal').style.display = 'none';
+}
+
+// Cerrar modal al hacer clic fuera
+window.addEventListener('click', function(event) {
+    const dataModal = document.getElementById('data-modal');
+    if (event.target === dataModal) {
+        closeDataModal();
+    }
+});
+
+// Cerrar modal con Escape
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeDataModal();
+    }
+});
+
+// Agregar eventos de doble clic a las tarjetas de totales
+setTimeout(() => {
+    // Total General
+    const totalGeneralCard = document.querySelector('.top-totals .card:nth-child(1)');
+    if (totalGeneralCard) {
+        totalGeneralCard.addEventListener('dblclick', function() {
+            const value = document.getElementById('total-general').textContent;
+            showDataModal('💰 TOTAL GENERAL', 'Suma de todas las cuentas', value, '🏦');
+        });
+        totalGeneralCard.style.cursor = 'pointer';
+        totalGeneralCard.title = 'Doble clic para ver en grande';
+    }
+
+    // Total Cuenta Actual
+    const totalCuentaCard = document.querySelector('.top-totals .card:nth-child(2)');
+    if (totalCuentaCard) {
+        totalCuentaCard.addEventListener('dblclick', function() {
+            const value = document.getElementById('total-cuenta').textContent;
+            const accountName = selectedAccountName || 'Cuenta Actual';
+            showDataModal('🏦 TOTAL CUENTA ACTUAL', accountName, value, '💳');
+        });
+        totalCuentaCard.style.cursor = 'pointer';
+        totalCuentaCard.title = 'Doble clic para ver en grande';
+    }
+
+    // Usuario
+    const usuarioCard = document.querySelector('.top-totals .card:nth-child(3)');
+    if (usuarioCard) {
+        usuarioCard.addEventListener('dblclick', function() {
+            const value = document.getElementById('user-info').textContent;
+            showDataModal('👤 USUARIO ACTIVO', 'Sesión actual', value, '🔐');
+        });
+        usuarioCard.style.cursor = 'pointer';
+        usuarioCard.title = 'Doble clic para ver en grande';
+    }
+}, 1000);
 
 </script>
 </body>
