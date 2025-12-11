@@ -1062,6 +1062,11 @@ $('options-continue').addEventListener('click', ()=>{
 
   $('modal-options').classList.add('hidden');
   showModal('Acceso', 'Rol activo: ' + sessionRole, false);
+  
+  // Actualizar indicadores de jerarquía cuando cambia el rol
+  setTimeout(() => {
+    updateVerificationIndicators();
+  }, 200);
 });
 
 /* SEGURIDAD EXTRA: Proteger cambios en items verificados */
@@ -1310,6 +1315,11 @@ function renderConsigns(){
     // Actualización de totales aquí, cada vez que la lista cambia
     updateSelectedTotals(); 
     updateTotalGeneral();
+    
+    // Actualizar indicadores de jerarquía después de renderizar
+    setTimeout(() => {
+      updateVerificationIndicators();
+    }, 100);
   });
 }
 
@@ -1611,6 +1621,65 @@ $('valor').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-consign')
 let lastSelectedDate = null;
 let lastSelectedObs = null;
 
+// Función para validar jerarquía de verificación
+function validateVerificationHierarchy(currentRole, newRole) {
+  // Reglas de jerarquía:
+  // - Blanco (null) → Puede cambiar a Gris (Administrativo) o Amarillo (Gerente) ✅
+  // - Amarillo (Gerente) → Puede cambiar a Gris (Administrativo) ✅  
+  // - Gris (Administrativo) → NO puede cambiar a Amarillo (Gerente) ❌
+  
+  if (currentRole === 'Administrativo' && newRole === 'Gerente') {
+    return false; // No permitido
+  }
+  return true; // Permitido
+}
+
+// Función para mostrar indicadores visuales de jerarquía
+function updateVerificationIndicators() {
+  const rows = document.querySelectorAll('#consigns-body tr');
+  
+  rows.forEach((row, index) => {
+    const data = currentConsignsSnapshot[index];
+    if (!data || data.isSeparator) return;
+    
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    
+    const canVerify = validateVerificationHierarchy(data.verifiedRole, sessionRole);
+    
+    if (!canVerify) {
+      // Agregar indicador visual para elementos que no se pueden cambiar
+      checkbox.style.opacity = '0.3';
+      checkbox.title = `No se puede cambiar de ${data.verifiedRole} a ${sessionRole}`;
+      row.style.position = 'relative';
+      
+      // Agregar icono de bloqueo si no existe
+      if (!row.querySelector('.hierarchy-lock')) {
+        const lockIcon = document.createElement('span');
+        lockIcon.className = 'hierarchy-lock';
+        lockIcon.innerHTML = '🔒';
+        lockIcon.style.cssText = `
+          position: absolute;
+          right: 5px;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: 12px;
+          color: #f44336;
+          z-index: 10;
+        `;
+        lockIcon.title = 'Jerarquía: Gris no puede cambiar a Amarillo';
+        row.appendChild(lockIcon);
+      }
+    } else {
+      // Restaurar apariencia normal
+      checkbox.style.opacity = '1';
+      checkbox.title = '';
+      const lockIcon = row.querySelector('.hierarchy-lock');
+      if (lockIcon) lockIcon.remove();
+    }
+  });
+}
+
 // Event listeners para radio buttons de fecha
 document.querySelectorAll('input[name="dateOpt"]').forEach(radio => {
   radio.addEventListener('click', function() {
@@ -1712,14 +1781,67 @@ function getSelectedConsignIds(){
 }
 
 $('btn-verify').addEventListener('click', async ()=>{
-  const ids=getSelectedConsignIds(); if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para verificar.', false);
-  const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); 
-  const batch = db.batch(); 
-  ids.forEach(id=> batch.update(col.doc(id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole })); 
-  await batch.commit();
+  const ids=getSelectedConsignIds(); 
+  if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para verificar.', false);
+  
+  // Obtener los datos de los elementos seleccionados
+  const selectedData = currentConsignsSnapshot.filter(c => ids.includes(c.id));
+  
+  // Validar jerarquía de verificación
+  const invalidItems = [];
+  const validItems = [];
+  
+  selectedData.forEach(item => {
+    const currentRole = item.verifiedRole;
+    const newRole = sessionRole;
+    
+    // Reglas de jerarquía:
+    // - Blanco (null) → Puede cambiar a Gris (Administrativo) o Amarillo (Gerente) ✅
+    // - Amarillo (Gerente) → Puede cambiar a Gris (Administrativo) ✅  
+    // - Gris (Administrativo) → NO puede cambiar a Amarillo (Gerente) ❌
+    
+    if (currentRole === 'Administrativo' && newRole === 'Gerente') {
+      // Gris NO puede cambiar a Amarillo
+      invalidItems.push(item);
+    } else {
+      // Todos los demás casos son válidos
+      validItems.push(item);
+    }
+  });
+  
+  // Si hay elementos inválidos, mostrar mensaje y solo procesar los válidos
+  if (invalidItems.length > 0) {
+    const message = `⚠️ JERARQUÍA DE VERIFICACIÓN ⚠️\n\n` +
+      `${invalidItems.length} elemento(s) verificado(s) por Administrador (gris) no pueden ser cambiados a Gerente (amarillo).\n\n` +
+      `Solo se verificarán ${validItems.length} elemento(s) válido(s) (en blanco).`;
+    
+    showModal('Advertencia de Jerarquía', message, false);
+  }
+  
+  // Procesar solo los elementos válidos
+  if (validItems.length > 0) {
+    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones'); 
+    const batch = db.batch(); 
+    
+    validItems.forEach(item => {
+      batch.update(col.doc(item.id), { verifiedBy: usuario.usuario, verifiedRole: sessionRole });
+    });
+    
+    await batch.commit();
+    
+    // Mensaje de éxito
+    const successMessage = invalidItems.length > 0 
+      ? `${validItems.length} movimientos verificados correctamente. ${invalidItems.length} elementos omitidos por jerarquía.`
+      : `${validItems.length} movimientos verificados correctamente.`;
+    
+    showModal('Éxito', successMessage, false);
+  } else if (invalidItems.length > 0) {
+    // Solo había elementos inválidos
+    showModal('Error de Jerarquía', 'No se pudo verificar ningún elemento. Los elementos verificados por Administrador (gris) no pueden ser cambiados a Gerente (amarillo).', false);
+  }
+  
   // Limpia la selección después de la acción
   selectedConsignIds.clear();
-  showModal('Éxito', `${ids.length} movimientos verificados.`, false);
 });
 
 $('btn-unverify').addEventListener('click', async ()=>{
