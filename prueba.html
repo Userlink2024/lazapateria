@@ -761,14 +761,20 @@ function parseDateRadio(name, pickerId){
   let sel = null; 
   for(const r of opts) if(r.checked) sel = r.value; 
   
-  if(sel === 'today') return new Date(); 
+  // Crear fechas en zona horaria de Colombia (UTC-5)
+  const now = new Date();
+  const colombiaOffset = -5 * 60; // UTC-5 en minutos
+  const localOffset = now.getTimezoneOffset();
+  const colombiaTime = new Date(now.getTime() + (localOffset + colombiaOffset) * 60000);
+  
+  if(sel === 'today') return colombiaTime; 
   if(sel === 'yesterday'){ 
-    const d = new Date(); 
+    const d = new Date(colombiaTime); 
     d.setDate(d.getDate()-1); 
     return d; 
   } 
   if(sel === 'daybefore'){ 
-    const d = new Date(); 
+    const d = new Date(colombiaTime); 
     d.setDate(d.getDate()-2); 
     return d; 
   } 
@@ -776,9 +782,12 @@ function parseDateRadio(name, pickerId){
   // Si no hay radio button seleccionado, usar el date picker
   const v = $(pickerId).value; 
   if(v) {
-    // Crear fecha local correctamente para evitar problemas de zona horaria
+    // Crear fecha local correctamente para Colombia
     const parts = v.split('-');
-    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const selectedDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    // Ajustar a hora de Colombia (mediodía para evitar problemas de zona horaria)
+    selectedDate.setHours(12, 0, 0, 0);
+    return selectedDate;
   }
   
   return null; 
@@ -892,7 +901,12 @@ async function handleDoubleClick(clickedConsign, index) {
     // 3. Preparar datos
     const clickedDate = clickedConsign.fecha.toDate();
     const clickedTimestamp = clickedDate.getTime();
-    const today = new Date().toISOString().substring(0, 10);
+    // Obtener fecha actual en zona horaria de Colombia
+    const now = new Date();
+    const colombiaOffset = -5 * 60; // UTC-5 en minutos
+    const localOffset = now.getTimezoneOffset();
+    const colombiaTime = new Date(now.getTime() + (localOffset + colombiaOffset) * 60000);
+    const today = colombiaTime.toISOString().substring(0, 10);
     const clickedDateStr = clickedDate.toLocaleDateString('es-CO');
 
     // 4. Configurar el Modal Dinámico con inputs de Fecha y Observación
@@ -960,6 +974,13 @@ async function handleDoubleClick(clickedConsign, index) {
                 verifiedBy: usuario.usuario, 
                 verifiedRole: 'Gerente'
             });
+            
+            // Forzar actualización de totales después de inserción retroactiva
+            setTimeout(() => {
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 500);
+            
         } catch(e) { 
             showModal('Error', 'Error al insertar consignación: '+e.message, false); 
         } finally {
@@ -1561,6 +1582,13 @@ $('add-consign').addEventListener('click', async ()=>{
     }); 
     $('valor').value=''; 
     $('valor').focus();
+    
+    // Forzar actualización de totales después de agregar consignación
+    setTimeout(() => {
+      updateSelectedTotals();
+      updateTotalGeneral();
+    }, 500);
+    
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
 });
 
@@ -1826,12 +1854,17 @@ $('btn-cuadrar').addEventListener('click', async () => {
   showModal('Confirmación', `¿Realizar corte?\nTotal a Cuadrar: ${fmtCOP(total)}`, true, async () => {
     const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
     const batch = db.batch();
-    const now = new Date();
+    
+    // Crear fecha en zona horaria de Colombia
+    const nowUTC = new Date();
+    const colombiaOffset = -5 * 60; // UTC-5 en minutos
+    const localOffset = nowUTC.getTimezoneOffset();
+    const now = new Date(nowUTC.getTime() + (localOffset + colombiaOffset) * 60000);
     
     // Inserta separador Verde (Total del Corte)
-    batch.set(col.doc(), { isSeparator:true, type:'green', label: now.toLocaleDateString(), total: total, fecha: firebase.firestore.Timestamp.fromDate(now) });
+    batch.set(col.doc(), { isSeparator:true, type:'green', label: now.toLocaleDateString('es-CO'), total: total, fecha: firebase.firestore.Timestamp.fromDate(now) });
     // Inserta separador Rojo (Nuevo punto de partida) - 1ms más nuevo que el verde para aparecer ARRIBA en la lista descendente
-    batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString(), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1)) });
+    batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString('es-CO'), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1)) });
 
     await batch.commit();
     // Limpia la selección después de la acción
@@ -1856,12 +1889,42 @@ $('btn-sumar').addEventListener('click', ()=>{
 // ** Total de Cuenta Actual (Depende de la lista actual en memoria) **
 async function updateSelectedTotals(){ 
   if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; }
-  let total = 0; 
-  // Usa el snapshot de la cuenta actual que ya está en memoria
-  currentConsignsSnapshot.forEach(d=>{ 
-      if(!d.isSeparator) total += Number(d.valor || 0); 
-  }); 
-  $('total-cuenta').textContent = fmtCOP(total); 
+  
+  try {
+    // Obtener datos frescos de la base de datos para asegurar precisión
+    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+      .orderBy('fecha', 'desc').get();
+    
+    let total = 0;
+    let foundRedSeparator = false;
+    
+    // Recorrer desde el más reciente hasta encontrar un separador rojo (inicio de período)
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      
+      // Si encontramos un separador rojo, paramos el conteo (inicio del período actual)
+      if (data.isSeparator && data.type === 'red') {
+        foundRedSeparator = true;
+        return;
+      }
+      
+      // Solo contar consignaciones normales (no separadores) del período actual
+      if (!foundRedSeparator && !data.isSeparator) {
+        total += Number(data.valor || 0);
+      }
+    });
+    
+    $('total-cuenta').textContent = fmtCOP(total);
+    
+  } catch(e) {
+    console.error("Error actualizando totales de cuenta:", e);
+    // Fallback al método anterior si hay error
+    let total = 0; 
+    currentConsignsSnapshot.forEach(d=>{ 
+        if(!d.isSeparator) total += Number(d.valor || 0); 
+    }); 
+    $('total-cuenta').textContent = fmtCOP(total); 
+  }
 }
 
 // ** Total General (Implementación más robusta sin CollectionGroup) **
