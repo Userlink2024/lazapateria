@@ -1313,16 +1313,19 @@ function renderConsigns(){
 
       tbody.appendChild(tr);
     });
+    
     // Actualización de totales aquí, cada vez que la lista cambia
-    updateSelectedTotals(); 
-    updateTotalGeneral();
+    setTimeout(() => {
+      updateSelectedTotals(); 
+      updateTotalGeneral();
+    }, 100);
     
     // Actualizar indicadores de jerarquía después de renderizar
     setTimeout(() => {
       if (typeof updateVerificationIndicators === 'function') {
         updateVerificationIndicators();
       }
-    }, 200);
+    }, 300);
   });
 }
 
@@ -1601,8 +1604,16 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 2. Ejecutar adición
   try{ 
+    // Para consignaciones nuevas, usar timestamp actual para que aparezcan al principio
+    const fechaConHora = new Date(fecha);
+    fechaConHora.setHours(new Date().getHours(), new Date().getMinutes(), new Date().getSeconds(), new Date().getMilliseconds());
+    
     await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-        fecha: firebase.firestore.Timestamp.fromDate(fecha), obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, valor, verifiedBy:null, verifiedRole:null 
+        fecha: firebase.firestore.Timestamp.fromDate(fechaConHora), 
+        obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, 
+        valor, 
+        verifiedBy:null, 
+        verifiedRole:null 
     }); 
     $('valor').value=''; 
     $('valor').focus();
@@ -1944,6 +1955,13 @@ $('btn-delete').addEventListener('click', async ()=>{
         } else {
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
+            
+            // Forzar actualización de totales después de eliminar
+            setTimeout(() => {
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 1000);
+            
             showModal('Éxito', `${ids.length} items eliminados.`, false);
         }
 
@@ -2022,7 +2040,7 @@ async function updateSelectedTotals(){
     
     let total = 0;
     let foundRedSeparator = false;
-    let greenSeparatorTotal = 0;
+    let greenSeparatorDoc = null;
     
     // Recorrer desde el más reciente hasta encontrar un separador rojo (inicio de período)
     snapshot.forEach(doc => {
@@ -2034,11 +2052,9 @@ async function updateSelectedTotals(){
         return;
       }
       
-      // Si encontramos un separador verde, actualizar su total
+      // Si encontramos un separador verde, guardarlo para actualizar después
       if (data.isSeparator && data.type === 'green' && !foundRedSeparator) {
-        greenSeparatorTotal = total;
-        // Actualizar el separador verde con el nuevo total
-        doc.ref.update({ total: total });
+        greenSeparatorDoc = doc;
         return;
       }
       
@@ -2048,16 +2064,32 @@ async function updateSelectedTotals(){
       }
     });
     
+    // Actualizar el separador verde si existe
+    if (greenSeparatorDoc) {
+      await greenSeparatorDoc.ref.update({ total: total });
+    }
+    
     $('total-cuenta').textContent = fmtCOP(total);
+    console.log('Total actualizado:', total);
     
   } catch(e) {
     console.error("Error actualizando totales de cuenta:", e);
-    // Fallback al método anterior si hay error
+    // Fallback: calcular desde currentConsignsSnapshot
     let total = 0; 
-    currentConsignsSnapshot.forEach(d=>{ 
-        if(!d.isSeparator) total += Number(d.valor || 0); 
+    let foundRedSeparator = false;
+    
+    currentConsignsSnapshot.forEach(d => { 
+      if (d.isSeparator && d.type === 'red') {
+        foundRedSeparator = true;
+        return;
+      }
+      if (!foundRedSeparator && !d.isSeparator) {
+        total += Number(d.valor || 0);
+      }
     }); 
+    
     $('total-cuenta').textContent = fmtCOP(total); 
+    console.log('Total fallback:', total);
   }
 }
 
