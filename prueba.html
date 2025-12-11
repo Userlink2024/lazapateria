@@ -1727,12 +1727,16 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 2. Ejecutar adición
   try{ 
-    // SIEMPRE usar timestamp actual para que las nuevas consignaciones aparezcan al principio
-    // La fecha seleccionada se guarda en un campo separado para referencia
+    // Usar timestamp actual + milisegundos únicos para garantizar que aparezca al principio
     const ahora = new Date();
+    // Agregar milisegundos únicos para evitar conflictos de timestamp
+    const timestampUnico = new Date(ahora.getTime() + Math.random() * 1000);
+    
+    console.log('Agregando consignación con timestamp:', timestampUnico.toISOString());
+    console.log('Fecha original seleccionada:', fecha.toISOString());
     
     await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-        fecha: firebase.firestore.Timestamp.fromDate(ahora), // Timestamp actual para ordenamiento
+        fecha: firebase.firestore.Timestamp.fromDate(timestampUnico), // Timestamp único para ordenamiento
         fechaOriginal: firebase.firestore.Timestamp.fromDate(fecha), // Fecha seleccionada por el usuario
         obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, 
         valor, 
@@ -1742,13 +1746,26 @@ $('add-consign').addEventListener('click', async ()=>{
     $('valor').value=''; 
     $('valor').focus();
     
-    // Forzar actualización de totales después de agregar consignación
+    console.log('Consignación agregada exitosamente, forzando actualización...');
+    
+    // Forzar actualización inmediata y múltiple
     setTimeout(() => {
+      console.log('Actualizando totales - paso 1');
       updateSelectedTotals();
       updateTotalGeneral();
-      // También forzar re-render de la tabla
-      renderConsigns();
-    }, 1000);
+    }, 500);
+    
+    setTimeout(() => {
+      console.log('Actualizando totales - paso 2');
+      updateSelectedTotals();
+      updateTotalGeneral();
+    }, 1500);
+    
+    setTimeout(() => {
+      console.log('Actualizando totales - paso 3');
+      updateSelectedTotals();
+      updateTotalGeneral();
+    }, 3000);
     
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
 });
@@ -2155,39 +2172,86 @@ $('btn-sumar').addEventListener('click', ()=>{
 /* CALCULOS TOTALES */
 // ** Total de Cuenta Actual (Depende de la lista actual en memoria) **
 async function updateSelectedTotals(){ 
-  if(!selectedAccountId){ $('total-cuenta').textContent = fmtCOP(0); return; }
+  if(!selectedAccountId){ 
+    $('total-cuenta').textContent = fmtCOP(0); 
+    console.log('No hay cuenta seleccionada');
+    return; 
+  }
   
-  // Usar el snapshot actual en memoria para cálculo inmediato
-  let total = 0; 
+  console.log('=== INICIANDO ACTUALIZACIÓN DE TOTALES ===');
+  console.log('Cuenta seleccionada:', selectedAccountId);
+  console.log('Elementos en snapshot:', currentConsignsSnapshot.length);
+  
+  // Método 1: Usar snapshot en memoria
+  let totalMemoria = 0; 
   let foundRedSeparator = false;
+  let elementosContados = 0;
   
-  // Recorrer desde el más reciente (currentConsignsSnapshot ya está ordenado desc)
-  currentConsignsSnapshot.forEach(d => { 
-    // Si encontramos un separador rojo, paramos el conteo (inicio del período actual)
+  currentConsignsSnapshot.forEach((d, index) => { 
+    console.log(`Elemento ${index}:`, {
+      isSeparator: d.isSeparator,
+      type: d.type,
+      valor: d.valor,
+      foundRedSeparator
+    });
+    
+    // Si encontramos un separador rojo, paramos el conteo
     if (d.isSeparator && d.type === 'red') {
       foundRedSeparator = true;
+      console.log('Encontrado separador rojo, parando conteo');
       return;
     }
     
-    // Solo contar consignaciones normales (no separadores) del período actual
+    // Solo contar consignaciones normales del período actual
     if (!foundRedSeparator && !d.isSeparator) {
-      total += Number(d.valor || 0);
+      totalMemoria += Number(d.valor || 0);
+      elementosContados++;
+      console.log(`Sumando: ${d.valor}, total acumulado: ${totalMemoria}`);
     }
   }); 
   
-  $('total-cuenta').textContent = fmtCOP(total);
-  console.log('Total cuenta actualizado:', total, 'de', currentConsignsSnapshot.length, 'elementos');
+  console.log(`Total calculado desde memoria: ${totalMemoria} (${elementosContados} elementos)`);
   
-  // Actualizar separador verde en background si existe
+  // Método 2: Consulta fresca a Firebase como backup
   try {
-    const greenSeparator = currentConsignsSnapshot.find(d => d.isSeparator && d.type === 'green' && !foundRedSeparator);
-    if (greenSeparator && greenSeparator.total !== total) {
+    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+      .orderBy('fecha', 'desc').get();
+    
+    let totalFirebase = 0;
+    let foundRedSeparatorFB = false;
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.isSeparator && data.type === 'red') {
+        foundRedSeparatorFB = true;
+        return;
+      }
+      if (!foundRedSeparatorFB && !data.isSeparator) {
+        totalFirebase += Number(data.valor || 0);
+      }
+    });
+    
+    console.log(`Total calculado desde Firebase: ${totalFirebase}`);
+    
+    // Usar el mayor de los dos totales (por si hay diferencias de sincronización)
+    const totalFinal = Math.max(totalMemoria, totalFirebase);
+    
+    $('total-cuenta').textContent = fmtCOP(totalFinal);
+    console.log(`=== TOTAL FINAL APLICADO: ${totalFinal} ===`);
+    
+    // Actualizar separador verde
+    const greenSeparator = currentConsignsSnapshot.find(d => d.isSeparator && d.type === 'green');
+    if (greenSeparator && greenSeparator.total !== totalFinal) {
       await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-        .doc(greenSeparator.id).update({ total: total });
-      console.log('Separador verde actualizado con total:', total);
+        .doc(greenSeparator.id).update({ total: totalFinal });
+      console.log('Separador verde actualizado');
     }
+    
   } catch(e) {
-    console.log('Error actualizando separador verde:', e);
+    console.error('Error en consulta Firebase:', e);
+    // Usar solo el total de memoria si falla Firebase
+    $('total-cuenta').textContent = fmtCOP(totalMemoria);
+    console.log(`Total de memoria aplicado como fallback: ${totalMemoria}`);
   }
 }
 
