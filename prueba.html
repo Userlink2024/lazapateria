@@ -960,15 +960,24 @@ async function handleDoubleClick(clickedConsign, index) {
             return handleDoubleClick(clickedConsign, index);
         }
 
-        const userFecha = new Date(fechaStr);
-        const userObsdate = obsdateStr ? new Date(obsdateStr) : null;
+        // Crear fechas correctamente para Colombia
+        const fechaParts = fechaStr.split('-');
+        const userFecha = new Date(parseInt(fechaParts[0]), parseInt(fechaParts[1]) - 1, parseInt(fechaParts[2]), 12, 0, 0, 0);
         
-        // *** MODIFICADO: Ahora suma 1ms para que sea cronológicamente más reciente y suba en la lista descendente ***
-        const finalTimestampForSorting = firebase.firestore.Timestamp.fromMillis(clickedTimestamp + 1);
+        let userObsdate = null;
+        if (obsdateStr) {
+            const obsParts = obsdateStr.split('-');
+            userObsdate = new Date(parseInt(obsParts[0]), parseInt(obsParts[1]) - 1, parseInt(obsParts[2]), 12, 0, 0, 0);
+        }
+        
+        // Usar la fecha que el usuario especificó, pero con timestamp ligeramente anterior al registro clickeado
+        // para que aparezca justo encima en la lista descendente
+        const userTimestamp = userFecha.getTime();
+        const finalTimestampForSorting = firebase.firestore.Timestamp.fromMillis(clickedTimestamp - 1);
         
         try {
             await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-                fecha: finalTimestampForSorting, // Usamos 1ms más para forzar la posición superior (en lista descendente)
+                fecha: firebase.firestore.Timestamp.fromDate(userFecha), // Usar la fecha que especificó el usuario
                 obsdate: userObsdate ? firebase.firestore.Timestamp.fromDate(userObsdate) : null,
                 valor: valor, 
                 verifiedBy: usuario.usuario, 
@@ -979,7 +988,9 @@ async function handleDoubleClick(clickedConsign, index) {
             setTimeout(() => {
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 500);
+              // También forzar re-render de la tabla para mostrar cambios
+              renderConsigns();
+            }, 1000);
             
         } catch(e) { 
             showModal('Error', 'Error al insertar consignación: '+e.message, false); 
@@ -1587,7 +1598,9 @@ $('add-consign').addEventListener('click', async ()=>{
     setTimeout(() => {
       updateSelectedTotals();
       updateTotalGeneral();
-    }, 500);
+      // También forzar re-render de la tabla
+      renderConsigns();
+    }, 1000);
     
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
 });
@@ -1897,6 +1910,7 @@ async function updateSelectedTotals(){
     
     let total = 0;
     let foundRedSeparator = false;
+    let greenSeparatorTotal = 0;
     
     // Recorrer desde el más reciente hasta encontrar un separador rojo (inicio de período)
     snapshot.forEach(doc => {
@@ -1905,6 +1919,14 @@ async function updateSelectedTotals(){
       // Si encontramos un separador rojo, paramos el conteo (inicio del período actual)
       if (data.isSeparator && data.type === 'red') {
         foundRedSeparator = true;
+        return;
+      }
+      
+      // Si encontramos un separador verde, actualizar su total
+      if (data.isSeparator && data.type === 'green' && !foundRedSeparator) {
+        greenSeparatorTotal = total;
+        // Actualizar el separador verde con el nuevo total
+        doc.ref.update({ total: total });
         return;
       }
       
