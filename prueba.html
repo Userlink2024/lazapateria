@@ -1089,90 +1089,43 @@ async function handleDoubleClick(clickedConsign, index) {
         }
         
         // RETROACTIVA: Debe aparecer ENCIMA de la fila clickeada
-        // Solo trabajar con timestamps históricos (antes de 2030) para evitar interferencias
-        const añoFuturo = 2030;
-        const baseTimestamp = new Date(añoFuturo, 0, 1).getTime();
-        
-        // Filtrar solo consignaciones históricas (no las normales que están en el futuro)
-        const consignacionesHistoricas = currentConsignsSnapshot.filter(c => 
-          !c.isSeparator && c.fecha && c.fecha.toDate().getTime() < baseTimestamp
-        );
-        
-        // Encontrar la posición de la consignación clickeada en las históricas
-        const clickedIndex = consignacionesHistoricas.findIndex(c => c.id === clickedConsign.id);
-        let timestampParaOrden;
+        // Encontrar la posición de la consignación clickeada
+        const clickedIndex = currentConsignsSnapshot.findIndex(c => c.id === clickedConsign.id);
+        let nuevoOrden;
         
         if (clickedIndex > 0) {
           // Hay una fila encima, insertar entre esa fila y la clickeada
-          const filaEncima = consignacionesHistoricas[clickedIndex - 1];
-          const timestampEncima = filaEncima.fecha.toDate().getTime();
-          // Usar el promedio entre los dos timestamps
-          timestampParaOrden = new Date((timestampEncima + clickedTimestamp) / 2);
+          const filaEncima = currentConsignsSnapshot[clickedIndex - 1];
+          const filaClickeada = currentConsignsSnapshot[clickedIndex];
+          
+          const ordenEncima = filaEncima.orden || 0;
+          const ordenClickeada = filaClickeada.orden || 0;
+          
+          // Usar el promedio entre los dos órdenes (con decimales para precisión)
+          nuevoOrden = (ordenEncima + ordenClickeada) / 2;
         } else {
-          // Es la primera fila histórica, usar timestamp ligeramente mayor pero menor que 2030
-          const maxHistorico = Math.max(...consignacionesHistoricas.map(c => c.fecha.toDate().getTime()));
-          timestampParaOrden = new Date(Math.min(maxHistorico + 1000, baseTimestamp - 1000));
+          // Es la primera fila, usar orden ligeramente mayor que la clickeada
+          const ordenClickeada = clickedConsign.orden || 0;
+          nuevoOrden = ordenClickeada + 0.5;
         }
         
         console.log('🔄 INSERCIÓN RETROACTIVA (ENCIMA DE FILA):');
         console.log('  - Índice clickeado:', clickedIndex);
-        console.log('  - Fecha clickeada:', clickedDate);
-        console.log('  - Timestamp clickeado:', clickedTimestamp);
+        console.log('  - Orden clickeado:', clickedConsign.orden);
+        console.log('  - Nuevo orden calculado:', nuevoOrden);
         console.log('  - Fecha usuario:', userFecha);
-        console.log('  - Timestamp para orden (calculado):', timestampParaOrden);
-        console.log('  - Timestamp numérico:', timestampParaOrden.getTime());
         
         try {
             await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-                fecha: firebase.firestore.Timestamp.fromDate(timestampParaOrden), // Para ordenamiento
-                fechaOriginal: firebase.firestore.Timestamp.fromDate(userFecha), // Para mostrar
+                fecha: firebase.firestore.Timestamp.fromDate(userFecha), // Fecha seleccionada por el usuario
                 obsdate: userObsdate ? firebase.firestore.Timestamp.fromDate(userObsdate) : null,
                 valor: valor, 
                 verifiedBy: usuario.usuario, 
-                verifiedRole: 'Gerente'
+                verifiedRole: 'Gerente',
+                orden: nuevoOrden // Campo dedicado para ordenamiento manual
             });
             
-            console.log('✅ Consignación retroactiva agregada exitosamente');
-            
-            // Forzar actualización SUPER AGRESIVA para consignaciones retroactivas
-            console.log('🔄 Actualizando totales INMEDIATAMENTE (retroactiva)...');
-            
-            // Triple llamada inmediata
-            updateSelectedTotals();
-            updateTotalGeneral();
-            updateSelectedTotals();
-            updateTotalGeneral();
-            updateSelectedTotals();
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento 1 - Retroactiva (200ms)');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 200);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento 2 - Retroactiva (600ms)');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 600);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento 3 - Retroactiva (1200ms)');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 1200);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento 4 - Retroactiva (2500ms)');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 2500);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento FINAL - Retroactiva (5000ms)');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 5000);
+            console.log('✅ Consignación retroactiva agregada exitosamente con orden:', nuevoOrden);
             
         } catch(e) { 
             showModal('Error', 'Error al insertar consignación: '+e.message, false); 
@@ -1429,8 +1382,8 @@ function renderConsigns(){
 
   if(!selectedAccountId) return;
 
-  // Ordenar por fecha DESCENDENTE (más nuevas arriba)
-  consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').orderBy('fecha', 'desc').onSnapshot(snapshot=>{
+  // Obtener todas las consignaciones y ordenar manualmente para manejar migración
+  consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').onSnapshot(async snapshot=>{
     tbody.innerHTML = '';
     currentConsignsSnapshot = [];
     
@@ -1438,7 +1391,48 @@ function renderConsigns(){
     const newSnapshotIds = new Set(snapshot.docs.map(doc => doc.id));
     selectedConsignIds = new Set([...selectedConsignIds].filter(id => newSnapshotIds.has(id)));
     
+    // 2. MIGRACIÓN: Asignar orden a consignaciones que no lo tienen
+    const batch = db.batch();
+    let needsMigration = false;
+    let maxOrdenExistente = 0;
+    
+    // Primero, encontrar el orden máximo existente
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.orden !== undefined) {
+        maxOrdenExistente = Math.max(maxOrdenExistente, data.orden);
+      }
+    });
+    
+    // Luego, asignar orden a los que no lo tienen (más antiguos primero)
+    const docsWithoutOrder = snapshot.docs.filter(doc => doc.data().orden === undefined);
+    docsWithoutOrder.sort((a, b) => {
+      const fechaA = a.data().fecha?.toDate() || new Date(0);
+      const fechaB = b.data().fecha?.toDate() || new Date(0);
+      return fechaA.getTime() - fechaB.getTime(); // Más antiguos primero
+    });
+    
+    docsWithoutOrder.forEach((doc, index) => {
+      const nuevoOrden = maxOrdenExistente + index + 1;
+      batch.update(doc.ref, { orden: nuevoOrden });
+      needsMigration = true;
+    });
+    
+    if (needsMigration) {
+      console.log('🔄 Migrando consignaciones sin campo orden...');
+      await batch.commit();
+      return; // El snapshot se actualizará automáticamente
+    }
+    
+    // 3. PROCESAR Y ORDENAR DATOS
     snapshot.forEach(doc => currentConsignsSnapshot.push({id: doc.id, ...doc.data()}));
+    
+    // Ordenar por campo orden (descendente = más nuevas primero)
+    currentConsignsSnapshot.sort((a, b) => {
+      const ordenA = a.orden || 0;
+      const ordenB = b.orden || 0;
+      return ordenB - ordenA; // Descendente
+    });
 
     currentConsignsSnapshot.forEach((c, index)=>{
       
@@ -1463,9 +1457,8 @@ function renderConsigns(){
       if(c.verifiedRole === 'Administrativo') tr.classList.add('verified-admin');
       if(c.verifiedRole === 'Gerente') tr.classList.add('verified-gerente');
       
-      // Usar fechaOriginal si existe, sino usar fecha normal
-      const fechaParaMostrar = c.fechaOriginal || c.fecha;
-      const fechaText = fechaParaMostrar && fechaParaMostrar.toDate ? new Date(fechaParaMostrar.toDate()).toLocaleDateString() : '';
+      // Usar fecha normal (ya no necesitamos fechaOriginal o fechaUsuario)
+      const fechaText = c.fecha && c.fecha.toDate ? new Date(c.fecha.toDate()).toLocaleDateString() : '';
       const obsText = c.obsdate && c.obsdate.toDate ? new Date(c.obsdate.toDate()).toLocaleDateString() : '';
       
       tr.innerHTML = `
@@ -1497,22 +1490,9 @@ function renderConsigns(){
       tbody.appendChild(tr);
     });
     
-    // Actualización AGRESIVA de totales cada vez que la lista cambia
-    console.log('📊 Snapshot actualizado, recalculando totales...');
+    // Actualizar totales automáticamente
     updateSelectedTotals(); 
     updateTotalGeneral();
-    
-    setTimeout(() => {
-      console.log('📊 Recálculo de totales - intento 1 (100ms)');
-      updateSelectedTotals(); 
-      updateTotalGeneral();
-    }, 100);
-    
-    setTimeout(() => {
-      console.log('📊 Recálculo de totales - intento 2 (500ms)');
-      updateSelectedTotals(); 
-      updateTotalGeneral();
-    }, 500);
     
     // Actualizar indicadores de jerarquía después de renderizar
     setTimeout(() => {
@@ -1802,67 +1782,35 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 2. Ejecutar adición
   try{ 
-    // CONSIGNACIONES NORMALES: Usar timestamps en el futuro para orden de llegada
-    // Esto evita interferencias con consignaciones retroactivas
-    const ahora = new Date();
-    const añoFuturo = 2030; // Año base para consignaciones normales
-    const baseTimestamp = new Date(añoFuturo, 0, 1).getTime(); // 1 enero 2030
-    
-    // Encontrar el contador más alto de consignaciones normales existentes
-    let maxContador = 0;
+    // CONSIGNACIONES NORMALES: Usar un campo de orden separado
+    // Encontrar el orden más alto existente
+    let maxOrden = 0;
     currentConsignsSnapshot.forEach(c => {
-      if (!c.isSeparator && c.fecha) {
-        const timestamp = c.fecha.toDate().getTime();
-        if (timestamp >= baseTimestamp) {
-          // Es una consignación normal (timestamp futuro)
-          const contador = timestamp - baseTimestamp;
-          maxContador = Math.max(maxContador, contador);
-        }
+      if (!c.isSeparator && c.orden !== undefined) {
+        maxOrden = Math.max(maxOrden, c.orden);
       }
     });
     
-    // Nuevo timestamp = base + contador incrementado
-    const timestampUnico = new Date(baseTimestamp + maxContador + 1000);
+    // Nuevo orden = máximo + 1 (las más nuevas van primero)
+    const nuevoOrden = maxOrden + 1;
     
     console.log('🆕 CONSIGNACIÓN NORMAL (DEBE IR AL PRINCIPIO):');
-    console.log('  - Contador actual:', maxContador);
-    console.log('  - Nuevo timestamp:', timestampUnico.toISOString());
+    console.log('  - Orden actual máximo:', maxOrden);
+    console.log('  - Nuevo orden:', nuevoOrden);
     console.log('  - Fecha seleccionada:', fecha.toISOString());
-    console.log('  - Timestamp numérico:', timestampUnico.getTime());
-    
-    console.log('Fecha original seleccionada:', fecha.toISOString());
     
     await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-        fecha: firebase.firestore.Timestamp.fromDate(timestampUnico), // Timestamp único para ordenamiento
-        fechaOriginal: firebase.firestore.Timestamp.fromDate(fecha), // Fecha seleccionada por el usuario
+        fecha: firebase.firestore.Timestamp.fromDate(fecha), // Fecha seleccionada por el usuario (para mostrar)
         obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, 
         valor, 
         verifiedBy:null, 
-        verifiedRole:null 
+        verifiedRole:null,
+        orden: nuevoOrden // Campo dedicado para ordenamiento manual
     }); 
     $('valor').value=''; 
     $('valor').focus();
     
-    console.log('Consignación agregada exitosamente, forzando actualización...');
-    
-    // Forzar actualización inmediata y múltiple
-    setTimeout(() => {
-      console.log('Actualizando totales - paso 1');
-      updateSelectedTotals();
-      updateTotalGeneral();
-    }, 500);
-    
-    setTimeout(() => {
-      console.log('Actualizando totales - paso 2');
-      updateSelectedTotals();
-      updateTotalGeneral();
-    }, 1500);
-    
-    setTimeout(() => {
-      console.log('Actualizando totales - paso 3');
-      updateSelectedTotals();
-      updateTotalGeneral();
-    }, 3000);
+    console.log('✅ Consignación normal agregada exitosamente con orden:', nuevoOrden);
     
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
 });
