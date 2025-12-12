@@ -1768,12 +1768,26 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 2. Ejecutar adición
   try{ 
-    // Usar timestamp actual + milisegundos únicos para garantizar que aparezca al principio
-    const ahora = new Date();
-    // Agregar milisegundos únicos para evitar conflictos de timestamp
-    const timestampUnico = new Date(ahora.getTime() + Math.random() * 1000);
+    // ORDEN DE LLEGADA: Obtener el timestamp más reciente y agregar 1 segundo
+    let timestampUnico;
     
-    console.log('Agregando consignación con timestamp:', timestampUnico.toISOString());
+    if (currentConsignsSnapshot.length > 0) {
+      // Encontrar el timestamp más reciente de las consignaciones existentes
+      const timestampsExistentes = currentConsignsSnapshot
+        .filter(c => !c.isSeparator && c.fecha)
+        .map(c => c.fecha.toDate().getTime());
+      
+      const maxTimestamp = Math.max(...timestampsExistentes);
+      timestampUnico = new Date(maxTimestamp + 1000); // +1 segundo después del más reciente
+      
+      console.log('Timestamp más reciente encontrado:', new Date(maxTimestamp).toISOString());
+      console.log('Nuevo timestamp (más reciente + 1s):', timestampUnico.toISOString());
+    } else {
+      // Si no hay consignaciones, usar timestamp actual
+      timestampUnico = new Date();
+      console.log('Primera consignación, usando timestamp actual:', timestampUnico.toISOString());
+    }
+    
     console.log('Fecha original seleccionada:', fecha.toISOString());
     
     await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
