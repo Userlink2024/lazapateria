@@ -732,6 +732,7 @@
             <button id="btn-unverify" class="btn ghost">❌ Desverificar</button>
             <button id="btn-delete" class="btn danger" style="display:none">🗑️ Eliminar</button>
             <button id="btn-sumar" class="btn ghost">➕ Sumar</button>
+            <button id="btn-refresh-totals" class="btn ghost" style="background: linear-gradient(135deg, #9C27B0, #E91E63); color: white;">🔄 Actualizar Totales</button>
             <button id="btn-cuadrar" class="btn ghost" style="display:none; border:2px solid var(--accent); color:var(--accent); font-weight:600;">✅ Cuadrar (Corte)</button>
           </div>
         </div>
@@ -1110,18 +1111,34 @@ async function handleDoubleClick(clickedConsign, index) {
             
             console.log('✅ Consignación retroactiva agregada exitosamente');
             
-            // Forzar actualización de totales después de inserción retroactiva
-            setTimeout(() => {
-              console.log('🔄 Actualizando totales después de inserción retroactiva...');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 1000);
+            // Forzar actualización INMEDIATA y múltiples intentos
+            console.log('🔄 Actualizando totales INMEDIATAMENTE...');
+            updateSelectedTotals();
+            updateTotalGeneral();
             
             setTimeout(() => {
-              console.log('🔄 Segunda actualización de totales...');
+              console.log('🔄 Actualizando totales - intento 1 (500ms)...');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 2500);
+            }, 500);
+            
+            setTimeout(() => {
+              console.log('🔄 Actualizando totales - intento 2 (1500ms)...');
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 1500);
+            
+            setTimeout(() => {
+              console.log('🔄 Actualizando totales - intento 3 (3000ms)...');
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 3000);
+            
+            setTimeout(() => {
+              console.log('🔄 Actualizando totales - intento FINAL (5000ms)...');
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 5000);
             
         } catch(e) { 
             showModal('Error', 'Error al insertar consignación: '+e.message, false); 
@@ -1446,11 +1463,22 @@ function renderConsigns(){
       tbody.appendChild(tr);
     });
     
-    // Actualización de totales aquí, cada vez que la lista cambia
+    // Actualización AGRESIVA de totales cada vez que la lista cambia
+    console.log('📊 Snapshot actualizado, recalculando totales...');
+    updateSelectedTotals(); 
+    updateTotalGeneral();
+    
     setTimeout(() => {
+      console.log('📊 Recálculo de totales - intento 1 (100ms)');
       updateSelectedTotals(); 
       updateTotalGeneral();
     }, 100);
+    
+    setTimeout(() => {
+      console.log('📊 Recálculo de totales - intento 2 (500ms)');
+      updateSelectedTotals(); 
+      updateTotalGeneral();
+    }, 500);
     
     // Actualizar indicadores de jerarquía después de renderizar
     setTimeout(() => {
@@ -1989,6 +2017,18 @@ $('btn-verify').addEventListener('click', async ()=>{
       ? `${validItems.length} movimientos verificados correctamente. ${invalidItems.length} elementos omitidos por jerarquía.`
       : `${validItems.length} movimientos verificados correctamente.`;
     
+    // Forzar actualización de totales después de verificar
+    console.log('✅ Verificación completada, actualizando totales...');
+    setTimeout(() => {
+      updateSelectedTotals();
+      updateTotalGeneral();
+    }, 500);
+    
+    setTimeout(() => {
+      updateSelectedTotals();
+      updateTotalGeneral();
+    }, 1500);
+    
     showModal('Éxito', successMessage, false);
   } else if (invalidItems.length > 0) {
     // Solo había elementos inválidos
@@ -2008,6 +2048,19 @@ $('btn-unverify').addEventListener('click', async ()=>{
   const batch = db.batch(); const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
   ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null })); 
   await batch.commit();
+  
+  // Forzar actualización de totales después de desverificar
+  console.log('❌ Desverificación completada, actualizando totales...');
+  setTimeout(() => {
+    updateSelectedTotals();
+    updateTotalGeneral();
+  }, 500);
+  
+  setTimeout(() => {
+    updateSelectedTotals();
+    updateTotalGeneral();
+  }, 1500);
+  
   // Limpia la selección después de la acción
   selectedConsignIds.clear();
   showModal('Éxito', `${ids.length} movimientos desverificados.`, false);
@@ -2105,16 +2158,43 @@ $('btn-delete').addEventListener('click', async ()=>{
             await updateBatch.commit();
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
+            
+            // Forzar actualización de totales después de eliminar (con cortes)
+            console.log('🗑️ Eliminación con cortes completada, actualizando totales...');
+            setTimeout(() => {
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 500);
+            
+            setTimeout(() => {
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 1500);
+            
             showModal('¡Atención!', `Eliminación exitosa. ${recalculationCount} CORTES afectados han sido recalculados y corregidos.`, false);
         } else {
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
             
-            // Forzar actualización de totales después de eliminar
+            // Forzar actualización AGRESIVA de totales después de eliminar
+            console.log('🗑️ Eliminación sin cortes completada, actualizando totales...');
+            updateSelectedTotals();
+            updateTotalGeneral();
+            
             setTimeout(() => {
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 1000);
+            }, 500);
+            
+            setTimeout(() => {
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 1500);
+            
+            setTimeout(() => {
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 3000);
             
             showModal('Éxito', `${ids.length} items eliminados.`, false);
         }
@@ -2182,6 +2262,33 @@ $('btn-sumar').addEventListener('click', ()=>{
   showModal('Suma de Selección', `La suma de los ítems seleccionados es: ${fmtCOP(suma)}`, false);
 });
 
+// Botón para forzar actualización de totales
+$('btn-refresh-totals').addEventListener('click', ()=>{
+  console.log('🔄 FORZANDO ACTUALIZACIÓN MANUAL DE TOTALES...');
+  showModal('Actualizando...', 'Recalculando totales, por favor espere...', false);
+  
+  // Actualización inmediata
+  updateSelectedTotals();
+  updateTotalGeneral();
+  
+  // Múltiples intentos
+  setTimeout(() => {
+    updateSelectedTotals();
+    updateTotalGeneral();
+  }, 500);
+  
+  setTimeout(() => {
+    updateSelectedTotals();
+    updateTotalGeneral();
+  }, 1500);
+  
+  setTimeout(() => {
+    updateSelectedTotals();
+    updateTotalGeneral();
+    showModal('Completado', 'Totales actualizados correctamente.', false);
+  }, 3000);
+});
+
 /* CALCULOS TOTALES */
 // ** Total de Cuenta Actual (Depende de la lista actual en memoria) **
 async function updateSelectedTotals(){ 
@@ -2197,29 +2304,41 @@ async function updateSelectedTotals(){
   
   // Método 1: Usar snapshot en memoria
   let totalMemoria = 0; 
-  let foundRedSeparator = false;
   let elementosContados = 0;
   
+  // Encontrar el índice del primer separador rojo (si existe)
+  let firstRedSeparatorIndex = -1;
+  for (let i = 0; i < currentConsignsSnapshot.length; i++) {
+    if (currentConsignsSnapshot[i].isSeparator && currentConsignsSnapshot[i].type === 'red') {
+      firstRedSeparatorIndex = i;
+      break;
+    }
+  }
+  
+  console.log('Primer separador rojo en índice:', firstRedSeparatorIndex);
+  
+  // Contar solo las consignaciones que están ANTES del primer separador rojo
   currentConsignsSnapshot.forEach((d, index) => { 
     console.log(`Elemento ${index}:`, {
       isSeparator: d.isSeparator,
       type: d.type,
       valor: d.valor,
-      foundRedSeparator
+      beforeRedSeparator: firstRedSeparatorIndex === -1 || index < firstRedSeparatorIndex
     });
     
-    // Si encontramos un separador rojo, paramos el conteo
-    if (d.isSeparator && d.type === 'red') {
-      foundRedSeparator = true;
-      console.log('Encontrado separador rojo, parando conteo');
-      return;
-    }
+    // Solo contar consignaciones normales que están antes del separador rojo
+    const shouldCount = !d.isSeparator && (firstRedSeparatorIndex === -1 || index < firstRedSeparatorIndex);
     
-    // Solo contar consignaciones normales del período actual
-    if (!foundRedSeparator && !d.isSeparator) {
+    if (shouldCount) {
       totalMemoria += Number(d.valor || 0);
       elementosContados++;
-      console.log(`Sumando: ${d.valor}, total acumulado: ${totalMemoria}`);
+      console.log(`✅ Sumando: ${d.valor}, total acumulado: ${totalMemoria}`);
+    } else if (d.isSeparator && d.type === 'red') {
+      console.log('🛑 Separador rojo encontrado, no contar más elementos');
+    } else if (d.isSeparator) {
+      console.log('📊 Separador no-rojo, continuar');
+    } else {
+      console.log('❌ Consignación después del separador rojo, no contar');
     }
   }); 
   
@@ -2231,15 +2350,22 @@ async function updateSelectedTotals(){
       .orderBy('fecha', 'desc').get();
     
     let totalFirebase = 0;
-    let foundRedSeparatorFB = false;
+    const fbDocs = [];
+    snapshot.forEach(doc => fbDocs.push({id: doc.id, ...doc.data()}));
     
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.isSeparator && data.type === 'red') {
-        foundRedSeparatorFB = true;
-        return;
+    // Encontrar el primer separador rojo en Firebase
+    let firstRedSeparatorIndexFB = -1;
+    for (let i = 0; i < fbDocs.length; i++) {
+      if (fbDocs[i].isSeparator && fbDocs[i].type === 'red') {
+        firstRedSeparatorIndexFB = i;
+        break;
       }
-      if (!foundRedSeparatorFB && !data.isSeparator) {
+    }
+    
+    // Contar solo antes del separador rojo
+    fbDocs.forEach((data, index) => {
+      const shouldCount = !data.isSeparator && (firstRedSeparatorIndexFB === -1 || index < firstRedSeparatorIndexFB);
+      if (shouldCount) {
         totalFirebase += Number(data.valor || 0);
       }
     });
