@@ -2410,58 +2410,68 @@ async function updateSelectedTotals(){
       console.log(`  - [${sep.index}] ${sep.type.toUpperCase()}`);
     });
     
-    // Calcular totales para cada período (entre separadores rojos)
-    let periodoInicio = 0;
-    let totalPeriodoActual = 0;
+    // Nueva lógica: Calcular desde abajo hacia arriba y asociar correctamente
+    const periodos = [];
+    let totalActual = 0;
+    let inicioActual = fbDocs.length;
     
-    for (let i = 0; i < fbDocs.length; i++) {
+    // Recorrer desde abajo hacia arriba para calcular cada período
+    for (let i = fbDocs.length - 1; i >= 0; i--) {
       const doc = fbDocs[i];
       
-      if (doc.isSeparator && doc.type === 'red') {
-        // Encontramos un separador rojo - fin del período actual
-        console.log(`🛑 FIN DE PERÍODO en índice ${i} - Total: ${totalPeriodoActual}`);
+      if (doc.isSeparator && doc.type === 'green') {
+        // Encontramos un separador verde - guardar el período
+        periodos.push({
+          greenIndex: i,
+          greenId: doc.id,
+          total: totalActual,
+          inicio: inicioActual,
+          fin: fbDocs.length - 1
+        });
         
-        // Buscar el separador verde correspondiente (debe estar justo después del rojo)
-        const greenSeparatorIndex = i + 1;
-        if (greenSeparatorIndex < fbDocs.length && 
-            fbDocs[greenSeparatorIndex].isSeparator && 
-            fbDocs[greenSeparatorIndex].type === 'green') {
-          
-          const greenSeparator = fbDocs[greenSeparatorIndex];
-          console.log(`🔄 Actualizando separador verde en índice ${greenSeparatorIndex}`);
-          console.log(`   Valor anterior: ${greenSeparator.total}`);
-          console.log(`   Valor nuevo: ${totalPeriodoActual}`);
-          
-          if (greenSeparator.total !== totalPeriodoActual) {
-            await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-              .doc(greenSeparator.id).update({ total: totalPeriodoActual });
-            console.log(`✅ Separador verde actualizado: ${totalPeriodoActual}`);
-          } else {
-            console.log(`✓ Separador verde ya tiene el total correcto`);
-          }
-        }
+        console.log(`💚 PERÍODO CALCULADO: Verde[${i}] = ${totalActual} (elementos ${inicioActual}-${fbDocs.length - 1})`);
         
-        // Reiniciar para el siguiente período
-        totalPeriodoActual = 0;
-        periodoInicio = i + 2; // Saltar el separador rojo y verde
+        // Actualizar el separador verde
+        console.log(`🔄 Actualizando separador verde en índice ${i}`);
+        console.log(`   Valor anterior: ${doc.total}`);
+        console.log(`   Valor nuevo: ${totalActual}`);
+        
+        await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+          .doc(doc.id).update({ total: totalActual });
+        console.log(`✅ Separador verde ACTUALIZADO: ${totalActual}`);
+        
+        // Reiniciar para el siguiente período (hacia arriba)
+        totalActual = 0;
+        inicioActual = i - 1; // Continuar desde antes del separador verde
+        
+      } else if (doc.isSeparator && doc.type === 'red') {
+        // Separador rojo - ajustar el inicio del período
+        inicioActual = i - 1;
+        console.log(`🛑 Separador rojo en ${i}, ajustando inicio a ${inicioActual}`);
         
       } else if (!doc.isSeparator) {
-        // Es una consignación normal - sumar al período actual
-        totalPeriodoActual += Number(doc.valor || 0);
-        console.log(`✅ Sumando [${i}]: ${doc.valor} (Total período: ${totalPeriodoActual})`);
+        // Consignación normal - sumar
+        totalActual += Number(doc.valor || 0);
+        console.log(`✅ Sumando [${i}]: ${doc.valor} (Total acumulado: ${totalActual})`);
       }
     }
     
-    // El último período (desde el último separador hasta el inicio)
-    console.log(`💰 TOTAL DEL PERÍODO ACTUAL (para UI): ${totalPeriodoActual}`);
+    // El último período (el más arriba, sin separador verde)
+    if (totalActual > 0) {
+      console.log(`💰 PERÍODO SUPERIOR (sin separador): ${totalActual}`);
+    }
+    
+    // Usar el total del período superior (más reciente) para la UI
+    const totalParaUI = totalActual > 0 ? totalActual : (periodos.length > 0 ? periodos[periodos.length - 1].total : 0);
+    console.log(`💰 TOTAL DEL PERÍODO ACTUAL (para UI): ${totalParaUI}`);
     
     // Actualizar la UI con el total del período actual
     const totalElement = $('total-cuenta');
-    const formattedTotal = fmtCOP(totalPeriodoActual);
+    const formattedTotal = fmtCOP(totalParaUI);
     
     console.log('🎯 ACTUALIZANDO UI:');
     console.log('  - Elemento encontrado:', !!totalElement);
-    console.log('  - Total sin formato:', totalPeriodoActual);
+    console.log('  - Total sin formato:', totalParaUI);
     console.log('  - Total formateado:', formattedTotal);
     console.log('  - Valor actual en UI:', totalElement ? totalElement.textContent : 'ELEMENTO NO ENCONTRADO');
     
