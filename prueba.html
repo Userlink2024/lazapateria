@@ -2379,11 +2379,9 @@ async function updateSelectedTotals(){
     return; 
   }
   
-  console.log('=== INICIANDO ACTUALIZACIÓN DE TOTALES ===');
+  console.log('=== INICIANDO ACTUALIZACIÓN DE TOTALES (NUEVA LÓGICA) ===');
   console.log('Cuenta seleccionada:', selectedAccountId);
   
-  // MÉTODO PRINCIPAL: Consulta DIRECTA a Firebase (más confiable)
-  let totalFinal = 0;
   try {
     console.log('🔄 Consultando Firebase directamente...');
     const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
@@ -2394,50 +2392,80 @@ async function updateSelectedTotals(){
     
     console.log(`📊 Documentos encontrados en Firebase: ${fbDocs.length}`);
     
-    // Encontrar el primer separador rojo
-    let firstRedSeparatorIndex = -1;
-    for (let i = 0; i < fbDocs.length; i++) {
-      if (fbDocs[i].isSeparator && fbDocs[i].type === 'red') {
-        firstRedSeparatorIndex = i;
-        console.log(`🛑 Primer separador rojo encontrado en índice: ${i}`);
-        break;
-      }
-    }
-    
-    if (firstRedSeparatorIndex === -1) {
-      console.log('📝 No hay separador rojo, contando todas las consignaciones');
-    }
-    
-    // Contar solo consignaciones antes del separador rojo
-    let elementosContados = 0;
-    fbDocs.forEach((data, index) => {
-      const shouldCount = !data.isSeparator && (firstRedSeparatorIndex === -1 || index < firstRedSeparatorIndex);
-      
-      if (shouldCount) {
-        totalFinal += Number(data.valor || 0);
-        elementosContados++;
-        console.log(`✅ Sumando [${index}]: ${data.valor} (Total: ${totalFinal})`);
-      } else if (data.isSeparator) {
-        console.log(`📊 Separador [${index}]: ${data.type}`);
-      } else {
-        console.log(`❌ Omitiendo [${index}]: ${data.valor} (después del corte)`);
+    // Encontrar TODOS los separadores rojos y verdes
+    const separadores = [];
+    fbDocs.forEach((doc, index) => {
+      if (doc.isSeparator) {
+        separadores.push({
+          index: index,
+          type: doc.type,
+          id: doc.id,
+          doc: doc
+        });
       }
     });
     
-    console.log(`💰 TOTAL CALCULADO: ${totalFinal} (${elementosContados} elementos)`);
+    console.log(`� Separadyores encontrados: ${separadores.length}`);
+    separadores.forEach(sep => {
+      console.log(`  - [${sep.index}] ${sep.type.toUpperCase()}`);
+    });
     
-    // Actualizar la UI con logging detallado
+    // Calcular totales para cada período (entre separadores rojos)
+    let periodoInicio = 0;
+    let totalPeriodoActual = 0;
+    
+    for (let i = 0; i < fbDocs.length; i++) {
+      const doc = fbDocs[i];
+      
+      if (doc.isSeparator && doc.type === 'red') {
+        // Encontramos un separador rojo - fin del período actual
+        console.log(`🛑 FIN DE PERÍODO en índice ${i} - Total: ${totalPeriodoActual}`);
+        
+        // Buscar el separador verde correspondiente (debe estar justo después del rojo)
+        const greenSeparatorIndex = i + 1;
+        if (greenSeparatorIndex < fbDocs.length && 
+            fbDocs[greenSeparatorIndex].isSeparator && 
+            fbDocs[greenSeparatorIndex].type === 'green') {
+          
+          const greenSeparator = fbDocs[greenSeparatorIndex];
+          console.log(`🔄 Actualizando separador verde en índice ${greenSeparatorIndex}`);
+          console.log(`   Valor anterior: ${greenSeparator.total}`);
+          console.log(`   Valor nuevo: ${totalPeriodoActual}`);
+          
+          if (greenSeparator.total !== totalPeriodoActual) {
+            await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+              .doc(greenSeparator.id).update({ total: totalPeriodoActual });
+            console.log(`✅ Separador verde actualizado: ${totalPeriodoActual}`);
+          } else {
+            console.log(`✓ Separador verde ya tiene el total correcto`);
+          }
+        }
+        
+        // Reiniciar para el siguiente período
+        totalPeriodoActual = 0;
+        periodoInicio = i + 2; // Saltar el separador rojo y verde
+        
+      } else if (!doc.isSeparator) {
+        // Es una consignación normal - sumar al período actual
+        totalPeriodoActual += Number(doc.valor || 0);
+        console.log(`✅ Sumando [${i}]: ${doc.valor} (Total período: ${totalPeriodoActual})`);
+      }
+    }
+    
+    // El último período (desde el último separador hasta el inicio)
+    console.log(`💰 TOTAL DEL PERÍODO ACTUAL (para UI): ${totalPeriodoActual}`);
+    
+    // Actualizar la UI con el total del período actual
     const totalElement = $('total-cuenta');
-    const formattedTotal = fmtCOP(totalFinal);
+    const formattedTotal = fmtCOP(totalPeriodoActual);
     
     console.log('🎯 ACTUALIZANDO UI:');
     console.log('  - Elemento encontrado:', !!totalElement);
-    console.log('  - Total sin formato:', totalFinal);
+    console.log('  - Total sin formato:', totalPeriodoActual);
     console.log('  - Total formateado:', formattedTotal);
     console.log('  - Valor actual en UI:', totalElement ? totalElement.textContent : 'ELEMENTO NO ENCONTRADO');
     
     if (totalElement) {
-      // Múltiples métodos para asegurar la actualización
       totalElement.textContent = formattedTotal;
       totalElement.innerHTML = formattedTotal;
       totalElement.innerText = formattedTotal;
@@ -2450,7 +2478,6 @@ async function updateSelectedTotals(){
       console.log('  - Nuevo valor en UI:', totalElement.textContent);
       console.log('✅ UI ACTUALIZADA EXITOSAMENTE');
       
-      // Verificación adicional después de un momento
       setTimeout(() => {
         console.log('🔍 VERIFICACIÓN POST-ACTUALIZACIÓN:');
         console.log('  - Valor final en UI:', totalElement.textContent);
@@ -2458,35 +2485,6 @@ async function updateSelectedTotals(){
       
     } else {
       console.error('❌ ERROR: Elemento total-cuenta no encontrado');
-    }
-    
-    // Actualizar TODOS los separadores verdes en el período actual
-    const greenSeparators = fbDocs.filter(d => d.isSeparator && d.type === 'green');
-    
-    if (greenSeparators.length > 0) {
-      console.log(`🔄 Encontrados ${greenSeparators.length} separadores verdes para actualizar`);
-      
-      // Actualizar cada separador verde que esté ANTES del primer separador rojo
-      for (let i = 0; i < greenSeparators.length; i++) {
-        const greenSeparator = greenSeparators[i];
-        const greenIndex = fbDocs.findIndex(d => d.id === greenSeparator.id);
-        
-        // Solo actualizar si está antes del primer separador rojo
-        if (firstRedSeparatorIndex === -1 || greenIndex < firstRedSeparatorIndex) {
-          if (greenSeparator.total !== totalFinal) {
-            console.log(`🔄 Actualizando separador verde ${i + 1}/${greenSeparators.length} (índice ${greenIndex})`);
-            await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-              .doc(greenSeparator.id).update({ total: totalFinal });
-            console.log(`✅ Separador verde ${i + 1} actualizado: ${totalFinal}`);
-          } else {
-            console.log(`✓ Separador verde ${i + 1} ya tiene el total correcto: ${totalFinal}`);
-          }
-        } else {
-          console.log(`⏭️ Separador verde ${i + 1} está después del corte rojo, no actualizar`);
-        }
-      }
-    } else {
-      console.log('📝 No hay separadores verdes para actualizar');
     }
     
   } catch(e) {
