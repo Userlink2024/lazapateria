@@ -138,10 +138,10 @@
       background: linear-gradient(135deg, var(--accent), #66BB6A);
       color:white;
       border:none;
-      padding:4px 8px;
+      padding:6px 12px;
       border-radius:6px;
       cursor:pointer;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       transition: all 0.3s ease;
       text-transform: uppercase;
@@ -1089,15 +1089,38 @@ async function handleDoubleClick(clickedConsign, index) {
             userObsdate = new Date(parseInt(obsParts[0]), parseInt(obsParts[1]) - 1, parseInt(obsParts[2]), 12, 0, 0, 0);
         }
         
-        // RETROACTIVA: Debe aparecer ENCIMA de la fila clickeada (no al principio)
-        // Usar timestamp ligeramente posterior al clickeado para que aparezca justo encima
-        const timestampParaOrden = new Date(clickedTimestamp + 1); // 1ms después del clickeado
+        // RETROACTIVA: Debe aparecer ENCIMA de la fila clickeada
+        // Solo trabajar con timestamps históricos (antes de 2030) para evitar interferencias
+        const añoFuturo = 2030;
+        const baseTimestamp = new Date(añoFuturo, 0, 1).getTime();
+        
+        // Filtrar solo consignaciones históricas (no las normales que están en el futuro)
+        const consignacionesHistoricas = currentConsignsSnapshot.filter(c => 
+          !c.isSeparator && c.fecha && c.fecha.toDate().getTime() < baseTimestamp
+        );
+        
+        // Encontrar la posición de la consignación clickeada en las históricas
+        const clickedIndex = consignacionesHistoricas.findIndex(c => c.id === clickedConsign.id);
+        let timestampParaOrden;
+        
+        if (clickedIndex > 0) {
+          // Hay una fila encima, insertar entre esa fila y la clickeada
+          const filaEncima = consignacionesHistoricas[clickedIndex - 1];
+          const timestampEncima = filaEncima.fecha.toDate().getTime();
+          // Usar el promedio entre los dos timestamps
+          timestampParaOrden = new Date((timestampEncima + clickedTimestamp) / 2);
+        } else {
+          // Es la primera fila histórica, usar timestamp ligeramente mayor pero menor que 2030
+          const maxHistorico = Math.max(...consignacionesHistoricas.map(c => c.fecha.toDate().getTime()));
+          timestampParaOrden = new Date(Math.min(maxHistorico + 1000, baseTimestamp - 1000));
+        }
         
         console.log('🔄 INSERCIÓN RETROACTIVA (ENCIMA DE FILA):');
+        console.log('  - Índice clickeado:', clickedIndex);
         console.log('  - Fecha clickeada:', clickedDate);
         console.log('  - Timestamp clickeado:', clickedTimestamp);
         console.log('  - Fecha usuario:', userFecha);
-        console.log('  - Timestamp para orden (+1ms):', timestampParaOrden);
+        console.log('  - Timestamp para orden (calculado):', timestampParaOrden);
         
         try {
             await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
@@ -1768,25 +1791,32 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 2. Ejecutar adición
   try{ 
-    // ORDEN DE LLEGADA: Obtener el timestamp más reciente y agregar 1 segundo
-    let timestampUnico;
+    // CONSIGNACIONES NORMALES: Usar timestamps en el futuro para orden de llegada
+    // Esto evita interferencias con consignaciones retroactivas
+    const ahora = new Date();
+    const añoFuturo = 2030; // Año base para consignaciones normales
+    const baseTimestamp = new Date(añoFuturo, 0, 1).getTime(); // 1 enero 2030
     
-    if (currentConsignsSnapshot.length > 0) {
-      // Encontrar el timestamp más reciente de las consignaciones existentes
-      const timestampsExistentes = currentConsignsSnapshot
-        .filter(c => !c.isSeparator && c.fecha)
-        .map(c => c.fecha.toDate().getTime());
-      
-      const maxTimestamp = Math.max(...timestampsExistentes);
-      timestampUnico = new Date(maxTimestamp + 1000); // +1 segundo después del más reciente
-      
-      console.log('Timestamp más reciente encontrado:', new Date(maxTimestamp).toISOString());
-      console.log('Nuevo timestamp (más reciente + 1s):', timestampUnico.toISOString());
-    } else {
-      // Si no hay consignaciones, usar timestamp actual
-      timestampUnico = new Date();
-      console.log('Primera consignación, usando timestamp actual:', timestampUnico.toISOString());
-    }
+    // Encontrar el contador más alto de consignaciones normales existentes
+    let maxContador = 0;
+    currentConsignsSnapshot.forEach(c => {
+      if (!c.isSeparator && c.fecha) {
+        const timestamp = c.fecha.toDate().getTime();
+        if (timestamp >= baseTimestamp) {
+          // Es una consignación normal (timestamp futuro)
+          const contador = timestamp - baseTimestamp;
+          maxContador = Math.max(maxContador, contador);
+        }
+      }
+    });
+    
+    // Nuevo timestamp = base + contador incrementado
+    const timestampUnico = new Date(baseTimestamp + maxContador + 1000);
+    
+    console.log('🆕 CONSIGNACIÓN NORMAL:');
+    console.log('  - Contador actual:', maxContador);
+    console.log('  - Nuevo timestamp:', timestampUnico.toISOString());
+    console.log('  - Fecha seleccionada:', fecha.toISOString());
     
     console.log('Fecha original seleccionada:', fecha.toISOString());
     
