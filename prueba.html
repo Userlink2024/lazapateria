@@ -1134,31 +1134,42 @@ async function handleDoubleClick(clickedConsign, index) {
             
             console.log('✅ Consignación retroactiva agregada exitosamente');
             
-            // Forzar actualización INMEDIATA y múltiples intentos
-            console.log('🔄 Actualizando totales INMEDIATAMENTE...');
+            // Forzar actualización SUPER AGRESIVA para consignaciones retroactivas
+            console.log('🔄 Actualizando totales INMEDIATAMENTE (retroactiva)...');
+            
+            // Triple llamada inmediata
             updateSelectedTotals();
             updateTotalGeneral();
+            updateSelectedTotals();
+            updateTotalGeneral();
+            updateSelectedTotals();
             
             setTimeout(() => {
-              console.log('🔄 Actualizando totales - intento 1 (500ms)...');
+              console.log('🔄 Reintento 1 - Retroactiva (200ms)');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 500);
+            }, 200);
             
             setTimeout(() => {
-              console.log('🔄 Actualizando totales - intento 2 (1500ms)...');
+              console.log('🔄 Reintento 2 - Retroactiva (600ms)');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 1500);
+            }, 600);
             
             setTimeout(() => {
-              console.log('🔄 Actualizando totales - intento 3 (3000ms)...');
+              console.log('🔄 Reintento 3 - Retroactiva (1200ms)');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 3000);
+            }, 1200);
             
             setTimeout(() => {
-              console.log('🔄 Actualizando totales - intento FINAL (5000ms)...');
+              console.log('🔄 Reintento 4 - Retroactiva (2500ms)');
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 2500);
+            
+            setTimeout(() => {
+              console.log('🔄 Reintento FINAL - Retroactiva (5000ms)');
               updateSelectedTotals();
               updateTotalGeneral();
             }, 5000);
@@ -2203,42 +2214,68 @@ $('btn-delete').addEventListener('click', async ()=>{
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
             
-            // Forzar actualización de totales después de eliminar (con cortes)
+            // Forzar actualización AGRESIVA de totales después de eliminar (con cortes)
             console.log('🗑️ Eliminación con cortes completada, actualizando totales...');
+            
+            // Actualización inmediata
+            updateSelectedTotals();
+            updateTotalGeneral();
+            
+            // Múltiples intentos para asegurar sincronización
             setTimeout(() => {
+              console.log('🔄 Reintento 1 - Eliminación con cortes');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 500);
+            }, 300);
             
             setTimeout(() => {
+              console.log('🔄 Reintento 2 - Eliminación con cortes');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 1500);
+            }, 1000);
+            
+            setTimeout(() => {
+              console.log('🔄 Reintento 3 - Eliminación con cortes');
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 2500);
             
             showModal('¡Atención!', `Eliminación exitosa. ${recalculationCount} CORTES afectados han sido recalculados y corregidos.`, false);
         } else {
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
             
-            // Forzar actualización AGRESIVA de totales después de eliminar
+            // Forzar actualización SUPER AGRESIVA de totales después de eliminar
             console.log('🗑️ Eliminación sin cortes completada, actualizando totales...');
+            
+            // Actualización inmediata múltiple
             updateSelectedTotals();
             updateTotalGeneral();
+            updateSelectedTotals(); // Doble llamada inmediata
             
             setTimeout(() => {
+              console.log('🔄 Reintento 1 - Eliminación sin cortes');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 500);
+            }, 200);
             
             setTimeout(() => {
+              console.log('🔄 Reintento 2 - Eliminación sin cortes');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 1500);
+            }, 800);
             
             setTimeout(() => {
+              console.log('🔄 Reintento 3 - Eliminación sin cortes');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 3000);
+            }, 2000);
+            
+            setTimeout(() => {
+              console.log('🔄 Reintento FINAL - Eliminación sin cortes');
+              updateSelectedTotals();
+              updateTotalGeneral();
+            }, 4000);
             
             showModal('Éxito', `${ids.length} items eliminados.`, false);
         }
@@ -2344,98 +2381,69 @@ async function updateSelectedTotals(){
   
   console.log('=== INICIANDO ACTUALIZACIÓN DE TOTALES ===');
   console.log('Cuenta seleccionada:', selectedAccountId);
-  console.log('Elementos en snapshot:', currentConsignsSnapshot.length);
   
-  // Método 1: Usar snapshot en memoria
-  let totalMemoria = 0; 
-  let elementosContados = 0;
-  
-  // Encontrar el índice del primer separador rojo (si existe)
-  let firstRedSeparatorIndex = -1;
-  for (let i = 0; i < currentConsignsSnapshot.length; i++) {
-    if (currentConsignsSnapshot[i].isSeparator && currentConsignsSnapshot[i].type === 'red') {
-      firstRedSeparatorIndex = i;
-      break;
-    }
-  }
-  
-  console.log('Primer separador rojo en índice:', firstRedSeparatorIndex);
-  
-  // Contar solo las consignaciones que están ANTES del primer separador rojo
-  currentConsignsSnapshot.forEach((d, index) => { 
-    console.log(`Elemento ${index}:`, {
-      isSeparator: d.isSeparator,
-      type: d.type,
-      valor: d.valor,
-      beforeRedSeparator: firstRedSeparatorIndex === -1 || index < firstRedSeparatorIndex
-    });
-    
-    // Solo contar consignaciones normales que están antes del separador rojo
-    const shouldCount = !d.isSeparator && (firstRedSeparatorIndex === -1 || index < firstRedSeparatorIndex);
-    
-    if (shouldCount) {
-      totalMemoria += Number(d.valor || 0);
-      elementosContados++;
-      console.log(`✅ Sumando: ${d.valor}, total acumulado: ${totalMemoria}`);
-    } else if (d.isSeparator && d.type === 'red') {
-      console.log('🛑 Separador rojo encontrado, no contar más elementos');
-    } else if (d.isSeparator) {
-      console.log('📊 Separador no-rojo, continuar');
-    } else {
-      console.log('❌ Consignación después del separador rojo, no contar');
-    }
-  }); 
-  
-  console.log(`Total calculado desde memoria: ${totalMemoria} (${elementosContados} elementos)`);
-  
-  // Método 2: Consulta fresca a Firebase como backup
+  // MÉTODO PRINCIPAL: Consulta DIRECTA a Firebase (más confiable)
+  let totalFinal = 0;
   try {
+    console.log('🔄 Consultando Firebase directamente...');
     const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
       .orderBy('fecha', 'desc').get();
     
-    let totalFirebase = 0;
     const fbDocs = [];
     snapshot.forEach(doc => fbDocs.push({id: doc.id, ...doc.data()}));
     
-    // Encontrar el primer separador rojo en Firebase
-    let firstRedSeparatorIndexFB = -1;
+    console.log(`📊 Documentos encontrados en Firebase: ${fbDocs.length}`);
+    
+    // Encontrar el primer separador rojo
+    let firstRedSeparatorIndex = -1;
     for (let i = 0; i < fbDocs.length; i++) {
       if (fbDocs[i].isSeparator && fbDocs[i].type === 'red') {
-        firstRedSeparatorIndexFB = i;
+        firstRedSeparatorIndex = i;
+        console.log(`🛑 Primer separador rojo encontrado en índice: ${i}`);
         break;
       }
     }
     
-    // Contar solo antes del separador rojo
+    if (firstRedSeparatorIndex === -1) {
+      console.log('📝 No hay separador rojo, contando todas las consignaciones');
+    }
+    
+    // Contar solo consignaciones antes del separador rojo
+    let elementosContados = 0;
     fbDocs.forEach((data, index) => {
-      const shouldCount = !data.isSeparator && (firstRedSeparatorIndexFB === -1 || index < firstRedSeparatorIndexFB);
+      const shouldCount = !data.isSeparator && (firstRedSeparatorIndex === -1 || index < firstRedSeparatorIndex);
+      
       if (shouldCount) {
-        totalFirebase += Number(data.valor || 0);
+        totalFinal += Number(data.valor || 0);
+        elementosContados++;
+        console.log(`✅ Sumando [${index}]: ${data.valor} (Total: ${totalFinal})`);
+      } else if (data.isSeparator) {
+        console.log(`📊 Separador [${index}]: ${data.type}`);
+      } else {
+        console.log(`❌ Omitiendo [${index}]: ${data.valor} (después del corte)`);
       }
     });
     
-    console.log(`Total calculado desde Firebase: ${totalFirebase}`);
+    console.log(`💰 TOTAL CALCULADO: ${totalFinal} (${elementosContados} elementos)`);
     
-    // Usar el mayor de los dos totales (por si hay diferencias de sincronización)
-    const totalFinal = Math.max(totalMemoria, totalFirebase);
-    
+    // Actualizar la UI
     $('total-cuenta').textContent = fmtCOP(totalFinal);
-    console.log(`=== TOTAL FINAL APLICADO: ${totalFinal} ===`);
     
-    // Actualizar separador verde
-    const greenSeparator = currentConsignsSnapshot.find(d => d.isSeparator && d.type === 'green');
+    // Actualizar separador verde si existe
+    const greenSeparator = fbDocs.find(d => d.isSeparator && d.type === 'green');
     if (greenSeparator && greenSeparator.total !== totalFinal) {
+      console.log('🔄 Actualizando separador verde...');
       await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
         .doc(greenSeparator.id).update({ total: totalFinal });
-      console.log('Separador verde actualizado');
-    }
+      console.log('✅ Separador verde actualizado');
     
   } catch(e) {
-    console.error('Error en consulta Firebase:', e);
-    // Usar solo el total de memoria si falla Firebase
-    $('total-cuenta').textContent = fmtCOP(totalMemoria);
-    console.log(`Total de memoria aplicado como fallback: ${totalMemoria}`);
+    console.error('❌ Error al actualizar totales:', e);
+    $('total-cuenta').textContent = fmtCOP(0);
+    console.log('Aplicando total 0 como fallback por error');
   }
+  
+  console.log('=== FIN ACTUALIZACIÓN DE TOTALES ===');
 }
 
 // ** Total General (Implementación más robusta sin CollectionGroup) **
