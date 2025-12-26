@@ -1803,23 +1803,23 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 3. Ejecutar adición
   try{ 
-    // CONSIGNACIONES NORMALES: Respetar cortes existentes y mantener orden de ingreso
-    // Buscar el separador rojo más reciente (último corte)
+    // CONSIGNACIONES NORMALES: Con cortes en la parte superior
+    // Buscar el separador rojo más reciente (que estará en la parte superior)
     let ultimoCorteRojo = null;
     let ordenParaNuevaConsignacion = 0;
     
-    // Buscar el separador rojo con el orden más alto (más reciente)
+    // Buscar el separador rojo con el orden más PEQUEÑO (más reciente, ya que están arriba)
     for (const item of currentConsignsSnapshot) {
       if (item.isSeparator && item.type === 'red') {
-        if (!ultimoCorteRojo || (item.orden || 0) > (ultimoCorteRojo.orden || 0)) {
+        if (!ultimoCorteRojo || (item.orden || 0) < (ultimoCorteRojo.orden || 0)) {
           ultimoCorteRojo = item;
         }
       }
     }
     
     if (ultimoCorteRojo) {
-      // HAY UN CORTE: Las nuevas consignaciones deben ir DESPUÉS del corte
-      // En orden ascendente, "después" significa orden mayor al del corte
+      // HAY UN CORTE: Las nuevas consignaciones deben ir DESPUÉS del corte rojo
+      // Como los cortes están arriba (orden menor), "después" significa orden mayor al del corte
       // Buscar el orden máximo de las consignaciones que están después del corte
       let maxOrdenDespuesDelCorte = ultimoCorteRojo.orden || 0;
       
@@ -1833,7 +1833,7 @@ $('add-consign').addEventListener('click', async ()=>{
       // Nueva consignación va después del corte con orden mayor al máximo encontrado
       ordenParaNuevaConsignacion = maxOrdenDespuesDelCorte + 1;
       
-      console.log('🆕 CONSIGNACIÓN DESPUÉS DEL CORTE (ORDEN ASCENDENTE):');
+      console.log('🆕 CONSIGNACIÓN DESPUÉS DEL CORTE (CORTES ARRIBA):');
       console.log('  - Último corte rojo encontrado con orden:', ultimoCorteRojo.orden);
       console.log('  - Orden máximo después del corte:', maxOrdenDespuesDelCorte);
       console.log('  - Nuevo orden (después del corte):', ordenParaNuevaConsignacion);
@@ -1849,7 +1849,7 @@ $('add-consign').addEventListener('click', async ()=>{
       
       ordenParaNuevaConsignacion = maxOrden + 1;
       
-      console.log('🆕 CONSIGNACIÓN SIN CORTES (AL FINAL - ORDEN ASCENDENTE):');
+      console.log('🆕 CONSIGNACIÓN SIN CORTES (AL FINAL):');
       console.log('  - Orden actual máximo:', maxOrden);
       console.log('  - Nuevo orden:', ordenParaNuevaConsignacion);
     }
@@ -2345,22 +2345,27 @@ $('btn-cuadrar').addEventListener('click', async () => {
     const now = new Date(nowUTC.getTime() + (localOffset + colombiaOffset) * 60000);
     
     // Calcular órdenes para los separadores
-    // En orden ascendente: el separador verde va primero, luego el rojo
-    // Esto mantiene el corte al final del período cuadrado
-    let maxOrden = 0;
+    // Los separadores deben ir en la PARTE SUPERIOR (orden menor)
+    // Para que aparezcan arriba, necesitamos órdenes menores que las consignaciones existentes
+    let minOrden = Number.MAX_SAFE_INTEGER;
     currentConsignsSnapshot.forEach(c => {
       if (c.orden !== undefined) {
-        maxOrden = Math.max(maxOrden, c.orden);
+        minOrden = Math.min(minOrden, c.orden);
       }
     });
     
-    const ordenSeparadorVerde = maxOrden + 1; // Verde va primero (cierre del período)
-    const ordenSeparadorRojo = maxOrden + 2; // Rojo va después (inicio del nuevo período)
+    // Si no hay consignaciones, usar orden 1 y 2
+    if (minOrden === Number.MAX_SAFE_INTEGER) {
+      minOrden = 3; // Para que los separadores sean 1 y 2
+    }
     
-    console.log('🔴 CREANDO CORTE (ORDEN ASCENDENTE):');
-    console.log('  - Orden máximo actual:', maxOrden);
-    console.log('  - Orden separador verde (cierre):', ordenSeparadorVerde);
-    console.log('  - Orden separador rojo (nuevo período):', ordenSeparadorRojo);
+    const ordenSeparadorVerde = minOrden - 2; // Verde va primero (cierre del período anterior)
+    const ordenSeparadorRojo = minOrden - 1; // Rojo va después (inicio del nuevo período)
+    
+    console.log('🔴 CREANDO CORTE (ARRIBA DE LA TABLA):');
+    console.log('  - Orden mínimo actual:', minOrden);
+    console.log('  - Orden separador verde (arriba):', ordenSeparadorVerde);
+    console.log('  - Orden separador rojo (arriba):', ordenSeparadorRojo);
     
     // Inserta separador Verde (Total del Corte)
     batch.set(col.doc(), { 
@@ -2443,68 +2448,48 @@ async function updateSelectedTotals(){
       console.log(`  - [${sep.index}] ${sep.type.toUpperCase()}`);
     });
     
-    // Nueva lógica: Calcular desde abajo hacia arriba y asociar correctamente
+    // Nueva lógica: Con cortes en la parte superior
+    // Los separadores están ordenados por 'orden' ascendente, por lo que aparecen arriba
+    // Necesitamos calcular desde el último separador rojo hacia abajo
     const periodos = [];
     let totalActual = 0;
-    let inicioActual = fbDocs.length;
+    let ultimoCorteRojo = null;
     
-    // Recorrer desde abajo hacia arriba para calcular cada período
-    for (let i = fbDocs.length - 1; i >= 0; i--) {
-      const doc = fbDocs[i];
-      
-      if (doc.isSeparator && doc.type === 'green') {
-        // Encontramos un separador verde - guardar el período
-        periodos.push({
-          greenIndex: i,
-          greenId: doc.id,
-          total: totalActual,
-          inicio: inicioActual,
-          fin: fbDocs.length - 1
-        });
-        
-        console.log(`💚 PERÍODO CALCULADO: Verde[${i}] = ${totalActual} (elementos ${inicioActual}-${fbDocs.length - 1})`);
-        
-        // Actualizar el separador verde
-        console.log(`🔄 Actualizando separador verde en índice ${i}`);
-        console.log(`   Valor anterior: ${doc.total}`);
-        console.log(`   Valor nuevo: ${totalActual}`);
-        
-        await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-          .doc(doc.id).update({ total: totalActual });
-        console.log(`✅ Separador verde ACTUALIZADO: ${totalActual}`);
-        
-        // Reiniciar para el siguiente período (hacia arriba)
-        totalActual = 0;
-        inicioActual = i - 1; // Continuar desde antes del separador verde
-        
-      } else if (doc.isSeparator && doc.type === 'red') {
-        // Separador rojo - ajustar el inicio del período
-        inicioActual = i - 1;
-        console.log(`🛑 Separador rojo en ${i}, ajustando inicio a ${inicioActual}`);
-        
-      } else if (!doc.isSeparator) {
-        // Consignación normal - sumar
-        totalActual += Number(doc.valor || 0);
-        console.log(`✅ Sumando [${i}]: ${doc.valor} (Total acumulado: ${totalActual})`);
+    // Encontrar el último separador rojo (el más reciente, que tendrá el orden más pequeño)
+    fbDocs.forEach(doc => {
+      if (doc.isSeparator && doc.type === 'red') {
+        if (!ultimoCorteRojo || (doc.orden || 0) < (ultimoCorteRojo.orden || 0)) {
+          ultimoCorteRojo = doc;
+        }
       }
-    }
+    });
     
-    // El último período (el más arriba, sin separador verde)
-    if (totalActual > 0) {
-      console.log(`💰 PERÍODO SUPERIOR (sin separador): ${totalActual}`);
-    }
+    // Calcular el total del período actual (después del último corte rojo)
+    fbDocs.forEach(doc => {
+      if (!doc.isSeparator) {
+        // Si hay un corte rojo, solo sumar las consignaciones posteriores a él
+        if (ultimoCorteRojo) {
+          if ((doc.orden || 0) > (ultimoCorteRojo.orden || 0)) {
+            totalActual += Number(doc.valor || 0);
+            console.log(`✅ Sumando consignación después del corte: ${doc.valor} (Total: ${totalActual})`);
+          }
+        } else {
+          // No hay cortes, sumar todas las consignaciones
+          totalActual += Number(doc.valor || 0);
+          console.log(`✅ Sumando consignación (sin cortes): ${doc.valor} (Total: ${totalActual})`);
+        }
+      }
+    });
     
-    // Usar el total del período superior (más reciente) para la UI
-    const totalParaUI = totalActual > 0 ? totalActual : (periodos.length > 0 ? periodos[periodos.length - 1].total : 0);
-    console.log(`💰 TOTAL DEL PERÍODO ACTUAL (para UI): ${totalParaUI}`);
+    console.log(`💰 TOTAL DEL PERÍODO ACTUAL: ${totalActual}`);
     
     // Actualizar la UI con el total del período actual
     const totalElement = $('total-cuenta');
-    const formattedTotal = fmtCOP(totalParaUI);
+    const formattedTotal = fmtCOP(totalActual);
     
     console.log('🎯 ACTUALIZANDO UI:');
     console.log('  - Elemento encontrado:', !!totalElement);
-    console.log('  - Total sin formato:', totalParaUI);
+    console.log('  - Total sin formato:', totalActual);
     console.log('  - Total formateado:', formattedTotal);
     console.log('  - Valor actual en UI:', totalElement ? totalElement.textContent : 'ELEMENTO NO ENCONTRADO');
     
