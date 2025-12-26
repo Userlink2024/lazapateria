@@ -1431,6 +1431,17 @@
                         <option value="">Todos</option>
                     </select>
                 </div>
+                
+                <!-- Nueva barra de búsqueda específica para pedidos -->
+                <div class="form-field">
+                    <label for="search_pedidos_input">Búsqueda Universal:</label>
+                    <input type="text" 
+                           id="search_pedidos_input" 
+                           placeholder="Buscar por cliente, código, productos, pares, valores..." 
+                           oninput="filtrarYBuscarPedidos()" 
+                           style="width: 100%; padding: 12px 15px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 1em; background-color: #fcfcfc; box-sizing: border-box;">
+                </div>
+                
                 <div class="totals">
                     <label id="total_pares">Total Pares: 0</label>
                     <label id="valor_vendido">Valor Vendido: $0</label>
@@ -2081,9 +2092,11 @@
         function filtrarYBuscarPedidos() {
             console.log("--- Inicia filtrarYBuscarPedidos ---");
             const filtroAsesorValue = document.getElementById('filtro_asesor').value;
-            // Obtener el valor del campo de búsqueda por cliente
-            const searchClienteInput = document.getElementById('search_cliente_input');
-            const searchTerm = searchClienteInput ? searchClienteInput.value.toLowerCase() : '';
+            
+            // Obtener el valor del campo de búsqueda específico para pedidos
+            const searchPedidosInput = document.getElementById('search_pedidos_input');
+            const searchTerm = searchPedidosInput ? searchPedidosInput.value.toLowerCase() : '';
+            
             const listaPedidosContainer = document.getElementById('lista_pedidos_container');
             const records = listaPedidosContainer.querySelectorAll('.record');
 
@@ -2111,11 +2124,20 @@
                 const despachadoDelRegistro = recordElement.dataset.despachado === 'true';
                 const retardoDelRegistro = recordElement.dataset.retardo === 'true'; // New: Read data-retardo
                 const usuarioDelRegistro = recordElement.dataset.usuario;
+                
+                // Obtener valores adicionales para búsqueda universal
+                const paresDelRegistro = recordElement.dataset.pares ? recordElement.dataset.pares.toLowerCase() : '';
+                const valorDelRegistro = recordElement.dataset.valor ? recordElement.dataset.valor.toLowerCase() : '';
 
                 const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
                 let coincideBusqueda = true;
                 if (searchTerm) {
-                    coincideBusqueda = clienteDelRegistro.includes(searchTerm) || codigoDelRegistro.includes(searchTerm) || productosDelRegistro.includes(searchTerm);
+                    // Búsqueda universal: cliente, código, productos, pares, valores
+                    coincideBusqueda = clienteDelRegistro.includes(searchTerm) || 
+                                     codigoDelRegistro.includes(searchTerm) || 
+                                     productosDelRegistro.includes(searchTerm) ||
+                                     paresDelRegistro.includes(searchTerm) ||
+                                     valorDelRegistro.includes(searchTerm);
                 }
                 const userMatches = (isUserFilteredRole ? usuarioDelRegistro === currentUserId : true);
 
@@ -2498,15 +2520,15 @@
             console.log("Iniciando vista de pedidos en tiempo real...");
             mostrarModal('modal_pedidos'); // This will show the modal
 
-            // Limpiar el campo de búsqueda por cliente al abrir el modal
-            const searchClienteInput = document.getElementById('search_cliente_input');
-            if (searchClienteInput) {
-                searchClienteInput.value = '';
-                searchClienteInput.blur(); // Quitar el foco
+            // Limpiar el campo de búsqueda de pedidos al abrir el modal
+            const searchPedidosInput = document.getElementById('search_pedidos_input');
+            if (searchPedidosInput) {
+                searchPedidosInput.value = '';
+                searchPedidosInput.blur(); // Quitar el foco
                 // Pequeño retraso para asegurar la limpieza en caso de autorrelleno agresivo
                 setTimeout(() => {
-                    searchClienteInput.value = '';
-                    searchClienteInput.blur();
+                    searchPedidosInput.value = '';
+                    searchPedidosInput.blur();
                 }, 100);
             }
 
@@ -2640,12 +2662,12 @@
                     listaPedidosContainer.scrollTop = scrollPosPedidos;
                 }
 
-                // Limpiar el campo de búsqueda por cliente después de cargar/filtrar
-                const searchClienteInput = document.getElementById('search_cliente_input');
-                if (searchClienteInput) {
+                // Limpiar el campo de búsqueda de pedidos después de cargar/filtrar
+                const searchPedidosInput = document.getElementById('search_pedidos_input');
+                if (searchPedidosInput) {
                     setTimeout(() => {
-                        searchClienteInput.value = '';
-                        searchClienteInput.blur();
+                        searchPedidosInput.value = '';
+                        searchPedidosInput.blur();
                     }, 200);
                 }
 
@@ -3902,10 +3924,10 @@
             document.querySelector('input[name="asesor"]').value = datosUsuario.nombreCompleto;
             ocultarBarraCargando();
 
-            // Asignar el evento 'input' al nuevo campo de búsqueda por cliente
-            const searchClienteInput = document.getElementById('search_cliente_input');
-            if(searchClienteInput) {
-                searchClienteInput.addEventListener('input', filtrarYBuscarPedidos);
+            // Asignar el evento 'input' al nuevo campo de búsqueda de pedidos
+            const searchPedidosInput = document.getElementById('search_pedidos_input');
+            if(searchPedidosInput) {
+                searchPedidosInput.addEventListener('input', filtrarYBuscarPedidos);
             }
 
             // Listener para el estado de bloqueo global desde Firestore
@@ -4013,11 +4035,11 @@
                 filterAllButton.textContent = 'Todos';
                 filterAllButton.addEventListener('click', () => {
                     initAudioContext();
-                    const searchClienteInput = document.getElementById('search_cliente_input');
-                    if (searchClienteInput) {
-                        searchClienteInput.value = '';
-                        searchClienteInput.blur();
-                        setTimeout(() => { searchClienteInput.value = ''; searchClienteInput.blur(); }, 100);
+                    const searchPedidosInput = document.getElementById('search_pedidos_input');
+                    if (searchPedidosInput) {
+                        searchPedidosInput.value = '';
+                        searchPedidosInput.blur();
+                        setTimeout(() => { searchPedidosInput.value = ''; searchPedidosInput.blur(); }, 100);
                     }
                     currentDispatchFilter = 'all';
                     setActiveDispatchFilterButton('all');
@@ -4029,11 +4051,11 @@
                 filterDespachadosButton.textContent = 'Despachados';
                 filterDespachadosButton.addEventListener('click', () => {
                     initAudioContext();
-                    const searchClienteInput = document.getElementById('search_cliente_input');
-                    if (searchClienteInput) {
-                        searchClienteInput.value = '';
-                        searchClienteInput.blur();
-                        setTimeout(() => { searchClienteInput.value = ''; searchClienteInput.blur(); }, 100);
+                    const searchPedidosInput = document.getElementById('search_pedidos_input');
+                    if (searchPedidosInput) {
+                        searchPedidosInput.value = '';
+                        searchPedidosInput.blur();
+                        setTimeout(() => { searchPedidosInput.value = ''; searchPedidosInput.blur(); }, 100);
                     }
                     currentDispatchFilter = 'despachados';
                     setActiveDispatchFilterButton('despachados');
@@ -4045,11 +4067,11 @@
                 filterNoDespachadosButton.textContent = 'No Despachados';
                 filterNoDespachadosButton.addEventListener('click', () => {
                     initAudioContext();
-                    const searchClienteInput = document.getElementById('search_cliente_input');
-                    if (searchClienteInput) {
-                        searchClienteInput.value = '';
-                        searchClienteInput.blur();
-                        setTimeout(() => { searchClienteInput.value = ''; searchClienteInput.blur(); }, 100);
+                    const searchPedidosInput = document.getElementById('search_pedidos_input');
+                    if (searchPedidosInput) {
+                        searchPedidosInput.value = '';
+                        searchPedidosInput.blur();
+                        setTimeout(() => { searchPedidosInput.value = ''; searchPedidosInput.blur(); }, 100);
                     }
                     currentDispatchFilter = 'noDespachados';
                     setActiveDispatchFilterButton('noDespachados');
@@ -4061,11 +4083,11 @@
                 filterRetardosButton.textContent = 'Retardos';
                 filterRetardosButton.addEventListener('click', () => {
                     initAudioContext();
-                    const searchClienteInput = document.getElementById('search_cliente_input');
-                    if (searchClienteInput) {
-                        searchClienteInput.value = '';
-                        searchClienteInput.blur();
-                        setTimeout(() => { searchClienteInput.value = ''; searchClienteInput.blur(); }, 100);
+                    const searchPedidosInput = document.getElementById('search_pedidos_input');
+                    if (searchPedidosInput) {
+                        searchPedidosInput.value = '';
+                        searchPedidosInput.blur();
+                        setTimeout(() => { searchPedidosInput.value = ''; searchPedidosInput.blur(); }, 100);
                     }
                     currentDispatchFilter = 'retardos';
                     setActiveDispatchFilterButton('retardos');
@@ -4085,13 +4107,13 @@
                 searchBarContainer = document.createElement('div');
                 searchBarContainer.className = 'form-field search-bar-container';
                 searchBarContainer.innerHTML = `
-                    <label for="search_cliente_input">Barra de Búsqueda:</label>
-                    <input type="search" id="search_cliente_input" name="client_search_query"
-                           placeholder=""
+                    <label for="search_pedidos_input">Barra de Búsqueda:</label>
+                    <input type="search" id="search_pedidos_input" name="pedidos_search_query"
+                           placeholder="Buscar por cliente, código, productos, pares, valores..."
                            autocorrect="off"
                            spellcheck="false"
                            role="searchbox"
-                           aria-label="Barra de Búsqueda de Clientes"
+                           aria-label="Barra de Búsqueda Universal de Pedidos"
                            inputmode="text">
                 `;
             }
@@ -4106,9 +4128,9 @@
             }
 
             // Asignar el evento 'input' a la barra de búsqueda
-            const searchClienteInput = document.getElementById('search_cliente_input');
-            if(searchClienteInput) {
-                searchClienteInput.addEventListener('input', filtrarYBuscarPedidos);
+            const searchPedidosInput = document.getElementById('search_pedidos_input');
+            if(searchPedidosInput) {
+                searchPedidosInput.addEventListener('input', filtrarYBuscarPedidos);
             }
 
             // Establecer el botón de filtro activo inicial
