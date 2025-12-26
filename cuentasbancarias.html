@@ -1432,11 +1432,11 @@ function renderConsigns(){
     // 3. PROCESAR Y ORDENAR DATOS
     snapshot.forEach(doc => currentConsignsSnapshot.push({id: doc.id, ...doc.data()}));
     
-    // Ordenar por campo orden (descendente = más nuevas primero)
+    // Ordenar por campo orden (ascendente = orden de ingreso)
     currentConsignsSnapshot.sort((a, b) => {
       const ordenA = a.orden || 0;
       const ordenB = b.orden || 0;
-      return ordenB - ordenA; // Descendente
+      return ordenA - ordenB; // Ascendente - mantiene orden de ingreso
     });
 
     currentConsignsSnapshot.forEach((c, index)=>{
@@ -1684,7 +1684,7 @@ $('btn-export-excel').addEventListener('click', () => {
   if(dataForExcel.length === 0) return showModal('Atención', "No hay movimientos válidos (solo separadores).", false);
 
   const wb = XLSX.utils.book_new();
-  // El orden de la exportación es el mismo que el del snapshot (descendente), que es lo que el usuario ve.
+  // El orden de la exportación es el mismo que el del snapshot (ascendente = orden de ingreso)
   const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: ["FECHA", "VALOR", "REFERENCIA", "OBSERVACIONES", "ESTADO/COLOR"] }); 
 
   applyExcelDateFormats(ws);
@@ -1803,21 +1803,56 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 3. Ejecutar adición
   try{ 
-    // CONSIGNACIONES NORMALES: Usar un campo de orden separado
-    // Encontrar el orden más alto existente
-    let maxOrden = 0;
-    currentConsignsSnapshot.forEach(c => {
-      if (!c.isSeparator && c.orden !== undefined) {
-        maxOrden = Math.max(maxOrden, c.orden);
+    // CONSIGNACIONES NORMALES: Respetar cortes existentes y mantener orden de ingreso
+    // Buscar el separador rojo más reciente (último corte)
+    let ultimoCorteRojo = null;
+    let ordenParaNuevaConsignacion = 0;
+    
+    // Buscar el separador rojo con el orden más alto (más reciente)
+    for (const item of currentConsignsSnapshot) {
+      if (item.isSeparator && item.type === 'red') {
+        if (!ultimoCorteRojo || (item.orden || 0) > (ultimoCorteRojo.orden || 0)) {
+          ultimoCorteRojo = item;
+        }
       }
-    });
+    }
     
-    // Nuevo orden = máximo + 1 (las más nuevas van primero)
-    const nuevoOrden = maxOrden + 1;
-    
-    console.log('🆕 CONSIGNACIÓN NORMAL (DEBE IR AL PRINCIPIO):');
-    console.log('  - Orden actual máximo:', maxOrden);
-    console.log('  - Nuevo orden:', nuevoOrden);
+    if (ultimoCorteRojo) {
+      // HAY UN CORTE: Las nuevas consignaciones deben ir DESPUÉS del corte
+      // En orden ascendente, "después" significa orden mayor al del corte
+      // Buscar el orden máximo de las consignaciones que están después del corte
+      let maxOrdenDespuesDelCorte = ultimoCorteRojo.orden || 0;
+      
+      // Buscar consignaciones que están después del corte (orden mayor al del corte)
+      currentConsignsSnapshot.forEach(c => {
+        if (!c.isSeparator && c.orden !== undefined && c.orden > (ultimoCorteRojo.orden || 0)) {
+          maxOrdenDespuesDelCorte = Math.max(maxOrdenDespuesDelCorte, c.orden);
+        }
+      });
+      
+      // Nueva consignación va después del corte con orden mayor al máximo encontrado
+      ordenParaNuevaConsignacion = maxOrdenDespuesDelCorte + 1;
+      
+      console.log('🆕 CONSIGNACIÓN DESPUÉS DEL CORTE (ORDEN ASCENDENTE):');
+      console.log('  - Último corte rojo encontrado con orden:', ultimoCorteRojo.orden);
+      console.log('  - Orden máximo después del corte:', maxOrdenDespuesDelCorte);
+      console.log('  - Nuevo orden (después del corte):', ordenParaNuevaConsignacion);
+      
+    } else {
+      // NO HAY CORTES: Agregar al final de la lista (orden máximo + 1)
+      let maxOrden = 0;
+      currentConsignsSnapshot.forEach(c => {
+        if (!c.isSeparator && c.orden !== undefined) {
+          maxOrden = Math.max(maxOrden, c.orden);
+        }
+      });
+      
+      ordenParaNuevaConsignacion = maxOrden + 1;
+      
+      console.log('🆕 CONSIGNACIÓN SIN CORTES (AL FINAL - ORDEN ASCENDENTE):');
+      console.log('  - Orden actual máximo:', maxOrden);
+      console.log('  - Nuevo orden:', ordenParaNuevaConsignacion);
+    }
     console.log('  - Fecha seleccionada:', fecha.toISOString());
     console.log('  - Referencia:', referencia);
     
@@ -1828,13 +1863,13 @@ $('add-consign').addEventListener('click', async ()=>{
         referencia: referencia, // Agregar la referencia
         verifiedBy:null, 
         verifiedRole:null,
-        orden: nuevoOrden // Campo dedicado para ordenamiento manual
+        orden: ordenParaNuevaConsignacion // Campo dedicado para ordenamiento manual
     }); 
     $('valor').value=''; 
     $('referencia').value=''; // Limpiar el campo de referencia
     $('valor').focus();
     
-    console.log('✅ Consignación normal agregada exitosamente con orden:', nuevoOrden);
+    console.log('✅ Consignación agregada exitosamente con orden:', ordenParaNuevaConsignacion);
     
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
 });
@@ -2264,15 +2299,21 @@ $('btn-delete').addEventListener('click', async ()=>{
 $('btn-cuadrar').addEventListener('click', async () => {
   if (!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   
-  // Adaptación a la lista DESCENDENTE (más nueva arriba)
+  // Buscar consignaciones pendientes desde el último corte
   let pendingItems = [];
-  for(const item of currentConsignsSnapshot){
-    // Al ir de lo nuevo a lo viejo, sumamos hasta que encontramos el primer separador de corte (el más reciente)
-    if(item.isSeparator && item.type === 'red') {
-        break; 
+  let foundLastCut = false;
+  
+  // Recorrer desde el final hacia atrás (más nuevas primero) para encontrar el último corte
+  for (let i = currentConsignsSnapshot.length - 1; i >= 0; i--) {
+    const item = currentConsignsSnapshot[i];
+    
+    if (item.isSeparator && item.type === 'red') {
+      foundLastCut = true;
+      break; // Encontramos el último corte, paramos aquí
     }
+    
     if (!item.isSeparator) {
-        pendingItems.push(item);
+      pendingItems.unshift(item); // Agregar al principio para mantener orden
     }
   }
   
@@ -2293,10 +2334,43 @@ $('btn-cuadrar').addEventListener('click', async () => {
     const localOffset = nowUTC.getTimezoneOffset();
     const now = new Date(nowUTC.getTime() + (localOffset + colombiaOffset) * 60000);
     
+    // Calcular órdenes para los separadores
+    // En orden ascendente: el separador verde va primero, luego el rojo
+    // Esto mantiene el corte al final del período cuadrado
+    let maxOrden = 0;
+    currentConsignsSnapshot.forEach(c => {
+      if (c.orden !== undefined) {
+        maxOrden = Math.max(maxOrden, c.orden);
+      }
+    });
+    
+    const ordenSeparadorVerde = maxOrden + 1; // Verde va primero (cierre del período)
+    const ordenSeparadorRojo = maxOrden + 2; // Rojo va después (inicio del nuevo período)
+    
+    console.log('🔴 CREANDO CORTE (ORDEN ASCENDENTE):');
+    console.log('  - Orden máximo actual:', maxOrden);
+    console.log('  - Orden separador verde (cierre):', ordenSeparadorVerde);
+    console.log('  - Orden separador rojo (nuevo período):', ordenSeparadorRojo);
+    
     // Inserta separador Verde (Total del Corte)
-    batch.set(col.doc(), { isSeparator:true, type:'green', label: now.toLocaleDateString('es-CO'), total: total, fecha: firebase.firestore.Timestamp.fromDate(now) });
-    // Inserta separador Rojo (Nuevo punto de partida) - 1ms más nuevo que el verde para aparecer ARRIBA en la lista descendente
-    batch.set(col.doc(), { isSeparator:true, type:'red', label: now.toLocaleDateString('es-CO'), total: 0, fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1)) });
+    batch.set(col.doc(), { 
+      isSeparator: true, 
+      type: 'green', 
+      label: now.toLocaleDateString('es-CO'), 
+      total: total, 
+      fecha: firebase.firestore.Timestamp.fromDate(now),
+      orden: ordenSeparadorVerde
+    });
+    
+    // Inserta separador Rojo (Nuevo punto de partida) - Después del verde en orden ascendente
+    batch.set(col.doc(), { 
+      isSeparator: true, 
+      type: 'red', 
+      label: now.toLocaleDateString('es-CO'), 
+      total: 0, 
+      fecha: firebase.firestore.Timestamp.fromDate(new Date(now.getTime()+1)),
+      orden: ordenSeparadorRojo
+    });
 
     await batch.commit();
     // Limpia la selección después de la acción
