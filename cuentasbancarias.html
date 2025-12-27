@@ -1309,6 +1309,12 @@ function subscribeAccounts(){
 
         const isClosedState = a.closed || false;
         $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}${isClosedState ? ' (🔒 CERRADA)' : ''}`; 
+        
+        // Recalcular totales de separadores verdes al cambiar de cuenta
+        setTimeout(() => {
+          recalcularTotalSeparadorVerde();
+        }, 500);
+        
         updateSelectedTotals(); 
         renderConsigns(); 
       };
@@ -1320,7 +1326,12 @@ function subscribeAccounts(){
         const isClosed = firstAccount.closed || false;
         $('selected-account-info').textContent = `Cuenta: ${selectedAccountName} — ${firstAccount.number || ''}${isClosed ? ' (🔒 CERRADA)' : ''}`; 
         renderConsigns(); 
-        updateSelectedTotals(); 
+        updateSelectedTotals();
+        
+        // Recalcular totales al cargar la primera cuenta
+        setTimeout(() => {
+          recalcularTotalSeparadorVerde();
+        }, 1000);
     }
     // Aseguramos que el total general se actualice al cargar las cuentas por primera vez
     updateTotalGeneral(); 
@@ -1385,7 +1396,21 @@ $('add-account').addEventListener('click', async ()=>{
     return showModal('Atención', 'El nombre de la cuenta es obligatorio.', false);
   }
   
+  if(!number){
+    return showModal('Atención', 'El número de cuenta es obligatorio.', false);
+  }
+  
   try {
+    // Verificar si ya existe una cuenta con el mismo número
+    const existingAccountQuery = await db.collection('cuentas')
+      .where('number', '==', number)
+      .get();
+    
+    if (!existingAccountQuery.empty) {
+      const existingAccount = existingAccountQuery.docs[0].data();
+      return showModal('Error', `Ya existe una cuenta con el número "${number}". Nombre: "${existingAccount.name}".`, false);
+    }
+    
     await db.collection('cuentas').add({
       name: name,
       number: number,
@@ -1920,57 +1945,59 @@ async function recalcularTotalSeparadorVerde() {
     const docs = [];
     snapshot.forEach(doc => docs.push({id: doc.id, ...doc.data()}));
     
-    // Encontrar el separador verde más reciente (menor orden)
-    let separadorVerdeMasReciente = null;
+    // Encontrar TODOS los separadores verdes y recalcular cada uno
+    const separadoresVerdes = [];
     docs.forEach(doc => {
       if (doc.isSeparator && doc.type === 'green') {
-        if (!separadorVerdeMasReciente || (doc.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
-          separadorVerdeMasReciente = doc;
-        }
+        separadoresVerdes.push(doc);
       }
     });
     
-    if (!separadorVerdeMasReciente) {
-      console.log('❌ No se encontró separador verde para recalcular');
-      return;
+    console.log(`📊 Encontrados ${separadoresVerdes.length} separadores verdes para recalcular`);
+    
+    // Recalcular cada separador verde
+    for (const separadorVerde of separadoresVerdes) {
+      // Encontrar el separador rojo correspondiente (el que tiene orden menor al verde)
+      let separadorRojoCorrespondiente = null;
+      docs.forEach(doc => {
+        if (doc.isSeparator && doc.type === 'red' && (doc.orden || 0) < (separadorVerde.orden || 0)) {
+          if (!separadorRojoCorrespondiente || (doc.orden || 0) > (separadorRojoCorrespondiente.orden || 0)) {
+            separadorRojoCorrespondiente = doc;
+          }
+        }
+      });
+      
+      // Calcular el total de consignaciones verificadas por Gerente en el período
+      let nuevoTotal = 0;
+      const ordenInicio = separadorRojoCorrespondiente ? separadorRojoCorrespondiente.orden : -1;
+      const ordenFin = separadorVerde.orden;
+      
+      docs.forEach(doc => {
+        if (!doc.isSeparator && 
+            doc.verifiedRole === 'Gerente' && 
+            (doc.orden || 0) > ordenInicio && 
+            (doc.orden || 0) < ordenFin) {
+          nuevoTotal += Number(doc.valor || 0);
+          console.log(`✅ Sumando para recálculo (Verde ${separadorVerde.orden}): ${doc.valor} (Total: ${nuevoTotal})`);
+        }
+      });
+      
+      // Solo actualizar si el total cambió
+      if (nuevoTotal !== (separadorVerde.total || 0)) {
+        await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+          .doc(separadorVerde.id).update({ 
+            total: nuevoTotal,
+            label: `🔄 Actualizado ${new Date().toLocaleDateString()}`
+          });
+        
+        console.log(`✅ SEPARADOR VERDE RECALCULADO (orden ${separadorVerde.orden}): ${separadorVerde.total || 0} → ${nuevoTotal}`);
+      } else {
+        console.log(`ℹ️ Separador verde (orden ${separadorVerde.orden}) ya tiene el total correcto: ${nuevoTotal}`);
+      }
     }
     
-    // Encontrar el separador rojo correspondiente (el que tiene orden menor al verde)
-    let separadorRojoCorrespondiente = null;
-    docs.forEach(doc => {
-      if (doc.isSeparator && doc.type === 'red' && (doc.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
-        if (!separadorRojoCorrespondiente || (doc.orden || 0) > (separadorRojoCorrespondiente.orden || 0)) {
-          separadorRojoCorrespondiente = doc;
-        }
-      }
-    });
-    
-    // Calcular el total de consignaciones verificadas por Gerente en el período
-    let nuevoTotal = 0;
-    const ordenInicio = separadorRojoCorrespondiente ? separadorRojoCorrespondiente.orden : -1;
-    const ordenFin = separadorVerdeMasReciente.orden;
-    
-    docs.forEach(doc => {
-      if (!doc.isSeparator && 
-          doc.verifiedRole === 'Gerente' && 
-          (doc.orden || 0) > ordenInicio && 
-          (doc.orden || 0) < ordenFin) {
-        nuevoTotal += Number(doc.valor || 0);
-        console.log(`✅ Sumando para recálculo: ${doc.valor} (Total: ${nuevoTotal})`);
-      }
-    });
-    
-    // Actualizar el separador verde
-    await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-      .doc(separadorVerdeMasReciente.id).update({ 
-        total: nuevoTotal,
-        label: `🔄 Actualizado ${new Date().toLocaleDateString()}`
-      });
-    
-    console.log(`✅ SEPARADOR VERDE RECALCULADO: ${nuevoTotal}`);
-    
   } catch (error) {
-    console.error('❌ Error recalculando separador verde:', error);
+    console.error('❌ Error recalculando separadores verdes:', error);
   }
 }
 
@@ -2554,11 +2581,12 @@ async function updateSelectedTotals(){
     });
     
     // Nueva lógica: Con cortes en la parte superior
-    // Los separadores están ordenados por 'orden' ascendente, por lo que aparecen arriba
-    // Necesitamos calcular desde el último separador rojo hacia abajo
-    const periodos = [];
+    // Necesitamos encontrar el período más reciente (el que está más arriba)
+    // y calcular solo las consignaciones de ese período
+    
     let totalActual = 0;
     let ultimoCorteRojo = null;
+    let separadorVerdeMasReciente = null;
     
     // Encontrar el último separador rojo (el más reciente, que tendrá el orden más pequeño)
     fbDocs.forEach(doc => {
@@ -2569,24 +2597,64 @@ async function updateSelectedTotals(){
       }
     });
     
-    // Calcular el total del período actual (después del último corte rojo)
+    // Encontrar el separador verde más reciente (el que tendrá el orden más pequeño)
     fbDocs.forEach(doc => {
-      if (!doc.isSeparator) {
-        // Si hay un corte rojo, solo sumar las consignaciones posteriores a él
-        if (ultimoCorteRojo) {
-          if ((doc.orden || 0) > (ultimoCorteRojo.orden || 0)) {
-            totalActual += Number(doc.valor || 0);
-            console.log(`✅ Sumando consignación después del corte: ${doc.valor} (Total: ${totalActual})`);
-          }
-        } else {
-          // No hay cortes, sumar todas las consignaciones
-          totalActual += Number(doc.valor || 0);
-          console.log(`✅ Sumando consignación (sin cortes): ${doc.valor} (Total: ${totalActual})`);
+      if (doc.isSeparator && doc.type === 'green') {
+        if (!separadorVerdeMasReciente || (doc.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
+          separadorVerdeMasReciente = doc;
         }
       }
     });
     
-    console.log(`💰 TOTAL DEL PERÍODO ACTUAL: ${totalActual}`);
+    console.log('🔍 ANÁLISIS DE CORTES:');
+    console.log('  - Último corte rojo (orden):', ultimoCorteRojo?.orden);
+    console.log('  - Separador verde más reciente (orden):', separadorVerdeMasReciente?.orden);
+    
+    // Determinar qué mostrar en el total de cuenta actual
+    if (separadorVerdeMasReciente && ultimoCorteRojo) {
+      // Hay cortes: verificar si hay consignaciones nuevas después del último corte
+      let hayConsignacionesNuevas = false;
+      let totalConsignacionesNuevas = 0;
+      
+      // Buscar consignaciones que estén ENCIMA del separador verde más reciente
+      fbDocs.forEach(doc => {
+        if (!doc.isSeparator && (doc.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
+          hayConsignacionesNuevas = true;
+          totalConsignacionesNuevas += Number(doc.valor || 0);
+          console.log(`✅ Consignación nueva encima del verde: ${doc.valor} (Total nuevas: ${totalConsignacionesNuevas})`);
+        }
+      });
+      
+      if (hayConsignacionesNuevas) {
+        // Hay consignaciones nuevas, mostrar su total
+        totalActual = totalConsignacionesNuevas;
+        console.log(`💰 MOSTRANDO TOTAL DE CONSIGNACIONES NUEVAS: ${totalActual}`);
+      } else {
+        // No hay consignaciones nuevas, mostrar el total del separador verde
+        totalActual = separadorVerdeMasReciente.total || 0;
+        console.log(`💰 MOSTRANDO TOTAL DEL SEPARADOR VERDE: ${totalActual}`);
+      }
+    } else if (!ultimoCorteRojo) {
+      // No hay cortes, sumar todas las consignaciones
+      fbDocs.forEach(doc => {
+        if (!doc.isSeparator) {
+          totalActual += Number(doc.valor || 0);
+          console.log(`✅ Sumando consignación (sin cortes): ${doc.valor} (Total: ${totalActual})`);
+        }
+      });
+      console.log(`💰 TOTAL SIN CORTES: ${totalActual}`);
+    } else {
+      // Hay corte rojo pero no verde (situación extraña), calcular desde el corte
+      fbDocs.forEach(doc => {
+        if (!doc.isSeparator && (doc.orden || 0) > (ultimoCorteRojo.orden || 0)) {
+          totalActual += Number(doc.valor || 0);
+          console.log(`✅ Sumando después del corte rojo: ${doc.valor} (Total: ${totalActual})`);
+        }
+      });
+      console.log(`💰 TOTAL DESPUÉS DEL CORTE ROJO: ${totalActual}`);
+    }
+    
+    console.log(`💰 TOTAL FINAL PARA UI: ${totalActual}`);
     
     // Actualizar la UI con el total del período actual
     const totalElement = $('total-cuenta');
