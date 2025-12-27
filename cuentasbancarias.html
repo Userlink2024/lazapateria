@@ -656,7 +656,7 @@
         <div style="margin-top:8px;display:flex;gap:6px;align-items:end;flex-wrap:wrap;">
           <div style="flex:1;min-width:120px;">
             <label>💵 VALOR (COP)</label>
-            <input id="valor" type="number" placeholder="Ingrese el valor..." style="font-size:12px;font-weight:600;">
+            <input id="valor" type="text" placeholder="Ingrese el valor..." style="font-size:12px;font-weight:600;" maxlength="15">
           </div>
           <div style="flex:1;min-width:120px;">
             <label>📝 REFERENCIA</label>
@@ -1148,6 +1148,11 @@ async function handleDoubleClick(clickedConsign, index) {
             
             // RECALCULAR EL TOTAL DEL SEPARADOR VERDE MÁS RECIENTE
             await recalcularTotalSeparadorVerde();
+            
+            // Esperar un momento para que se actualice Firebase y luego actualizar la UI
+            setTimeout(() => {
+              updateSelectedTotals();
+            }, 1000);
             
             console.log('✅ Consignación retroactiva agregada exitosamente con orden:', nuevoOrden);
             
@@ -1810,14 +1815,22 @@ $('btn-export-master').addEventListener('click', async () => {
 $('add-consign').addEventListener('click', async ()=>{
   if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   
-  // 1. Validar datos
+  // 1. Validar datos con nueva validación mejorada
   const fecha = parseDateRadio('dateOpt','date-picker'); 
   const obsdate = parseDateRadio('obsOpt','obsdate-picker'); 
-  const valor = Number(getNumericValue($('valor').value) || 0);
   const referencia = $('referencia').value.trim();
   
   if(!fecha) return showModal('Atención', 'Fecha inválida.', false);
   if(!referencia) return showModal('Atención', 'La referencia es obligatoria.', false);
+  
+  // Validar valor usando la nueva función de validación
+  let valor;
+  try {
+    valor = validateValorInput($('valor').value);
+  } catch (error) {
+    $('valor').focus();
+    return showModal('Error de Validación', error.message, false);
+  }
   
   // 2. Verificar que la referencia no exista
   try {
@@ -1921,6 +1934,11 @@ $('add-consign').addEventListener('click', async ()=>{
     
     // RECALCULAR EL TOTAL DEL SEPARADOR VERDE MÁS RECIENTE
     await recalcularTotalSeparadorVerde();
+    
+    // Esperar un momento para que se actualice Firebase y luego actualizar la UI
+    setTimeout(() => {
+      updateSelectedTotals();
+    }, 1000);
     
     $('valor').value=''; 
     $('referencia').value=''; // Limpiar el campo de referencia
@@ -2112,12 +2130,17 @@ $('obsdate-picker').addEventListener('change', function() {
   lastSelectedObs = null;
 });
 
-// Formateo de números con separadores de miles
+// Formateo de números con separadores de miles - MEJORADO
 function formatNumberWithSeparators(value) {
   // Remover todo excepto números
   const numericValue = value.replace(/[^\d]/g, '');
   
   if (numericValue === '') return '';
+  
+  // Validar que no exceda 12 dígitos
+  if (numericValue.length > 12) {
+    return formatNumberWithSeparators(numericValue.substring(0, 12));
+  }
   
   // Formatear con separadores de miles usando punto
   return new Intl.NumberFormat('es-CO').format(parseInt(numericValue));
@@ -2128,20 +2151,49 @@ function getNumericValue(formattedValue) {
   return formattedValue.replace(/[^\d]/g, '');
 }
 
-// Event listeners para formateo del campo valor
+// Nueva función para validar valor antes de agregar consignación
+function validateValorInput(valor) {
+  const numericValue = getNumericValue(valor);
+  
+  // Validar que no esté vacío
+  if (!numericValue || numericValue === '') {
+    throw new Error('El valor es obligatorio');
+  }
+  
+  // Validar que no sea cero
+  const numberValue = parseInt(numericValue);
+  if (numberValue <= 0) {
+    throw new Error('El valor debe ser mayor a cero');
+  }
+  
+  // Validar que no exceda 12 dígitos (999,999,999,999)
+  if (numericValue.length > 12) {
+    throw new Error('El valor no puede exceder 999,999,999,999');
+  }
+  
+  return numberValue;
+}
+
+// Event listeners para formateo del campo valor - MEJORADO
 $('valor').addEventListener('input', function(e) {
   const cursorPosition = e.target.selectionStart;
   const oldValue = e.target.value;
   const oldLength = oldValue.length;
   
-  // Formatear el valor
-  const formattedValue = formatNumberWithSeparators(oldValue);
+  // Solo permitir números y formatear
+  const numericOnly = oldValue.replace(/[^\d]/g, '');
+  
+  // Limitar a 12 dígitos máximo
+  const limitedValue = numericOnly.substring(0, 12);
+  
+  // Formatear el valor si no está vacío
+  const formattedValue = limitedValue ? formatNumberWithSeparators(limitedValue) : '';
   e.target.value = formattedValue;
   
   // Ajustar posición del cursor
   const newLength = formattedValue.length;
   const lengthDiff = newLength - oldLength;
-  const newCursorPosition = cursorPosition + lengthDiff;
+  const newCursorPosition = Math.max(0, Math.min(cursorPosition + lengthDiff, newLength));
   
   // Establecer nueva posición del cursor
   setTimeout(() => {
@@ -2149,18 +2201,43 @@ $('valor').addEventListener('input', function(e) {
   }, 0);
 });
 
-// Limpiar formato al hacer focus para facilitar edición
+// Validar al hacer focus - mostrar valor sin formato para edición
 $('valor').addEventListener('focus', function(e) {
   const numericValue = getNumericValue(e.target.value);
   if (numericValue !== '') {
     e.target.value = numericValue;
+    // Seleccionar todo el texto para facilitar edición
+    setTimeout(() => {
+      e.target.select();
+    }, 0);
   }
 });
 
-// Restaurar formato al perder focus
+// Restaurar formato y validar al perder focus
 $('valor').addEventListener('blur', function(e) {
   if (e.target.value !== '') {
-    e.target.value = formatNumberWithSeparators(e.target.value);
+    try {
+      const numericValue = getNumericValue(e.target.value);
+      if (numericValue) {
+        // Validar el valor
+        validateValorInput(numericValue);
+        // Aplicar formato
+        e.target.value = formatNumberWithSeparators(numericValue);
+        // Remover cualquier indicador de error
+        e.target.style.borderColor = '';
+        e.target.style.backgroundColor = '';
+      }
+    } catch (error) {
+      // Mostrar error visualmente
+      e.target.style.borderColor = '#f44336';
+      e.target.style.backgroundColor = 'rgba(244, 67, 54, 0.1)';
+      // Mostrar mensaje de error
+      showModal('Error de Validación', error.message, false);
+      // Enfocar de nuevo el campo para corrección
+      setTimeout(() => {
+        e.target.focus();
+      }, 100);
+    }
   }
 });
 
@@ -2230,11 +2307,6 @@ $('btn-verify').addEventListener('click', async ()=>{
       updateTotalGeneral();
     }, 500);
     
-    setTimeout(() => {
-      updateSelectedTotals();
-      updateTotalGeneral();
-    }, 1500);
-    
     showModal('Éxito', successMessage, false);
   } else if (invalidItems.length > 0) {
     // Solo había elementos inválidos
@@ -2261,11 +2333,6 @@ $('btn-unverify').addEventListener('click', async ()=>{
     updateSelectedTotals();
     updateTotalGeneral();
   }, 500);
-  
-  setTimeout(() => {
-    updateSelectedTotals();
-    updateTotalGeneral();
-  }, 1500);
   
   // Limpia la selección después de la acción
   selectedConsignIds.clear();
@@ -2365,68 +2432,35 @@ $('btn-delete').addEventListener('click', async ()=>{
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
             
-            // Forzar actualización AGRESIVA de totales después de eliminar (con cortes)
+            // Actualización optimizada después de eliminar (con cortes)
             console.log('🗑️ Eliminación con cortes completada, actualizando totales...');
             
-            // Actualización inmediata
             updateSelectedTotals();
             updateTotalGeneral();
             
-            // Múltiples intentos para asegurar sincronización
+            // Un solo reintento después de 1.5 segundos
             setTimeout(() => {
-              console.log('🔄 Reintento 1 - Eliminación con cortes');
+              console.log('🔄 Reintento - Eliminación con cortes');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 300);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento 2 - Eliminación con cortes');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 1000);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento 3 - Eliminación con cortes');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 2500);
+            }, 1500);
             
             showModal('¡Atención!', `Eliminación exitosa. ${recalculationCount} CORTES afectados han sido recalculados y corregidos.`, false);
         } else {
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
             
-            // Forzar actualización SUPER AGRESIVA de totales después de eliminar
+            // Actualización optimizada después de eliminar (sin cortes)
             console.log('🗑️ Eliminación sin cortes completada, actualizando totales...');
             
-            // Actualización inmediata múltiple
             updateSelectedTotals();
             updateTotalGeneral();
-            updateSelectedTotals(); // Doble llamada inmediata
             
             setTimeout(() => {
-              console.log('🔄 Reintento 1 - Eliminación sin cortes');
+              console.log('🔄 Reintento - Eliminación sin cortes');
               updateSelectedTotals();
               updateTotalGeneral();
-            }, 200);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento 2 - Eliminación sin cortes');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 800);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento 3 - Eliminación sin cortes');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 2000);
-            
-            setTimeout(() => {
-              console.log('🔄 Reintento FINAL - Eliminación sin cortes');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 4000);
+            }, 1000);
             
             showModal('Éxito', `${ids.length} items eliminados.`, false);
         }
@@ -2540,161 +2574,168 @@ $('btn-sumar').addEventListener('click', ()=>{
 
 
 
-/* CALCULOS TOTALES */
+/* CALCULOS TOTALES - MEJORADO CON CONCURRENCY-SAFE MANAGER */
 // ** Total de Cuenta Actual (Depende de la lista actual en memoria) **
+let isUpdatingTotals = false; // Flag para prevenir llamadas concurrentes
+let updateTimeout = null; // Timeout para liberar flag automáticamente
+
 async function updateSelectedTotals(){ 
+  // Prevenir llamadas concurrentes
+  if (isUpdatingTotals) {
+    console.log('⏳ Ya hay una actualización de totales en progreso, saltando...');
+    return;
+  }
+  
+  // Validación inicial de cuenta seleccionada
   if(!selectedAccountId){ 
     $('total-cuenta').textContent = fmtCOP(0); 
-    console.log('No hay cuenta seleccionada');
+    console.log('❌ No hay cuenta seleccionada, estableciendo total en 0');
     return; 
   }
   
-  console.log('=== INICIANDO ACTUALIZACIÓN DE TOTALES (NUEVA LÓGICA) ===');
+  // Marcar como en progreso con timeout de seguridad
+  isUpdatingTotals = true;
+  updateTimeout = setTimeout(() => {
+    console.log('⚠️ Timeout de actualización de totales, liberando flag');
+    isUpdatingTotals = false;
+  }, 10000); // 10 segundos de timeout
+  
+  console.log('=== INICIANDO ACTUALIZACIÓN DE TOTALES (CONCURRENCY-SAFE) ===');
   console.log('Cuenta seleccionada:', selectedAccountId);
   
   try {
+    // Verificación múltiple de cuenta seleccionada
+    if (!selectedAccountId) {
+      console.log('❌ Cuenta seleccionada se perdió durante la ejecución');
+      $('total-cuenta').textContent = fmtCOP(0);
+      return;
+    }
+    
     console.log('🔄 Consultando Firebase directamente...');
     const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-      .orderBy('fecha', 'desc').get();
+      .orderBy('orden', 'asc').get();
+    
+    // Verificación post-consulta
+    if (!selectedAccountId) {
+      console.log('❌ Cuenta seleccionada cambió durante la consulta Firebase');
+      return;
+    }
     
     const fbDocs = [];
     snapshot.forEach(doc => fbDocs.push({id: doc.id, ...doc.data()}));
     
     console.log(`📊 Documentos encontrados en Firebase: ${fbDocs.length}`);
     
-    // Encontrar TODOS los separadores rojos y verdes
-    const separadores = [];
-    fbDocs.forEach((doc, index) => {
-      if (doc.isSeparator) {
-        separadores.push({
-          index: index,
-          type: doc.type,
-          id: doc.id,
-          doc: doc
-        });
-      }
-    });
+    // Calcular total del período activo usando nueva lógica simplificada
+    const totalActual = calculateActivePeriodTotal(fbDocs);
     
-    console.log(`� Separadyores encontrados: ${separadores.length}`);
-    separadores.forEach(sep => {
-      console.log(`  - [${sep.index}] ${sep.type.toUpperCase()}`);
-    });
+    console.log(`💰 TOTAL CALCULADO PARA PERÍODO ACTIVO: ${totalActual}`);
     
-    // Nueva lógica: Con cortes en la parte superior
-    // Necesitamos encontrar el período más reciente (el que está más arriba)
-    // y calcular solo las consignaciones de ese período
-    
-    let totalActual = 0;
-    let ultimoCorteRojo = null;
-    let separadorVerdeMasReciente = null;
-    
-    // Encontrar el último separador rojo (el más reciente, que tendrá el orden más pequeño)
-    fbDocs.forEach(doc => {
-      if (doc.isSeparator && doc.type === 'red') {
-        if (!ultimoCorteRojo || (doc.orden || 0) < (ultimoCorteRojo.orden || 0)) {
-          ultimoCorteRojo = doc;
-        }
-      }
-    });
-    
-    // Encontrar el separador verde más reciente (el que tendrá el orden más pequeño)
-    fbDocs.forEach(doc => {
-      if (doc.isSeparator && doc.type === 'green') {
-        if (!separadorVerdeMasReciente || (doc.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
-          separadorVerdeMasReciente = doc;
-        }
-      }
-    });
-    
-    console.log('🔍 ANÁLISIS DE CORTES:');
-    console.log('  - Último corte rojo (orden):', ultimoCorteRojo?.orden);
-    console.log('  - Separador verde más reciente (orden):', separadorVerdeMasReciente?.orden);
-    
-    // Determinar qué mostrar en el total de cuenta actual
-    if (separadorVerdeMasReciente && ultimoCorteRojo) {
-      // Hay cortes: verificar si hay consignaciones nuevas después del último corte
-      let hayConsignacionesNuevas = false;
-      let totalConsignacionesNuevas = 0;
-      
-      // Buscar consignaciones que estén ENCIMA del separador verde más reciente
-      fbDocs.forEach(doc => {
-        if (!doc.isSeparator && (doc.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
-          hayConsignacionesNuevas = true;
-          totalConsignacionesNuevas += Number(doc.valor || 0);
-          console.log(`✅ Consignación nueva encima del verde: ${doc.valor} (Total nuevas: ${totalConsignacionesNuevas})`);
-        }
-      });
-      
-      if (hayConsignacionesNuevas) {
-        // Hay consignaciones nuevas, mostrar su total
-        totalActual = totalConsignacionesNuevas;
-        console.log(`💰 MOSTRANDO TOTAL DE CONSIGNACIONES NUEVAS: ${totalActual}`);
-      } else {
-        // No hay consignaciones nuevas, mostrar el total del separador verde
-        totalActual = separadorVerdeMasReciente.total || 0;
-        console.log(`💰 MOSTRANDO TOTAL DEL SEPARADOR VERDE: ${totalActual}`);
-      }
-    } else if (!ultimoCorteRojo) {
-      // No hay cortes, sumar todas las consignaciones
-      fbDocs.forEach(doc => {
-        if (!doc.isSeparator) {
-          totalActual += Number(doc.valor || 0);
-          console.log(`✅ Sumando consignación (sin cortes): ${doc.valor} (Total: ${totalActual})`);
-        }
-      });
-      console.log(`💰 TOTAL SIN CORTES: ${totalActual}`);
-    } else {
-      // Hay corte rojo pero no verde (situación extraña), calcular desde el corte
-      fbDocs.forEach(doc => {
-        if (!doc.isSeparator && (doc.orden || 0) > (ultimoCorteRojo.orden || 0)) {
-          totalActual += Number(doc.valor || 0);
-          console.log(`✅ Sumando después del corte rojo: ${doc.valor} (Total: ${totalActual})`);
-        }
-      });
-      console.log(`💰 TOTAL DESPUÉS DEL CORTE ROJO: ${totalActual}`);
+    // Verificación final antes de actualizar UI
+    if (!selectedAccountId) {
+      console.log('❌ Cuenta seleccionada se perdió antes de actualizar UI');
+      return;
     }
     
-    console.log(`💰 TOTAL FINAL PARA UI: ${totalActual}`);
-    
-    // Actualizar la UI con el total del período actual
-    const totalElement = $('total-cuenta');
-    const formattedTotal = fmtCOP(totalActual);
-    
-    console.log('🎯 ACTUALIZANDO UI:');
-    console.log('  - Elemento encontrado:', !!totalElement);
-    console.log('  - Total sin formato:', totalActual);
-    console.log('  - Total formateado:', formattedTotal);
-    console.log('  - Valor actual en UI:', totalElement ? totalElement.textContent : 'ELEMENTO NO ENCONTRADO');
-    
-    if (totalElement) {
-      totalElement.textContent = formattedTotal;
-      totalElement.innerHTML = formattedTotal;
-      totalElement.innerText = formattedTotal;
-      
-      // Forzar re-render
-      totalElement.style.display = 'none';
-      totalElement.offsetHeight; // Trigger reflow
-      totalElement.style.display = '';
-      
-      console.log('  - Nuevo valor en UI:', totalElement.textContent);
-      console.log('✅ UI ACTUALIZADA EXITOSAMENTE');
-      
-      setTimeout(() => {
-        console.log('🔍 VERIFICACIÓN POST-ACTUALIZACIÓN:');
-        console.log('  - Valor final en UI:', totalElement.textContent);
-      }, 100);
-      
-    } else {
-      console.error('❌ ERROR: Elemento total-cuenta no encontrado');
-    }
+    // Actualizar la UI de forma atómica
+    updateTotalDisplay(totalActual);
     
   } catch(e) {
     console.error('❌ Error al actualizar totales:', e);
-    $('total-cuenta').textContent = fmtCOP(0);
+    // Solo actualizar a 0 si aún tenemos la misma cuenta seleccionada
+    if (selectedAccountId) {
+      $('total-cuenta').textContent = fmtCOP(0);
+    }
     console.log('Aplicando total 0 como fallback por error');
+  } finally {
+    // Limpiar timeout y liberar flag
+    if (updateTimeout) {
+      clearTimeout(updateTimeout);
+      updateTimeout = null;
+    }
+    isUpdatingTotals = false;
   }
   
   console.log('=== FIN ACTUALIZACIÓN DE TOTALES ===');
+}
+
+// Función auxiliar para calcular total del período activo
+function calculateActivePeriodTotal(fbDocs) {
+  // Encontrar el último separador verde (período más reciente)
+  let ultimoSeparadorVerde = null;
+  fbDocs.forEach(doc => {
+    if (doc.isSeparator && doc.type === 'green') {
+      if (!ultimoSeparadorVerde || (doc.orden || 0) < (ultimoSeparadorVerde.orden || 0)) {
+        ultimoSeparadorVerde = doc;
+      }
+    }
+  });
+  
+  let totalActual = 0;
+  
+  if (ultimoSeparadorVerde) {
+    // Hay separadores: sumar consignaciones ENCIMA del último separador verde
+    console.log('🔍 Calculando período activo desde separador verde (orden:', ultimoSeparadorVerde.orden, ')');
+    
+    fbDocs.forEach(doc => {
+      if (!doc.isSeparator && (doc.orden || 0) < (ultimoSeparadorVerde.orden || 0)) {
+        totalActual += Number(doc.valor || 0);
+        console.log(`✅ Sumando consignación del período activo: ${doc.valor} (Total: ${totalActual})`);
+      }
+    });
+    
+    console.log(`💰 TOTAL DEL PERÍODO ACTIVO: ${totalActual}`);
+  } else {
+    // No hay separadores: sumar todas las consignaciones
+    console.log('🔍 No hay separadores, sumando todas las consignaciones');
+    
+    fbDocs.forEach(doc => {
+      if (!doc.isSeparator) {
+        totalActual += Number(doc.valor || 0);
+        console.log(`✅ Sumando consignación (sin cortes): ${doc.valor} (Total: ${totalActual})`);
+      }
+    });
+    
+    console.log(`💰 TOTAL SIN CORTES: ${totalActual}`);
+  }
+  
+  return totalActual;
+}
+
+// Función auxiliar para actualizar la UI de forma atómica
+function updateTotalDisplay(totalActual) {
+  const totalElement = $('total-cuenta');
+  const formattedTotal = fmtCOP(totalActual);
+  
+  console.log('🎯 ACTUALIZANDO UI:');
+  console.log('  - Elemento encontrado:', !!totalElement);
+  console.log('  - Total sin formato:', totalActual);
+  console.log('  - Total formateado:', formattedTotal);
+  console.log('  - Valor actual en UI:', totalElement ? totalElement.textContent : 'ELEMENTO NO ENCONTRADO');
+  
+  if (totalElement) {
+    // Actualización atómica con múltiples métodos para asegurar compatibilidad
+    totalElement.textContent = formattedTotal;
+    totalElement.innerHTML = formattedTotal;
+    totalElement.innerText = formattedTotal;
+    
+    // Forzar re-render visual
+    totalElement.style.display = 'none';
+    totalElement.offsetHeight; // Trigger reflow
+    totalElement.style.display = '';
+    
+    console.log('  - Nuevo valor en UI:', totalElement.textContent);
+    console.log('✅ UI ACTUALIZADA EXITOSAMENTE');
+    
+    // Verificación post-actualización
+    setTimeout(() => {
+      console.log('🔍 VERIFICACIÓN POST-ACTUALIZACIÓN:');
+      console.log('  - Valor final en UI:', totalElement.textContent);
+    }, 100);
+    
+  } else {
+    console.error('❌ ERROR: Elemento total-cuenta no encontrado');
+  }
 }
 
 
