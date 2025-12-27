@@ -660,7 +660,7 @@
           </div>
           <div style="flex:1;min-width:120px;">
             <label>📝 REFERENCIA</label>
-            <input id="referencia" type="text" placeholder="Ingrese la referencia..." style="font-size:12px;font-weight:600;" maxlength="50">
+            <input id="referencia" type="text" placeholder="Ingrese la referencia..." style="font-size:12px;font-weight:600;text-transform:uppercase;" maxlength="50">
           </div>
           <div style="min-width:140px;">
             <button id="add-consign" class="btn" style="width:100%;padding:5px;font-size:10px;">✅ Agregar Consignación</button>
@@ -1035,7 +1035,7 @@ async function handleDoubleClick(clickedConsign, index) {
         </div>
         <div style="margin-top:12px;">
             <label style="font-size:13px; color:var(--muted); margin-bottom:6px;">REFERENCIA:</label>
-            <input type="text" id="modal-retro-referencia" placeholder="Ingrese la referencia..." style="padding: 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%;" maxlength="50">
+            <input type="text" id="modal-retro-referencia" placeholder="Ingrese la referencia..." style="padding: 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%; text-transform: uppercase;" maxlength="50">
         </div>
     `;
     
@@ -1140,11 +1140,14 @@ async function handleDoubleClick(clickedConsign, index) {
                 fecha: firebase.firestore.Timestamp.fromDate(userFecha), // Fecha seleccionada por el usuario
                 obsdate: userObsdate ? firebase.firestore.Timestamp.fromDate(userObsdate) : null,
                 valor: valor, 
-                referencia: referencia, // Agregar la referencia
+                referencia: referencia.toUpperCase(), // Convertir a mayúsculas
                 verifiedBy: usuario.usuario, 
                 verifiedRole: 'Gerente',
                 orden: nuevoOrden // Campo dedicado para ordenamiento manual
             });
+            
+            // RECALCULAR EL TOTAL DEL SEPARADOR VERDE MÁS RECIENTE
+            await recalcularTotalSeparadorVerde();
             
             console.log('✅ Consignación retroactiva agregada exitosamente con orden:', nuevoOrden);
             
@@ -1162,6 +1165,11 @@ async function handleDoubleClick(clickedConsign, index) {
     
     $('generic-modal').classList.remove('hidden');
     document.getElementById('modal-retro-valor').focus();
+    
+    // Event listener para convertir referencia a mayúsculas en el modal
+    document.getElementById('modal-retro-referencia').addEventListener('input', function(e) {
+        e.target.value = e.target.value.toUpperCase();
+    });
 }
 
 
@@ -1834,31 +1842,29 @@ $('add-consign').addEventListener('click', async ()=>{
     }
     
     if (ultimoCorteRojo) {
-      // HAY UN CORTE: Las nuevas consignaciones deben ir INMEDIATAMENTE DESPUÉS del separador rojo
-      // Como queremos que aparezcan arriba (justo después del corte rojo), 
-      // necesitamos un orden ligeramente mayor al del separador rojo
-      
-      // Encontrar el orden del separador verde (que va justo después del rojo)
-      let ordenSeparadorVerde = null;
+      // HAY UN CORTE: Las nuevas consignaciones deben ir ENCIMA del separador verde
+      // Buscar el separador verde más reciente (el que tiene menor orden, ya que están arriba)
+      let separadorVerdeMasReciente = null;
       currentConsignsSnapshot.forEach(c => {
-        if (c.isSeparator && c.type === 'green' && c.orden > ultimoCorteRojo.orden) {
-          if (!ordenSeparadorVerde || c.orden < ordenSeparadorVerde) {
-            ordenSeparadorVerde = c.orden;
+        if (c.isSeparator && c.type === 'green') {
+          if (!separadorVerdeMasReciente || (c.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
+            separadorVerdeMasReciente = c;
           }
         }
       });
       
-      // La nueva consignación va entre el separador rojo y el verde
-      if (ordenSeparadorVerde) {
-        ordenParaNuevaConsignacion = (ultimoCorteRojo.orden + ordenSeparadorVerde) / 2;
+      if (separadorVerdeMasReciente) {
+        // Insertar ENCIMA del separador verde (orden menor)
+        ordenParaNuevaConsignacion = separadorVerdeMasReciente.orden - 0.1;
       } else {
+        // No hay separador verde, insertar después del rojo
         ordenParaNuevaConsignacion = ultimoCorteRojo.orden + 0.1;
       }
       
-      console.log('🆕 CONSIGNACIÓN DESPUÉS DEL CORTE ROJO (ARRIBA):');
+      console.log('🆕 CONSIGNACIÓN ENCIMA DEL SEPARADOR VERDE:');
       console.log('  - Orden corte rojo:', ultimoCorteRojo.orden);
-      console.log('  - Orden separador verde:', ordenSeparadorVerde);
-      console.log('  - Nuevo orden (entre rojo y verde):', ordenParaNuevaConsignacion);
+      console.log('  - Orden separador verde:', separadorVerdeMasReciente?.orden);
+      console.log('  - Nuevo orden (ENCIMA del verde):', ordenParaNuevaConsignacion);
       
     } else {
       // NO HAY CORTES: Agregar al final de la lista (orden máximo + 1)
@@ -1882,11 +1888,15 @@ $('add-consign').addEventListener('click', async ()=>{
         fecha: firebase.firestore.Timestamp.fromDate(fecha), // Fecha seleccionada por el usuario (para mostrar)
         obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, 
         valor, 
-        referencia: referencia, // Agregar la referencia
+        referencia: referencia.toUpperCase(), // Convertir a mayúsculas
         verifiedBy:null, 
         verifiedRole:null,
         orden: ordenParaNuevaConsignacion // Campo dedicado para ordenamiento manual
     }); 
+    
+    // RECALCULAR EL TOTAL DEL SEPARADOR VERDE MÁS RECIENTE
+    await recalcularTotalSeparadorVerde();
+    
     $('valor').value=''; 
     $('referencia').value=''; // Limpiar el campo de referencia
     $('valor').focus(); // Enfocar el campo valor para la siguiente consignación
@@ -1894,6 +1904,79 @@ $('add-consign').addEventListener('click', async ()=>{
     console.log('✅ Consignación agregada exitosamente con orden:', ordenParaNuevaConsignacion);
     
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
+});
+
+// Función para recalcular el total del separador verde más reciente
+async function recalcularTotalSeparadorVerde() {
+  if (!selectedAccountId) return;
+  
+  try {
+    console.log('🔄 RECALCULANDO TOTAL DEL SEPARADOR VERDE...');
+    
+    // Obtener todas las consignaciones ordenadas
+    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+      .orderBy('orden', 'asc').get();
+    
+    const docs = [];
+    snapshot.forEach(doc => docs.push({id: doc.id, ...doc.data()}));
+    
+    // Encontrar el separador verde más reciente (menor orden)
+    let separadorVerdeMasReciente = null;
+    docs.forEach(doc => {
+      if (doc.isSeparator && doc.type === 'green') {
+        if (!separadorVerdeMasReciente || (doc.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
+          separadorVerdeMasReciente = doc;
+        }
+      }
+    });
+    
+    if (!separadorVerdeMasReciente) {
+      console.log('❌ No se encontró separador verde para recalcular');
+      return;
+    }
+    
+    // Encontrar el separador rojo correspondiente (el que tiene orden menor al verde)
+    let separadorRojoCorrespondiente = null;
+    docs.forEach(doc => {
+      if (doc.isSeparator && doc.type === 'red' && (doc.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
+        if (!separadorRojoCorrespondiente || (doc.orden || 0) > (separadorRojoCorrespondiente.orden || 0)) {
+          separadorRojoCorrespondiente = doc;
+        }
+      }
+    });
+    
+    // Calcular el total de consignaciones verificadas por Gerente en el período
+    let nuevoTotal = 0;
+    const ordenInicio = separadorRojoCorrespondiente ? separadorRojoCorrespondiente.orden : -1;
+    const ordenFin = separadorVerdeMasReciente.orden;
+    
+    docs.forEach(doc => {
+      if (!doc.isSeparator && 
+          doc.verifiedRole === 'Gerente' && 
+          (doc.orden || 0) > ordenInicio && 
+          (doc.orden || 0) < ordenFin) {
+        nuevoTotal += Number(doc.valor || 0);
+        console.log(`✅ Sumando para recálculo: ${doc.valor} (Total: ${nuevoTotal})`);
+      }
+    });
+    
+    // Actualizar el separador verde
+    await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+      .doc(separadorVerdeMasReciente.id).update({ 
+        total: nuevoTotal,
+        label: `🔄 Actualizado ${new Date().toLocaleDateString()}`
+      });
+    
+    console.log(`✅ SEPARADOR VERDE RECALCULADO: ${nuevoTotal}`);
+    
+  } catch (error) {
+    console.error('❌ Error recalculando separador verde:', error);
+  }
+}
+
+// Event listener para convertir referencia a mayúsculas
+$('referencia').addEventListener('input', function(e) {
+  e.target.value = e.target.value.toUpperCase();
 });
 
 $('valor').addEventListener('keydown', e=>{ 
