@@ -1091,7 +1091,7 @@ async function handleDoubleClick(clickedConsign, index) {
             userObsdate = new Date(parseInt(obsParts[0]), parseInt(obsParts[1]) - 1, parseInt(obsParts[2]), 12, 0, 0, 0);
         }
         
-        // RETROACTIVA: Debe aparecer ENCIMA de la fila clickeada
+        // RETROACTIVA: Con cortes arriba, insertar encima de la fila clickeada
         // Encontrar la posición de la consignación clickeada
         const clickedIndex = currentConsignsSnapshot.findIndex(c => c.id === clickedConsign.id);
         let nuevoOrden;
@@ -1107,9 +1107,25 @@ async function handleDoubleClick(clickedConsign, index) {
           // Usar el promedio entre los dos órdenes (con decimales para precisión)
           nuevoOrden = (ordenEncima + ordenClickeada) / 2;
         } else {
-          // Es la primera fila, usar orden ligeramente mayor que la clickeada
-          const ordenClickeada = clickedConsign.orden || 0;
-          nuevoOrden = ordenClickeada + 0.5;
+          // Es la primera fila visible, insertar justo después del último corte rojo
+          // Buscar el último separador rojo
+          let ultimoCorteRojo = null;
+          currentConsignsSnapshot.forEach(item => {
+            if (item.isSeparator && item.type === 'red') {
+              if (!ultimoCorteRojo || (item.orden || 0) < (ultimoCorteRojo.orden || 0)) {
+                ultimoCorteRojo = item;
+              }
+            }
+          });
+          
+          if (ultimoCorteRojo) {
+            // Insertar justo después del corte rojo
+            nuevoOrden = ultimoCorteRojo.orden + 0.1;
+          } else {
+            // No hay cortes, usar orden menor que la primera consignación
+            const ordenClickeada = clickedConsign.orden || 0;
+            nuevoOrden = ordenClickeada - 0.1;
+          }
         }
         
         console.log('🔄 INSERCIÓN RETROACTIVA (ENCIMA DE FILA):');
@@ -1818,25 +1834,31 @@ $('add-consign').addEventListener('click', async ()=>{
     }
     
     if (ultimoCorteRojo) {
-      // HAY UN CORTE: Las nuevas consignaciones deben ir DESPUÉS del corte rojo
-      // Como los cortes están arriba (orden menor), "después" significa orden mayor al del corte
-      // Buscar el orden máximo de las consignaciones que están después del corte
-      let maxOrdenDespuesDelCorte = ultimoCorteRojo.orden || 0;
+      // HAY UN CORTE: Las nuevas consignaciones deben ir INMEDIATAMENTE DESPUÉS del separador rojo
+      // Como queremos que aparezcan arriba (justo después del corte rojo), 
+      // necesitamos un orden ligeramente mayor al del separador rojo
       
-      // Buscar consignaciones que están después del corte (orden mayor al del corte)
+      // Encontrar el orden del separador verde (que va justo después del rojo)
+      let ordenSeparadorVerde = null;
       currentConsignsSnapshot.forEach(c => {
-        if (!c.isSeparator && c.orden !== undefined && c.orden > (ultimoCorteRojo.orden || 0)) {
-          maxOrdenDespuesDelCorte = Math.max(maxOrdenDespuesDelCorte, c.orden);
+        if (c.isSeparator && c.type === 'green' && c.orden > ultimoCorteRojo.orden) {
+          if (!ordenSeparadorVerde || c.orden < ordenSeparadorVerde) {
+            ordenSeparadorVerde = c.orden;
+          }
         }
       });
       
-      // Nueva consignación va después del corte con orden mayor al máximo encontrado
-      ordenParaNuevaConsignacion = maxOrdenDespuesDelCorte + 1;
+      // La nueva consignación va entre el separador rojo y el verde
+      if (ordenSeparadorVerde) {
+        ordenParaNuevaConsignacion = (ultimoCorteRojo.orden + ordenSeparadorVerde) / 2;
+      } else {
+        ordenParaNuevaConsignacion = ultimoCorteRojo.orden + 0.1;
+      }
       
-      console.log('🆕 CONSIGNACIÓN DESPUÉS DEL CORTE (CORTES ARRIBA):');
-      console.log('  - Último corte rojo encontrado con orden:', ultimoCorteRojo.orden);
-      console.log('  - Orden máximo después del corte:', maxOrdenDespuesDelCorte);
-      console.log('  - Nuevo orden (después del corte):', ordenParaNuevaConsignacion);
+      console.log('🆕 CONSIGNACIÓN DESPUÉS DEL CORTE ROJO (ARRIBA):');
+      console.log('  - Orden corte rojo:', ultimoCorteRojo.orden);
+      console.log('  - Orden separador verde:', ordenSeparadorVerde);
+      console.log('  - Nuevo orden (entre rojo y verde):', ordenParaNuevaConsignacion);
       
     } else {
       // NO HAY CORTES: Agregar al final de la lista (orden máximo + 1)
