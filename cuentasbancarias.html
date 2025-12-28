@@ -597,6 +597,7 @@
         <div class="muted">👤 Usuario</div>
         <div id="user-info" style="font-weight: 600; color: #2e7d32; font-size: 0.8em;">...</div>
       </div>
+      <button id="btn-back" class="btn ghost">⬅️ Atrás</button>
       <button id="open-options" class="btn ghost">⚙️ Opciones</button>
       <button id="logout" class="btn ghost">🚪 Salir</button>
     </div>
@@ -793,6 +794,7 @@ if(usuario.permisos !== 'Administrador'){ showModal('Error', 'Acceso denegado.',
 
 $('user-info').textContent = usuario.usuario;
 $('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
+$('btn-back').onclick = ()=>{ location.href='paneldecuentas.html'; };
 
 let sessionRole = 'Administrativo';
 let managerPass = '0000'; 
@@ -1146,8 +1148,13 @@ async function handleDoubleClick(clickedConsign, index) {
                 orden: nuevoOrden // Campo dedicado para ordenamiento manual
             });
             
-            // RECALCULAR EL TOTAL DEL SEPARADOR VERDE MÁS RECIENTE
-            await recalcularTotalSeparadorVerde();
+            // RECÁLCULO AUTOMÁTICO DESPUÉS DE INSERCIÓN RETROACTIVA
+            const nuevaConsignacion = {
+              orden: nuevoOrden,
+              valor: valor,
+              verifiedRole: 'Gerente' // Inserción retroactiva se marca como verificada por Gerente
+            };
+            await recalcularSeparadoresAfectados(nuevaConsignacion);
             
             // Esperar un momento para que se actualice Firebase y luego actualizar la UI
             setTimeout(() => {
@@ -1932,8 +1939,13 @@ $('add-consign').addEventListener('click', async ()=>{
         orden: ordenParaNuevaConsignacion // Campo dedicado para ordenamiento manual
     }); 
     
-    // RECALCULAR EL TOTAL DEL SEPARADOR VERDE MÁS RECIENTE
-    await recalcularTotalSeparadorVerde();
+    // RECALCULAR SEPARADORES AFECTADOS AUTOMÁTICAMENTE
+    const nuevaConsignacion = { 
+      orden: ordenParaNuevaConsignacion,
+      valor: valor,
+      verifiedRole: null // Nueva consignación sin verificar
+    };
+    await recalcularSeparadoresAfectados(nuevaConsignacion);
     
     // Esperar un momento para que se actualice Firebase y luego actualizar la UI
     setTimeout(() => {
@@ -1949,73 +1961,243 @@ $('add-consign').addEventListener('click', async ()=>{
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
 });
 
-// Función para recalcular el total del separador verde más reciente
+/* MANEJO ROBUSTO DE ERRORES Y RECOVERY STRATEGIES */
+
+// Estrategias de recuperación para cálculos fallidos
+const errorRecoveryStrategies = {
+  // Contador de errores por cuenta
+  errorCounts: new Map(),
+  
+  // Último valor conocido válido por cuenta
+  lastKnownValues: new Map(),
+  
+  // Registrar error y decidir estrategia
+  handleCalculationError(accountId, operation, error) {
+    const key = `${accountId}_${operation}`;
+    const currentCount = this.errorCounts.get(key) || 0;
+    this.errorCounts.set(key, currentCount + 1);
+    
+    console.error(`❌ Error en ${operation} (intento ${currentCount + 1}):`, error);
+    
+    // Estrategia basada en número de errores
+    if (currentCount < 2) {
+      console.log('🔄 Reintentando operación...');
+      return 'retry';
+    } else if (currentCount < 5) {
+      console.log('⏳ Usando último valor conocido...');
+      return 'useLastKnown';
+    } else {
+      console.log('🚨 Demasiados errores, recálculo completo...');
+      return 'fullRecalculation';
+    }
+  },
+  
+  // Guardar último valor conocido válido
+  saveLastKnownValue(accountId, operation, value) {
+    const key = `${accountId}_${operation}`;
+    this.lastKnownValues.set(key, {
+      value: value,
+      timestamp: Date.now()
+    });
+    // Resetear contador de errores en éxito
+    this.errorCounts.delete(key);
+  },
+  
+  // Obtener último valor conocido válido
+  getLastKnownValue(accountId, operation) {
+    const key = `${accountId}_${operation}`;
+    const stored = this.lastKnownValues.get(key);
+    
+    if (stored && (Date.now() - stored.timestamp) < 300000) { // 5 minutos
+      console.log('📚 Usando último valor conocido válido:', stored.value);
+      return stored.value;
+    }
+    
+    return null;
+  }
+};
+
+// Función para detectar inconsistencias en cálculos
+function detectCalculationInconsistency(separator, calculatedTotal) {
+  const storedTotal = separator.total || 0;
+  const tolerance = 1; // 1 peso de tolerancia
+  
+  const difference = Math.abs(storedTotal - calculatedTotal);
+  
+  if (difference > tolerance) {
+    console.warn('⚠️ INCONSISTENCIA DETECTADA:');
+    console.warn(`  - Separador ID: ${separator.id}`);
+    console.warn(`  - Total almacenado: ${fmtCOP(storedTotal)}`);
+    console.warn(`  - Total calculado: ${fmtCOP(calculatedTotal)}`);
+    console.warn(`  - Diferencia: ${fmtCOP(difference)}`);
+    
+    return {
+      hasInconsistency: true,
+      difference: difference,
+      storedTotal: storedTotal,
+      calculatedTotal: calculatedTotal
+    };
+  }
+  
+  return { hasInconsistency: false };
+}
+
+// Función para logging detallado de debugging
+function logCalculationDebug(operation, data) {
+  const timestamp = new Date().toISOString();
+  const debugInfo = {
+    timestamp: timestamp,
+    operation: operation,
+    accountId: selectedAccountId,
+    data: data
+  };
+  
+  console.group(`🐛 DEBUG: ${operation} - ${timestamp}`);
+  console.log('Account ID:', debugInfo.accountId);
+  console.log('Data:', debugInfo.data);
+  console.groupEnd();
+  
+  // Guardar en localStorage para debugging persistente
+  const debugLog = JSON.parse(localStorage.getItem('calculationDebugLog') || '[]');
+  debugLog.push(debugInfo);
+  
+  // Mantener solo los últimos 50 logs
+  if (debugLog.length > 50) {
+    debugLog.splice(0, debugLog.length - 50);
+  }
+  
+  localStorage.setItem('calculationDebugLog', JSON.stringify(debugLog));
+}
+
+// Función para recálculo completo como fallback
+async function performFullRecalculation(accountId) {
+  console.log('🔄 INICIANDO RECÁLCULO COMPLETO COMO FALLBACK...');
+  
+  try {
+    showCalculationIndicator(true);
+    
+    // Invalidar todo el caché
+    invalidateCache(accountId);
+    
+    // Obtener todos los datos frescos
+    const allItems = await getConsignationsOptimized(accountId);
+    
+    // Encontrar todos los separadores verdes
+    const greenSeparators = allItems.filter(item => item.isSeparator && item.type === 'green');
+    
+    if (greenSeparators.length === 0) {
+      console.log('ℹ️ No hay separadores verdes para recalcular');
+      return;
+    }
+    
+    console.log(`🔄 Recalculando ${greenSeparators.length} separadores verdes...`);
+    
+    // Recalcular todos los separadores
+    const separatorIds = greenSeparators.map(s => s.id);
+    await batchRecalculateSeparators(separatorIds, accountId);
+    
+    // Actualizar totales de UI
+    await updateSelectedTotals();
+    
+    console.log('✅ RECÁLCULO COMPLETO EXITOSO');
+    
+  } catch (error) {
+    console.error('❌ Error en recálculo completo:', error);
+    
+    // Último recurso: mostrar mensaje al usuario
+    showModal('Error de Sistema', 
+      'Hubo un problema con los cálculos. Por favor, recarga la página y contacta al administrador si el problema persiste.', 
+      false);
+  } finally {
+    showCalculationIndicator(false);
+  }
+}
+// NUEVA FUNCIÓN: Recalcular automáticamente todos los separadores verdes afectados - CON MANEJO DE ERRORES
 async function recalcularTotalSeparadorVerde() {
   if (!selectedAccountId) return;
   
   try {
-    console.log('🔄 RECALCULANDO TOTAL DEL SEPARADOR VERDE...');
+    console.log('🔄 INICIANDO RECÁLCULO AUTOMÁTICO DE SEPARADORES VERDES...');
+    logCalculationDebug('recalcularTotalSeparadorVerde', { accountId: selectedAccountId });
     
-    // Obtener todas las consignaciones ordenadas
-    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-      .orderBy('orden', 'asc').get();
+    // Invalidar caché al hacer cambios
+    invalidateCache(selectedAccountId);
     
-    const docs = [];
-    snapshot.forEach(doc => docs.push({id: doc.id, ...doc.data()}));
+    // Obtener todas las consignaciones ordenadas con manejo de errores
+    const allItems = await getConsignationsOptimized(selectedAccountId);
     
-    // Encontrar TODOS los separadores verdes y recalcular cada uno
-    const separadoresVerdes = [];
-    docs.forEach(doc => {
-      if (doc.isSeparator && doc.type === 'green') {
-        separadoresVerdes.push(doc);
-      }
-    });
+    // Encontrar TODOS los separadores verdes
+    const separadoresVerdes = allItems.filter(item => item.isSeparator && item.type === 'green');
     
     console.log(`📊 Encontrados ${separadoresVerdes.length} separadores verdes para recalcular`);
     
-    // Recalcular cada separador verde
-    for (const separadorVerde of separadoresVerdes) {
-      // Encontrar el separador rojo correspondiente (el que tiene orden menor al verde)
-      let separadorRojoCorrespondiente = null;
-      docs.forEach(doc => {
-        if (doc.isSeparator && doc.type === 'red' && (doc.orden || 0) < (separadorVerde.orden || 0)) {
-          if (!separadorRojoCorrespondiente || (doc.orden || 0) > (separadorRojoCorrespondiente.orden || 0)) {
-            separadorRojoCorrespondiente = doc;
-          }
-        }
-      });
-      
-      // Calcular el total de consignaciones verificadas por Gerente en el período
-      let nuevoTotal = 0;
-      const ordenInicio = separadorRojoCorrespondiente ? separadorRojoCorrespondiente.orden : -1;
-      const ordenFin = separadorVerde.orden;
-      
-      docs.forEach(doc => {
-        if (!doc.isSeparator && 
-            doc.verifiedRole === 'Gerente' && 
-            (doc.orden || 0) > ordenInicio && 
-            (doc.orden || 0) < ordenFin) {
-          nuevoTotal += Number(doc.valor || 0);
-          console.log(`✅ Sumando para recálculo (Verde ${separadorVerde.orden}): ${doc.valor} (Total: ${nuevoTotal})`);
-        }
-      });
-      
-      // Solo actualizar si el total cambió
-      if (nuevoTotal !== (separadorVerde.total || 0)) {
-        await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-          .doc(separadorVerde.id).update({ 
-            total: nuevoTotal,
-            label: `🔄 Actualizado ${new Date().toLocaleDateString()}`
-          });
-        
-        console.log(`✅ SEPARADOR VERDE RECALCULADO (orden ${separadorVerde.orden}): ${separadorVerde.total || 0} → ${nuevoTotal}`);
-      } else {
-        console.log(`ℹ️ Separador verde (orden ${separadorVerde.orden}) ya tiene el total correcto: ${nuevoTotal}`);
-      }
+    if (separadoresVerdes.length === 0) {
+      console.log('ℹ️ No hay separadores verdes para recalcular');
+      return;
     }
     
+    // Recalcular todos los separadores usando el motor de cálculo en tiempo real
+    const separatorIds = separadoresVerdes.map(s => s.id);
+    await batchRecalculateSeparators(separatorIds, selectedAccountId);
+    
+    // Guardar éxito en recovery strategy
+    errorRecoveryStrategies.saveLastKnownValue(selectedAccountId, 'fullRecalculation', Date.now());
+    
+    console.log('✅ RECÁLCULO AUTOMÁTICO COMPLETADO');
+    
   } catch (error) {
-    console.error('❌ Error recalculando separadores verdes:', error);
+    console.error('❌ Error en recálculo automático:', error);
+    logCalculationDebug('recalcularTotalSeparadorVerde_error', { error: error.message });
+    
+    // Aplicar estrategia de recuperación
+    const strategy = errorRecoveryStrategies.handleCalculationError(
+      selectedAccountId, 
+      'fullRecalculation', 
+      error
+    );
+    
+    switch (strategy) {
+      case 'retry':
+        setTimeout(() => recalcularTotalSeparadorVerde(), 2000);
+        break;
+      case 'fullRecalculation':
+        await performFullRecalculation(selectedAccountId);
+        break;
+      default:
+        console.log('⚠️ No se pudo recuperar del error de recálculo');
+    }
+  }
+}
+
+// NUEVA FUNCIÓN: Recalcular separadores afectados por una consignación específica - OPTIMIZADA
+async function recalcularSeparadoresAfectados(consignation) {
+  if (!selectedAccountId) return;
+  
+  try {
+    console.log('🎯 RECALCULANDO SEPARADORES AFECTADOS POR CONSIGNACIÓN...');
+    
+    // Invalidar caché al hacer cambios
+    invalidateCache(selectedAccountId);
+    
+    // Obtener todos los items para identificar separadores afectados
+    const allItems = await getConsignationsOptimized(selectedAccountId);
+    
+    // Identificar separadores afectados
+    const affectedSeparators = identifyAffectedSeparators(consignation, allItems);
+    
+    if (affectedSeparators.length === 0) {
+      console.log('ℹ️ No hay separadores afectados por esta consignación');
+      return;
+    }
+    
+    // Recalcular solo los separadores afectados
+    const separatorIds = affectedSeparators.map(s => s.id);
+    await batchRecalculateSeparators(separatorIds, selectedAccountId);
+    
+    console.log('✅ RECÁLCULO DE SEPARADORES AFECTADOS COMPLETADO');
+    
+  } catch (error) {
+    console.error('❌ Error recalculando separadores afectados:', error);
   }
 }
 
@@ -2151,7 +2333,7 @@ function getNumericValue(formattedValue) {
   return formattedValue.replace(/[^\d]/g, '');
 }
 
-// Nueva función para validar valor antes de agregar consignación
+// Nueva función para validar valor antes de agregar consignación - MEJORADA CON PRECISIÓN
 function validateValorInput(valor) {
   const numericValue = getNumericValue(valor);
   
@@ -2160,8 +2342,10 @@ function validateValorInput(valor) {
     throw new Error('El valor es obligatorio');
   }
   
-  // Validar que no sea cero
+  // Convertir a número entero para evitar problemas de punto flotante
   const numberValue = parseInt(numericValue);
+  
+  // Validar que no sea cero
   if (numberValue <= 0) {
     throw new Error('El valor debe ser mayor a cero');
   }
@@ -2171,7 +2355,53 @@ function validateValorInput(valor) {
     throw new Error('El valor no puede exceder 999,999,999,999');
   }
   
+  // Validar rango máximo razonable (999 mil millones)
+  if (numberValue > 999999999999) {
+    throw new Error('El valor excede el límite máximo permitido');
+  }
+  
   return numberValue;
+}
+
+/* UTILIDADES DE PRECISIÓN NUMÉRICA */
+
+// Convertir valor a centavos para cálculos precisos
+function toCentavos(pesos) {
+  return Math.round(Number(pesos) * 100);
+}
+
+// Convertir centavos de vuelta a pesos
+function toPesos(centavos) {
+  return Math.round(Number(centavos)) / 100;
+}
+
+// Sumar valores monetarios con precisión
+function sumarValoresMonetarios(valores) {
+  let totalCentavos = 0;
+  for (const valor of valores) {
+    totalCentavos += toCentavos(valor);
+  }
+  return toPesos(totalCentavos);
+}
+
+// Validar que un número sea un entero válido para cálculos monetarios
+function validarPrecisionMonetaria(valor) {
+  const num = Number(valor);
+  
+  // Verificar que sea un número válido
+  if (!Number.isFinite(num)) {
+    throw new Error('Valor monetario inválido: no es un número finito');
+  }
+  
+  // Verificar que no tenga más de 2 decimales (centavos)
+  const centavos = Math.round(num * 100);
+  const pesosReconstruidos = centavos / 100;
+  
+  if (Math.abs(num - pesosReconstruidos) > 0.001) {
+    console.warn('⚠️ Valor monetario con más de 2 decimales, redondeando:', num, '→', pesosReconstruidos);
+  }
+  
+  return pesosReconstruidos;
 }
 
 // Event listeners para formateo del campo valor - MEJORADO
@@ -2300,8 +2530,14 @@ $('btn-verify').addEventListener('click', async ()=>{
       ? `${validItems.length} movimientos verificados correctamente. ${invalidItems.length} elementos omitidos por jerarquía.`
       : `${validItems.length} movimientos verificados correctamente.`;
     
-    // Forzar actualización de totales después de verificar
-    console.log('✅ Verificación completada, actualizando totales...');
+    // Forzar actualización de totales y recálculo automático después de verificar
+    console.log('✅ Verificación completada, recalculando separadores afectados...');
+    
+    // Recalcular separadores afectados por cada consignación verificada
+    for (const item of validItems) {
+      await recalcularSeparadoresAfectados(item);
+    }
+    
     setTimeout(() => {
       updateSelectedTotals();
       updateTotalGeneral();
@@ -2327,8 +2563,16 @@ $('btn-unverify').addEventListener('click', async ()=>{
   ids.forEach(id=> batch.update(col.doc(id), { verifiedBy:null, verifiedRole:null })); 
   await batch.commit();
   
-  // Forzar actualización de totales después de desverificar
-  console.log('❌ Desverificación completada, actualizando totales...');
+  // Recálculo automático después de desverificar
+  console.log('❌ Desverificación completada, recalculando separadores afectados...');
+  
+  // Recalcular separadores afectados por cada consignación desverificada
+  for (const item of selectedData) {
+    if (!item.isSeparator) {
+      await recalcularSeparadoresAfectados(item);
+    }
+  }
+  
   setTimeout(() => {
     updateSelectedTotals();
     updateTotalGeneral();
@@ -2432,37 +2676,34 @@ $('btn-delete').addEventListener('click', async ()=>{
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
             
-            // Actualización optimizada después de eliminar (con cortes)
-            console.log('🗑️ Eliminación con cortes completada, actualizando totales...');
+            // Recálculo automático después de eliminar (con cortes)
+            console.log('🗑️ Eliminación completada, recalculando separadores automáticamente...');
+            
+            // Usar el nuevo motor de recálculo automático
+            await recalcularTotalSeparadorVerde();
             
             updateSelectedTotals();
             updateTotalGeneral();
             
-            // Un solo reintento después de 1.5 segundos
-            setTimeout(() => {
-              console.log('🔄 Reintento - Eliminación con cortes');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 1500);
-            
-            showModal('¡Atención!', `Eliminación exitosa. ${recalculationCount} CORTES afectados han sido recalculados y corregidos.`, false);
+            showModal('¡Atención!', `Eliminación exitosa. Todos los separadores han sido recalculados automáticamente.`, false);
         } else {
             // Limpia la selección después de la acción
             selectedConsignIds.clear();
             
-            // Actualización optimizada después de eliminar (sin cortes)
-            console.log('🗑️ Eliminación sin cortes completada, actualizando totales...');
+            // Recálculo automático después de eliminar (sin cortes)
+            console.log('🗑️ Eliminación completada, recalculando separadores automáticamente...');
+            
+            // Recalcular separadores afectados por cada consignación eliminada
+            for (const item of selectedData) {
+              if (!item.isSeparator) {
+                await recalcularSeparadoresAfectados(item);
+              }
+            }
             
             updateSelectedTotals();
             updateTotalGeneral();
             
-            setTimeout(() => {
-              console.log('🔄 Reintento - Eliminación sin cortes');
-              updateSelectedTotals();
-              updateTotalGeneral();
-            }, 1000);
-            
-            showModal('Éxito', `${ids.length} items eliminados.`, false);
+            showModal('Éxito', `${ids.length} items eliminados. Separadores recalculados automáticamente.`, false);
         }
 
     } catch(e) { 
@@ -2593,6 +2834,13 @@ async function updateSelectedTotals(){
     return; 
   }
   
+  // Verificar caché primero
+  const cachedTotal = getCachedTotal(selectedAccountId, 'activePeriod');
+  if (cachedTotal !== null) {
+    updateTotalDisplay(cachedTotal);
+    return;
+  }
+  
   // Marcar como en progreso con timeout de seguridad
   isUpdatingTotals = true;
   updateTimeout = setTimeout(() => {
@@ -2612,8 +2860,9 @@ async function updateSelectedTotals(){
     }
     
     console.log('🔄 Consultando Firebase directamente...');
-    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-      .orderBy('orden', 'asc').get();
+    
+    // Usar consulta optimizada
+    const fbDocs = await getConsignationsOptimized(selectedAccountId);
     
     // Verificación post-consulta
     if (!selectedAccountId) {
@@ -2621,15 +2870,15 @@ async function updateSelectedTotals(){
       return;
     }
     
-    const fbDocs = [];
-    snapshot.forEach(doc => fbDocs.push({id: doc.id, ...doc.data()}));
-    
     console.log(`📊 Documentos encontrados en Firebase: ${fbDocs.length}`);
     
     // Calcular total del período activo usando nueva lógica simplificada
     const totalActual = calculateActivePeriodTotal(fbDocs);
     
     console.log(`💰 TOTAL CALCULADO PARA PERÍODO ACTIVO: ${totalActual}`);
+    
+    // Guardar en caché
+    setCachedTotal(selectedAccountId, 'activePeriod', totalActual);
     
     // Verificación final antes de actualizar UI
     if (!selectedAccountId) {
@@ -2659,7 +2908,7 @@ async function updateSelectedTotals(){
   console.log('=== FIN ACTUALIZACIÓN DE TOTALES ===');
 }
 
-// Función auxiliar para calcular total del período activo
+// Función auxiliar para calcular total del período activo - MEJORADA CON PRECISIÓN
 function calculateActivePeriodTotal(fbDocs) {
   // Encontrar el último separador verde (período más reciente)
   let ultimoSeparadorVerde = null;
@@ -2671,7 +2920,7 @@ function calculateActivePeriodTotal(fbDocs) {
     }
   });
   
-  let totalActual = 0;
+  let valoresParaSumar = [];
   
   if (ultimoSeparadorVerde) {
     // Hay separadores: sumar consignaciones ENCIMA del último separador verde
@@ -2679,25 +2928,28 @@ function calculateActivePeriodTotal(fbDocs) {
     
     fbDocs.forEach(doc => {
       if (!doc.isSeparator && (doc.orden || 0) < (ultimoSeparadorVerde.orden || 0)) {
-        totalActual += Number(doc.valor || 0);
-        console.log(`✅ Sumando consignación del período activo: ${doc.valor} (Total: ${totalActual})`);
+        const valorValidado = validarPrecisionMonetaria(doc.valor || 0);
+        valoresParaSumar.push(valorValidado);
+        console.log(`✅ Sumando consignación del período activo: ${valorValidado}`);
       }
     });
     
-    console.log(`💰 TOTAL DEL PERÍODO ACTIVO: ${totalActual}`);
   } else {
     // No hay separadores: sumar todas las consignaciones
     console.log('🔍 No hay separadores, sumando todas las consignaciones');
     
     fbDocs.forEach(doc => {
       if (!doc.isSeparator) {
-        totalActual += Number(doc.valor || 0);
-        console.log(`✅ Sumando consignación (sin cortes): ${doc.valor} (Total: ${totalActual})`);
+        const valorValidado = validarPrecisionMonetaria(doc.valor || 0);
+        valoresParaSumar.push(valorValidado);
+        console.log(`✅ Sumando consignación (sin cortes): ${valorValidado}`);
       }
     });
-    
-    console.log(`💰 TOTAL SIN CORTES: ${totalActual}`);
   }
+  
+  // Usar suma con precisión monetaria
+  const totalActual = sumarValoresMonetarios(valoresParaSumar);
+  console.log(`💰 TOTAL CALCULADO CON PRECISIÓN: ${totalActual}`);
   
   return totalActual;
 }
@@ -2735,6 +2987,287 @@ function updateTotalDisplay(totalActual) {
     
   } else {
     console.error('❌ ERROR: Elemento total-cuenta no encontrado');
+  }
+}
+
+/* OPTIMIZACIONES DE RENDIMIENTO */
+
+// Caché inteligente para totales calculados
+const totalsCache = new Map();
+const CACHE_EXPIRY_MS = 30000; // 30 segundos
+
+// Función para obtener clave de caché
+function getCacheKey(accountId, operation) {
+  return `${accountId}_${operation}`;
+}
+
+// Función para obtener total desde caché
+function getCachedTotal(accountId, operation) {
+  const key = getCacheKey(accountId, operation);
+  const cached = totalsCache.get(key);
+  
+  if (cached && (Date.now() - cached.timestamp) < CACHE_EXPIRY_MS) {
+    console.log('💾 Usando total desde caché:', operation, '→', cached.value);
+    return cached.value;
+  }
+  
+  return null;
+}
+
+// Función para guardar total en caché
+function setCachedTotal(accountId, operation, value) {
+  const key = getCacheKey(accountId, operation);
+  totalsCache.set(key, {
+    value: value,
+    timestamp: Date.now()
+  });
+  console.log('💾 Total guardado en caché:', operation, '→', value);
+}
+
+// Función para invalidar caché
+function invalidateCache(accountId) {
+  const keysToDelete = [];
+  for (const key of totalsCache.keys()) {
+    if (key.startsWith(accountId)) {
+      keysToDelete.push(key);
+    }
+  }
+  
+  keysToDelete.forEach(key => totalsCache.delete(key));
+  console.log('🗑️ Caché invalidado para cuenta:', accountId, '(', keysToDelete.length, 'entradas)');
+}
+
+// Debouncing para actualizaciones múltiples
+let updateDebounceTimeout = null;
+const DEBOUNCE_DELAY_MS = 500;
+
+function debouncedUpdateTotals() {
+  if (updateDebounceTimeout) {
+    clearTimeout(updateDebounceTimeout);
+  }
+  
+  updateDebounceTimeout = setTimeout(() => {
+    console.log('⏱️ Ejecutando actualización de totales debounced');
+    updateSelectedTotals();
+    updateTotalGeneral();
+    updateDebounceTimeout = null;
+  }, DEBOUNCE_DELAY_MS);
+  
+  console.log('⏱️ Actualización de totales programada (debounced)');
+}
+
+// Función optimizada para consultas Firebase con límites
+async function getConsignationsOptimized(accountId, limit = null) {
+  let query = db.collection('cuentas').doc(accountId).collection('consignaciones')
+    .orderBy('orden', 'asc');
+  
+  if (limit) {
+    query = query.limit(limit);
+  }
+  
+  const startTime = Date.now();
+  const snapshot = await query.get();
+  const endTime = Date.now();
+  
+  console.log(`⚡ Consulta Firebase optimizada: ${snapshot.size} docs en ${endTime - startTime}ms`);
+  
+  const items = [];
+  snapshot.forEach(doc => items.push({id: doc.id, ...doc.data()}));
+  
+  return items;
+}
+
+// Función para detectar operaciones pesadas y mostrar indicador
+function showCalculationIndicator(show = true) {
+  const indicator = document.getElementById('calculation-indicator');
+  if (!indicator && show) {
+    // Crear indicador si no existe
+    const div = document.createElement('div');
+    div.id = 'calculation-indicator';
+    div.innerHTML = '🔄 Recalculando...';
+    div.style.cssText = `
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(76, 175, 80, 0.9);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 1000;
+      backdrop-filter: blur(5px);
+    `;
+    document.body.appendChild(div);
+  } else if (indicator) {
+    if (show) {
+      indicator.style.display = 'block';
+    } else {
+      indicator.style.display = 'none';
+    }
+  }
+}
+
+/* REAL-TIME CALCULATION ENGINE - MOTOR DE CÁLCULO EN TIEMPO REAL OPTIMIZADO */
+
+// Identificar separadores verdes afectados por un cambio en una consignación
+function identifyAffectedSeparators(consignation, allItems) {
+  const affectedSeparators = [];
+  const consignationOrder = consignation.orden || 0;
+  
+  console.log('🔍 IDENTIFICANDO SEPARADORES AFECTADOS:');
+  console.log('  - Consignación orden:', consignationOrder);
+  
+  // Encontrar todos los separadores verdes que podrían incluir esta consignación
+  for (const item of allItems) {
+    if (item.isSeparator && item.type === 'green') {
+      const separatorOrder = item.orden || 0;
+      
+      // Un separador verde incluye consignaciones que están ANTES de él (orden menor)
+      if (consignationOrder < separatorOrder) {
+        // Verificar si hay un separador rojo entre la consignación y el verde
+        const redSeparatorBetween = allItems.find(s => 
+          s.isSeparator && 
+          s.type === 'red' && 
+          s.orden > consignationOrder && 
+          s.orden < separatorOrder
+        );
+        
+        if (!redSeparatorBetween) {
+          // No hay separador rojo entre ellos, este verde incluye la consignación
+          affectedSeparators.push(item);
+          console.log(`  ✅ Separador verde afectado (orden ${separatorOrder})`);
+        } else {
+          console.log(`  ❌ Separador verde NO afectado (orden ${separatorOrder}) - hay rojo intermedio`);
+        }
+      }
+    }
+  }
+  
+  console.log(`  📊 Total separadores afectados: ${affectedSeparators.length}`);
+  return affectedSeparators;
+}
+
+// Calcular el total correcto para un separador verde específico - MEJORADO CON PRECISIÓN
+async function calculateSeparatorTotal(separatorId, accountId) {
+  console.log('🧮 CALCULANDO TOTAL DE SEPARADOR CON PRECISIÓN:', separatorId);
+  
+  try {
+    // Obtener todos los items ordenados
+    const snapshot = await db.collection('cuentas').doc(accountId).collection('consignaciones')
+      .orderBy('orden', 'asc').get();
+    
+    const allItems = [];
+    snapshot.forEach(doc => allItems.push({id: doc.id, ...doc.data()}));
+    
+    // Encontrar el separador verde específico
+    const greenSeparator = allItems.find(item => item.id === separatorId);
+    if (!greenSeparator) {
+      console.error('❌ Separador verde no encontrado:', separatorId);
+      return 0;
+    }
+    
+    const greenOrder = greenSeparator.orden || 0;
+    console.log('  - Separador verde orden:', greenOrder);
+    
+    // Encontrar el separador rojo anterior (el que tiene orden menor más cercano)
+    let previousRedSeparator = null;
+    for (const item of allItems) {
+      if (item.isSeparator && item.type === 'red' && (item.orden || 0) < greenOrder) {
+        if (!previousRedSeparator || (item.orden || 0) > (previousRedSeparator.orden || 0)) {
+          previousRedSeparator = item;
+        }
+      }
+    }
+    
+    const startOrder = previousRedSeparator ? previousRedSeparator.orden : -Infinity;
+    console.log('  - Separador rojo anterior orden:', previousRedSeparator?.orden || 'ninguno');
+    console.log('  - Rango de cálculo: >', startOrder, 'y <', greenOrder);
+    
+    // Recopilar valores para suma con precisión
+    const valoresParaSumar = [];
+    let consignationCount = 0;
+    
+    for (const item of allItems) {
+      if (!item.isSeparator && 
+          item.verifiedRole === 'Gerente' && 
+          (item.orden || 0) > startOrder && 
+          (item.orden || 0) < greenOrder) {
+        
+        const valorValidado = validarPrecisionMonetaria(item.valor || 0);
+        valoresParaSumar.push(valorValidado);
+        consignationCount++;
+        console.log(`    ✅ Incluida: ${valorValidado}`);
+      }
+    }
+    
+    // Calcular total con precisión monetaria
+    const total = sumarValoresMonetarios(valoresParaSumar);
+    console.log(`  💰 TOTAL CALCULADO CON PRECISIÓN: ${total} (${consignationCount} consignaciones)`);
+    
+    return total;
+    
+  } catch (error) {
+    console.error('❌ Error calculando total de separador:', error);
+    return 0;
+  }
+}
+
+// Recalcular múltiples separadores en lote usando Firebase batch - OPTIMIZADO
+async function batchRecalculateSeparators(separatorIds, accountId) {
+  if (!separatorIds || separatorIds.length === 0) {
+    console.log('ℹ️ No hay separadores para recalcular');
+    return;
+  }
+  
+  console.log('🔄 RECALCULANDO SEPARADORES EN LOTE (OPTIMIZADO):', separatorIds.length);
+  
+  // Mostrar indicador de cálculo para operaciones pesadas
+  if (separatorIds.length > 3) {
+    showCalculationIndicator(true);
+  }
+  
+  try {
+    const batch = db.batch();
+    const updates = [];
+    const startTime = Date.now();
+    
+    // Calcular nuevo total para cada separador
+    for (const separatorId of separatorIds) {
+      const newTotal = await calculateSeparatorTotal(separatorId, accountId);
+      const separatorRef = db.collection('cuentas').doc(accountId).collection('consignaciones').doc(separatorId);
+      
+      batch.update(separatorRef, {
+        total: newTotal,
+        lastRecalculation: firebase.firestore.Timestamp.now(),
+        calculationMethod: 'auto'
+      });
+      
+      updates.push({ id: separatorId, total: newTotal });
+      console.log(`  📝 Preparando actualización: ${separatorId} → ${fmtCOP(newTotal)}`);
+    }
+    
+    // Ejecutar todas las actualizaciones en una sola transacción
+    await batch.commit();
+    
+    const endTime = Date.now();
+    console.log(`✅ RECÁLCULO EN LOTE COMPLETADO en ${endTime - startTime}ms`);
+    
+    updates.forEach(update => {
+      console.log(`  ✅ ${update.id}: ${fmtCOP(update.total)}`);
+    });
+    
+    // Invalidar caché después de recálculo
+    invalidateCache(accountId);
+    
+    return updates;
+    
+  } catch (error) {
+    console.error('❌ Error en recálculo en lote:', error);
+    throw error;
+  } finally {
+    // Ocultar indicador de cálculo
+    showCalculationIndicator(false);
   }
 }
 
