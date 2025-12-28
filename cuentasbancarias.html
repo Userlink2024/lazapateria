@@ -1154,7 +1154,7 @@ async function handleDoubleClick(clickedConsign, index) {
               valor: valor,
               verifiedRole: 'Gerente' // Inserción retroactiva se marca como verificada por Gerente
             };
-            await actualizarTotalesVerdes(); // Nueva lógica simple
+            await recalcularSeparadoresAfectados(nuevaConsignacion);
             
             // Esperar un momento para que se actualice Firebase y luego actualizar la UI
             setTimeout(() => {
@@ -1323,8 +1323,8 @@ function subscribeAccounts(){
         $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}${isClosedState ? ' (🔒 CERRADA)' : ''}`; 
         
         // Recalcular totales de separadores verdes al cambiar de cuenta
-        setTimeout(async () => {
-          await actualizarTotalesVerdes(); // Nueva lógica simple
+        setTimeout(() => {
+          recalcularTotalSeparadorVerde();
         }, 500);
         
         updateSelectedTotals(); 
@@ -1341,8 +1341,8 @@ function subscribeAccounts(){
         updateSelectedTotals();
         
         // Recalcular totales al cargar la primera cuenta
-        setTimeout(async () => {
-          await actualizarTotalesVerdes(); // Nueva lógica simple
+        setTimeout(() => {
+          recalcularTotalSeparadorVerde();
         }, 1000);
     }
     // Aseguramos que el total general se actualice al cargar las cuentas por primera vez
@@ -1945,7 +1945,7 @@ $('add-consign').addEventListener('click', async ()=>{
       valor: valor,
       verifiedRole: null // Nueva consignación sin verificar
     };
-    await actualizarTotalesVerdes(); // Nueva lógica simple
+    await recalcularSeparadoresAfectados(nuevaConsignacion);
     
     // Esperar un momento para que se actualice Firebase y luego actualizar la UI
     setTimeout(() => {
@@ -2112,94 +2112,92 @@ async function performFullRecalculation(accountId) {
     showCalculationIndicator(false);
   }
 }
-// ===== NUEVA LÓGICA SIMPLE PARA TOTALES VERDES =====
-// Esta función recalcula TODOS los separadores verdes de forma simple y directa
-async function recalcularTodosLosSeparadoresVerdes() {
+// NUEVA FUNCIÓN: Recalcular automáticamente todos los separadores verdes afectados - CON MANEJO DE ERRORES
+async function recalcularTotalSeparadorVerde() {
   if (!selectedAccountId) return;
   
-  console.log('🔄 NUEVA LÓGICA: Recalculando todos los separadores verdes...');
-  
   try {
-    // 1. Obtener TODOS los documentos de la cuenta
-    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').get();
-    const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log('🔄 INICIANDO RECÁLCULO AUTOMÁTICO DE SEPARADORES VERDES...');
+    logCalculationDebug('recalcularTotalSeparadorVerde', { accountId: selectedAccountId });
     
-    // 2. Ordenar por orden ascendente (como en la tabla)
-    allItems.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+    // Invalidar caché al hacer cambios
+    invalidateCache(selectedAccountId);
     
-    console.log('📊 Total items encontrados:', allItems.length);
+    // Obtener todas las consignaciones ordenadas con manejo de errores
+    const allItems = await getConsignationsOptimized(selectedAccountId);
     
-    // 3. Encontrar todos los separadores verdes
+    // Encontrar TODOS los separadores verdes
     const separadoresVerdes = allItems.filter(item => item.isSeparator && item.type === 'green');
-    console.log('🟢 Separadores verdes encontrados:', separadoresVerdes.length);
     
-    // 4. Para cada separador verde, calcular su total
-    const batch = db.batch();
-    const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+    console.log(`📊 Encontrados ${separadoresVerdes.length} separadores verdes para recalcular`);
     
-    for (const separadorVerde of separadoresVerdes) {
-      // Encontrar el separador rojo anterior (si existe)
-      let separadorRojoAnterior = null;
-      for (let i = 0; i < allItems.length; i++) {
-        const item = allItems[i];
-        if (item.id === separadorVerde.id) break; // Llegamos al separador verde
-        if (item.isSeparator && item.type === 'red') {
-          separadorRojoAnterior = item; // El último rojo antes del verde
-        }
-      }
-      
-      // Calcular el total: sumar consignaciones verificadas por Gerente entre el rojo anterior y el verde
-      let total = 0;
-      let conteoConsignaciones = 0;
-      
-      for (const item of allItems) {
-        // Solo procesar consignaciones (no separadores)
-        if (item.isSeparator) continue;
-        
-        // Si hay separador rojo anterior, solo contar después de él
-        if (separadorRojoAnterior && item.orden <= separadorRojoAnterior.orden) continue;
-        
-        // Si llegamos al separador verde, parar
-        if (item.orden >= separadorVerde.orden) break;
-        
-        // Solo sumar si está verificado por Gerente (amarillo)
-        if (item.verifiedRole === 'Gerente') {
-          total += Number(item.valor || 0);
-          conteoConsignaciones++;
-        }
-      }
-      
-      console.log(`🟢 Separador ${separadorVerde.id}: ${conteoConsignaciones} consignaciones = ${total}`);
-      
-      // Actualizar el separador verde si el total cambió
-      if (separadorVerde.total !== total) {
-        batch.update(col.doc(separadorVerde.id), { total: total });
-        console.log(`✅ Actualizando separador ${separadorVerde.id}: ${separadorVerde.total} → ${total}`);
-      }
+    if (separadoresVerdes.length === 0) {
+      console.log('ℹ️ No hay separadores verdes para recalcular');
+      return;
     }
     
-    // 5. Guardar todos los cambios
-    await batch.commit();
-    console.log('✅ NUEVA LÓGICA: Recálculo completado exitosamente');
+    // Recalcular todos los separadores usando el motor de cálculo en tiempo real
+    const separatorIds = separadoresVerdes.map(s => s.id);
+    await batchRecalculateSeparators(separatorIds, selectedAccountId);
+    
+    // Guardar éxito en recovery strategy
+    errorRecoveryStrategies.saveLastKnownValue(selectedAccountId, 'fullRecalculation', Date.now());
+    
+    console.log('✅ RECÁLCULO AUTOMÁTICO COMPLETADO');
     
   } catch (error) {
-    console.error('❌ Error en nueva lógica de recálculo:', error);
+    console.error('❌ Error en recálculo automático:', error);
+    logCalculationDebug('recalcularTotalSeparadorVerde_error', { error: error.message });
+    
+    // Aplicar estrategia de recuperación
+    const strategy = errorRecoveryStrategies.handleCalculationError(
+      selectedAccountId, 
+      'fullRecalculation', 
+      error
+    );
+    
+    switch (strategy) {
+      case 'retry':
+        setTimeout(() => recalcularTotalSeparadorVerde(), 2000);
+        break;
+      case 'fullRecalculation':
+        await performFullRecalculation(selectedAccountId);
+        break;
+      default:
+        console.log('⚠️ No se pudo recuperar del error de recálculo');
+    }
   }
 }
 
-// Función simple que se ejecuta en todas las operaciones importantes
-async function actualizarTotalesVerdes() {
-  await recalcularTodosLosSeparadoresVerdes();
-}
-
-// Mantener compatibilidad con código existente
-async function recalcularTotalSeparadorVerde() {
-  await recalcularTodosLosSeparadoresVerdes();
-}
-
+// NUEVA FUNCIÓN: Recalcular separadores afectados por una consignación específica - OPTIMIZADA
 async function recalcularSeparadoresAfectados(consignation) {
-  await recalcularTodosLosSeparadoresVerdes();
-}
+  if (!selectedAccountId) return;
+  
+  try {
+    console.log('🎯 RECALCULANDO SEPARADORES AFECTADOS POR CONSIGNACIÓN...');
+    
+    // Invalidar caché al hacer cambios
+    invalidateCache(selectedAccountId);
+    
+    // Obtener todos los items para identificar separadores afectados
+    const allItems = await getConsignationsOptimized(selectedAccountId);
+    
+    // Identificar separadores afectados
+    const affectedSeparators = identifyAffectedSeparators(consignation, allItems);
+    
+    if (affectedSeparators.length === 0) {
+      console.log('ℹ️ No hay separadores afectados por esta consignación');
+      return;
+    }
+    
+    // Recalcular solo los separadores afectados
+    const separatorIds = affectedSeparators.map(s => s.id);
+    await batchRecalculateSeparators(separatorIds, selectedAccountId);
+    
+    console.log('✅ RECÁLCULO DE SEPARADORES AFECTADOS COMPLETADO');
+    
+  } catch (error) {
+    console.error('❌ Error recalculando separadores afectados:', error);
   }
 }
 
@@ -2537,7 +2535,7 @@ $('btn-verify').addEventListener('click', async ()=>{
     
     // Recalcular separadores afectados por cada consignación verificada
     for (const item of validItems) {
-      await actualizarTotalesVerdes(); // Nueva lógica simple
+      await recalcularSeparadoresAfectados(item);
     }
     
     setTimeout(() => {
@@ -2571,7 +2569,7 @@ $('btn-unverify').addEventListener('click', async ()=>{
   // Recalcular separadores afectados por cada consignación desverificada
   for (const item of selectedData) {
     if (!item.isSeparator) {
-      await actualizarTotalesVerdes(); // Nueva lógica simple
+      await recalcularSeparadoresAfectados(item);
     }
   }
   
@@ -2681,8 +2679,8 @@ $('btn-delete').addEventListener('click', async ()=>{
             // Recálculo automático después de eliminar (con cortes)
             console.log('🗑️ Eliminación completada, recalculando separadores automáticamente...');
             
-            // Usar la nueva lógica simple
-            await actualizarTotalesVerdes();
+            // Usar el nuevo motor de recálculo automático
+            await recalcularTotalSeparadorVerde();
             
             updateSelectedTotals();
             updateTotalGeneral();
@@ -2698,7 +2696,7 @@ $('btn-delete').addEventListener('click', async ()=>{
             // Recalcular separadores afectados por cada consignación eliminada
             for (const item of selectedData) {
               if (!item.isSeparator) {
-                await actualizarTotalesVerdes(); // Nueva lógica simple
+                await recalcularSeparadoresAfectados(item);
               }
             }
             
@@ -2810,10 +2808,8 @@ $('btn-cuadrar').addEventListener('click', async () => {
     selectedConsignIds.clear();
     
     // Forzar recarga de la tabla después de un pequeño delay para asegurar sincronización
-    setTimeout(async () => {
+    setTimeout(() => {
       console.log('🔄 Forzando recarga de tabla después del cuadre...');
-      // Actualizar totales verdes con nueva lógica
-      await actualizarTotalesVerdes();
       // El onSnapshot se disparará automáticamente, pero forzamos actualización de totales
       updateSelectedTotals();
       updateTotalGeneral();
