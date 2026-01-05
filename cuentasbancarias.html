@@ -2132,19 +2132,20 @@ async function recalcularTodosLosSeparadoresVerdes() {
     for (const separadorVerde of separadoresVerdes) {
       console.log(`\n🟢 PROCESANDO: ${separadorVerde.id.substring(0, 8)}, orden: ${separadorVerde.orden}`);
       
-      // Encontrar el separador rojo anterior
-      let separadorRojoAnterior = null;
+      // NUEVA LÓGICA: Encontrar el separador rojo que viene DESPUÉS del verde
+      let separadorRojoPosterior = null;
       for (const item of allItems) {
-        if (item.orden >= separadorVerde.orden) break; // Parar antes del verde
+        if (item.orden <= separadorVerde.orden) continue; // Saltar items antes o igual al verde
         if (item.isSeparator && item.type === 'red') {
-          separadorRojoAnterior = item; // El último rojo antes del verde
+          separadorRojoPosterior = item; // El primer rojo después del verde
+          break;
         }
       }
       
-      console.log('🔴 Separador rojo anterior:', separadorRojoAnterior ? 
-        `${separadorRojoAnterior.id.substring(0, 8)}, orden: ${separadorRojoAnterior.orden}` : 'NINGUNO');
+      console.log('🔴 Separador rojo posterior:', separadorRojoPosterior ? 
+        `${separadorRojoPosterior.id.substring(0, 8)}, orden: ${separadorRojoPosterior.orden}` : 'NINGUNO');
       
-      // LÓGICA CORREGIDA: Buscar consignaciones amarillas
+      // LÓGICA CORREGIDA: Buscar consignaciones amarillas ENTRE el verde y el rojo posterior
       let total = 0;
       let conteoConsignaciones = 0;
       let consignacionesEncontradas = [];
@@ -2153,16 +2154,15 @@ async function recalcularTodosLosSeparadoresVerdes() {
         // Solo procesar consignaciones (no separadores)
         if (item.isSeparator) continue;
         
-        // NUEVA LÓGICA: Si hay separador rojo anterior, contar DESPUÉS de él
-        // Si NO hay separador rojo anterior, contar ANTES del verde
+        // NUEVA LÓGICA: Incluir consignaciones DESPUÉS del verde
         let incluirConsignacion = false;
         
-        if (separadorRojoAnterior) {
-          // Hay rojo anterior: incluir consignaciones entre rojo y verde
-          incluirConsignacion = item.orden > separadorRojoAnterior.orden && item.orden < separadorVerde.orden;
+        if (separadorRojoPosterior) {
+          // Hay rojo posterior: incluir consignaciones entre verde y rojo
+          incluirConsignacion = item.orden > separadorVerde.orden && item.orden < separadorRojoPosterior.orden;
         } else {
-          // No hay rojo anterior: incluir consignaciones antes del verde
-          incluirConsignacion = item.orden < separadorVerde.orden;
+          // No hay rojo posterior: incluir todas las consignaciones después del verde
+          incluirConsignacion = item.orden > separadorVerde.orden;
         }
         
         if (incluirConsignacion && item.verifiedRole === 'Gerente') {
@@ -2193,6 +2193,20 @@ async function recalcularTodosLosSeparadoresVerdes() {
     
   } catch (error) {
     console.error('❌ Error:', error);
+  }
+}       batch.update(col.doc(separadorVerde.id), { total: total });
+        console.log(`✅ Actualizando separador ${separadorVerde.id.substring(0, 8)}: ${separadorVerde.total} → ${total}`);
+      } else {
+        console.log(`ℹ️ Separador ${separadorVerde.id.substring(0, 8)} ya tiene el total correcto: ${total}`);
+      }
+    }
+    
+    // 5. Guardar todos los cambios
+    await batch.commit();
+    console.log('✅ NUEVA LÓGICA: Recálculo completado exitosamente');
+    
+  } catch (error) {
+    console.error('❌ Error en nueva lógica de recálculo:', error);
   }
 }
 
