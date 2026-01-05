@@ -1669,9 +1669,58 @@ function renderConsigns(){
       tbody.appendChild(tr);
     });
     
-    // Actualizar totales automáticamente
-    updateSelectedTotals(); 
-    updateTotalGeneral();
+    // Actualizar totales automáticamente (con diagnóstico)
+    console.log('🔄 ACTUALIZANDO TOTALES DESPUÉS DE RENDERIZAR');
+    console.log('  - Estado isProcessingCuadre:', window.isProcessingCuadre);
+    
+    // Solo actualizar si no hay un cuadre en proceso
+    if (!window.isProcessingCuadre) {
+      updateSelectedTotals(); 
+      updateTotalGeneral();
+      
+      // Verificar que los totales se actualizaron correctamente
+      setTimeout(() => {
+        const totalElement = $('total-cuenta');
+        const currentDisplay = totalElement ? totalElement.textContent : '$0';
+        
+        console.log('🔍 VERIFICACIÓN POST-ACTUALIZACIÓN:');
+        console.log('  - Total en UI:', currentDisplay);
+        
+        // Si el total está en ceros o vacío, mostrar alerta
+        if (!currentDisplay || currentDisplay === '$0' || currentDisplay === '0') {
+          console.log('⚠️ DETECTADO: Total en ceros después de actualización');
+          console.log('  - Posibles causas:');
+          console.log('    1. updateSelectedTotals() o updateTotalGeneral() devolvieron 0');
+          console.log('    2. Problema en la lógica de cálculo');
+          console.log('    3. Interferencia con otra actualización');
+          
+          // Intentar recalcular una vez más
+          console.log('🔄 REINTENTO AUTOMÁTICO...');
+          invalidateCache(selectedAccountId);
+          updateSelectedTotals();
+          updateTotalGeneral();
+          
+          setTimeout(() => {
+            const retryDisplay = totalElement ? totalElement.textContent : '$0';
+            console.log('🔍 VERIFICACIÓN POST-REINTENTO:');
+            console.log('  - Total después de reintento:', retryDisplay);
+            
+            if (!retryDisplay || retryDisplay === '$0' || retryDisplay === '0') {
+              console.log('❌ ERROR CRÍTICO: El total sigue en ceros después de reintento');
+              console.log('  - Esto indica un problema sistémico en el cálculo de totales');
+              
+              // Mostrar alerta al usuario
+              showModal('⚠️ Problema Detectado', 
+                'El total se está mostrando en ceros después del cuadre. Esto indica un problema en el sistema de cálculo de totales. Por favor, recargue la página y contacte al administrador.', 
+                false
+              );
+            } else {
+              console.log('✅ RECUPERACIÓN EXITOSA: Total ahora se muestra correctamente');
+            }
+          }, 1000);
+        }
+      }, 500);
+    }
     
     // Actualizar indicadores de jerarquía después de renderizar
     setTimeout(() => {
