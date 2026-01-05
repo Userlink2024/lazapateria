@@ -1669,7 +1669,7 @@ function renderConsigns(){
       tbody.appendChild(tr);
     });
     
-    // Actualizar totales automáticamente (con diagnóstico)
+    // Actualizar totales automáticamente (con diagnóstico y protección)
     console.log('🔄 ACTUALIZANDO TOTALES DESPUÉS DE RENDERIZAR');
     console.log('  - Estado isProcessingCuadre:', window.isProcessingCuadre);
     
@@ -1693,6 +1693,7 @@ function renderConsigns(){
           console.log('    1. updateSelectedTotals() o updateTotalGeneral() devolvieron 0');
           console.log('    2. Problema en la lógica de cálculo');
           console.log('    3. Interferencia con otra actualización');
+          console.log('    4. onSnapshot sobreescribiendo datos después del cuadre');
           
           // Intentar recalcular una vez más
           console.log('🔄 REINTENTO AUTOMÁTICO...');
@@ -1721,6 +1722,44 @@ function renderConsigns(){
         }
       }, 500);
     }
+    
+    // *** PROTECCIÓN ANTI-SOBREESCRITURA ***
+    // Prevenir que el onSnapshot actualice los totales si hay un cuadre en proceso
+    const originalOnSnapshot = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').onSnapshot;
+    
+    db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').onSnapshot(async snapshot => {
+      // Si hay un cuadre en proceso, no actualizar totales (evitar interferencia)
+      if (window.isProcessingCuadre) {
+        console.log('🛡️ PROTEGIENDO: Omitiendo actualización de totales por cuadre en proceso');
+        // Solo renderizar los datos sin actualizar totales
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          currentConsignsSnapshot.push({id: doc.id, ...data});
+        });
+        
+        // Ordenar y renderizar
+        currentConsignsSnapshot.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+        renderTableFromSnapshot();
+        return;
+      }
+      
+      // Si no hay cuadre en proceso, procesar normalmente
+      console.log('🔄 PROCESANDO SNAPSHOT NORMAL (sin cuadre en proceso)');
+      
+      // Procesar snapshot y actualizar totales
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        currentConsignsSnapshot.push({id: doc.id, ...data});
+      });
+      
+      // Ordenar y renderizar
+      currentConsignsSnapshot.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+      renderTableFromSnapshot();
+      
+      // Actualizar totales normalmente
+      updateSelectedTotals();
+      updateTotalGeneral();
+    });
     
     // Actualizar indicadores de jerarquía después de renderizar
     setTimeout(() => {
