@@ -2112,83 +2112,123 @@ async function performFullRecalculation(accountId) {
     showCalculationIndicator(false);
   }
 }
-// ===== NUEVA LÓGICA SIMPLE PARA TOTALES VERDES =====
-// Esta función recalcula TODOS los separadores verdes de forma simple y directa
+// ===== LÓGICA CORREGIDA PARA TOTALES VERDES =====
 async function recalcularTodosLosSeparadoresVerdes() {
   if (!selectedAccountId) return;
   
-  console.log('🔄 NUEVA LÓGICA: Recalculando todos los separadores verdes...');
+  console.log('🔄 LÓGICA CORREGIDA: Recalculando todos los separadores verdes...');
   
   try {
-    // 1. Obtener TODOS los documentos de la cuenta
     const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').get();
     const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    // 2. Ordenar por orden ascendente (como en la tabla)
     allItems.sort((a, b) => (a.orden || 0) - (b.orden || 0));
     
-    console.log('📊 Total items encontrados:', allItems.length);
-    
-    // 3. Encontrar todos los separadores verdes
     const separadoresVerdes = allItems.filter(item => item.isSeparator && item.type === 'green');
-    console.log('🟢 Separadores verdes encontrados:', separadoresVerdes.length);
+    console.log(`🟢 Procesando ${separadoresVerdes.length} separadores verdes`);
     
-    // 4. Para cada separador verde, calcular su total
     const batch = db.batch();
     const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
     
     for (const separadorVerde of separadoresVerdes) {
-      // Encontrar el separador rojo anterior (si existe)
+      console.log(`\n🟢 PROCESANDO: ${separadorVerde.id.substring(0, 8)}, orden: ${separadorVerde.orden}`);
+      
+      // Encontrar el separador rojo anterior
       let separadorRojoAnterior = null;
-      for (let i = 0; i < allItems.length; i++) {
-        const item = allItems[i];
-        if (item.id === separadorVerde.id) break; // Llegamos al separador verde
+      for (const item of allItems) {
+        if (item.orden >= separadorVerde.orden) break; // Parar antes del verde
         if (item.isSeparator && item.type === 'red') {
           separadorRojoAnterior = item; // El último rojo antes del verde
         }
       }
       
-      // Calcular el total: sumar consignaciones verificadas por Gerente entre el rojo anterior y el verde
+      console.log('🔴 Separador rojo anterior:', separadorRojoAnterior ? 
+        `${separadorRojoAnterior.id.substring(0, 8)}, orden: ${separadorRojoAnterior.orden}` : 'NINGUNO');
+      
+      // LÓGICA CORREGIDA: Buscar consignaciones amarillas
       let total = 0;
       let conteoConsignaciones = 0;
+      let consignacionesEncontradas = [];
       
       for (const item of allItems) {
         // Solo procesar consignaciones (no separadores)
         if (item.isSeparator) continue;
         
-        // Si hay separador rojo anterior, solo contar después de él
-        if (separadorRojoAnterior && item.orden <= separadorRojoAnterior.orden) continue;
+        // NUEVA LÓGICA: Si hay separador rojo anterior, contar DESPUÉS de él
+        // Si NO hay separador rojo anterior, contar ANTES del verde
+        let incluirConsignacion = false;
         
-        // Si llegamos al separador verde, parar
-        if (item.orden >= separadorVerde.orden) break;
+        if (separadorRojoAnterior) {
+          // Hay rojo anterior: incluir consignaciones entre rojo y verde
+          incluirConsignacion = item.orden > separadorRojoAnterior.orden && item.orden < separadorVerde.orden;
+        } else {
+          // No hay rojo anterior: incluir consignaciones antes del verde
+          incluirConsignacion = item.orden < separadorVerde.orden;
+        }
         
-        // Solo sumar si está verificado por Gerente (amarillo)
-        if (item.verifiedRole === 'Gerente') {
+        if (incluirConsignacion && item.verifiedRole === 'Gerente') {
           total += Number(item.valor || 0);
           conteoConsignaciones++;
+          consignacionesEncontradas.push({
+            id: item.id.substring(0, 8),
+            valor: item.valor,
+            orden: item.orden
+          });
         }
       }
       
-      console.log(`🟢 Separador ${separadorVerde.id}: ${conteoConsignaciones} consignaciones = ${total}`);
+      console.log(`📊 Consignaciones encontradas:`, consignacionesEncontradas);
+      console.log(`💰 Total calculado: ${total}`);
       
-      // Actualizar el separador verde si el total cambió
+      // Actualizar si cambió
       if (separadorVerde.total !== total) {
         batch.update(col.doc(separadorVerde.id), { total: total });
-        console.log(`✅ Actualizando separador ${separadorVerde.id}: ${separadorVerde.total} → ${total}`);
+        console.log(`✅ Actualizando: ${separadorVerde.total} → ${total}`);
+      } else {
+        console.log(`ℹ️ Ya correcto: ${total}`);
       }
     }
     
-    // 5. Guardar todos los cambios
     await batch.commit();
-    console.log('✅ NUEVA LÓGICA: Recálculo completado exitosamente');
+    console.log('✅ LÓGICA CORREGIDA: Completado exitosamente');
     
   } catch (error) {
-    console.error('❌ Error en nueva lógica de recálculo:', error);
+    console.error('❌ Error:', error);
   }
+}
+
+// Función de depuración para ver exactamente qué datos tenemos
+async function debugearDatos() {
+  if (!selectedAccountId) return;
+  
+  console.log('🔍 DEPURANDO DATOS...');
+  
+  const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').get();
+  const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  allItems.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+  
+  console.log('📋 TODOS LOS ITEMS:');
+  allItems.forEach((item, index) => {
+    console.log(`${index + 1}. ID: ${item.id.substring(0, 8)}, ` +
+      `Separador: ${item.isSeparator ? item.type : 'NO'}, ` +
+      `Verificado: ${item.verifiedRole || 'NO'}, ` +
+      `Valor: ${item.valor || 0}, ` +
+      `Orden: ${item.orden || 0}`);
+  });
+  
+  const separadoresVerdes = allItems.filter(item => item.isSeparator && item.type === 'green');
+  const consignacionesAmarillas = allItems.filter(item => !item.isSeparator && item.verifiedRole === 'Gerente');
+  
+  console.log(`\n🟢 SEPARADORES VERDES: ${separadoresVerdes.length}`);
+  console.log(`🟡 CONSIGNACIONES AMARILLAS: ${consignacionesAmarillas.length}`);
+  
+  consignacionesAmarillas.forEach(item => {
+    console.log(`  - ${item.id.substring(0, 8)}: ${item.valor}, orden: ${item.orden}`);
+  });
 }
 
 // Función simple que se ejecuta en todas las operaciones importantes
 async function actualizarTotalesVerdes() {
+  await debugearDatos(); // Primero depurar
   await recalcularTodosLosSeparadoresVerdes();
 }
 
