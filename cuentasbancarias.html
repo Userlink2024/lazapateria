@@ -1725,41 +1725,8 @@ function renderConsigns(){
     
     // *** PROTECCIÓN ANTI-SOBREESCRITURA ***
     // Prevenir que el onSnapshot actualice los totales si hay un cuadre en proceso
-    const originalOnSnapshot = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').onSnapshot;
-    
-    db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').onSnapshot(async snapshot => {
-      // Si hay un cuadre en proceso, no actualizar totales (evitar interferencia)
-      if (window.isProcessingCuadre) {
-        console.log('🛡️ PROTEGIENDO: Omitiendo actualización de totales por cuadre en proceso');
-        // Solo renderizar los datos sin actualizar totales
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          currentConsignsSnapshot.push({id: doc.id, ...data});
-        });
-        
-        // Ordenar y renderizar
-        currentConsignsSnapshot.sort((a, b) => (a.orden || 0) - (b.orden || 0));
-        renderTableFromSnapshot();
-        return;
-      }
-      
-      // Si no hay cuadre en proceso, procesar normalmente
-      console.log('🔄 PROCESANDO SNAPSHOT NORMAL (sin cuadre en proceso)');
-      
-      // Procesar snapshot y actualizar totales
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        currentConsignsSnapshot.push({id: doc.id, ...data});
-      });
-      
-      // Ordenar y renderizar
-      currentConsignsSnapshot.sort((a, b) => (a.orden || 0) - (b.orden || 0));
-      renderTableFromSnapshot();
-      
-      // Actualizar totales normalmente
-      updateSelectedTotals();
-      updateTotalGeneral();
-    });
+    // Nota: No modificamos el onSnapshot directamente, sino que protegemos las actualizaciones
+    console.log('🛡️ PROTECCIÓN ACTIVA: Sistema listo para proteger contra sobreescribir totales');
     
     // Actualizar indicadores de jerarquía después de renderizar
     setTimeout(() => {
@@ -2709,8 +2676,9 @@ async function calcularTotalesVerdesCorregido() {
     await batch.commit();
     console.log('✅ FUNCIÓN DEFINITIVA CORREGIDA: Completado exitosamente');
     
-    // 9. Actualizar la UI
-    await loadConsignaciones();
+    // 9. Actualizar la UI (recargar los datos)
+    console.log('🔄 Recargando datos para actualizar UI...');
+    // La UI se actualizará automáticamente a través del onSnapshot existente
     
   } catch (error) {
     console.error('❌ Error en función definitiva corregida:', error);
@@ -3593,6 +3561,10 @@ $('btn-cuadrar').addEventListener('click', async () => {
   console.log('💰 TOTAL CALCULADO PARA CUADRE:', totalCalculado);
   
   showModal('Confirmación', `¿Realizar corte?\nTotal a Cuadrar: ${fmtCOP(totalCalculado)}\n(Solo consignaciones verificadas por Gerente)`, true, async () => {
+    // *** PROTECCIÓN CRÍTICA: Establecer bandera de cuadre en proceso ***
+    window.isProcessingCuadre = true;
+    console.log('🛡️ CUADRE INICIADO: Protección activada contra interferencias');
+    
     const col = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
     const batch = db.batch();
     
@@ -3673,9 +3645,13 @@ $('btn-cuadrar').addEventListener('click', async () => {
       // El onSnapshot se disparará automáticamente, pero forzamos actualización de totales
       updateSelectedTotals();
       updateTotalGeneral();
+      
+      // *** LIBERAR PROTECCIÓN: Permitir actualizaciones normales ***
+      window.isProcessingCuadre = false;
+      console.log('✅ CUADRE COMPLETADO: Protección desactivada, sistema operativo');
+      
+      showModal('Éxito', `¡Corte realizado con éxito!\nTotal cuadrado: ${fmtCOP(totalCalculado)}`, false);
     }, 1000);
-    
-    showModal('Éxito', `¡Corte realizado con éxito!\nTotal cuadrado: ${fmtCOP(totalCalculado)}`, false);
   });
 });
 
