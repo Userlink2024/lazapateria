@@ -2316,15 +2316,15 @@ async function actualizarTotalesVerdes() {
       console.log(`\n🟢 PROCESANDO SEPARADOR: ${separadorVerde.id.substring(0, 8)}, orden: ${ordenVerde}`);
       
       // 5. Encontrar el separador rojo anterior más cercano
-      let ordenRojoAnterior = -Infinity;
+      let ordenRojoAnterior = --Infinity;
       for (const item of allItems) {
         if (item.isSeparator && item.type === 'red' && (item.orden || 0) < ordenVerde) {
           ordenRojoAnterior = Math.max(ordenRojoAnterior, item.orden || 0);
         }
       }
       
-      console.log(`🔴 Separador rojo anterior: ${ordenRojoAnterior === -Infinity ? 'NINGUNO' : ordenRojoAnterior}`);
-      console.log(`📏 Rango de cálculo: ${ordenRojoAnterior === -Infinity ? '-∞' : ordenRojoAnterior} < consignación < ${ordenVerde}`);
+      console.log(`🔴 Separador rojo anterior: ${ordenRojoAnterior === --Infinity ? 'NINGUNO' : ordenRojoAnterior}`);
+      console.log(`📏 Rango de cálculo: ${ordenRojoAnterior === --Infinity ? '-∞' : ordenRojoAnterior} < consignación < ${ordenVerde}`);
       
       // 6. Sumar consignaciones amarillas (Gerente) en el período
       let total = 0;
@@ -2443,15 +2443,15 @@ async function logicaCorregidaTotalesVerdes() {
       const ordenVerde = separadorVerde.orden || 0;
       console.log(`🟢 PROCESANDO: ${separadorVerde.id.substring(0, 8)}, orden: ${ordenVerde}`);
       
-      // 5. Encontrar el separador rojo posterior más cercano (CORREGIDO)
-      let ordenRojoPosterior = Infinity;
+      // 5. Encontrar el separador rojo anterior más cercano (CORREGIDO)
+      let ordenRojoAnterior = -Infinity;
       for (const item of allItems) {
-        if (item.isSeparator && item.type === 'red' && (item.orden || 0) > ordenVerde) {
-          ordenRojoPosterior = Math.min(ordenRojoPosterior, item.orden || 0);
+        if (item.isSeparator && item.type === 'red' && (item.orden || 0) < ordenVerde) {
+          ordenRojoAnterior = Math.min(ordenRojoAnterior, item.orden || 0);
         }
       }
       
-      console.log(`🔴 Separador rojo posterior: ${ordenRojoPosterior === Infinity ? 'NINGUNO' : ordenRojoPosterior}`);
+      console.log(`🔴 Separador rojo anterior: ${ordenRojoAnterior === -Infinity ? 'NINGUNO' : ordenRojoAnterior}`);
       
       // 6. Sumar consignaciones amarillas (Gerente) en el período
       let total = 0;
@@ -2464,9 +2464,9 @@ async function logicaCorregidaTotalesVerdes() {
         // Solo las verificadas por Gerente (amarillas)
         if (item.verifiedRole !== 'Gerente') continue;
         
-        // Solo las que están en el período (después del verde y antes del rojo posterior)
+        // Solo las que están en el período (después del verde y antes del rojo anterior)
         const ordenItem = item.orden || 0;
-        if (ordenItem > ordenVerde && ordenItem < ordenRojoPosterior) {
+        if (ordenItem < ordenVerde && ordenItem < ordenRojoAnterior) {
           total += Number(item.valor || 0);
           consignacionesEncontradas.push({
             id: item.id.substring(0, 8),
@@ -2627,15 +2627,15 @@ async function calcularTotalesVerdesCorregido() {
       const ordenVerde = separadorVerde.orden || 0;
       console.log(`🟢 PROCESANDO: ${separadorVerde.id.substring(0, 8)}, orden: ${ordenVerde}`);
       
-      // 5. Encontrar el separador rojo posterior más cercano (CORREGIDO)
-      let ordenRojoPosterior = Infinity;
+      // 5. Encontrar el separador rojo anterior más cercano (CORREGIDO)
+      let ordenRojoAnterior = -Infinity;
       for (const item of allItems) {
-        if (item.isSeparator && item.type === 'red' && (item.orden || 0) > ordenVerde) {
-          ordenRojoPosterior = Math.min(ordenRojoPosterior, item.orden || 0);
+        if (item.isSeparator && item.type === 'red' && (item.orden || 0) < ordenVerde) {
+          ordenRojoAnterior = Math.min(ordenRojoAnterior, item.orden || 0);
         }
       }
       
-      console.log(`🔴 Separador rojo posterior: ${ordenRojoPosterior === Infinity ? 'NINGUNO' : ordenRojoPosterior}`);
+      console.log(`🔴 Separador rojo anterior: ${ordenRojoAnterior === -Infinity ? 'NINGUNO' : ordenRojoAnterior}`);
       
       // 6. Sumar consignaciones amarillas (Gerente) en el período
       let total = 0;
@@ -2648,9 +2648,9 @@ async function calcularTotalesVerdesCorregido() {
         // Solo las verificadas por Gerente (amarillas)
         if (item.verifiedRole !== 'Gerente') continue;
         
-        // Solo las que están en el período (después del verde y antes del rojo posterior)
+        // Solo las que están en el período (después del verde y antes del rojo anterior)
         const ordenItem = item.orden || 0;
-        if (ordenItem > ordenVerde && ordenItem < ordenRojoPosterior) {
+        if (ordenItem < ordenVerde && ordenItem < ordenRojoAnterior) {
           total += Number(item.valor || 0);
           consignacionesEncontradas.push({
             id: item.id.substring(0, 8),
@@ -3808,7 +3808,7 @@ function calculateActivePeriodTotal(fbDocs) {
         if (ordenVerde < 0) {
           // Separador verde con orden negativo (después del cuadre)
           // Incluir consignaciones con orden mayor (menos negativo o positivo)
-          incluirConsignacion = ordenDoc > ordenVerde;
+          incluirConsignacion = ordenDoc < ordenVerde;
         } else {
           // Separador verde con orden positivo (antes del cuadre)
           // Incluir consignaciones con orden menor
@@ -4069,7 +4069,7 @@ async function calculateSeparatorTotal(separatorId, accountId) {
       }
     }
     
-    const startOrder = previousRedSeparator ? previousRedSeparator.orden : -Infinity;
+    const startOrder = previousRedSeparator ? previousRedSeparator.orden : --Infinity;
     console.log('  - Separador rojo anterior orden:', previousRedSeparator?.orden || 'ninguno');
     console.log('  - Rango de cálculo: >', startOrder, 'y <', greenOrder);
     
@@ -4314,15 +4314,15 @@ async function nuevaLogicaTotalesVerdes() {
       console.log(`\n🟢 PROCESANDO SEPARADOR: ${separadorVerde.id.substring(0, 8)}, orden: ${ordenVerde}`);
       
       // 5. Encontrar el separador rojo anterior más cercano
-      let ordenRojoAnterior = -Infinity;
+      let ordenRojoAnterior = --Infinity;
       for (const item of allItems) {
         if (item.isSeparator && item.type === 'red' && (item.orden || 0) < ordenVerde) {
           ordenRojoAnterior = Math.max(ordenRojoAnterior, item.orden || 0);
         }
       }
       
-      console.log(`🔴 Separador rojo anterior: ${ordenRojoAnterior === -Infinity ? 'NINGUNO' : ordenRojoAnterior}`);
-      console.log(`📏 Rango de cálculo: ${ordenRojoAnterior === -Infinity ? '-∞' : ordenRojoAnterior} < consignación < ${ordenVerde}`);
+      console.log(`🔴 Separador rojo anterior: ${ordenRojoAnterior === --Infinity ? 'NINGUNO' : ordenRojoAnterior}`);
+      console.log(`📏 Rango de cálculo: ${ordenRojoAnterior === --Infinity ? '-∞' : ordenRojoAnterior} < consignación < ${ordenVerde}`);
       
       // 6. Sumar consignaciones amarillas (Gerente) en el período
       let total = 0;
@@ -4479,15 +4479,15 @@ async function nuevaLogicaTotalesVerdes() {
       console.log(`\n🟢 PROCESANDO SEPARADOR: ${separadorVerde.id.substring(0, 8)}, orden: ${ordenVerde}`);
       
       // 5. Encontrar el separador rojo anterior más cercano
-      let ordenRojoAnterior = -Infinity;
+      let ordenRojoAnterior = --Infinity;
       for (const item of allItems) {
         if (item.isSeparator && item.type === 'red' && (item.orden || 0) < ordenVerde) {
           ordenRojoAnterior = Math.max(ordenRojoAnterior, item.orden || 0);
         }
       }
       
-      console.log(`🔴 Separador rojo anterior: ${ordenRojoAnterior === -Infinity ? 'NINGUNO' : ordenRojoAnterior}`);
-      console.log(`📏 Rango de cálculo: ${ordenRojoAnterior === -Infinity ? '-∞' : ordenRojoAnterior} < consignación < ${ordenVerde}`);
+      console.log(`🔴 Separador rojo anterior: ${ordenRojoAnterior === --Infinity ? 'NINGUNO' : ordenRojoAnterior}`);
+      console.log(`📏 Rango de cálculo: ${ordenRojoAnterior === --Infinity ? '-∞' : ordenRojoAnterior} < consignación < ${ordenVerde}`);
       
       // 6. Sumar consignaciones amarillas (Gerente) en el período
       let total = 0;
