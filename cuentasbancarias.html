@@ -3585,16 +3585,20 @@ $('btn-cuadrar').addEventListener('click', async () => {
   if (!ultimoSeparadorVerde) {
     itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator && item.verifiedRole === 'Gerente');
   } else {
-    // LÓGICA MEJORADA: Detectar consignaciones pendientes reales
-    // Buscar el período activo actual (entre el último rojo y el siguiente corte)
+    // LÓGICA CORREGIDA: Encontrar el período activo actual
+    // Buscar el último corte completo (verde + rojo) y tomar consignaciones después
     
-    // Encontrar el último corte rojo (punto de partida actual)
+    // Encontrar el último corte rojo (punto de partida más reciente)
     let ultimoRojo = null;
     let ordenUltimoRojo = -Infinity;
     
+    console.log('🔍 Buscando último corte rojo...');
+    
+    // Recorrer todos los items para encontrar el último rojo con el orden más alto
     for (const item of currentConsignsSnapshot) {
       if (item.isSeparator && item.type === 'red') {
         const ordenItem = item.orden || 0;
+        console.log(`  - Rojo encontrado: ${item.id.substring(0, 8)}, orden: ${ordenItem}`);
         if (ordenItem > ordenUltimoRojo) {
           ordenUltimoRojo = ordenItem;
           ultimoRojo = item;
@@ -3605,16 +3609,25 @@ $('btn-cuadrar').addEventListener('click', async () => {
     console.log('🔴 Último corte rojo encontrado:', ultimoRojo ? ultimoRojo.id.substring(0, 8) : 'NINGUNO');
     console.log('  - Orden del último rojo:', ordenUltimoRojo);
     
-    // Tomar todas las consignaciones verificadas por Gerente DESPUÉS del último rojo
-    itemsParaCuadrar = currentConsignsSnapshot.filter(item => {
-      if (item.isSeparator) return false;
-      if (item.verifiedRole !== 'Gerente') return false;
+    // Tomar TODAS las consignaciones verificadas por Gerente DESPUÉS del último rojo
+    itemsParaCuadrar = [];
+    
+    for (const item of currentConsignsSnapshot) {
+      if (item.isSeparator) continue;
+      if (item.verifiedRole !== 'Gerente') continue;
       
       const ordenItem = item.orden || 0;
-      return ordenItem > ordenUltimoRojo;
-    });
+      
+      if (ordenItem > ordenUltimoRojo) {
+        itemsParaCuadrar.push(item);
+        console.log(`✅ Incluyendo consignación: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
+      } else {
+        console.log(`❌ Ignorando consignación: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
+      }
+    }
     
     console.log('📋 Consignaciones pendientes desde último corte:', itemsParaCuadrar.length);
+    console.log('💰 Total pendiente calculado:', itemsParaCuadrar.reduce((sum, item) => sum + Number(item.valor || 0), 0));
   }
   
   console.log('📋 ANÁLISIS AUTOMÁTICO:');
@@ -4838,31 +4851,8 @@ if (modalPasswordInput && modalOkBtn) {
 // Configurar los eventos de Enter
   setupEnterKeyForPasswordFields();
   
-  // *** MEJORA ADICIONAL: Enter directo con mayor prioridad ***
-  // Usar addEventListener con capture para asegurar que se ejecute antes que otros eventos
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
-      const target = e.target;
-      
-      // Para cualquier campo de contraseña
-      if (target.type === 'password') {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        console.log('🔑 Enter DIRECTO detectado en campo de contraseña');
-        
-        // Buscar el botón más cercano
-        const form = target.closest('div');
-        if (form) {
-          const submitBtn = form.querySelector('button.btn:not(.ghost), button[type="submit"]');
-          if (submitBtn && submitBtn.style.display !== 'none') {
-            console.log('🎯 Activando botón:', submitBtn.textContent);
-            submitBtn.click();
-          }
-        }
-      }
-    }
-  }, true); // true = capture phase
+  // *** MEJORA SIMPLE: Enter en campos de contraseña ***
+  // Enfoque directo sin interferir con otros eventos
   
   // Re-configurar cuando se abren nuevos modales
   const observer = new MutationObserver(function(mutations) {
