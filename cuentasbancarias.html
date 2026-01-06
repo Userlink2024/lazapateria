@@ -3568,42 +3568,69 @@ $('btn-cuadrar').addEventListener('click', async () => {
     return showModal('Atención', 'Seleccione una cuenta.', false);
   }
   
-  // Obtener consignaciones seleccionadas actualmente
-  let selectedItems = [];
+  // DETECCIÓN AUTOMÁTICA: Encontrar consignaciones después del último verde
+  let itemsParaCuadrar = [];
+  let ultimoSeparadorVerde = null;
   
-  // Buscar las consignaciones que están seleccionadas actualmente
-  for (const item of currentConsignsSnapshot) {
-    if (!item.isSeparator && selectedConsignIds.has(item.id)) {
-      selectedItems.push(item);
+  // Buscar el último separador verde
+  for (let i = currentConsignsSnapshot.length - 1; i >= 0; i--) {
+    const item = currentConsignsSnapshot[i];
+    if (item.isSeparator && item.type === 'green') {
+      ultimoSeparadorVerde = item;
+      break;
     }
   }
   
-  console.log('📋 ANÁLISIS DE ITEMS SELECCIONADOS:');
-  console.log('  - Items seleccionados encontrados:', selectedItems.length);
+  // Si no hay separador verde, tomar todas las consignaciones
+  if (!ultimoSeparadorVerde) {
+    itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator);
+  } else {
+    // Tomar consignaciones después del último verde
+    const ordenVerde = ultimoSeparadorVerde.orden || 0;
+    itemsParaCuadrar = currentConsignsSnapshot.filter(item => {
+      if (item.isSeparator) return false;
+      const ordenItem = item.orden || 0;
+      return ordenItem > ordenVerde;
+    });
+  }
   
-  if(selectedItems.length === 0) {
-    console.log('❌ ERROR: No hay items seleccionados para cuadrar');
-    return showModal('Atención', "No hay consignaciones seleccionadas. Por favor seleccione las consignaciones que desea cuadrar.", false);
+  console.log('📋 ANÁLISIS AUTOMÁTICO:');
+  console.log('  - Último separador verde:', ultimoSeparadorVerde ? ultimoSeparadorVerde.id.substring(0, 8) : 'NINGUNO');
+  console.log('  - Items para cuadrar encontrados:', itemsParaCuadrar.length);
+  
+  if(itemsParaCuadrar.length === 0) {
+    console.log('❌ ERROR: No hay items para cuadrar');
+    return showModal('Atención', "No hay consignaciones nuevas para cuadrar. Todas están procesadas.", false);
   }
 
-  const nonYellow = selectedItems.filter(i => i.verifiedRole !== 'Gerente');
+  // VALIDACIÓN CRÍTICA: Verificar que todas estén en amarillo (Gerente)
+  const nonYellow = itemsParaCuadrar.filter(i => i.verifiedRole !== 'Gerente');
+  const yellowItems = itemsParaCuadrar.filter(i => i.verifiedRole === 'Gerente');
   
-  // DEBUG: Agregar logs para depurar
-  console.log('🔍 VALIDACIÓN DE CUADRE:');
-  console.log('  - Total items seleccionados:', selectedItems.length);
-  console.log('  - Items sin verificar por Gerente:', nonYellow.length);
-  selectedItems.forEach((item, index) => {
-    console.log(`  - Item ${index + 1}: verifiedRole="${item.verifiedRole}", valor=${item.valor}, referencia="${item.referencia}"`);
+  // DEBUG: Mostrar estado de cada item
+  console.log('🔍 VALIDACIÓN DE VERIFICACIÓN:');
+  itemsParaCuadrar.forEach((item, index) => {
+    const estado = item.verifiedRole === 'Gerente' ? '🟡 AMARILLO' : 
+                 item.verifiedRole === 'Administrativo' ? '⚪ GRIS' : '⚫ BLANCO';
+    console.log(`  - Item ${index + 1}: ${estado} - valor=${item.valor}, ref=${item.referencia}`);
   });
+  
+  console.log(`  - Items en amarillo (✅): ${yellowItems.length}`);
+  console.log(`  - Items sin amarillo (❌): ${nonYellow.length}`);
   
   if(nonYellow.length > 0) {
     console.log('❌ ERROR: Hay items sin verificar por Gerente');
-    return showModal('Atención', `Hay ${nonYellow.length} items sin verificar por Gerente. Verifique todos los ítems primero.`, false);
+    const mensajeAdvertencia = `⚠️ NO SE PUEDE CUADRAR AÚN\n\n` +
+      `Hay ${nonYellow.length} consignaciones sin verificar por Gerente:\n` +
+      `• Items en amarillo (verificados): ${yellowItems.length}\n` +
+      `• Items sin amarillo (pendientes): ${nonYellow.length}\n\n` +
+      `Por favor, verifique todas las consignaciones (póngalas en amarillo) antes de poder cuadrar.`;
+    
+    return showModal('⚠️ Verificación Requerida', mensajeAdvertencia, false);
   }
 
-  // NUEVA LÓGICA: Calcular total solo de items verificados por Gerente
-  const totalCalculado = selectedItems
-    .filter(item => item.verifiedRole === 'Gerente')
+  // CALCULAR TOTAL: Solo items verificados por Gerente
+  const totalCalculado = yellowItems
     .reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
   
   console.log('💰 TOTAL CALCULADO PARA CUADRE:', totalCalculado);
