@@ -3568,39 +3568,31 @@ $('btn-cuadrar').addEventListener('click', async () => {
     return showModal('Atención', 'Seleccione una cuenta.', false);
   }
   
-  // Buscar consignaciones pendientes desde el último corte
-  let pendingItems = [];
-  let foundLastCut = false;
+  // Obtener consignaciones seleccionadas actualmente
+  let selectedItems = [];
   
-  // Recorrer desde el final hacia atrás (más nuevas primero) para encontrar el último corte
-  for (let i = currentConsignsSnapshot.length - 1; i >= 0; i--) {
-    const item = currentConsignsSnapshot[i];
-    
-    if (item.isSeparator && item.type === 'red') {
-      foundLastCut = true;
-      break; // Encontramos el último corte, paramos aquí
-    }
-    
-    if (!item.isSeparator) {
-      pendingItems.unshift(item); // Agregar al principio para mantener orden
+  // Buscar las consignaciones que están seleccionadas actualmente
+  for (const item of currentConsignsSnapshot) {
+    if (!item.isSeparator && selectedConsignIds.has(item.id)) {
+      selectedItems.push(item);
     }
   }
   
-  console.log('📋 ANÁLISIS DE ITEMS PENDIENTES:');
-  console.log('  - Items pendientes encontrados:', pendingItems.length);
+  console.log('📋 ANÁLISIS DE ITEMS SELECCIONADOS:');
+  console.log('  - Items seleccionados encontrados:', selectedItems.length);
   
-  if(pendingItems.length === 0) {
-    console.log('❌ ERROR: No hay items pendientes para cuadrar');
-    return showModal('Atención', "Nada nuevo para cuadrar. No hay movimientos pendientes desde el último corte.", false);
+  if(selectedItems.length === 0) {
+    console.log('❌ ERROR: No hay items seleccionados para cuadrar');
+    return showModal('Atención', "No hay consignaciones seleccionadas. Por favor seleccione las consignaciones que desea cuadrar.", false);
   }
 
-  const nonYellow = pendingItems.filter(i => i.verifiedRole !== 'Gerente');
+  const nonYellow = selectedItems.filter(i => i.verifiedRole !== 'Gerente');
   
   // DEBUG: Agregar logs para depurar
   console.log('🔍 VALIDACIÓN DE CUADRE:');
-  console.log('  - Total items pendientes:', pendingItems.length);
+  console.log('  - Total items seleccionados:', selectedItems.length);
   console.log('  - Items sin verificar por Gerente:', nonYellow.length);
-  pendingItems.forEach((item, index) => {
+  selectedItems.forEach((item, index) => {
     console.log(`  - Item ${index + 1}: verifiedRole="${item.verifiedRole}", valor=${item.valor}, referencia="${item.referencia}"`);
   });
   
@@ -3610,7 +3602,7 @@ $('btn-cuadrar').addEventListener('click', async () => {
   }
 
   // NUEVA LÓGICA: Calcular total solo de items verificados por Gerente
-  const totalCalculado = pendingItems
+  const totalCalculado = selectedItems
     .filter(item => item.verifiedRole === 'Gerente')
     .reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
   
