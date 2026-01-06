@@ -3585,36 +3585,36 @@ $('btn-cuadrar').addEventListener('click', async () => {
   if (!ultimoSeparadorVerde) {
     itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator && item.verifiedRole === 'Gerente');
   } else {
-    // LÓGICA CORREGIDA: Tomar TODAS las consignaciones verificadas por Gerente
-    // que no han sido incluidas en un corte posterior
+    // LÓGICA MEJORADA: Detectar consignaciones pendientes reales
+    // Buscar el período activo actual (entre el último rojo y el siguiente corte)
     
-    // Encontrar todos los separadores rojos que estén DESPUÉS del último verde
-    const ordenVerde = ultimoSeparadorVerde.orden || 0;
-    const separadoresRojosPosteriores = currentConsignsSnapshot.filter(item => 
-      item.isSeparator && item.type === 'red' && (item.orden || 0) > ordenVerde
-    );
+    // Encontrar el último corte rojo (punto de partida actual)
+    let ultimoRojo = null;
+    let ordenUltimoRojo = -Infinity;
     
-    // Si hay un corte posterior, solo tomar consignaciones hasta ese corte
-    if (separadoresRojosPosteriores.length > 0) {
-      const ordenProximoRojo = Math.min(...separadoresRojosPosteriores.map(s => s.orden || 0));
-      
-      itemsParaCuadrar = currentConsignsSnapshot.filter(item => {
-        if (item.isSeparator) return false;
-        if (item.verifiedRole !== 'Gerente') return false;
-        
+    for (const item of currentConsignsSnapshot) {
+      if (item.isSeparator && item.type === 'red') {
         const ordenItem = item.orden || 0;
-        return ordenItem > ordenVerde && ordenItem < ordenProximoRojo;
-      });
-    } else {
-      // No hay corte posterior, tomar todas las consignaciones verificadas desde el último verde
-      itemsParaCuadrar = currentConsignsSnapshot.filter(item => {
-        if (item.isSeparator) return false;
-        if (item.verifiedRole !== 'Gerente') return false;
-        
-        const ordenItem = item.orden || 0;
-        return ordenItem > ordenVerde;
-      });
+        if (ordenItem > ordenUltimoRojo) {
+          ordenUltimoRojo = ordenItem;
+          ultimoRojo = item;
+        }
+      }
     }
+    
+    console.log('🔴 Último corte rojo encontrado:', ultimoRojo ? ultimoRojo.id.substring(0, 8) : 'NINGUNO');
+    console.log('  - Orden del último rojo:', ordenUltimoRojo);
+    
+    // Tomar todas las consignaciones verificadas por Gerente DESPUÉS del último rojo
+    itemsParaCuadrar = currentConsignsSnapshot.filter(item => {
+      if (item.isSeparator) return false;
+      if (item.verifiedRole !== 'Gerente') return false;
+      
+      const ordenItem = item.orden || 0;
+      return ordenItem > ordenUltimoRojo;
+    });
+    
+    console.log('📋 Consignaciones pendientes desde último corte:', itemsParaCuadrar.length);
   }
   
   console.log('📋 ANÁLISIS AUTOMÁTICO:');
@@ -4837,6 +4837,32 @@ if (modalPasswordInput && modalOkBtn) {
 
 // Configurar los eventos de Enter
   setupEnterKeyForPasswordFields();
+  
+  // *** MEJORA ADICIONAL: Enter directo con mayor prioridad ***
+  // Usar addEventListener con capture para asegurar que se ejecute antes que otros eventos
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+      const target = e.target;
+      
+      // Para cualquier campo de contraseña
+      if (target.type === 'password') {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('🔑 Enter DIRECTO detectado en campo de contraseña');
+        
+        // Buscar el botón más cercano
+        const form = target.closest('div');
+        if (form) {
+          const submitBtn = form.querySelector('button.btn:not(.ghost), button[type="submit"]');
+          if (submitBtn && submitBtn.style.display !== 'none') {
+            console.log('🎯 Activando botón:', submitBtn.textContent);
+            submitBtn.click();
+          }
+        }
+      }
+    }
+  }, true); // true = capture phase
   
   // Re-configurar cuando se abren nuevos modales
   const observer = new MutationObserver(function(mutations) {
