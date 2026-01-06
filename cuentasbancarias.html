@@ -3557,158 +3557,20 @@ $('btn-cuadrar').addEventListener('click', async () => {
   let itemsParaCuadrar = [];
   let ultimoSeparadorVerde = null;
   
-  // Buscar el último separador verde
-  for (let i = currentConsignsSnapshot.length - 1; i >= 0; i--) {
-    const item = currentConsignsSnapshot[i];
+  // Buscar el separador verde más reciente (orden más negativo)
+  for (const item of currentConsignsSnapshot) {
     if (item.isSeparator && item.type === 'green') {
-      ultimoSeparadorVerde = item;
-      break;
+      if (!ultimoSeparadorVerde || (item.orden || 0) < (ultimoSeparadorVerde.orden || 0)) {
+        ultimoSeparadorVerde = item;
+      }
     }
   }
   
-  // Si no hay separador verde, tomar todas las consignaciones verificadas por Gerente
-  if (!ultimoSeparadorVerde) {
-    itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator && item.verifiedRole === 'Gerente');
+  if (ultimoSeparadorVerde) {
+    const ordenVerde = ultimoSeparadorVerde.orden || 0;
+    itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator && (item.orden || 0) < ordenVerde);
   } else {
-    // LÓGICA DEFINITIVA: Encontrar el período activo actual
-    // Buscar el último corte completo (verde + rojo) y tomar consignaciones pendientes
-    
-    console.log('🔍 Buscando estructura de cortes...');
-    
-    // Encontrar todos los separadores ordenados por orden
-    const separadores = currentConsignsSnapshot.filter(item => item.isSeparator)
-      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
-    
-    console.log('📋 Separadores encontrados:');
-    separadores.forEach(sep => {
-      console.log(`  - ${sep.type === 'green' ? '🟢' : '🔴'} ${sep.id.substring(0, 8)}: orden ${sep.orden}`);
-    });
-    
-    // Encontrar el último corte completo (par verde + rojo)
-    let ultimoCorteCompleto = null;
-    let ordenUltimoCorte = -Infinity;
-    
-    for (let i = 0; i < separadores.length; i++) {
-      const sep = separadores[i];
-      
-      if (sep.type === 'green') {
-        // Buscar el rojo correspondiente después de este verde
-        for (let j = i + 1; j < separadores.length; j++) {
-          if (separadores[j].type === 'red') {
-            const ordenVerde = sep.orden || 0;
-            const ordenRojo = separadores[j].orden || 0;
-            
-            if (ordenRojo > ordenUltimoCorte) {
-              ordenUltimoCorte = ordenRojo;
-              ultimoCorteCompleto = {
-                verde: sep,
-                rojo: separadores[j],
-                ordenRojo: ordenRojo
-              };
-            }
-            break; // Solo el primer rojo después de cada verde
-          }
-        }
-      }
-    }
-    
-    console.log('🔴 Último corte completo encontrado:');
-    if (ultimoCorteCompleto) {
-      console.log(`  - Verde: ${ultimoCorteCompleto.verde.id.substring(0, 8)} (orden: ${ultimoCorteCompleto.verde.orden})`);
-      console.log(`  - Rojo: ${ultimoCorteCompleto.rojo.id.substring(0, 8)} (orden: ${ultimoCorteCompleto.ordenRojo})`);
-    } else {
-      console.log('  - NINGUNO');
-    }
-    
-    // Tomar las consignaciones para el PRÓXIMO CORTE (último corte completo)
-    itemsParaCuadrar = [];
-    
-    console.log('🔍 ANÁLISIS COMPLETO DE CONSIGNACIONES:');
-    console.log('  - Último separador verde orden:', ultimoSeparadorVerde ? ultimoSeparadorVerde.orden : 'NINGUNO');
-    console.log('  - Orden del último corte:', ordenUltimoCorte);
-    console.log(`  - Estrategia: Calculando PRÓXIMO CORTE (último corte completo)`);
-    
-    // DEPURACIÓN: Mostrar todas las consignaciones verificadas por Gerente
-    console.log('🔍 DEPURACIÓN COMPLETA DE CONSIGNACIONES VERIFICADAS:');
-    const todasVerificadas = currentConsignsSnapshot.filter(item => 
-      !item.isSeparator && item.verifiedRole === 'Gerente'
-    );
-    
-    todasVerificadas.forEach((item, index) => {
-      console.log(`  ${index + 1}. 🟡 ${item.valor} (orden: ${item.orden}, ref: ${item.referencia})`);
-    });
-    
-    console.log(`💰 Total de todas las verificadas: ${todasVerificadas.reduce((sum, item) => sum + Number(item.valor || 0), 0)}`);
-    
-    // Lógica para el PRÓXIMO CORTE (último corte completo)
-    if (ultimoCorteCompleto) {
-      console.log('  - Estrategia: Incluyendo consignaciones hasta el último corte completo');
-      
-      // Incluir todas las consignaciones verificadas que estén ANTES del último corte completo
-      for (const item of currentConsignsSnapshot) {
-        if (item.isSeparator) {
-          console.log(`  🚫 SEPARADOR: ${item.type} (orden: ${item.orden || 0})`);
-          continue;
-        }
-        if (item.verifiedRole !== 'Gerente') {
-          console.log(`  🚫 NO GERENTE: ${item.valor} (orden: ${item.orden || 0}, rol: ${item.verifiedRole})`);
-          continue;
-        }
-        
-        const ordenItem = item.orden || 0;
-        
-        // Incluir si está ANTES del último corte completo
-        const incluirConsignacion = ordenItem < (ultimoCorteCompleto.rojo.orden || 0);
-        
-        console.log(`  📋 CONSIGNACIÓN: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
-        console.log(`     - ¿Incluir en próximo corte? ${incluirConsignacion}`);
-        
-        if (incluirConsignacion) {
-          itemsParaCuadrar.push(item);
-          console.log(`  ✅ INCLUIDA: ${item.valor}`);
-        } else {
-          console.log(`  ❌ IGNORADA: ${item.valor} (ya fue procesada)`);
-        }
-      }
-    } else {
-      console.log('  - Estrategia: No hay cortes previos, incluyendo todo');
-      
-      // Si no hay cortes previos, incluir todas las consignaciones verificadas
-      for (const item of currentConsignsSnapshot) {
-        if (item.isSeparator) {
-          console.log(`  🚫 SEPARADOR: ${item.type} (orden: ${item.orden || 0})`);
-          continue;
-        }
-        if (item.verifiedRole !== 'Gerente') {
-          console.log(`  🚫 NO GERENTE: ${item.valor} (orden: ${item.orden || 0}, rol: ${item.verifiedRole})`);
-          continue;
-        }
-        
-        const ordenItem = item.orden || 0;
-        
-        // Incluir todas las consignaciones verificadas
-        const incluirConsignacion = true;
-        
-        console.log(`  📋 CONSIGNACIÓN: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
-        console.log(`     - ¿Incluir en primer corte? ${incluirConsignacion}`);
-        
-        if (incluirConsignacion) {
-          itemsParaCuadrar.push(item);
-          console.log(`  ✅ INCLUIDA: ${item.valor}`);
-        } else {
-          console.log(`  ❌ IGNORADA: ${item.valor} (no verificada)`);
-        }
-      }
-    }
-    
-    const totalCalculado = itemsParaCuadrar.reduce((sum, item) => sum + Number(item.valor || 0), 0);
-    console.log('📋 RESUMEN FINAL:');
-    console.log('  - Consignaciones pendientes:', itemsParaCuadrar.length);
-    console.log('  - Total pendiente calculado:', totalCalculado);
-    console.log('  - Detalle de pendientes:');
-    itemsParaCuadrar.forEach((item, index) => {
-      console.log(`    ${index + 1}. ${item.valor} (orden: ${item.orden}, ref: ${item.referencia})`);
-    });
+    itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator);
   }
   
   console.log('📋 ANÁLISIS AUTOMÁTICO:');
@@ -3872,15 +3734,7 @@ $('btn-cuadrar').addEventListener('click', async () => {
       setTimeout(() => {
         console.log('🔄 Forzando recarga completa de datos...');
         if (selectedAccountId) {
-          // Usar la función correcta para recargar datos
-          const snapshot = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-            .orderBy('orden', 'asc')
-            .onSnapshot(snapshot => {
-              currentConsignsSnapshot = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-              renderConsignaciones();
-            }, error => {
-              console.error('Error escuchando consignaciones:', error);
-            });
+          renderConsigns();
         }
       }, 500);
       
@@ -4002,52 +3856,26 @@ async function updateSelectedTotals(){
 
 // Función auxiliar para calcular total del período activo - MEJORADA CON PRECISIÓN
 function calculateActivePeriodTotal(fbDocs) {
-  // Encontrar separadores verdes que tienen corte completo (verde + rojo)
-  const separadoresVerdes = fbDocs.filter(doc => doc.isSeparator && doc.type === 'green');
-  const separadoresRojos = fbDocs.filter(doc => doc.isSeparator && doc.type === 'red');
-  
-  let ultimoSeparadorVerdeValido = null;
-  
-  // Buscar el último separador verde que tiene un corte completo asociado
-  for (const verde of separadoresVerdes) {
-    const ordenVerde = verde.orden || 0;
-    
-    // Buscar si hay un separador rojo después de este verde
-    const tieneRojoAsociado = separadoresRojos.some(rojo => 
-      (rojo.orden || 0) > ordenVerde
-    );
-    
-    if (tieneRojoAsociado) {
-      if (!ultimoSeparadorVerdeValido || ordenVerde > (ultimoSeparadorVerdeValido.orden || 0)) {
-        ultimoSeparadorVerdeValido = verde;
+  let ultimoSeparadorVerde = null;
+  fbDocs.forEach(doc => {
+    if (doc.isSeparator && doc.type === 'green') {
+      if (!ultimoSeparadorVerde || (doc.orden || 0) < (ultimoSeparadorVerde.orden || 0)) {
+        ultimoSeparadorVerde = doc;
       }
     }
-  }
+  });
   
   let valoresParaSumar = [];
   
-  if (ultimoSeparadorVerdeValido) {
-    // Hay separadores: sumar consignaciones ENCIMA del último separador verde válido
-    console.log('🔍 Calculando período activo desde separador verde (orden:', ultimoSeparadorVerdeValido.orden, ')');
+  if (ultimoSeparadorVerde) {
+    // Hay separadores: sumar consignaciones ENCIMA del último separador verde
+    console.log('🔍 Calculando período activo desde separador verde (orden:', ultimoSeparadorVerde.orden, ')');
+    const ordenVerde = ultimoSeparadorVerde.orden || 0;
     
     fbDocs.forEach(doc => {
       if (!doc.isSeparator) {
         const ordenDoc = doc.orden || 0;
-        const ordenVerde = ultimoSeparadorVerdeValido.orden || 0;
-        
-        // LÓGICA CORREGIDA: Después del cuadre, las consignaciones tienen orden negativo
-        // Si el separador verde tiene orden negativo, las consignaciones activas son las que tienen orden MAYOR (menos negativo)
-        let incluirConsignacion = false;
-        
-        if (ordenVerde < 0) {
-          // Separador verde con orden negativo (después del cuadre)
-          // Incluir consignaciones con orden mayor (menos negativo o positivo)
-          incluirConsignacion = ordenDoc < ordenVerde;
-        } else {
-          // Separador verde con orden positivo (antes del cuadre)
-          // Incluir consignaciones con orden menor
-          incluirConsignacion = ordenDoc < ordenVerde;
-        }
+        const incluirConsignacion = ordenDoc < ordenVerde;
         
         if (incluirConsignacion) {
           const valorValidado = validarPrecisionMonetaria(doc.valor || 0);
