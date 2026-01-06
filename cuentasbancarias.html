@@ -1096,6 +1096,43 @@ function showSuperWarning(title, message, onContinue) {
     });
 }
 
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    const genericModalVisible = !$('generic-modal').classList.contains('hidden');
+    const optionsModalVisible = !$('modal-options').classList.contains('hidden');
+    if (!genericModalVisible && !optionsModalVisible) return;
+    if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    if (genericModalVisible) {
+        $('modal-ok-btn').click();
+        return;
+    }
+    if (optionsModalVisible) {
+        $('options-continue').click();
+        return;
+    }
+});
+
+document.addEventListener('input', function(e) {
+    const el = e.target;
+    if (!el) return;
+    const tag = el.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+    if (tag === 'INPUT' && el.type !== 'text') return;
+    const id = (el.id || '').toLowerCase();
+    if (el.type === 'password') return;
+    if (id.includes('pass')) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const upper = (el.value || '').toUpperCase();
+    if (el.value !== upper) {
+        el.value = upper;
+        if (typeof start === 'number' && typeof end === 'number') {
+            el.setSelectionRange(start, end);
+        }
+    }
+});
+
 /** Función para Inserción Retroactiva (Doble Clic) - DESHABILITADA
  * Usar el modal de ajustes manuales en su lugar
  */
@@ -3781,7 +3818,7 @@ async function updateSelectedTotals(){
   }
   
   // Verificar caché primero
-  const cachedTotal = getCachedTotal(selectedAccountId, 'activePeriod');
+  const cachedTotal = getCachedTotal(selectedAccountId, 'accountTotal');
   if (cachedTotal !== null) {
     updateTotalDisplay(cachedTotal);
     return;
@@ -3818,13 +3855,13 @@ async function updateSelectedTotals(){
     
     console.log(`📊 Documentos encontrados en Firebase: ${fbDocs.length}`);
     
-    // Calcular total del período activo usando nueva lógica simplificada
-    const totalActual = calculateActivePeriodTotal(fbDocs);
+    // Calcular total completo de la cuenta (todas las consignaciones, sin separadores)
+    const totalActual = calculateAccountTotal(fbDocs);
     
-    console.log(`💰 TOTAL CALCULADO PARA PERÍODO ACTIVO: ${totalActual}`);
+    console.log(`💰 TOTAL CALCULADO PARA CUENTA (COMPLETO): ${totalActual}`);
     
     // Guardar en caché
-    setCachedTotal(selectedAccountId, 'activePeriod', totalActual);
+    setCachedTotal(selectedAccountId, 'accountTotal', totalActual);
     
     // Verificación final antes de actualizar UI
     if (!selectedAccountId) {
@@ -3852,6 +3889,17 @@ async function updateSelectedTotals(){
   }
   
   console.log('=== FIN ACTUALIZACIÓN DE TOTALES ===');
+}
+
+function calculateAccountTotal(fbDocs) {
+  const valoresParaSumar = [];
+  fbDocs.forEach(doc => {
+    if (!doc.isSeparator) {
+      const valorValidado = validarPrecisionMonetaria(doc.valor || 0);
+      valoresParaSumar.push(valorValidado);
+    }
+  });
+  return sumarValoresMonetarios(valoresParaSumar);
 }
 
 // Función auxiliar para calcular total del período activo - MEJORADA CON PRECISIÓN
