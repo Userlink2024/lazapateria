@@ -3620,52 +3620,72 @@ $('btn-cuadrar').addEventListener('click', async () => {
       console.log('  - NINGUNO');
     }
     
-    // Tomar las consignaciones del período activo (después del último separador verde)
+    // Tomar las consignaciones para el PRÓXIMO CORTE (último corte completo)
     itemsParaCuadrar = [];
     
     console.log('🔍 ANÁLISIS COMPLETO DE CONSIGNACIONES:');
     console.log('  - Último separador verde orden:', ultimoSeparadorVerde ? ultimoSeparadorVerde.orden : 'NINGUNO');
     console.log('  - Orden del último corte:', ordenUltimoCorte);
+    console.log('  - Estrategia: Calculando PRÓXIMO CORTE (último corte completo)');
     
-    for (const item of currentConsignsSnapshot) {
-      if (item.isSeparator) {
-        console.log(`  🚫 SEPARADOR: ${item.type} (orden: ${item.orden || 0})`);
-        continue;
-      }
-      if (item.verifiedRole !== 'Gerente') {
-        console.log(`  🚫 NO GERENTE: ${item.valor} (orden: ${item.orden || 0}, rol: ${item.verifiedRole})`);
-        continue;
-      }
+    // Lógica para el PRÓXIMO CORTE (último corte completo)
+    if (ultimoCorteCompleto) {
+      console.log('  - Estrategia: Incluyendo consignaciones hasta el último corte completo');
       
-      const ordenItem = item.orden || 0;
-      
-      // Lógica corregida: Tomar consignaciones del período activo
-      let incluirConsignacion = false;
-      
-      if (ultimoSeparadorVerde) {
-        // Hay separador verde: tomar consignaciones ENCIMA del último separador verde
-        const ordenVerde = ultimoSeparadorVerde.orden || 0;
-        
-        if (ordenVerde < 0) {
-          // Separador verde con orden negativo: tomar consignaciones con orden más negativo
-          incluirConsignacion = ordenItem < ordenVerde;
-        } else {
-          // Separador verde con orden positivo: tomar consignaciones con orden mayor
-          incluirConsignacion = ordenItem > ordenVerde;
+      // Incluir todas las consignaciones verificadas que estén ANTES del último corte completo
+      for (const item of currentConsignsSnapshot) {
+        if (item.isSeparator) {
+          console.log(`  🚫 SEPARADOR: ${item.type} (orden: ${item.orden || 0})`);
+          continue;
         }
-      } else {
-        // No hay separador verde: tomar todas las consignaciones verificadas
-        incluirConsignacion = true;
+        if (item.verifiedRole !== 'Gerente') {
+          console.log(`  🚫 NO GERENTE: ${item.valor} (orden: ${item.orden || 0}, rol: ${item.verifiedRole})`);
+          continue;
+        }
+        
+        const ordenItem = item.orden || 0;
+        
+        // Incluir si está ANTES del último corte completo
+        const incluirConsignacion = ordenItem < (ultimoCorteCompleto.rojo.orden || 0);
+        
+        console.log(`  📋 CONSIGNACIÓN: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
+        console.log(`     - ¿Incluir en próximo corte? ${incluirConsignacion}`);
+        
+        if (incluirConsignacion) {
+          itemsParaCuadrar.push(item);
+          console.log(`  ✅ INCLUIDA: ${item.valor}`);
+        } else {
+          console.log(`  ❌ IGNORADA: ${item.valor} (ya fue procesada)`);
+        }
       }
+    } else {
+      console.log('  - Estrategia: No hay cortes previos, incluyendo todo');
       
-      console.log(`  📋 CONSIGNACIÓN: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
-      console.log(`     - ¿Incluir en cuadre? ${incluirConsignacion}`);
-      
-      if (incluirConsignacion) {
-        itemsParaCuadrar.push(item);
-        console.log(`  ✅ INCLUIDA: ${item.valor}`);
-      } else {
-        console.log(`  ❌ IGNORADA: ${item.valor} (ya fue procesada)`);
+      // Si no hay cortes previos, incluir todas las consignaciones verificadas
+      for (const item of currentConsignsSnapshot) {
+        if (item.isSeparator) {
+          console.log(`  🚫 SEPARADOR: ${item.type} (orden: ${item.orden || 0})`);
+          continue;
+        }
+        if (item.verifiedRole !== 'Gerente') {
+          console.log(`  🚫 NO GERENTE: ${item.valor} (orden: ${item.orden || 0}, rol: ${item.verifiedRole})`);
+          continue;
+        }
+        
+        const ordenItem = item.orden || 0;
+        
+        // Incluir todas las consignaciones verificadas
+        const incluirConsignacion = true;
+        
+        console.log(`  📋 CONSIGNACIÓN: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
+        console.log(`     - ¿Incluir en primer corte? ${incluirConsignacion}`);
+        
+        if (incluirConsignacion) {
+          itemsParaCuadrar.push(item);
+          console.log(`  ✅ INCLUIDA: ${item.valor}`);
+        } else {
+          console.log(`  ❌ IGNORADA: ${item.valor} (no verificada)`);
+        }
       }
     }
     
@@ -4080,6 +4100,8 @@ function updateTotalDisplay(totalActual) {
     console.error('❌ ERROR: Elemento total-cuenta no encontrado');
   }
 }
+
+// *** NOTA: No hay círculos múltiples en el sistema, solo un total general ***
 
 /* OPTIMIZACIONES DE RENDIMIENTO */
 
