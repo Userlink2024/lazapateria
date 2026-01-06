@@ -2997,9 +2997,47 @@ $('btn-add-extra-consign').onclick = async () => {
         if (prevOrden === null) {
           newOrden = targetOrden - 1;
         } else {
-          newOrden = (prevOrden + targetOrden) / 2;
-          if (newOrden === prevOrden || newOrden === targetOrden) {
-            newOrden = targetOrden - 0.0001;
+          // Asegurar que el nuevo orden quede EXACTAMENTE entre el anterior y el objetivo.
+          // Si no hay espacio (órdenes iguales o demasiado cerca), renumerar con step=10.
+          const EPS = 1e-6;
+          const gap = targetOrden - prevOrden;
+
+          if (!Number.isFinite(gap) || gap <= EPS) {
+            console.warn('⚠️ No hay espacio suficiente entre órdenes para inserción. Renumerando...', {
+              prevOrden,
+              targetOrden,
+              gap
+            });
+
+            const colRef = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+            const batch = db.batch();
+
+            // Renumerar en el orden actual (asc) para crear huecos.
+            // Step 10 permite futuras inserciones sin reindexar constantemente.
+            for (let i = 0; i < allItems.length; i++) {
+              const desiredOrden = (i + 1) * 10;
+              const currentOrden = Number(allItems[i].orden || 0);
+              if (currentOrden !== desiredOrden) {
+                batch.update(colRef.doc(allItems[i].id), { orden: desiredOrden });
+              }
+              allItems[i].orden = desiredOrden;
+            }
+
+            await batch.commit();
+
+            // Recalcular órdenes ya renumeradas
+            const newTargetOrden = Number(allItems[idx].orden || 0);
+            const newPrevOrden = Number(allItems[idx - 1].orden || 0);
+            newOrden = (newPrevOrden + newTargetOrden) / 2;
+          } else {
+            newOrden = (prevOrden + targetOrden) / 2;
+          }
+
+          // Clamp final: garantizar estrictamente prev < new < target
+          const finalPrev = Number(allItems[idx - 1].orden || prevOrden);
+          const finalTarget = Number(allItems[idx].orden || targetOrden);
+          if (!(newOrden > finalPrev && newOrden < finalTarget)) {
+            newOrden = finalTarget - 0.0001;
           }
         }
       }
