@@ -3638,22 +3638,41 @@ $('btn-cuadrar').addEventListener('click', async () => {
     // Tomar todas las consignaciones verificadas por Gerente DESPUÉS del último corte completo
     itemsParaCuadrar = [];
     
+    console.log('🔍 ANÁLISIS COMPLETO DE CONSIGNACIONES:');
+    console.log('  - Orden del último corte:', ordenUltimoCorte);
+    
     for (const item of currentConsignsSnapshot) {
-      if (item.isSeparator) continue;
-      if (item.verifiedRole !== 'Gerente') continue;
+      if (item.isSeparator) {
+        console.log(`  🚫 SEPARADOR: ${item.type} (orden: ${item.orden || 0})`);
+        continue;
+      }
+      if (item.verifiedRole !== 'Gerente') {
+        console.log(`  🚫 NO GERENTE: ${item.valor} (orden: ${item.orden || 0}, rol: ${item.verifiedRole})`);
+        continue;
+      }
       
       const ordenItem = item.orden || 0;
+      const estaDespuesDelCorte = ordenItem > ordenUltimoCorte;
       
-      if (ordenItem > ordenUltimoCorte) {
+      console.log(`  📋 CONSIGNACIÓN: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
+      console.log(`     - ¿Está después del corte? ${estaDespuesDelCorte} (ordenItem: ${ordenItem} > ordenUltimoCorte: ${ordenUltimoCorte})`);
+      
+      if (estaDespuesDelCorte) {
         itemsParaCuadrar.push(item);
-        console.log(`✅ Incluyendo consignación: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
+        console.log(`  ✅ INCLUIDA: ${item.valor}`);
       } else {
-        console.log(`❌ Ignorando consignación: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
+        console.log(`  ❌ IGNORADA: ${item.valor} (ya fue procesada)`);
       }
     }
     
-    console.log('📋 Consignaciones pendientes desde último corte:', itemsParaCuadrar.length);
-    console.log('💰 Total pendiente calculado:', itemsParaCuadrar.reduce((sum, item) => sum + Number(item.valor || 0), 0));
+    const totalCalculado = itemsParaCuadrar.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+    console.log('📋 RESUMEN FINAL:');
+    console.log('  - Consignaciones pendientes:', itemsParaCuadrar.length);
+    console.log('  - Total pendiente calculado:', totalCalculado);
+    console.log('  - Detalle de pendientes:');
+    itemsParaCuadrar.forEach((item, index) => {
+      console.log(`    ${index + 1}. ${item.valor} (orden: ${item.orden}, ref: ${item.referencia})`);
+    });
   }
   
   console.log('📋 ANÁLISIS AUTOMÁTICO:');
@@ -4889,59 +4908,8 @@ if (modalPasswordInput && modalOkBtn) {
   // *** MEJORA SIMPLE: Enter en campos de contraseña ***
   // Enfoque directo sin interferir con otros eventos
   
-  // *** EVENTO DIRECTO PARA ENTER ***
-  // Función simple que siempre funciona
-  function setupEnterForAllPasswordFields() {
-    const passwordFields = document.querySelectorAll('input[type="password"]');
-    
-    passwordFields.forEach(field => {
-      // Evitar duplicar eventos
-      if (field.hasAttribute('data-enter-setup')) return;
-      field.setAttribute('data-enter-setup', 'true');
-      
-      field.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          e.stopPropagation();
-          
-          console.log('🔑 ENTER PRESIONADO en campo de contraseña');
-          
-          // Buscar el botón más cercano
-          const container = field.closest('.panel, .modal-content, div');
-          if (container) {
-            const buttons = container.querySelectorAll('button:not(.ghost)');
-            if (buttons.length > 0) {
-              const button = buttons[buttons.length - 1]; // Tomar el último botón
-              console.log('🎯 Activando botón:', button.textContent);
-              button.click();
-              return;
-            }
-          }
-          
-          // Fallback: buscar botón por ID
-          const modalOkBtn = document.getElementById('modal-ok-btn');
-          if (modalOkBtn) {
-            console.log('🎯 Activando botón modal-ok-btn');
-            modalOkBtn.click();
-            return;
-          }
-          
-          const optionsContinueBtn = document.getElementById('options-continue');
-          if (optionsContinueBtn) {
-            console.log('🎯 Activando botón options-continue');
-            optionsContinueBtn.click();
-            return;
-          }
-        }
-      });
-    });
-  }
-  
-  // Configurar inmediatamente
-  setupEnterForAllPasswordFields();
-  
-  // Re-configurar periódicamente
-  setInterval(setupEnterForAllPasswordFields, 1000);
+  // *** ENTER SIMPLE Y DIRECTO ***
+  // Solo los eventos específicos que ya funcionaban
   
   // Re-configurar cuando se abren nuevos modales
   const observer = new MutationObserver(function(mutations) {
