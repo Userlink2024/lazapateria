@@ -3585,31 +3585,57 @@ $('btn-cuadrar').addEventListener('click', async () => {
   if (!ultimoSeparadorVerde) {
     itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator && item.verifiedRole === 'Gerente');
   } else {
-    // LÓGICA CORREGIDA: Encontrar el período activo actual
-    // Buscar el último corte completo (verde + rojo) y tomar consignaciones después
+    // LÓGICA DEFINITIVA: Encontrar el período activo actual
+    // Buscar el último corte completo (verde + rojo) y tomar consignaciones pendientes
     
-    // Encontrar el último corte rojo (punto de partida más reciente)
-    let ultimoRojo = null;
-    let ordenUltimoRojo = -Infinity;
+    console.log('🔍 Buscando estructura de cortes...');
     
-    console.log('🔍 Buscando último corte rojo...');
+    // Encontrar todos los separadores ordenados por orden
+    const separadores = currentConsignsSnapshot.filter(item => item.isSeparator)
+      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
     
-    // Recorrer todos los items para encontrar el último rojo con el orden más alto
-    for (const item of currentConsignsSnapshot) {
-      if (item.isSeparator && item.type === 'red') {
-        const ordenItem = item.orden || 0;
-        console.log(`  - Rojo encontrado: ${item.id.substring(0, 8)}, orden: ${ordenItem}`);
-        if (ordenItem > ordenUltimoRojo) {
-          ordenUltimoRojo = ordenItem;
-          ultimoRojo = item;
+    console.log('📋 Separadores encontrados:');
+    separadores.forEach(sep => {
+      console.log(`  - ${sep.type === 'green' ? '🟢' : '🔴'} ${sep.id.substring(0, 8)}: orden ${sep.orden}`);
+    });
+    
+    // Encontrar el último corte completo (par verde + rojo)
+    let ultimoCorteCompleto = null;
+    let ordenUltimoCorte = -Infinity;
+    
+    for (let i = 0; i < separadores.length; i++) {
+      const sep = separadores[i];
+      
+      if (sep.type === 'green') {
+        // Buscar el rojo correspondiente después de este verde
+        for (let j = i + 1; j < separadores.length; j++) {
+          if (separadores[j].type === 'red') {
+            const ordenVerde = sep.orden || 0;
+            const ordenRojo = separadores[j].orden || 0;
+            
+            if (ordenRojo > ordenUltimoCorte) {
+              ordenUltimoCorte = ordenRojo;
+              ultimoCorteCompleto = {
+                verde: sep,
+                rojo: separadores[j],
+                ordenRojo: ordenRojo
+              };
+            }
+            break; // Solo el primer rojo después de cada verde
+          }
         }
       }
     }
     
-    console.log('🔴 Último corte rojo encontrado:', ultimoRojo ? ultimoRojo.id.substring(0, 8) : 'NINGUNO');
-    console.log('  - Orden del último rojo:', ordenUltimoRojo);
+    console.log('🔴 Último corte completo encontrado:');
+    if (ultimoCorteCompleto) {
+      console.log(`  - Verde: ${ultimoCorteCompleto.verde.id.substring(0, 8)} (orden: ${ultimoCorteCompleto.verde.orden})`);
+      console.log(`  - Rojo: ${ultimoCorteCompleto.rojo.id.substring(0, 8)} (orden: ${ultimoCorteCompleto.ordenRojo})`);
+    } else {
+      console.log('  - NINGUNO');
+    }
     
-    // Tomar TODAS las consignaciones verificadas por Gerente DESPUÉS del último rojo
+    // Tomar todas las consignaciones verificadas por Gerente DESPUÉS del último corte completo
     itemsParaCuadrar = [];
     
     for (const item of currentConsignsSnapshot) {
@@ -3618,7 +3644,7 @@ $('btn-cuadrar').addEventListener('click', async () => {
       
       const ordenItem = item.orden || 0;
       
-      if (ordenItem > ordenUltimoRojo) {
+      if (ordenItem > ordenUltimoCorte) {
         itemsParaCuadrar.push(item);
         console.log(`✅ Incluyendo consignación: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
       } else {
@@ -3741,7 +3767,7 @@ $('btn-cuadrar').addEventListener('click', async () => {
     // Registrar el cuadre en el historial de ajustes
     await registerAdjustment('cuadre_realizado', {
       totalCuadrado: totalCalculado,
-      itemsIncluidos: pendingItems.length,
+      itemsIncluidos: itemsParaCuadrar.length,
       fechaCuadre: now.toISOString()
     });
     
