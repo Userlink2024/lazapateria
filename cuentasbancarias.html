@@ -3720,7 +3720,27 @@ $('btn-cuadrar').addEventListener('click', async () => {
   
   console.log('💰 TOTAL CALCULADO PARA CUADRE:', totalCalculado);
   
-  showModal('Confirmación', `¿Realizar corte?\nTotal a Cuadrar: ${fmtCOP(totalCalculado)}\n(Solo consignaciones verificadas por Gerente)`, true, async () => {
+  // VALIDACIÓN FINAL CRÍTICA: Verificar una última vez antes del cuadre
+    console.log('🔍 VALIDACIÓN FINAL ANTES DEL CUADRE:');
+    const itemsFinales = currentConsignsSnapshot.filter(item => 
+      !item.isSeparator && 
+      itemsParaCuadrar.some(p => p.id === item.id)
+    );
+    
+    const noVerificadosFinal = itemsFinales.filter(item => item.verifiedRole !== 'Gerente');
+    
+    console.log(`  - Items a cuadrar: ${itemsFinales.length}`);
+    console.log(`  - No verificados: ${noVerificadosFinal.length}`);
+    
+    if (noVerificadosFinal.length > 0) {
+      console.log('❌ ERROR CRÍTICO: Hay items no verificados en validación final');
+      return showModal('⚠️ ERROR CRÍTICO', 
+        `HAY ${noVerificadosFinal.length} CONSIGNACIONES SIN VERIFICAR POR GERENTE\n\n` +
+        `NO SE PUEDE REALIZAR EL CORTE\n\n` +
+        `Por favor, verifique todas las consignaciones y póngalas en amarillo.`, false);
+    }
+    
+    showModal('Confirmación', `¿Realizar corte?\nTotal a Cuadrar: ${fmtCOP(totalCalculado)}\n(Solo consignaciones verificadas por Gerente)`, true, async () => {
     // *** PROTECCIÓN CRÍTICA: Establecer bandera de cuadre en proceso ***
     window.isProcessingCuadre = true;
     console.log('🛡️ CUADRE INICIADO: Protección activada contra interferencias');
@@ -3820,7 +3840,15 @@ $('btn-cuadrar').addEventListener('click', async () => {
       setTimeout(() => {
         console.log('🔄 Forzando recarga completa de datos...');
         if (selectedAccountId) {
-          loadConsignaciones(selectedAccountId);
+          // Usar la función correcta para recargar datos
+          const snapshot = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+            .orderBy('orden', 'asc')
+            .onSnapshot(snapshot => {
+              currentConsignsSnapshot = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+              renderConsignaciones();
+            }, error => {
+              console.error('Error escuchando consignaciones:', error);
+            });
         }
       }, 500);
       
@@ -3942,26 +3970,38 @@ async function updateSelectedTotals(){
 
 // Función auxiliar para calcular total del período activo - MEJORADA CON PRECISIÓN
 function calculateActivePeriodTotal(fbDocs) {
-  // Encontrar el último separador verde válido (el más cercano a cero)
-  let ultimoSeparadorVerde = null;
-  fbDocs.forEach(doc => {
-    if (doc.isSeparator && doc.type === 'green') {
-      if (!ultimoSeparadorVerde || (doc.orden || 0) > (ultimoSeparadorVerde.orden || 0)) {
-        ultimoSeparadorVerde = doc;
+  // Encontrar separadores verdes que tienen corte completo (verde + rojo)
+  const separadoresVerdes = fbDocs.filter(doc => doc.isSeparator && doc.type === 'green');
+  const separadoresRojos = fbDocs.filter(doc => doc.isSeparator && doc.type === 'red');
+  
+  let ultimoSeparadorVerdeValido = null;
+  
+  // Buscar el último separador verde que tiene un corte completo asociado
+  for (const verde of separadoresVerdes) {
+    const ordenVerde = verde.orden || 0;
+    
+    // Buscar si hay un separador rojo después de este verde
+    const tieneRojoAsociado = separadoresRojos.some(rojo => 
+      (rojo.orden || 0) > ordenVerde
+    );
+    
+    if (tieneRojoAsociado) {
+      if (!ultimoSeparadorVerdeValido || ordenVerde > (ultimoSeparadorVerdeValido.orden || 0)) {
+        ultimoSeparadorVerdeValido = verde;
       }
     }
-  });
+  }
   
   let valoresParaSumar = [];
   
-  if (ultimoSeparadorVerde) {
-    // Hay separadores: sumar consignaciones ENCIMA del último separador verde
-    console.log('🔍 Calculando período activo desde separador verde (orden:', ultimoSeparadorVerde.orden, ')');
+  if (ultimoSeparadorVerdeValido) {
+    // Hay separadores: sumar consignaciones ENCIMA del último separador verde válido
+    console.log('🔍 Calculando período activo desde separador verde (orden:', ultimoSeparadorVerdeValido.orden, ')');
     
     fbDocs.forEach(doc => {
       if (!doc.isSeparator) {
         const ordenDoc = doc.orden || 0;
-        const ordenVerde = ultimoSeparadorVerde.orden || 0;
+        const ordenVerde = ultimoSeparadorVerdeValido.orden || 0;
         
         // LÓGICA CORREGIDA: Después del cuadre, las consignaciones tienen orden negativo
         // Si el separador verde tiene orden negativo, las consignaciones activas son las que tienen orden MAYOR (menos negativo)
