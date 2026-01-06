@@ -3581,17 +3581,40 @@ $('btn-cuadrar').addEventListener('click', async () => {
     }
   }
   
-  // Si no hay separador verde, tomar todas las consignaciones
+  // Si no hay separador verde, tomar todas las consignaciones verificadas por Gerente
   if (!ultimoSeparadorVerde) {
-    itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator);
+    itemsParaCuadrar = currentConsignsSnapshot.filter(item => !item.isSeparator && item.verifiedRole === 'Gerente');
   } else {
-    // Tomar consignaciones después del último verde
+    // LÓGICA CORREGIDA: Tomar TODAS las consignaciones verificadas por Gerente
+    // que no han sido incluidas en un corte posterior
+    
+    // Encontrar todos los separadores rojos que estén DESPUÉS del último verde
     const ordenVerde = ultimoSeparadorVerde.orden || 0;
-    itemsParaCuadrar = currentConsignsSnapshot.filter(item => {
-      if (item.isSeparator) return false;
-      const ordenItem = item.orden || 0;
-      return ordenItem > ordenVerde;
-    });
+    const separadoresRojosPosteriores = currentConsignsSnapshot.filter(item => 
+      item.isSeparator && item.type === 'red' && (item.orden || 0) > ordenVerde
+    );
+    
+    // Si hay un corte posterior, solo tomar consignaciones hasta ese corte
+    if (separadoresRojosPosteriores.length > 0) {
+      const ordenProximoRojo = Math.min(...separadoresRojosPosteriores.map(s => s.orden || 0));
+      
+      itemsParaCuadrar = currentConsignsSnapshot.filter(item => {
+        if (item.isSeparator) return false;
+        if (item.verifiedRole !== 'Gerente') return false;
+        
+        const ordenItem = item.orden || 0;
+        return ordenItem > ordenVerde && ordenItem < ordenProximoRojo;
+      });
+    } else {
+      // No hay corte posterior, tomar todas las consignaciones verificadas desde el último verde
+      itemsParaCuadrar = currentConsignsSnapshot.filter(item => {
+        if (item.isSeparator) return false;
+        if (item.verifiedRole !== 'Gerente') return false;
+        
+        const ordenItem = item.orden || 0;
+        return ordenItem > ordenVerde;
+      });
+    }
   }
   
   console.log('📋 ANÁLISIS AUTOMÁTICO:');
@@ -4782,7 +4805,37 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Configurar los eventos de Enter
+  // *** MEJORA ESPECÍFICA: Enter en modal de acceso ***
+// Asegurar que el Enter funcione en el modal de acceso
+const modalPasswordInput = document.getElementById('modal-password-input');
+const modalOkBtn = document.getElementById('modal-ok-btn');
+
+if (modalPasswordInput && modalOkBtn) {
+  modalPasswordInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      console.log('🔑 Enter detectado en modal de acceso - Activando botón Aceptar');
+      modalOkBtn.click();
+    }
+  });
+  
+  // También agregar evento para el botón de continuar del modal de opciones
+  const optionsContinueBtn = document.getElementById('options-continue');
+  if (optionsContinueBtn) {
+    const managerPassField = document.getElementById('manager-pass');
+    if (managerPassField) {
+      managerPassField.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          console.log('🔑 Enter detectado en modal de opciones - Activando botón Continuar');
+          optionsContinueBtn.click();
+        }
+      });
+    }
+  }
+}
+
+// Configurar los eventos de Enter
   setupEnterKeyForPasswordFields();
   
   // Re-configurar cuando se abren nuevos modales
