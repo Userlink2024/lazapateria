@@ -4694,42 +4694,114 @@ async function probarNuevaLogicaCompleta() {
 // Actualizar las funciones existentes para usar la nueva lógica
 // (Función duplicada removida - usar la implementación principal en línea 2116)
 
-// *** MEJORA: Enter en campos de contraseña de gerente ***
-// Agregar evento keypress para que el Enter active el botón de aceptar
+// *** MEJORA COMPLETA: Enter en cualquier modal y auto-selección de campo ***
+// Agregar eventos para mejorar la experiencia de usuario
 document.addEventListener('DOMContentLoaded', function() {
-  // Para el campo manager-pass (modal de opciones)
+  
+  // *** MEJORA 1: Auto-seleccionar campo de contraseña al elegir Gerente ***
+  const gerenteRadio = document.querySelector('input[name="sessionRole"][value="Gerente"]');
+  const managerPassArea = document.getElementById('manager-pass-area');
   const managerPassField = document.getElementById('manager-pass');
-  if (managerPassField) {
-    managerPassField.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        // Buscar y hacer clic en el botón de aceptar del modal de opciones
-        const optionsModal = document.getElementById('modal-options');
-        if (optionsModal && !optionsModal.classList.contains('hidden')) {
-          // Buscar botón de guardar/cerrar en el modal de opciones
-          const acceptBtn = optionsModal.querySelector('.btn:not(.ghost)');
-          if (acceptBtn) {
-            acceptBtn.click();
-          }
-        }
+  
+  if (gerenteRadio && managerPassArea && managerPassField) {
+    gerenteRadio.addEventListener('change', function() {
+      if (this.value === 'Gerente') {
+        // Mostrar área de contraseña
+        managerPassArea.classList.remove('hidden');
+        
+        // Pequeña pausa para que el campo sea visible y luego seleccionarlo
+        setTimeout(() => {
+          managerPassField.focus();
+          managerPassField.select();
+        }, 100);
       }
     });
   }
   
-  // Para el campo modal-password-input (modal de verificación)
-  const modalPassField = document.getElementById('modal-password-input');
-  if (modalPassField) {
-    modalPassField.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        // Hacer clic en el botón modal-ok-btn
-        const okBtn = document.getElementById('modal-ok-btn');
-        if (okBtn) {
-          okBtn.click();
+  // *** MEJORA 2: Enter en cualquier campo de contraseña de cualquier modal ***
+  function setupEnterKeyForPasswordFields() {
+    // Para el campo manager-pass (modal de opciones)
+    if (managerPassField) {
+      managerPassField.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          // Buscar y hacer clic en el botón de aceptar del modal de opciones
+          const optionsModal = document.getElementById('modal-options');
+          if (optionsModal && !optionsModal.classList.contains('hidden')) {
+            // Buscar botón de guardar/cerrar en el modal de opciones
+            const acceptBtn = optionsModal.querySelector('.btn:not(.ghost)');
+            if (acceptBtn) {
+              acceptBtn.click();
+            }
+          }
+        }
+      });
+    }
+    
+    // Para el campo modal-password-input (modal de verificación)
+    const modalPassField = document.getElementById('modal-password-input');
+    if (modalPassField) {
+      modalPassField.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          // Hacer clic en el botón modal-ok-btn
+          const okBtn = document.getElementById('modal-ok-btn');
+          if (okBtn) {
+            okBtn.click();
+          }
+        }
+      });
+    }
+    
+    // *** MEJORA 3: Enter en cualquier input dentro de cualquier modal ***
+    // Buscar todos los modales que puedan tener botones de aceptar
+    const allModals = document.querySelectorAll('.modal:not(.hidden)');
+    
+    allModals.forEach(modal => {
+      // Agregar Enter a todos los inputs dentro del modal
+      const inputs = modal.querySelectorAll('input[type="text"], input[type="password"], input[type="number"]');
+      
+      inputs.forEach(input => {
+        // Evitar duplicar eventos
+        if (!input.hasAttribute('data-enter-setup')) {
+          input.setAttribute('data-enter-setup', 'true');
+          
+          input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              
+              // Buscar botón de aceptar principal en este modal
+              const acceptBtn = modal.querySelector('.btn:not(.ghost), button[type="submit"]');
+              if (acceptBtn && acceptBtn.style.display !== 'none') {
+                acceptBtn.click();
+              }
+            }
+          });
+        }
+      });
+    });
+  }
+  
+  // Configurar los eventos de Enter
+  setupEnterKeyForPasswordFields();
+  
+  // Re-configurar cuando se abren nuevos modales
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+        const target = mutation.target;
+        if (target.classList && target.classList.contains('modal')) {
+          // Si un modal cambió su visibilidad, reconfigurar
+          setTimeout(setupEnterKeyForPasswordFields, 50);
         }
       }
     });
-  }
+  });
+  
+  // Observar cambios en los modales
+  document.querySelectorAll('.modal').forEach(modal => {
+    observer.observe(modal, { attributes: true });
+  });
 });
 
 </script>
