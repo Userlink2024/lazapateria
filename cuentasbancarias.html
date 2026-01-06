@@ -3635,10 +3635,11 @@ $('btn-cuadrar').addEventListener('click', async () => {
       console.log('  - NINGUNO');
     }
     
-    // Tomar todas las consignaciones verificadas por Gerente DESPUÉS del último corte completo
+    // Tomar las consignaciones del período activo (después del último separador verde)
     itemsParaCuadrar = [];
     
     console.log('🔍 ANÁLISIS COMPLETO DE CONSIGNACIONES:');
+    console.log('  - Último separador verde orden:', ultimoSeparadorVerde ? ultimoSeparadorVerde.orden : 'NINGUNO');
     console.log('  - Orden del último corte:', ordenUltimoCorte);
     
     for (const item of currentConsignsSnapshot) {
@@ -3652,12 +3653,22 @@ $('btn-cuadrar').addEventListener('click', async () => {
       }
       
       const ordenItem = item.orden || 0;
-      const estaDespuesDelCorte = ordenItem > ordenUltimoCorte;
+      
+      // Lógica corregida: Tomar consignaciones del período activo
+      let incluirConsignacion = false;
+      
+      if (ultimoSeparadorVerde) {
+        // Hay separador verde: tomar consignaciones ENCIMA del último separador verde
+        incluirConsignacion = ordenItem > (ultimoSeparadorVerde.orden || 0);
+      } else {
+        // No hay separador verde: tomar todas las consignaciones verificadas
+        incluirConsignacion = true;
+      }
       
       console.log(`  📋 CONSIGNACIÓN: ${item.valor} (orden: ${ordenItem}, ref: ${item.referencia})`);
-      console.log(`     - ¿Está después del corte? ${estaDespuesDelCorte} (ordenItem: ${ordenItem} > ordenUltimoCorte: ${ordenUltimoCorte})`);
+      console.log(`     - ¿Incluir en cuadre? ${incluirConsignacion}`);
       
-      if (estaDespuesDelCorte) {
+      if (incluirConsignacion) {
         itemsParaCuadrar.push(item);
         console.log(`  ✅ INCLUIDA: ${item.valor}`);
       } else {
