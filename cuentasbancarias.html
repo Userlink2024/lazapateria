@@ -2137,60 +2137,25 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 3. Ejecutar adición
   try{ 
-    // CONSIGNACIONES NORMALES: Con cortes en la parte superior
-    // Buscar el separador rojo más reciente (que estará en la parte superior)
-    let ultimoCorteRojo = null;
-    let ordenParaNuevaConsignacion = 0;
-    
-    // Buscar el separador rojo con el orden más PEQUEÑO (más reciente, ya que están arriba)
-    for (const item of currentConsignsSnapshot) {
-      if (item.isSeparator && item.type === 'red') {
-        if (!ultimoCorteRojo || (item.orden || 0) < (ultimoCorteRojo.orden || 0)) {
-          ultimoCorteRojo = item;
-        }
+    // CONSIGNACIONES NORMALES: el orden debe ser SIEMPRE el de ingreso.
+    // La lógica anterior calculaba órdenes alrededor de separadores (cortes) con decimales,
+    // lo cual podía generar órdenes duplicados (p. ej. separadorVerde.orden - 0.1 repetido)
+    // y, por ende, reordenar visualmente las transferencias.
+    //
+    // Regla: el `orden` de una consignación normal siempre será (máximo orden existente) + 1.
+    // Esto garantiza que la tabla (orden asc) refleje exactamente el orden en que el usuario ingresa.
+    let maxOrden = 0;
+    currentConsignsSnapshot.forEach(item => {
+      if (typeof item.orden === 'number') {
+        maxOrden = Math.max(maxOrden, item.orden);
       }
-    }
-    
-    if (ultimoCorteRojo) {
-      // HAY UN CORTE: Las nuevas consignaciones deben ir ENCIMA del separador verde
-      // Buscar el separador verde más reciente (el que tiene menor orden, ya que están arriba)
-      let separadorVerdeMasReciente = null;
-      currentConsignsSnapshot.forEach(c => {
-        if (c.isSeparator && c.type === 'green') {
-          if (!separadorVerdeMasReciente || (c.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
-            separadorVerdeMasReciente = c;
-          }
-        }
-      });
-      
-      if (separadorVerdeMasReciente) {
-        // Insertar ENCIMA del separador verde (orden menor)
-        ordenParaNuevaConsignacion = separadorVerdeMasReciente.orden - 0.1;
-      } else {
-        // No hay separador verde, insertar después del rojo
-        ordenParaNuevaConsignacion = ultimoCorteRojo.orden + 0.1;
-      }
-      
-      console.log('🆕 CONSIGNACIÓN ENCIMA DEL SEPARADOR VERDE:');
-      console.log('  - Orden corte rojo:', ultimoCorteRojo.orden);
-      console.log('  - Orden separador verde:', separadorVerdeMasReciente?.orden);
-      console.log('  - Nuevo orden (ENCIMA del verde):', ordenParaNuevaConsignacion);
-      
-    } else {
-      // NO HAY CORTES: Agregar al final de la lista (orden máximo + 1)
-      let maxOrden = 0;
-      currentConsignsSnapshot.forEach(c => {
-        if (!c.isSeparator && c.orden !== undefined) {
-          maxOrden = Math.max(maxOrden, c.orden);
-        }
-      });
-      
-      ordenParaNuevaConsignacion = maxOrden + 1;
-      
-      console.log('🆕 CONSIGNACIÓN SIN CORTES (AL FINAL):');
-      console.log('  - Orden actual máximo:', maxOrden);
-      console.log('  - Nuevo orden:', ordenParaNuevaConsignacion);
-    }
+    });
+
+    const ordenParaNuevaConsignacion = maxOrden + 1;
+
+    console.log('🆕 CONSIGNACIÓN (ORDEN DE INGRESO):');
+    console.log('  - Orden actual máximo:', maxOrden);
+    console.log('  - Nuevo orden:', ordenParaNuevaConsignacion);
     console.log('  - Fecha seleccionada:', fecha.toISOString());
     console.log('  - Referencia:', referencia);
     
