@@ -944,13 +944,47 @@ let selectedAccountName = "SinNombre";
 let currentConsignsSnapshot = []; 
 let selectedConsignIds = new Set(); // Almacenamiento local de IDs seleccionados (para persistencia en UI)
 
+let isAddingConsign = false;
+let addConsignPrevText = null;
+function setAddConsignBusy(busy){
+  const btn = $('add-consign');
+  if(!btn) return;
+  if(busy){
+    if(addConsignPrevText === null) addConsignPrevText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Guardando...';
+  } else {
+    btn.disabled = false;
+    if(addConsignPrevText !== null) btn.textContent = addConsignPrevText;
+    addConsignPrevText = null;
+  }
+}
+
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
 function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)); }
+function refIndexId(referencia){ return encodeURIComponent(String(referencia || '').trim().toUpperCase()); }
 
 // Función para verificar si una referencia ya existe en cualquier cuenta
 async function checkReferenciaExists(referencia) {
   if (!referencia || referencia.trim() === '') return { exists: false };
+
+  const refKey = referencia.trim().toUpperCase();
+  const refId = refIndexId(refKey);
+
+  try {
+    const refDoc = await db.collection('referencias').doc(refId).get();
+    if (refDoc.exists) {
+      const d = refDoc.data() || {};
+      return {
+        exists: true,
+        cuentaId: d.cuentaId,
+        cuentaNombre: d.cuentaNombre || 'Cuenta sin nombre'
+      };
+    }
+  } catch (error) {
+    console.error('Error verificando índice de referencia:', error);
+  }
   
   try {
     // Buscar en todas las cuentas
@@ -960,7 +994,7 @@ async function checkReferenciaExists(referencia) {
       const consignacionesSnapshot = await db.collection('cuentas')
         .doc(cuentaDoc.id)
         .collection('consignaciones')
-        .where('referencia', '==', referencia.trim())
+        .where('referencia', '==', refKey)
         .get();
       
       if (!consignacionesSnapshot.empty) {
@@ -1906,7 +1940,7 @@ document.addEventListener('keydown', e => {
             // Sin Shift: se mueve el cursor y se establece un nuevo ancla
             anchorRowIndex = newIndex;
             // Opcional: limpiar la selección si no se usa Shift (ya manejado en click, pero aquí garantiza que solo se mueva el foco)
-            selectedConsignIds.clear(); 
+            selectedConsignIds.clear();
             document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
         }
         
@@ -2085,15 +2119,19 @@ $('btn-export-master').addEventListener('click', async () => {
 
 /* OPERACIONES DE DATOS (Sin modal de éxito) */
 $('add-consign').addEventListener('click', async ()=>{
-  if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
-  
-  // 1. Validar datos con nueva validación mejorada
-  const fecha = parseDateRadio('dateOpt','date-picker'); 
-  const obsdate = parseDateRadio('obsOpt','obsdate-picker'); 
-  const referencia = $('referencia').value.trim();
-  
-  if(!fecha) return showModal('Atención', 'Fecha inválida.', false);
-  if(!referencia) return showModal('Atención', 'La referencia es obligatoria.', false);
+  try {
+    if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
+    if(isAddingConsign) return;
+    isAddingConsign = true;
+    setAddConsignBusy(true);
+
+    // 1. Validar datos con nueva validación mejorada
+    const fecha = parseDateRadio('dateOpt','date-picker'); 
+    const obsdate = parseDateRadio('obsOpt','obsdate-picker'); 
+    const referencia = $('referencia').value.trim();
+    
+    if(!fecha) return showModal('Atención', 'Fecha inválida.', false);
+    if(!referencia) return showModal('Atención', 'La referencia es obligatoria.', false);
   
   // Validar valor usando la nueva función de validación
   let valor;
@@ -2199,15 +2237,32 @@ $('add-consign').addEventListener('click', async ()=>{
     console.log('  - Fecha seleccionada:', fecha.toISOString());
     console.log('  - Referencia:', referencia);
     
-    await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add({ 
-        fecha: firebase.firestore.Timestamp.fromDate(fecha), // Fecha seleccionada por el usuario (para mostrar)
-        obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, 
-        valor, 
-        referencia: referencia.toUpperCase(), // Convertir a mayúsculas
-        verifiedBy:null, 
-        verifiedRole:null,
-        orden: ordenParaNuevaConsignacion // Campo dedicado para ordenamiento manual
-    }); 
+    const refKey = referencia.trim().toUpperCase();
+    const refId = refIndexId(refKey);
+    await db.runTransaction(async (tx) => {
+        const refDocRef = db.collection('referencias').doc(refId);
+        const refSnap = await tx.get(refDocRef);
+        if (refSnap.exists) throw new Error(`La referencia "${refKey}" ya existe.`);
+        const consignRef = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').doc();
+        tx.set(consignRef, { 
+            fecha: firebase.firestore.Timestamp.fromDate(fecha), // Fecha seleccionada por el usuario (para mostrar)
+            obsdate: obsdate? firebase.firestore.Timestamp.fromDate(obsdate): null, 
+            valor, 
+            referencia: refKey, // Convertir a mayúsculas
+            verifiedBy:null, 
+            verifiedRole:null,
+            orden: ordenParaNuevaConsignacion, // Campo dedicado para ordenamiento manual
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdBy: usuario.usuario
+        });
+        tx.set(refDocRef, {
+            referencia: refKey,
+            cuentaId: selectedAccountId,
+            cuentaNombre: selectedAccountName,
+            consignId: consignRef.id,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    });
     
     // RECALCULAR SEPARADORES AFECTADOS AUTOMÁTICAMENTE
     const nuevaConsignacion = { 
@@ -2229,6 +2284,152 @@ $('add-consign').addEventListener('click', async ()=>{
     console.log('✅ Consignación agregada exitosamente con orden:', ordenParaNuevaConsignacion);
     
   }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
+  } finally { isAddingConsign = false; setAddConsignBusy(false); }
+});
+
+let isAddingExtraConsign = false;
+let addExtraConsignPrevText = null;
+function setAddExtraConsignBusy(busy){
+  const btn = $('btn-add-extra-consign');
+  if(!btn) return;
+  if(busy){
+    if(addExtraConsignPrevText === null) addExtraConsignPrevText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Guardando...';
+  } else {
+    btn.disabled = false;
+    if(addExtraConsignPrevText !== null) btn.textContent = addExtraConsignPrevText;
+    addExtraConsignPrevText = null;
+  }
+}
+
+// Agregar consignación extraordinaria (solo UI Gerencia / Ajustes)
+$('btn-add-extra-consign')?.addEventListener('click', async () => {
+  try {
+    if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
+    if(isAddingExtraConsign) return;
+    isAddingExtraConsign = true;
+    setAddExtraConsignBusy(true);
+
+    const consignDate = $('extra-consign-date')?.value;
+    const obsDate = $('extra-obs-date')?.value;
+    const valorRaw = $('extra-valor')?.value || '';
+    const referenciaRaw = $('extra-referencia')?.value || '';
+    const verifiedRole = $('extra-verified-role')?.value || '';
+    const reason = ($('extra-consign-reason')?.value || '').trim();
+    const insertBeforeId = $('extra-insert-before') ? ($('extra-insert-before').value || '') : '';
+
+    if (!consignDate || !obsDate) return showModal('Error', 'Debe ingresar ambas fechas.', false);
+    const valorNum = Number(String(valorRaw).replace(/[^\d]/g, ''));
+    if (!Number.isFinite(valorNum) || valorNum <= 0) return showModal('Error', 'Debe ingresar un valor válido.', false);
+    const referencia = String(referenciaRaw).trim().toUpperCase();
+    if (!referencia) return showModal('Error', 'Debe ingresar una referencia.', false);
+    if (!reason) return showModal('Error', 'Debe explicar el motivo de esta consignación extraordinaria.', false);
+
+    const refCheck = await checkReferenciaExists(referencia);
+    if (refCheck.exists) {
+      return showModal('Error', `La referencia "${referencia}" ya existe en la cuenta: ${refCheck.cuentaNombre}`, false);
+    }
+
+    // Calcular el orden para insertar en la posición elegida
+    const snapOrden = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
+      .orderBy('orden', 'asc').get();
+    const allItems = snapOrden.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    let newOrden = 0;
+    if (insertBeforeId) {
+      const idx = allItems.findIndex(x => x.id === insertBeforeId);
+      if (idx === -1) {
+        const maxOrden = allItems.length ? Number(allItems[allItems.length - 1].orden || 0) : 0;
+        newOrden = maxOrden + 1;
+      } else {
+        const targetOrden = Number(allItems[idx].orden || 0);
+        const prevOrden = idx > 0 ? Number(allItems[idx - 1].orden || 0) : null;
+        if (prevOrden === null) {
+          newOrden = targetOrden - 1;
+        } else {
+          const EPS = 1e-6;
+          const gap = targetOrden - prevOrden;
+          if (!Number.isFinite(gap) || gap <= EPS) {
+            // Renumerar para crear espacio (step=10)
+            const colRef = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
+            const batch = db.batch();
+            for (let i = 0; i < allItems.length; i++) {
+              const desiredOrden = (i + 1) * 10;
+              const currentOrden = Number(allItems[i].orden || 0);
+              if (currentOrden !== desiredOrden) {
+                batch.update(colRef.doc(allItems[i].id), { orden: desiredOrden });
+              }
+              allItems[i].orden = desiredOrden;
+            }
+            await batch.commit();
+            const newTargetOrden = Number(allItems[idx].orden || 0);
+            const newPrevOrden = Number(allItems[idx - 1].orden || 0);
+            newOrden = (newPrevOrden + newTargetOrden) / 2;
+          } else {
+            newOrden = (prevOrden + targetOrden) / 2;
+          }
+          const finalPrev = Number(allItems[idx - 1].orden || prevOrden);
+          const finalTarget = Number(allItems[idx].orden || targetOrden);
+          if (!(newOrden > finalPrev && newOrden < finalTarget)) {
+            newOrden = finalTarget - 0.0001;
+          }
+        }
+      }
+    } else {
+      const maxOrden = allItems.length ? Number(allItems[allItems.length - 1].orden || 0) : 0;
+      newOrden = maxOrden + 1;
+    }
+
+    const refKey = referencia;
+    const refId = refIndexId(refKey);
+    await db.runTransaction(async (tx) => {
+      const refDocRef = db.collection('referencias').doc(refId);
+      const refSnap = await tx.get(refDocRef);
+      if (refSnap.exists) throw new Error(`La referencia "${refKey}" ya existe.`);
+
+      const consignRef = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').doc();
+      tx.set(consignRef, {
+        fecha: firebase.firestore.Timestamp.fromDate(new Date(consignDate + 'T12:00:00')),
+        obsdate: firebase.firestore.Timestamp.fromDate(new Date(obsDate + 'T12:00:00')),
+        valor: valorNum,
+        referencia: refKey,
+        verifiedRole: verifiedRole || null,
+        verifiedBy: verifiedRole ? usuario.usuario : null,
+        verifiedAt: verifiedRole ? firebase.firestore.FieldValue.serverTimestamp() : null,
+        orden: newOrden,
+        isExtraordinary: true,
+        extraordinaryReason: reason,
+        createdBy: usuario.usuario,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      tx.set(refDocRef, {
+        referencia: refKey,
+        cuentaId: selectedAccountId,
+        cuentaNombre: selectedAccountName,
+        consignId: consignRef.id,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+
+    await actualizarTotalesVerdes();
+    setTimeout(() => {
+      updateSelectedTotals();
+    }, 500);
+
+    $('extra-valor').value = '';
+    $('extra-referencia').value = '';
+    $('extra-consign-reason').value = '';
+    showModal('✅ Éxito', 'Consignación extraordinaria agregada correctamente.', false);
+
+  } catch (error) {
+    console.error('Error agregando consignación extraordinaria:', error);
+    showModal('Error', 'Error al agregar la consignación: ' + (error?.message || error), false);
+  } finally {
+    isAddingExtraConsign = false;
+    setAddExtraConsignBusy(false);
+  }
 });
 
 /* MANEJO ROBUSTO DE ERRORES Y RECOVERY STRATEGIES */
@@ -2416,7 +2617,7 @@ async function actualizarTotalesVerdes() {
     
     for (const separadorVerde of separadoresVerdes) {
       const ordenVerde = separadorVerde.orden || 0;
-      console.log(`\n🟢 PROCESANDO SEPARADOR: ${separadorVerde.id.substring(0, 8)}, orden: ${ordenVerde}`);
+      console.log(`🟢 PROCESANDO SEPARADOR: ${separadorVerde.id.substring(0, 8)}, orden: ${ordenVerde}`);
       
       // 5. Encontrar el separador rojo anterior más cercano
       let ordenRojoAnterior = --Infinity;
@@ -2806,8 +3007,7 @@ async function calcularTotalesVerdesCorregido() {
     await batch.commit();
     console.log('✅ FUNCIÓN DEFINITIVA CORREGIDA: Completado exitosamente');
     
-    // 9. Actualizar la UI (recargar los datos)
-    console.log('🔄 Recargando datos para actualizar UI...');
+    // 9. Actualizar la UI
     // La UI se actualizará automáticamente a través del onSnapshot existente
     
   } catch (error) {
@@ -2836,433 +3036,7 @@ $('referencia').addEventListener('input', function(e) {
 $('valor').addEventListener('keydown', e=>{ 
   if(e.key==='Enter') {
     e.preventDefault();
-    $('referencia').focus(); // Pasar al campo de referencia
-  }
-});
-
-// Función global para probar desde consola
-window.probarLogicaCorregida = probarLogicaCorregida;
-window.debugearDatos = debugearDatos;
-window.logicaCorregidaTotalesVerdes = logicaCorregidaTotalesVerdes;
-window.calcularTotalesVerdesCorregido = calcularTotalesVerdesCorregido;
-
-// ===== MODAL DE AJUSTES MANUALES =====
-
-// Abrir modal de ajustes manuales
-$('btn-manual-adjustments').onclick = async () => {
-  try {
-    // Verificar permisos de gerente
-    await showPasswordModal('🔐 Acceso Restringido', 'Los ajustes manuales requieren autorización de gerencia.');
-    
-    // Cargar separadores verdes disponibles
-    await loadGreenSeparatorsForAdjustment();
-
-    // Cargar posiciones disponibles para inserción
-    await loadInsertionTargetsForAdjustment();
-    
-    // Cargar historial de ajustes
-    await loadAdjustmentsHistory();
-    
-    // Mostrar modal
-    $('manual-adjustments-modal').classList.remove('hidden');
-    
-    // Enfocar automáticamente en el primer campo disponible
-    setTimeout(() => {
-      console.log('🎯 Intentando autofocus en modal de ajustes...');
-      
-      // Intentar enfocar en el selector de separador verde, si no hay opciones enfocar en el campo de valor
-      const greenSeparatorSelect = $('green-separator-select');
-      const newGreenTotal = $('new-green-total');
-      const extraValor = $('extra-valor');
-      
-      console.log('📋 Elementos encontrados:', {
-        greenSeparatorSelect: !!greenSeparatorSelect,
-        newGreenTotal: !!newGreenTotal,
-        extraValor: !!extraValor,
-        greenOptions: greenSeparatorSelect ? greenSeparatorSelect.options.length : 0
-      });
-      
-      if (greenSeparatorSelect && greenSeparatorSelect.options.length > 1) {
-        console.log('✅ Enfocando selector de separador verde');
-        greenSeparatorSelect.focus();
-      } else if (newGreenTotal) {
-        console.log('✅ Enfocando campo de nuevo total verde');
-        newGreenTotal.focus();
-      } else if (extraValor) {
-        console.log('✅ Enfocando campo de valor extraordinario');
-        extraValor.focus();
-      } else {
-        console.log('❌ No se encontraron campos para enfocar');
-      }
-    }, 300);
-    
-  } catch (error) {
-    console.log('Acceso denegado a ajustes manuales');
-  }
-};
-
-// Cerrar modal de ajustes
-$('manual-adjustments-close').onclick = () => {
-  $('manual-adjustments-modal').classList.add('hidden');
-  clearAdjustmentForms();
-};
-
-// Cargar separadores verdes para el selector
-async function loadGreenSeparatorsForAdjustment() {
-  if (!selectedAccountId) return;
-  
-  try {
-    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').get();
-    const allItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    const greenSeparators = allItems
-      .filter(item => item.isSeparator && item.type === 'green')
-      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
-    
-    const select = $('green-separator-select');
-    select.innerHTML = '<option value="">-- Seleccione un separador verde --</option>';
-    
-    greenSeparators.forEach(sep => {
-      const option = document.createElement('option');
-      option.value = sep.id;
-      option.textContent = `Separador Verde (Orden: ${sep.orden || 0}) - Total Actual: ${fmtCOP(sep.total || 0)}`;
-      select.appendChild(option);
-    });
-    
-  } catch (error) {
-    console.error('Error cargando separadores verdes:', error);
-  }
-}
-
-// Actualizar total verde
-$('btn-update-green-total').onclick = async () => {
-  const separatorId = $('green-separator-select').value;
-  const newTotal = $('new-green-total').value.replace(/[^\d]/g, '');
-  const reason = $('green-adjustment-reason').value.trim();
-  
-  if (!separatorId) {
-    showModal('Error', 'Debe seleccionar un separador verde.', false);
-    return;
-  }
-  
-  if (!newTotal || newTotal === '0') {
-    showModal('Error', 'Debe ingresar un total válido.', false);
-    return;
-  }
-  
-  if (!reason) {
-    showModal('Error', 'Debe explicar el motivo del ajuste.', false);
-    return;
-  }
-  
-  try {
-    // Actualizar el total en Firebase
-    await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-      .doc(separatorId).update({
-        total: Number(newTotal),
-        lastManualAdjustment: {
-          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-          user: usuario.usuario,
-          previousTotal: 0, // Se podría obtener el valor anterior
-          newTotal: Number(newTotal),
-          reason: reason
-        }
-      });
-    
-    // Registrar en historial
-    await registerAdjustment('green_total_update', {
-      separatorId: separatorId,
-      newTotal: Number(newTotal),
-      reason: reason
-    });
-    
-    showModal('✅ Éxito', 'Total verde actualizado correctamente.', false);
-    
-    // Limpiar formulario y recargar
-    clearAdjustmentForms();
-    // La UI se actualizará automáticamente a través del onSnapshot existente
-    await loadAdjustmentsHistory();
-    
-  } catch (error) {
-    console.error('Error actualizando total verde:', error);
-    showModal('Error', 'Error al actualizar el total: ' + error.message, false);
-  }
-};
-
-// Agregar consignación extraordinaria
-$('btn-add-extra-consign').onclick = async () => {
-  const consignDate = $('extra-consign-date').value;
-  const obsDate = $('extra-obs-date').value;
-  const valor = $('extra-valor').value.replace(/[^\d]/g, '');
-  const referencia = $('extra-referencia').value.trim().toUpperCase();
-  const verifiedRole = $('extra-verified-role').value;
-  const reason = $('extra-consign-reason').value.trim();
-  const insertBeforeId = $('extra-insert-before') ? $('extra-insert-before').value : '';
-  
-  if (!consignDate || !obsDate) {
-    showModal('Error', 'Debe ingresar ambas fechas.', false);
-    return;
-  }
-  
-  if (!valor || valor === '0') {
-    showModal('Error', 'Debe ingresar un valor válido.', false);
-    return;
-  }
-  
-  if (!referencia) {
-    showModal('Error', 'Debe ingresar una referencia.', false);
-    return;
-  }
-  
-  if (!reason) {
-    showModal('Error', 'Debe explicar el motivo de esta consignación extraordinaria.', false);
-    return;
-  }
-  
-  try {
-    // Verificar si la referencia ya existe
-    const refCheck = await checkReferenciaExists(referencia);
-    if (refCheck.exists) {
-      showModal('Error', `La referencia "${referencia}" ya existe en la cuenta: ${refCheck.cuentaNombre}`, false);
-      return;
-    }
-
-    // Calcular el orden para insertar en la posición elegida
-    const snapOrden = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-      .orderBy('orden', 'asc').get();
-    const allItems = snapOrden.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    let newOrden = 0;
-    if (insertBeforeId) {
-      const idx = allItems.findIndex(x => x.id === insertBeforeId);
-      if (idx === -1) {
-        const maxOrden = allItems.length ? Number(allItems[allItems.length - 1].orden || 0) : 0;
-        newOrden = maxOrden + 1;
-      } else {
-        const targetOrden = Number(allItems[idx].orden || 0);
-        const prevOrden = idx > 0 ? Number(allItems[idx - 1].orden || 0) : null;
-
-        if (prevOrden === null) {
-          newOrden = targetOrden - 1;
-        } else {
-          // Asegurar que el nuevo orden quede EXACTAMENTE entre el anterior y el objetivo.
-          // Si no hay espacio (órdenes iguales o demasiado cerca), renumerar con step=10.
-          const EPS = 1e-6;
-          const gap = targetOrden - prevOrden;
-
-          if (!Number.isFinite(gap) || gap <= EPS) {
-            console.warn('⚠️ No hay espacio suficiente entre órdenes para inserción. Renumerando...', {
-              prevOrden,
-              targetOrden,
-              gap
-            });
-
-            const colRef = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones');
-            const batch = db.batch();
-
-            // Renumerar en el orden actual (asc) para crear huecos.
-            // Step 10 permite futuras inserciones sin reindexar constantemente.
-            for (let i = 0; i < allItems.length; i++) {
-              const desiredOrden = (i + 1) * 10;
-              const currentOrden = Number(allItems[i].orden || 0);
-              if (currentOrden !== desiredOrden) {
-                batch.update(colRef.doc(allItems[i].id), { orden: desiredOrden });
-              }
-              allItems[i].orden = desiredOrden;
-            }
-
-            await batch.commit();
-
-            // Recalcular órdenes ya renumeradas
-            const newTargetOrden = Number(allItems[idx].orden || 0);
-            const newPrevOrden = Number(allItems[idx - 1].orden || 0);
-            newOrden = (newPrevOrden + newTargetOrden) / 2;
-          } else {
-            newOrden = (prevOrden + targetOrden) / 2;
-          }
-
-          // Clamp final: garantizar estrictamente prev < new < target
-          const finalPrev = Number(allItems[idx - 1].orden || prevOrden);
-          const finalTarget = Number(allItems[idx].orden || targetOrden);
-          if (!(newOrden > finalPrev && newOrden < finalTarget)) {
-            newOrden = finalTarget - 0.0001;
-          }
-        }
-      }
-    } else {
-      const maxOrden = allItems.length ? Number(allItems[allItems.length - 1].orden || 0) : 0;
-      newOrden = maxOrden + 1;
-    }
-    
-    // Crear la consignación
-    const newConsign = {
-      fecha: firebase.firestore.Timestamp.fromDate(new Date(consignDate + 'T12:00:00')),
-      obsdate: firebase.firestore.Timestamp.fromDate(new Date(obsDate + 'T12:00:00')),
-      fechaObservacion: firebase.firestore.Timestamp.fromDate(new Date(obsDate + 'T12:00:00')),
-      valor: Number(valor),
-      referencia: referencia,
-      verifiedRole: verifiedRole || null,
-      verifiedBy: verifiedRole ? usuario.usuario : null,
-      verifiedAt: verifiedRole ? firebase.firestore.FieldValue.serverTimestamp() : null,
-      orden: newOrden,
-      isExtraordinary: true,
-      extraordinaryReason: reason,
-      createdBy: usuario.usuario,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    
-    await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').add(newConsign);
-
-    // Recalcular separadores verdes afectados si la consignación afecta totales (solo si queda en amarillo)
-    if (verifiedRole === 'Gerente') {
-      const snapAfter = await db.collection('cuentas').doc(selectedAccountId).collection('consignaciones')
-        .orderBy('orden', 'asc').get();
-      const itemsAfter = [];
-      snapAfter.forEach(d => itemsAfter.push({ id: d.id, ...d.data() }));
-
-      const affected = identifyAffectedSeparators({ orden: newOrden }, itemsAfter);
-      const affectedIds = affected.map(s => s.id);
-      if (affectedIds.length > 0) {
-        await batchRecalculateSeparators(affectedIds, selectedAccountId);
-      }
-    }
-    
-    // Registrar en historial
-    await registerAdjustment('extraordinary_consign', {
-      valor: Number(valor),
-      referencia: referencia,
-      verifiedRole: verifiedRole,
-      reason: reason
-    });
-    
-    showModal('✅ Éxito', 'Consignación extraordinaria agregada correctamente.', false);
-    
-    // Limpiar formulario y recargar
-    clearAdjustmentForms();
-    // La UI se actualizará automáticamente a través del onSnapshot existente
-    await loadAdjustmentsHistory();
-    
-  } catch (error) {
-    console.error('Error agregando consignación extraordinaria:', error);
-    showModal('Error', 'Error al agregar la consignación: ' + error.message, false);
-  }
-};
-
-// Recalcular todo
-$('btn-recalculate-all').onclick = async () => {
-  try {
-    showModal('🔄 Recalculando', 'Recalculando todos los totales...', false);
-    await calcularTotalesVerdesCorregido();
-    // La UI se actualizará automáticamente a través del onSnapshot existente
-    showModal('✅ Completado', 'Todos los totales han sido recalculados.', false);
-  } catch (error) {
-    console.error('Error recalculando:', error);
-    showModal('Error', 'Error al recalcular: ' + error.message, false);
-  }
-};
-
-// Registrar ajuste en historial
-async function registerAdjustment(type, data) {
-  if (!selectedAccountId) return;
-  
-  try {
-    await db.collection('cuentas').doc(selectedAccountId).collection('adjustments').add({
-      type: type,
-      data: data,
-      user: usuario.usuario,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      accountId: selectedAccountId
-    });
-  } catch (error) {
-    console.error('Error registrando ajuste:', error);
-  }
-}
-
-// Cargar historial de ajustes
-async function loadAdjustmentsHistory() {
-  if (!selectedAccountId) return;
-  
-  try {
-    const snapshot = await db.collection('cuentas').doc(selectedAccountId).collection('adjustments')
-      .orderBy('timestamp', 'desc')
-      .limit(10)
-      .get();
-    
-    const historyDiv = $('adjustments-history');
-    
-    if (snapshot.empty) {
-      historyDiv.innerHTML = '<div class="muted" style="text-align:center; padding:20px;">No hay ajustes registrados para esta cuenta</div>';
-      return;
-    }
-    
-    let html = '';
-    snapshot.docs.forEach(doc => {
-      const adj = doc.data();
-      const date = adj.timestamp ? adj.timestamp.toDate().toLocaleString('es-CO') : 'Fecha no disponible';
-      
-      let description = '';
-      if (adj.type === 'green_total_update') {
-        description = `🟢 Total verde actualizado a ${fmtCOP(adj.data.newTotal)} - ${adj.data.reason}`;
-      } else if (adj.type === 'extraordinary_consign') {
-        description = `➕ Consignación extraordinaria: ${fmtCOP(adj.data.valor)} (${adj.data.referencia}) - ${adj.data.reason}`;
-      } else if (adj.type === 'cuadre_realizado') {
-        description = `✅ Cuadre realizado: ${fmtCOP(adj.data.totalCuadrado)} (${adj.data.itemsIncluidos} items)`;
-      }
-      
-      html += `
-        <div style="padding:8px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:start;">
-          <div style="flex:1;">
-            <div style="font-weight:600; color:#333;">${description}</div>
-            <div class="small muted">Por: ${adj.user} - ${date}</div>
-          </div>
-        </div>
-      `;
-    });
-    
-    historyDiv.innerHTML = html;
-    
-  } catch (error) {
-    console.error('Error cargando historial:', error);
-    $('adjustments-history').innerHTML = '<div class="muted" style="text-align:center; padding:20px; color:red;">Error cargando historial</div>';
-  }
-}
-
-// Limpiar formularios de ajustes
-function clearAdjustmentForms() {
-  $('green-separator-select').value = '';
-  $('new-green-total').value = '';
-  $('green-adjustment-reason').value = '';
-  
-  if ($('extra-insert-before')) $('extra-insert-before').value = '';
-  $('extra-consign-date').value = '';
-  $('extra-obs-date').value = '';
-  $('extra-valor').value = '';
-  $('extra-referencia').value = '';
-  $('extra-verified-role').value = '';
-  $('extra-consign-reason').value = '';
-}
-
-// Formatear input de valores en tiempo real
-$('new-green-total').addEventListener('input', function(e) {
-  let value = e.target.value.replace(/[^\d]/g, '');
-  if (value) {
-    e.target.value = fmtCOP(value);
-  }
-});
-
-$('extra-valor').addEventListener('input', function(e) {
-  let value = e.target.value.replace(/[^\d]/g, '');
-  if (value) {
-    e.target.value = fmtCOP(value);
-  }
-});
-
-$('extra-referencia').addEventListener('input', function(e) {
-  e.target.value = e.target.value.toUpperCase();
-});
-$('referencia').addEventListener('keydown', e=>{ 
-  if(e.key==='Enter') {
-    e.preventDefault();
+    if(isAddingConsign) return;
     $('add-consign').click(); // Agregar la consignación
   }
 });
@@ -3612,7 +3386,7 @@ $('btn-unverify').addEventListener('click', async ()=>{
   await batch.commit();
   
   // Recálculo automático después de desverificar
-  console.log('❌ Desverificación completada, recalculando separadores afectados...');
+  console.log('❌ Desverificación completada, recalculando separadores automáticamente...');
   
   // Recalcular separadores afectados por cada consignación desverificada
   for (const item of selectedData) {
@@ -3643,9 +3417,15 @@ $('btn-delete').addEventListener('click', async ()=>{
   showModal('Confirmación', `¿Eliminar ${ids.length} items permanentemente?`, true, async () => {
     try {
         // 1. Eliminar los documentos seleccionados
-        const deletionBatch = db.batch(); 
-        ids.forEach(id=> deletionBatch.delete(col.doc(id))); 
-        await deletionBatch.commit();
+       const deletionBatch = db.batch(); 
+       ids.forEach(id=> deletionBatch.delete(col.doc(id))); 
+       selectedData.forEach(item => {
+         if(item && !item.isSeparator && item.referencia){
+           const refKey = String(item.referencia).trim().toUpperCase();
+           if(refKey) deletionBatch.delete(db.collection('referencias').doc(refIndexId(refKey)));
+         }
+       });
+       await deletionBatch.commit();
         
         // --- LÓGICA DE RECALCULO DE CORTES AFECTADOS ---
         const affectedGreenSeparatorIds = new Set();
