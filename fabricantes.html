@@ -739,14 +739,19 @@ body.dark .checkbox-text{
   <label>Nombre fabricante</label>
   <input id="nombre" type="text">
 
-  <label>N° Factura</label>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;margin-bottom:6px;gap:10px;">
+    <label style="margin:0;">N° Factura</label>
+    <button id="btnGenFactura" type="button" style="background:#2e7d32;color:white;border:none;padding:8px 10px;border-radius:8px;font-size:12px;white-space:nowrap;">
+      Generar código de factura
+    </button>
+  </div>
   <input id="numFactura" type="text">
 
   <label>Valor</label>
-  <input id="valor" type="number" value="0">
+  <input id="valor" type="text" inputmode="numeric" value="0">
 
   <label>Abono (ABONO GENERAL)</label>
-  <input id="abono" type="number" value="0">
+  <input id="abono" type="text" inputmode="numeric" value="0">
 
   <div class="checkbox-container">
     <input id="soloAbonar" type="checkbox">
@@ -806,6 +811,12 @@ body.dark .checkbox-text{
     <span>Registros: <b id="countRegs">0</b></span>
     <span>Deuda filtro: <b id="deudaFiltro">$0</b></span>
   </div>
+
+  <div id="pagination" style="margin-top:10px;display:flex;justify-content:flex-end;gap:10px;align-items:center;font-size:13px;">
+    <button id="pagePrev" type="button" style="background:#636e72;color:white;border:none;padding:8px 12px;border-radius:8px;">◀</button>
+    <span id="pageInfo">1 / 1</span>
+    <button id="pageNext" type="button" style="background:#636e72;color:white;border:none;padding:8px 12px;border-radius:8px;">▶</button>
+  </div>
 </div>
 
 </div> <!-- container -->
@@ -824,32 +835,11 @@ body.dark .checkbox-text{
       </button>
     </div>
 
-    <div style="display:flex;gap:14px;margin-top:12px;">
-
-      <div style="flex:1;">
-        <table style="width:100%;">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Factura</th>
-              <th>Facturas</th>
-              <th>Abonos</th>
-              <th>Saldo</th>
-            </tr>
-          </thead>
-          <tbody id="modalSummary"></tbody>
-        </table>
+    <div style="margin-top:12px;background:#f1f5f9;padding:10px;border-radius:10px;">
+      <canvas id="chartDonut"></canvas>
+      <div style="margin-top:12px;text-align:right;font-weight:bold;font-size:15px;">
+        Total: <span id="modalTotal">$0</span>
       </div>
-
-      <div style="width:320px;background:#f1f5f9;padding:10px;border-radius:10px;">
-        <canvas id="chartBar"></canvas>
-        <canvas id="chartDonut" style="margin-top:14px;"></canvas>
-
-        <div style="margin-top:12px;text-align:right;font-weight:bold;font-size:15px;">
-          Total: <span id="modalTotal">$0</span>
-        </div>
-      </div>
-
     </div>
 
     <div id="detalleList" style="margin-top:20px;"></div>
@@ -883,10 +873,10 @@ body.dark .checkbox-text{
     <input id="editNumFactura" type="text">
     
     <label>Valor</label>
-    <input id="editValor" type="number" value="0">
+    <input id="editValor" type="text" inputmode="numeric" value="0">
     
     <label>Abono</label>
-    <input id="editAbono" type="number" value="0">
+    <input id="editAbono" type="text" inputmode="numeric" value="0">
     
     <div class="edit-modal-buttons">
       <button onclick="cancelarEdicionModal()" style="background: linear-gradient(135deg, #636e72 0%, #95a5a6 100%); color:white;">
@@ -1017,8 +1007,11 @@ let registros = [];
 let currentModalNit = null;
 let currentModalNombre = null;
 let grouped = {};
-let chartBar = null;
 let chartDonut = null;
+
+const PAGE_SIZE = 50;
+let currentPage = 1;
+let currentList = [];
 
 async function cargarTodos(){
   const snap = await db.collection(COLECCION).get();
@@ -1030,15 +1023,20 @@ async function cargarTodos(){
     }
   });
 
+  currentPage = 1;
   renderTabla(registros);
   actualizarTotales(registros);
 }
 cargarTodos();
 function renderTabla(list){
+  currentList = Array.isArray(list) ? list : [];
   const tbody = document.getElementById("tablaFabricantes");
   tbody.innerHTML = "";
 
-  list.forEach(r=>{
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageItems = currentList.slice(start, start + PAGE_SIZE);
+
+  pageItems.forEach(r=>{
     const valor = Number(r.valor||0);
     const abono = Number(r.abono||0);
     const saldo = valor - abono;
@@ -1073,7 +1071,21 @@ function renderTabla(list){
     tbody.appendChild(tr);
   });
 
-  document.getElementById("countRegs").textContent = list.length;
+  document.getElementById("countRegs").textContent = currentList.length;
+  renderPagination();
+}
+
+function renderPagination(){
+  const total = currentList.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  document.getElementById('pageInfo').textContent = `${currentPage} / ${totalPages}`;
+  const prevBtn = document.getElementById('pagePrev');
+  const nextBtn = document.getElementById('pageNext');
+  prevBtn.disabled = currentPage <= 1;
+  nextBtn.disabled = currentPage >= totalPages;
+  prevBtn.style.opacity = prevBtn.disabled ? '0.5' : '1';
+  nextBtn.style.opacity = nextBtn.disabled ? '0.5' : '1';
 }
 
 function filtrar(){
@@ -1085,6 +1097,7 @@ function filtrar(){
     r.numFactura.toLowerCase().includes(q)
   );
 
+  currentPage = 1;
   renderTabla(out);
   actualizarTotales(out);
 }
@@ -1103,14 +1116,17 @@ document.getElementById("soloAbonar").onchange = function(){
   const banner = document.getElementById("bannerAbono");
   const numFactura = document.getElementById("numFactura");
   const valor = document.getElementById("valor");
+  const btnGenFactura = document.getElementById("btnGenFactura");
 
   if(this.checked){
     banner.style.display="block";
     valor.disabled = true;
-    valor.value = 0;
+    setMoneyInputValue(valor, 0);
 
     numFactura.value = "ABONO";
     numFactura.disabled = true;
+    btnGenFactura.disabled = true;
+    btnGenFactura.style.opacity = '0.5';
 
     document.getElementById("abono").focus();
   }
@@ -1120,6 +1136,8 @@ document.getElementById("soloAbonar").onchange = function(){
 
     numFactura.disabled = false;
     numFactura.value = "";
+    btnGenFactura.disabled = false;
+    btnGenFactura.style.opacity = '1';
   }
 };
 document.getElementById("btnGuardar").onclick = async function(){
@@ -1128,8 +1146,8 @@ document.getElementById("btnGuardar").onclick = async function(){
   const nit = document.getElementById("nit").value.trim();
   const nombre = document.getElementById("nombre").value.trim();
   const numFactura = document.getElementById("numFactura").value.trim() || "-";
-  const valor = Number(document.getElementById("valor").value || 0);
-  const abono = Number(document.getElementById("abono").value || 0);
+  const valor = parseMoney(document.getElementById("valor").value);
+  const abono = parseMoney(document.getElementById("abono").value);
   const solo = document.getElementById("soloAbonar").checked;
 
   if(!nit || !nombre){
@@ -1180,8 +1198,8 @@ function limpiar(){
   document.getElementById("nit").value="";
   document.getElementById("nombre").value="";
   document.getElementById("numFactura").value="";
-  document.getElementById("valor").value=0;
-  document.getElementById("abono").value=0;
+  setMoneyInputValue(document.getElementById("valor"), 0);
+  setMoneyInputValue(document.getElementById("abono"), 0);
   document.getElementById("soloAbonar").checked=false;
 
   document.getElementById("bannerAbono").style.display="none";
@@ -1204,8 +1222,8 @@ async function openModal(nit, nombre){
     .where("nit","==",nit).get();
 
   if(snap.empty){
-    document.getElementById("modalSummary").innerHTML =
-      "<tr><td colspan='6'>Sin registros</td></tr>";
+    document.getElementById("modalTotal").textContent = "$0";
+    if(chartDonut) chartDonut.destroy();
     document.getElementById("detalleList").innerHTML = "";
     return;
   }
@@ -1218,54 +1236,15 @@ async function openModal(nit, nombre){
     }
   });
 
-  /* Agrupar facturas/abonos */
-  grouped = {};
-  rows.forEach(r=>{
-    const key = r.numFactura || "-";
-    if(!grouped[key]) grouped[key] = {fact:[], abo:[]};
-
-    if(r.valor > 0) grouped[key].fact.push(r);
-    if(r.abono > 0) grouped[key].abo.push(r);
-  });
-
-  renderSummary(rows);
+  renderDonut(rows);
   renderDetalle(rows);
 }
 
-/* =======================================================
-   RENDER RESUMEN DEL MODAL
-======================================================= */
-function renderSummary(rows){
-  const tbody = document.getElementById("modalSummary");
-  tbody.innerHTML = "";
-
-  let i=1;
-  let totalF=0, totalA=0;
-
-  for(const key in grouped){
-    const g = grouped[key];
-    const sumaF = g.fact.reduce((s,x)=> s + Number(x.valor),0);
-    const sumaA = g.abo.reduce((s,x)=> s + Number(x.abono),0);
-
-    totalF += sumaF;
-    totalA += sumaA;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${i++}</td>
-      <td>${key}</td>
-      <td>$${sumaF.toLocaleString()}</td>
-      <td>$${sumaA.toLocaleString()}</td>
-      <td>$${(sumaF-sumaA).toLocaleString()}</td>
-    `;
-
-    tbody.appendChild(tr);
-  }
-
-  document.getElementById("modalTotal").textContent =
-    "$" + (totalF-totalA).toLocaleString();
-
-  drawCharts(Object.keys(grouped), grouped);
+function renderDonut(rows){
+  const totalF = rows.reduce((s,x)=> s + Number(x.valor||0), 0);
+  const totalA = rows.reduce((s,x)=> s + Number(x.abono||0), 0);
+  document.getElementById("modalTotal").textContent = "$" + (totalF-totalA).toLocaleString();
+  drawCharts(totalF, totalA);
 }
 
 /* =======================================================
@@ -1314,25 +1293,8 @@ function renderDetalle(rows){
    GRÁFICOS
 ======================================================= */
 function drawCharts(keys, grouped){
-  if(chartBar) chartBar.destroy();
   if(chartDonut) chartDonut.destroy();
 
-  let f = keys.map(k => grouped[k].fact.reduce((s,x)=> s+Number(x.valor),0));
-  let a = keys.map(k => grouped[k].abo.reduce((s,x)=> s+Number(x.abono),0));
-
-  /* BARRAS */
-  chartBar = new Chart(document.getElementById("chartBar"),{
-    type: "bar",
-    data:{
-      labels:keys,
-      datasets:[
-        { label:"Facturas", data:f, backgroundColor:"#0984e3" },
-        { label:"Abonos", data:a, backgroundColor:"#00b894" }
-      ]
-    }
-  });
-
-  /* DONUT */
   chartDonut = new Chart(document.getElementById("chartDonut"),{
     type:"doughnut",
     data:{
@@ -1340,8 +1302,8 @@ function drawCharts(keys, grouped){
       datasets:[
         {
           data:[
-            f.reduce((s,x)=>s+x,0),
-            a.reduce((s,x)=>s+x,0)
+            Number(keys||0),
+            Number(grouped||0)
           ],
           backgroundColor:["#0984e3","#00b894"]
         }
@@ -1355,9 +1317,72 @@ function drawCharts(keys, grouped){
 ======================================================= */
 function cerrarModal(){
   modalBackdrop.style.display="none";
-  if(chartBar) chartBar.destroy();
   if(chartDonut) chartDonut.destroy();
 }
+
+document.getElementById('pagePrev').onclick = ()=>{
+  if (currentPage > 1) {
+    currentPage -= 1;
+    renderTabla(currentList);
+  }
+};
+
+document.getElementById('pageNext').onclick = ()=>{
+  const totalPages = Math.max(1, Math.ceil(currentList.length / PAGE_SIZE));
+  if (currentPage < totalPages) {
+    currentPage += 1;
+    renderTabla(currentList);
+  }
+};
+
+function formatMoneyInput(raw) {
+  const digits = String(raw || '').replace(/\D/g, '').slice(0, 15);
+  const n = digits ? Number(digits) : 0;
+  return n.toLocaleString('es-CO');
+}
+
+function parseMoney(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  return digits ? Number(digits) : 0;
+}
+
+function setMoneyInputValue(el, n) {
+  if (!el) return;
+  const safe = Number.isFinite(Number(n)) ? Number(n) : 0;
+  el.value = safe.toLocaleString('es-CO');
+}
+
+function bindMoneyInput(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', (e) => {
+    const formatted = formatMoneyInput(e.target.value);
+    e.target.value = formatted;
+  });
+  el.addEventListener('blur', (e) => {
+    const formatted = formatMoneyInput(e.target.value);
+    e.target.value = formatted;
+  });
+}
+
+bindMoneyInput('valor');
+bindMoneyInput('abono');
+bindMoneyInput('editValor');
+bindMoneyInput('editAbono');
+
+function generateFacturaCode() {
+  const ts = Date.now().toString(36).toUpperCase();
+  const rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `F-${ts}-${rnd}`;
+}
+
+document.getElementById('btnGenFactura').onclick = ()=>{
+  const solo = document.getElementById('soloAbonar').checked;
+  if (solo) return;
+  const el = document.getElementById('numFactura');
+  el.value = generateFacturaCode();
+  el.focus();
+};
 
 /* =======================================================
    EXPORTAR EXCEL
@@ -1400,26 +1425,14 @@ function editarGrupo(numFactura){
   editandoGrupo = numFactura;
   editandoDocumento = null;
 
-  // Resaltar fila en resumen
-  document.querySelectorAll("#modalSummary tr").forEach(tr=>{
-    if(tr.children[1].textContent === numFactura){
-      tr.classList.add("editing-row");
-      tr.children[5].innerHTML = `
-        <button class="btn-small btn-save" onclick="guardarGrupo('${numFactura}')">Guardar</button>
-        <button class="btn-small btn-cancel" onclick="cancelarEdicion()">Cancelar</button>
-      `;
-    }
-  });
-
   // Cargar datos de la factura principal en el formulario
-  const facturaPrincipal = registros.find(r => r.numFactura === numFactura && r.valor > 0);
-
+  const facturaPrincipal = registros.find(r => r.numFactura === numFactura && Number(r.valor || 0) > 0);
   if(facturaPrincipal){
     document.getElementById("nit").value = facturaPrincipal.nit;
     document.getElementById("nombre").value = facturaPrincipal.nombre;
     document.getElementById("numFactura").value = facturaPrincipal.numFactura;
-    document.getElementById("valor").value = facturaPrincipal.valor;
-    document.getElementById("abono").value = 0;
+    setMoneyInputValue(document.getElementById("valor"), Number(facturaPrincipal.valor || 0));
+    setMoneyInputValue(document.getElementById("abono"), 0);
     document.getElementById("soloAbonar").checked = false;
     document.getElementById("bannerAbono").style.display = "none";
     document.getElementById("fecha").value = facturaPrincipal.fecha;
@@ -1437,7 +1450,7 @@ async function guardarGrupo(numFactura){
   const nit = document.getElementById("nit").value.trim();
   const nombre = document.getElementById("nombre").value.trim();
   const nuevoNum = document.getElementById("numFactura").value.trim();
-  const valor = Number(document.getElementById("valor").value || 0);
+  const valor = parseMoney(document.getElementById("valor").value);
 
   if(!nit || !nombre){
     showAlert("Debes ingresar NIT y Nombre.", "error");
@@ -1483,10 +1496,6 @@ async function guardarGrupo(numFactura){
 function cancelarEdicion(){
   editandoGrupo = null;
   editandoDocumento = null;
-
-  document.querySelectorAll("#modalSummary tr").forEach(tr=>{
-    tr.classList.remove("editing-row");
-  });
 
   cerrarModal();
   openModal(currentModalNit, currentModalNombre);
@@ -1540,18 +1549,18 @@ async function editarDocumento(id){
   if(doc.valor > 0){
     // Es FACTURA
     document.getElementById("editModalTitle").textContent = "Editar Factura";
-    document.getElementById("editValor").value = doc.valor;
+    setMoneyInputValue(document.getElementById("editValor"), Number(doc.valor || 0));
     document.getElementById("editValor").disabled = false;
-    document.getElementById("editAbono").value = 0;
+    setMoneyInputValue(document.getElementById("editAbono"), 0);
     document.getElementById("editAbono").disabled = true;
     document.getElementById("editNumFactura").disabled = false;
   }
   else{
     // Es ABONO
     document.getElementById("editModalTitle").textContent = "Editar Abono";
-    document.getElementById("editValor").value = 0;
+    setMoneyInputValue(document.getElementById("editValor"), 0);
     document.getElementById("editValor").disabled = true;
-    document.getElementById("editAbono").value = doc.abono;
+    setMoneyInputValue(document.getElementById("editAbono"), Number(doc.abono || 0));
     document.getElementById("editAbono").disabled = false;
     document.getElementById("editNumFactura").value = "ABONO";
     document.getElementById("editNumFactura").disabled = true;
@@ -1574,8 +1583,8 @@ async function guardarDocumentoModal(id){
   const nit = document.getElementById("editNit").value.trim();
   const nombre = document.getElementById("editNombre").value.trim();
   const numFactura = document.getElementById("editNumFactura").value.trim();
-  const valor = Number(document.getElementById("editValor").value || 0);
-  const abono = Number(document.getElementById("editAbono").value || 0);
+  const valor = parseMoney(document.getElementById("editValor").value);
+  const abono = parseMoney(document.getElementById("editAbono").value);
 
   if(!nit || !nombre){
     showAlert("Debes ingresar NIT y Nombre.", "error");
