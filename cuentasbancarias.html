@@ -699,8 +699,8 @@
                 <th>☑️ Sel</th>
                 <th>📅 FECHA</th>
                 <th>💵 VALOR</th>
-                <th>� REF</th>
-                <th>� ️ FECHA OBS</th>
+                <th>  REF</th>
+                <th>  ️ FECHA OBS</th>
                 <th>📋 ESTADO</th>
               </tr>
             </thead>
@@ -943,6 +943,7 @@ let selectedAccountId = null;
 let selectedAccountName = "SinNombre";
 let currentConsignsSnapshot = []; 
 let selectedConsignIds = new Set(); // Almacenamiento local de IDs seleccionados (para persistencia en UI)
+let lastAssignedOrden = null;
 
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
@@ -1481,6 +1482,7 @@ function subscribeAccounts(){
         firstAccount = accountsData[0];
         selectedAccountId = firstAccount.id; 
         selectedAccountName = firstAccount.name;
+        lastAssignedOrden = null;
     }
 
     // Renderizar cuentas
@@ -1511,6 +1513,7 @@ function subscribeAccounts(){
       div.onclick = ()=>{ 
         selectedAccountId = a.id; 
         selectedAccountName = a.name;
+        lastAssignedOrden = null;
         
         // LIMPIAR LA SELECCIÓN AL CAMBIAR DE CUENTA
         selectedConsignIds.clear(); 
@@ -1541,6 +1544,7 @@ function subscribeAccounts(){
     if(firstAccount){ 
         const isClosed = firstAccount.closed || false;
         $('selected-account-info').textContent = `Cuenta: ${selectedAccountName} — ${firstAccount.number || ''}${isClosed ? ' (🔒 CERRADA)' : ''}`; 
+        lastAssignedOrden = null;
         renderConsigns(); 
         updateSelectedTotals();
         
@@ -1649,6 +1653,7 @@ function renderConsigns(){
   if(consignsUnsub) consignsUnsub(); 
   const tbody = $('consigns-body'); tbody.innerHTML = '';
   currentConsignsSnapshot = [];
+  lastAssignedOrden = null;
 
   if(!selectedAccountId) return;
 
@@ -2137,65 +2142,38 @@ $('add-consign').addEventListener('click', async ()=>{
 
   // 3. Ejecutar adición
   try{ 
-    // CONSIGNACIONES NORMALES: Con cortes en la parte superior
-    // Buscar el separador rojo más reciente (que estará en la parte superior)
-    let ultimoCorteRojo = null;
+    // CONSIGNACIONES NORMALES:
+    // IMPORTANTE: El orden debe ser ÚNICO para no perder el orden de ingreso.
+    // Después de un corte, antes se usaba (ordenVerde - 0.1) y eso generaba empates.
+    // Solución: siempre insertar arriba usando (mínimo orden conocido - 1), usando
+    // lastAssignedOrden para evitar duplicados si se agregan varias antes de que llegue el onSnapshot.
     let ordenParaNuevaConsignacion = 0;
-    
-    // Buscar el separador rojo con el orden más PEQUEÑO (más reciente, ya que están arriba)
-    for (const item of currentConsignsSnapshot) {
-      if (item.isSeparator && item.type === 'red') {
-        if (!ultimoCorteRojo || (item.orden || 0) < (ultimoCorteRojo.orden || 0)) {
-          ultimoCorteRojo = item;
-        }
+    let minOrden = 0;
+    let hasOrden = false;
+    currentConsignsSnapshot.forEach(c => {
+      if (c.orden !== undefined) {
+        const o = Number(c.orden);
+        if (!Number.isFinite(o)) return;
+        if (!hasOrden) { minOrden = o; hasOrden = true; }
+        else { minOrden = Math.min(minOrden, o); }
       }
-    }
-    
-    if (ultimoCorteRojo) {
-      // HAY UN CORTE: Las nuevas consignaciones deben ir ENCIMA del separador verde
-      // Buscar el separador verde más reciente (el que tiene menor orden, ya que están arriba)
-      let separadorVerdeMasReciente = null;
-      currentConsignsSnapshot.forEach(c => {
-        if (c.isSeparator && c.type === 'green') {
-          if (!separadorVerdeMasReciente || (c.orden || 0) < (separadorVerdeMasReciente.orden || 0)) {
-            separadorVerdeMasReciente = c;
-          }
-        }
-      });
-      
-      if (separadorVerdeMasReciente) {
-        // Insertar ENCIMA del separador verde (orden menor)
-        ordenParaNuevaConsignacion = separadorVerdeMasReciente.orden - 0.1;
-      } else {
-        // No hay separador verde, insertar después del rojo
-        ordenParaNuevaConsignacion = ultimoCorteRojo.orden + 0.1;
-      }
-      
-      console.log('🆕 CONSIGNACIÓN ENCIMA DEL SEPARADOR VERDE:');
-      console.log('  - Orden corte rojo:', ultimoCorteRojo.orden);
-      console.log('  - Orden separador verde:', separadorVerdeMasReciente?.orden);
-      console.log('  - Nuevo orden (ENCIMA del verde):', ordenParaNuevaConsignacion);
-      
+    });
+
+    if (hasOrden) {
+      const base = (lastAssignedOrden !== null && Number.isFinite(Number(lastAssignedOrden)))
+        ? Math.min(Number(lastAssignedOrden), minOrden)
+        : minOrden;
+      ordenParaNuevaConsignacion = base - 1;
     } else {
-      // NO HAY CORTES: Insertar ARRIBA (orden mínimo - 1) para mantener el orden de ingreso
-      // (lo último ingresado se ve primero, como en Excel)
-      let minOrden = 0;
-      let hasOrden = false;
-      currentConsignsSnapshot.forEach(c => {
-        if (c.orden !== undefined) {
-          const o = Number(c.orden);
-          if (!Number.isFinite(o)) return;
-          if (!hasOrden) { minOrden = o; hasOrden = true; }
-          else { minOrden = Math.min(minOrden, o); }
-        }
-      });
-      
-      ordenParaNuevaConsignacion = hasOrden ? (minOrden - 1) : 0;
-      
-      console.log('🆕 CONSIGNACIÓN SIN CORTES (ARRIBA):');
-      console.log('  - Orden actual mínimo:', hasOrden ? minOrden : '(vacío)');
-      console.log('  - Nuevo orden:', ordenParaNuevaConsignacion);
+      ordenParaNuevaConsignacion = 0;
     }
+
+    lastAssignedOrden = ordenParaNuevaConsignacion;
+
+    console.log('🆕 CONSIGNACIÓN (ARRIBA, ORDEN ÚNICO):');
+    console.log('  - Orden mínimo actual:', hasOrden ? minOrden : '(vacío)');
+    console.log('  - Último orden asignado:', lastAssignedOrden);
+    console.log('  - Nuevo orden:', ordenParaNuevaConsignacion);
     console.log('  - Fecha seleccionada:', fecha.toISOString());
     console.log('  - Referencia:', referencia);
     
