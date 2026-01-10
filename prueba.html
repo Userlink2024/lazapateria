@@ -2084,7 +2084,6 @@
         function filtrarYBuscarPedidos() {
             console.log("--- Inicia filtrarYBuscarPedidos ---");
             const filtroAsesorValue = document.getElementById('filtro_asesor').value;
-            const todayStr = new Date().toISOString().slice(0, 10);
             
             // Obtener el valor del campo de búsqueda específico para pedidos
             const searchPedidosInput = document.getElementById('search_pedidos_input');
@@ -2117,13 +2116,11 @@
                 const despachadoDelRegistro = recordElement.dataset.despachado === 'true';
                 const retardoDelRegistro = recordElement.dataset.retardo === 'true'; // New: Read data-retardo
                 const usuarioDelRegistro = recordElement.dataset.usuario;
-                const dateKey = recordElement.dataset.dateKey;
                 
                 // Obtener valores adicionales para búsqueda universal
                 const paresDelRegistro = recordElement.dataset.pares ? recordElement.dataset.pares.toLowerCase() : '';
                 const valorDelRegistro = recordElement.dataset.valor ? recordElement.dataset.valor.toLowerCase() : '';
 
-                const coincideFechaHoy = !dateKey || dateKey === todayStr;
                 const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
                 let coincideBusqueda = true;
                 if (searchTerm) {
@@ -2137,7 +2134,7 @@
                 const userMatches = (isUserFilteredRole ? usuarioDelRegistro === currentUserId : true);
 
                 // Count for overall filter buttons (before applying currentDispatchFilter)
-                if (coincideFechaHoy && coincideAsesor && coincideBusqueda && userMatches) {
+                if (coincideAsesor && coincideBusqueda && userMatches) {
                     if (despachadoDelRegistro) {
                         totalDespachadosFiltered++;
                     } else {
@@ -2159,7 +2156,7 @@
                 }
                 // For 'all' filter, no specific dispatch/retardo filtering is needed here.
 
-                if (coincideFechaHoy && coincideAsesor && coincideBusqueda && userMatches && recordShouldBeDisplayed) {
+                if (coincideAsesor && coincideBusqueda && userMatches && recordShouldBeDisplayed) {
                     recordElement.style.display = 'block';
                     visibleTotalCount++;
                     const numParesElement = recordElement.querySelector('.num_pares');
@@ -2345,7 +2342,6 @@
             const enviadoAEmpaque = registro.enviadoAEmpaque === true;
             const enviadoAEmpaqueTimestamp = registro.enviadoAEmpaqueTimestamp ? registro.enviadoAEmpaqueTimestamp.toDate() : null;
             const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
-            const dateKey = fechaHoraCreacion ? fechaHoraCreacion.toISOString().slice(0, 10) : '';
 
             // Determine if the record is currently in a "retardo" state
             const now = new Date();
@@ -2363,7 +2359,6 @@
             recordElement.dataset.enviadoAEmpaque = enviadoAEmpaque;
             recordElement.dataset.enviadoAEmpaqueTimestamp = enviadoAEmpaqueTimestamp ? enviadoAEmpaqueTimestamp.toISOString() : '';
             recordElement.dataset.fechaHoraCreacionIso = fechaHoraCreacion ? fechaHoraCreacion.toISOString() : '';
-            recordElement.dataset.dateKey = dateKey;
             recordElement.dataset.retardo = isCurrentlyRetarded; // Set data-retardo attribute here
             // Store the 'usuario' (user ID) in the dataset for filtering purposes
             recordElement.dataset.usuario = registro.usuario || '';
@@ -2538,6 +2533,12 @@
             }
 
             let query = db.collection('registros').orderBy('fecha_hora', 'asc');
+            const now = new Date();
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            const startOfNextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+            query = query
+                .where('fecha_hora', '>=', firebase.firestore.Timestamp.fromDate(startOfDay))
+                .where('fecha_hora', '<', firebase.firestore.Timestamp.fromDate(startOfNextDay));
             // Updated logic: if user is operator OR bodeguero, filter by their own ID
             const isUserFilteredRole = datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero';
             const currentUserId = datosUsuario.usuario;
@@ -2870,18 +2871,22 @@
 
         async function exportarAExcel() {
             console.log("Exportando a Excel...");
-            const querySnapshot = await db.collection('registros').orderBy('fecha_hora', 'asc').get();
+            const now = new Date();
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            const startOfNextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+            const isUserFilteredRole = datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero';
+            const currentUserId = datosUsuario.usuario;
+            let query = db.collection('registros').orderBy('fecha_hora', 'asc')
+                .where('fecha_hora', '>=', firebase.firestore.Timestamp.fromDate(startOfDay))
+                .where('fecha_hora', '<', firebase.firestore.Timestamp.fromDate(startOfNextDay));
+            if (isUserFilteredRole) {
+                query = query.where('usuario', '==', currentUserId);
+            }
+            const querySnapshot = await query.get();
             let registros = [];
-            const todayStr = new Date().toISOString().slice(0, 10);
 
             querySnapshot.forEach(doc => {
                 const registro = doc.data();
-                if (registro.fecha_hora && typeof registro.fecha_hora.toDate === 'function') {
-                    const dateKey = registro.fecha_hora.toDate().toISOString().slice(0, 10);
-                    if (dateKey !== todayStr) return;
-                } else {
-                    return;
-                }
                 let fechaHoraFormateada = 'N/A';
                 if (registro.fecha_hora && typeof registro.fecha_hora.toDate === 'function') {
                     const dateObj = registro.fecha_hora.toDate();
@@ -3562,22 +3567,18 @@
                 let query = db.collection('registros')
                               .where('transportadora', '==', selectedTransportadora)
                               .where('despachado', '==', false) // Solo sin despachar
+                              .where('fecha_hora', '>=', firebase.firestore.Timestamp.fromDate(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 0, 0, 0, 0)))
+                              .where('fecha_hora', '<', firebase.firestore.Timestamp.fromDate(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1, 0, 0, 0, 0)))
                               .orderBy('fecha_hora', 'desc'); // Order by date/time for readability
 
                 const snapshot = await query.get();
-                const todayStr = new Date().toISOString().slice(0, 10);
-                const docsToday = snapshot.docs.filter(d => {
-                    const fh = d.data().fecha_hora;
-                    const dt = fh && fh.toDate ? fh.toDate() : null;
-                    return dt ? dt.toISOString().slice(0, 10) === todayStr : false;
-                });
-                countElement.textContent = docsToday.length;
+                countElement.textContent = snapshot.size;
 
                 let ordersHtml = '';
-                if (docsToday.length === 0) {
+                if (snapshot.empty) {
                     ordersHtml = '<p>No hay pedidos SIN despachar para esta transportadora.</p>';
                 } else {
-                    docsToday.forEach(doc => {
+                    snapshot.forEach(doc => {
                         const registro = doc.data();
                         const fechaHora = registro.fecha_hora ? registro.fecha_hora.toDate().toLocaleString('es-CO') : 'N/A';
                         const bodegueros = Array.isArray(registro.bodegueros_encargados) && registro.bodegueros_encargados.length > 0
