@@ -119,6 +119,11 @@
         .checklist .row{display:flex;align-items:center;gap:10px;padding:6px 4px}
         .checklist .row input{width:18px;height:18px}
         .checklist .row span{color:var(--text);font-weight:700;font-size:13px}
+
+        .abonos{border:1px solid rgba(20, 30, 60, .14);border-radius:12px;background:#ffffff;padding:10px;display:grid;gap:8px}
+        .abono-row{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}
+        @media(max-width:620px){.abono-row{grid-template-columns:1fr;align-items:stretch}}
+        .abono-row .btn{justify-content:center}
     </style>
 </head>
 <body>
@@ -228,6 +233,13 @@
                     <div style="grid-column:1 / -1;">
                         <label>Bodeguero(s)</label>
                         <div id="editBodeguerosList" class="checklist"></div>
+                    </div>
+                    <div style="grid-column:1 / -1;">
+                        <label>Abonos</label>
+                        <div id="editAbonosList" class="abonos"></div>
+                        <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+                            <button class="btn" type="button" id="addAbonoBtn">Agregar abono</button>
+                        </div>
                     </div>
                     <div style="grid-column:1 / -1;">
                         <label for="editObs">Observaciones</label>
@@ -559,6 +571,120 @@
             container.appendChild(frag);
         }
 
+        function renderAbonosEditor(abonos) {
+            const container = $('editAbonosList');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const list = Array.isArray(abonos) ? abonos : [];
+            if (!list.length) {
+                container.innerHTML = '<div style="color:var(--muted);font-weight:700;font-size:12px;">Sin abonos.</div>';
+                return;
+            }
+
+            const frag = document.createDocumentFragment();
+            list.forEach((a) => {
+                const row = document.createElement('div');
+                row.className = 'abono-row';
+
+                const fechaWrap = document.createElement('div');
+                const fechaLabel = document.createElement('label');
+                fechaLabel.textContent = 'Fecha';
+                const fecha = document.createElement('input');
+                fecha.type = 'date';
+                fecha.value = String((a && a.fecha) || '').trim();
+                fecha.dataset.field = 'fecha';
+                fechaWrap.appendChild(fechaLabel);
+                fechaWrap.appendChild(fecha);
+
+                const montoWrap = document.createElement('div');
+                const montoLabel = document.createElement('label');
+                montoLabel.textContent = 'Monto';
+                const monto = document.createElement('input');
+                monto.type = 'number';
+                monto.step = '1';
+                monto.value = (a && a.monto != null) ? String(a.monto) : '';
+                monto.dataset.field = 'monto';
+                montoWrap.appendChild(montoLabel);
+                montoWrap.appendChild(monto);
+
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'btn danger';
+                del.textContent = 'Quitar';
+                del.addEventListener('click', () => {
+                    row.remove();
+                    if (!container.querySelector('.abono-row')) {
+                        container.innerHTML = '<div style="color:var(--muted);font-weight:700;font-size:12px;">Sin abonos.</div>';
+                    }
+                });
+
+                row.appendChild(fechaWrap);
+                row.appendChild(montoWrap);
+                row.appendChild(del);
+                frag.appendChild(row);
+            });
+            container.appendChild(frag);
+        }
+
+        function addEmptyAbonoRow() {
+            const container = $('editAbonosList');
+            if (!container) return;
+            if (!container.querySelector('.abono-row')) container.innerHTML = '';
+
+            const row = document.createElement('div');
+            row.className = 'abono-row';
+
+            const fechaWrap = document.createElement('div');
+            const fechaLabel = document.createElement('label');
+            fechaLabel.textContent = 'Fecha';
+            const fecha = document.createElement('input');
+            fecha.type = 'date';
+            fecha.dataset.field = 'fecha';
+            fechaWrap.appendChild(fechaLabel);
+            fechaWrap.appendChild(fecha);
+
+            const montoWrap = document.createElement('div');
+            const montoLabel = document.createElement('label');
+            montoLabel.textContent = 'Monto';
+            const monto = document.createElement('input');
+            monto.type = 'number';
+            monto.step = '1';
+            monto.dataset.field = 'monto';
+            montoWrap.appendChild(montoLabel);
+            montoWrap.appendChild(monto);
+
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'btn danger';
+            del.textContent = 'Quitar';
+            del.addEventListener('click', () => {
+                row.remove();
+                if (!container.querySelector('.abono-row')) {
+                    container.innerHTML = '<div style="color:var(--muted);font-weight:700;font-size:12px;">Sin abonos.</div>';
+                }
+            });
+
+            row.appendChild(fechaWrap);
+            row.appendChild(montoWrap);
+            row.appendChild(del);
+            container.appendChild(row);
+        }
+
+        function getAbonosFromEditor() {
+            const container = $('editAbonosList');
+            if (!container) return [];
+            const rows = Array.from(container.querySelectorAll('.abono-row'));
+            const parsed = rows.map(row => {
+                const fecha = row.querySelector('input[data-field="fecha"]');
+                const monto = row.querySelector('input[data-field="monto"]');
+                const fechaVal = String((fecha && fecha.value) || '').trim();
+                const montoVal = Number((monto && monto.value) || NaN);
+                return { fecha: fechaVal, monto: montoVal };
+            }).filter(a => a.fecha && Number.isFinite(a.monto));
+            return parsed;
+        }
+
         function getSelectedBodeguerosFromChecklist() {
             const container = $('editBodeguerosList');
             if (!container) return [];
@@ -634,6 +760,7 @@
             $('editValorTotal').value = r.valor_total != null ? r.valor_total : '';
             $('editSaldo').value = r.saldo_a_favor != null ? r.saldo_a_favor : 0;
             renderBodeguerosChecklist(Array.isArray(r.bodegueros_encargados) ? r.bodegueros_encargados : []);
+            renderAbonosEditor(Array.isArray(r.abonos) ? r.abonos : []);
             $('editObs').value = r.observaciones || '';
             $('editEnviadoEmpaque').checked = r.enviadoAEmpaque === true;
             $('editModal').classList.add('open');
@@ -649,6 +776,10 @@
         $('closeEdit').addEventListener('click', closeEditModal);
         $('cancelEdit').addEventListener('click', closeEditModal);
         $('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) closeEditModal(); });
+
+        $('addAbonoBtn').addEventListener('click', () => {
+            addEmptyAbonoRow();
+        });
 
         async function toggleDespachado(id, nuevoEstado) {
             if (!nuevoEstado) {
@@ -689,6 +820,7 @@
                 num_pares: Number($('editNumPares').value || 0),
                 valor_total: Number($('editValorTotal').value || 0),
                 saldo_a_favor: Number($('editSaldo').value || 0),
+                abonos: getAbonosFromEditor(),
                 bodegueros_encargados: getSelectedBodeguerosFromChecklist(),
                 observaciones: $('editObs').value
             };
