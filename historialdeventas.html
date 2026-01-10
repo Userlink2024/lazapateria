@@ -202,7 +202,7 @@
                     </div>
                     <div>
                         <label for="editTransportadora">Transportadora</label>
-                        <input id="editTransportadora" type="text" />
+                        <select id="editTransportadora"></select>
                     </div>
                     <div>
                         <label for="editNumPares">Número de pares</label>
@@ -320,6 +320,9 @@
         let cachedAsesores = [];
         let cachedBodegueros = [];
 
+        const transportadorasCollection = db.collection('transportadoras');
+        let cachedTransportadoras = [];
+
         const PAGE_SIZE = 10;
         let currentPage = 1;
         let totalPages = 1;
@@ -404,6 +407,47 @@
             }
         }
 
+        async function loadTransportadorasForEdit() {
+            try {
+                const snap = await transportadorasCollection.orderBy('name').get();
+                cachedTransportadoras = [];
+                snap.forEach(doc => {
+                    const d = doc.data() || {};
+                    if (d.name) cachedTransportadoras.push(String(d.name));
+                });
+                cachedTransportadoras = Array.from(new Set(cachedTransportadoras)).sort((a, b) => a.localeCompare(b, 'es'));
+
+                const sel = $('editTransportadora');
+                if (sel) {
+                    sel.innerHTML = '';
+                    if (!cachedTransportadoras.length) {
+                        const opt = document.createElement('option');
+                        opt.value = '';
+                        opt.textContent = 'Sin transportadoras';
+                        sel.appendChild(opt);
+                    } else {
+                        cachedTransportadoras.forEach(n => {
+                            const opt = document.createElement('option');
+                            opt.value = n;
+                            opt.textContent = n;
+                            sel.appendChild(opt);
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('Error cargando transportadoras para edición:', e);
+                cachedTransportadoras = [];
+                const sel = $('editTransportadora');
+                if (sel) {
+                    sel.innerHTML = '';
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = 'Error cargando transportadoras';
+                    sel.appendChild(opt);
+                }
+            }
+        }
+
         function renderBodeguerosChecklist(selected) {
             const selectedSet = new Set((Array.isArray(selected) ? selected : []).map(String));
             const container = $('editBodeguerosList');
@@ -482,7 +526,16 @@
                 $('editAsesor').appendChild(opt);
                 $('editAsesor').value = r.asesor || '';
             }
-            $('editTransportadora').value = r.transportadora || '';
+            if (cachedTransportadoras.length) {
+                $('editTransportadora').value = r.transportadora || cachedTransportadoras[0] || '';
+            } else {
+                $('editTransportadora').innerHTML = '';
+                const opt = document.createElement('option');
+                opt.value = r.transportadora || '';
+                opt.textContent = r.transportadora || '';
+                $('editTransportadora').appendChild(opt);
+                $('editTransportadora').value = r.transportadora || '';
+            }
             $('editNumPares').value = r.num_pares != null ? r.num_pares : '';
             $('editValorTotal').value = r.valor_total != null ? r.valor_total : '';
             $('editSaldo').value = r.saldo_a_favor != null ? r.saldo_a_favor : 0;
@@ -538,7 +591,7 @@
             const updateData = {
                 cliente: $('editCliente').value.trim(),
                 asesor: String($('editAsesor').value || '').trim(),
-                transportadora: $('editTransportadora').value.trim(),
+                transportadora: String($('editTransportadora').value || '').trim(),
                 num_pares: Number($('editNumPares').value || 0),
                 valor_total: Number($('editValorTotal').value || 0),
                 saldo_a_favor: Number($('editSaldo').value || 0),
@@ -751,6 +804,7 @@
 
         attachFilterListeners();
         loadUsuariosForEdit();
+        loadTransportadorasForEdit();
         startRealtime();
     </script>
 </body>
