@@ -202,6 +202,14 @@
                         <select id="editAsesor"></select>
                     </div>
                     <div>
+                        <label for="editFecha">Fecha</label>
+                        <input id="editFecha" type="date" />
+                    </div>
+                    <div>
+                        <label for="editHora">Hora</label>
+                        <input id="editHora" type="time" step="1" />
+                    </div>
+                    <div>
                         <label for="editTransportadora">Transportadora</label>
                         <select id="editTransportadora"></select>
                     </div>
@@ -588,6 +596,20 @@
             editingRecord = r;
             $('editId').textContent = r.id;
             $('editCliente').value = r.cliente || '';
+            if (r.fecha_hora && typeof r.fecha_hora.toDate === 'function') {
+                const d = r.fecha_hora.toDate();
+                const yyyy = String(d.getFullYear());
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mi = String(d.getMinutes()).padStart(2, '0');
+                const ss = String(d.getSeconds()).padStart(2, '0');
+                $('editFecha').value = `${yyyy}-${mm}-${dd}`;
+                $('editHora').value = `${hh}:${mi}:${ss}`;
+            } else {
+                $('editFecha').value = '';
+                $('editHora').value = '';
+            }
             if (cachedAsesores.length) {
                 $('editAsesor').value = r.asesor || cachedAsesores[0] || '';
             } else {
@@ -670,6 +692,29 @@
                 bodegueros_encargados: getSelectedBodeguerosFromChecklist(),
                 observaciones: $('editObs').value
             };
+
+            const fechaStr = String($('editFecha').value || '').trim();
+            const horaStr = String($('editHora').value || '').trim();
+            if (fechaStr || horaStr) {
+                const base = (editingRecord.fecha_hora && typeof editingRecord.fecha_hora.toDate === 'function')
+                    ? editingRecord.fecha_hora.toDate()
+                    : new Date();
+
+                const yyyy = String(base.getFullYear());
+                const mm = String(base.getMonth() + 1).padStart(2, '0');
+                const dd = String(base.getDate()).padStart(2, '0');
+
+                const hh = String(base.getHours()).padStart(2, '0');
+                const mi = String(base.getMinutes()).padStart(2, '0');
+                const ss = String(base.getSeconds()).padStart(2, '0');
+
+                const finalDate = fechaStr || `${yyyy}-${mm}-${dd}`;
+                const finalTime = horaStr || `${hh}:${mi}:${ss}`;
+                const d = new Date(`${finalDate}T${finalTime}`);
+                if (!Number.isNaN(d.getTime())) {
+                    updateData.fecha_hora = firebase.firestore.Timestamp.fromDate(d);
+                }
+            }
 
             const wantsEnviado = $('editEnviadoEmpaque').checked === true;
             const snap = await docRef.get();
