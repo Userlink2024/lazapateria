@@ -1332,16 +1332,22 @@
                 // --- Listener for Today's Dispatches (for "Hoy" cards) ---
                 const now = new Date();
                 const todayStart = startOfDayLocal(now);
+                const weekStart = getStartOfWeekMonday(todayStart);
                 const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
                 monthStart.setHours(0, 0, 0, 0);
 
+                const rangeStart = (weekStart.getTime() < monthStart.getTime()) ? weekStart : monthStart;
+                const rangeEnd = new Date(todayStart);
+                rangeEnd.setDate(rangeEnd.getDate() + 1); // mañana 00:00
+
                 db.collection('registros')
-                    .where('fecha_hora', '>=', monthStart)
+                    .where('fecha_hora', '>=', rangeStart)
+                    .where('fecha_hora', '<', rangeEnd)
                     .orderBy('fecha_hora', 'desc')
                     .onSnapshot(snapshot => {
                         computeFromRegistrosSnapshot(snapshot);
                     }, error => {
-                        console.error("Error al escuchar los registros del mes:", error);
+                        console.error("Error al escuchar los registros del rango:", error);
                     });
 
 
