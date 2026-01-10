@@ -968,82 +968,100 @@
          * @param {boolean} isManualTrigger - True if called by user, false for auto-save.
          */
         async function autoSaveDailyProgress(isManualTrigger = false) {
-            // Prevent saving for anonymous user
-            if (asesorId === "usuario_anonimo") {
-                if (isManualTrigger) {
-                    showCustomMessageModal("Información", "No se puede guardar el progreso del día para un usuario anónimo.");
+            if (isManualTrigger) {
+                showCustomMessageModal("Información", "Ya no es necesario guardar el progreso del día. El progreso semanal y mensual se calcula automáticamente desde los pedidos almacenados en Firebase.");
+            }
+            return;
+        }
+
+        function startOfDayLocal(d) {
+            const x = new Date(d);
+            x.setHours(0, 0, 0, 0);
+            return x;
+        }
+
+        function getStartOfWeekMonday(todayLocalStart) {
+            const startOfWeek = new Date(todayLocalStart);
+            startOfWeek.setDate(todayLocalStart.getDate() - (todayLocalStart.getDay() + 6) % 7); // Monday
+            startOfWeek.setHours(0, 0, 0, 0);
+            return startOfWeek;
+        }
+
+        function isSameDayLocal(a, b) {
+            return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+        }
+
+        function computeFromRegistrosSnapshot(snapshot) {
+            const now = new Date();
+            const todayStart = startOfDayLocal(now);
+            const weekStart = getStartOfWeekMonday(todayStart);
+            const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+            monthStart.setHours(0, 0, 0, 0);
+
+            let totalParesHoy = 0;
+            let totalValorHoy = 0;
+            let pendingOrders = 0;
+            let inPackagingOrders = 0;
+            let dispatchedOrders = 0;
+            let retardedOrders = 0;
+
+            let weekValor = 0;
+            let monthPares = 0;
+
+            snapshot.forEach(doc => {
+                const registro = doc.data();
+                if (!registro || registro.asesor !== asesorNombreCompleto) return;
+                if (!registro.fecha_hora || typeof registro.fecha_hora.toDate !== 'function') return;
+
+                const fecha = registro.fecha_hora.toDate();
+                const pares = parseInt(registro.num_pares || 0) || 0;
+                const valor = parseFloat(registro.valor_total || 0) || 0;
+
+                // Semana (valor)
+                if (fecha.getTime() >= weekStart.getTime()) {
+                    weekValor += valor;
                 }
-                console.log("autoSaveDailyProgress: Saving skipped for anonymous user.");
-                return;
-            }
 
-            const todayStr = new Date().toISOString().slice(0, 10);
-            const asesorIdActual = asesorSeleccionado || asesorId;
-            const dailySnapshotRef = db.collection('users').doc(asesorIdActual).collection('daily_sales_snapshot').doc(todayStr);
+                // Mes (pares)
+                if (fecha.getTime() >= monthStart.getTime()) {
+                    monthPares += pares;
+                }
 
-            // MEJORA: Verificar si ya se guardó hoy (solo para auto-guardado)
-            if (!isManualTrigger && hasDailyProgressBeenSavedToday()) {
-                console.log(`autoSaveDailyProgress: Progreso del día ${todayStr} ya fue auto-guardado hoy (guardado automático omitido).`);
-                
-                // Schedule for tomorrow's 6 PM
-                const timeToNextRun = getTimeUntilNextAutoSave();
-                console.log(`autoSaveDailyProgress: Próximo auto-guardado programado en: ${timeToNextRun / (1000 * 60 * 60)} horas.`);
-                setTimeout(autoSaveDailyProgress, timeToNextRun);
-                return;
-            }
+                // Hoy (tarjetas)
+                if (isSameDayLocal(fecha, todayStart)) {
+                    totalParesHoy += pares;
+                    totalValorHoy += valor;
 
-            console.log(`autoSaveDailyProgress: Intentando guardar progreso del día ${todayStr} para el asesor ${asesorIdActual}. isManualTrigger: ${isManualTrigger}.`);
-            console.log(`  - Pares actuales: ${currentDayPares}`);
-            console.log(`  - Valor actual: ${currentDayValor}`);
-            
-            try {
-                // MEJORA: Usar transacción para evitar condiciones de carrera
-                await db.runTransaction(async (transaction) => {
-                    const doc = await transaction.get(dailySnapshotRef);
-                    
-                    // Si el documento ya existe, verificar si los valores son diferentes
-                    if (doc.exists) {
-                        const existingData = doc.data();
-                        console.log(`  - Datos existentes en Firebase: pares=${existingData.pares}, valor=${existingData.valor}`);
-                        
-                        // Solo actualizar si los valores son diferentes (evita escrituras innecesarias)
-                        if (existingData.pares === currentDayPares && existingData.valor === currentDayValor) {
-                            console.log(`  - Los valores no han cambiado. No se requiere actualización.`);
-                            return; // No hacer nada si los valores son iguales
-                        }
+                    if (registro.despachado) {
+                        dispatchedOrders++;
+                    } else if (registro.enviadoAEmpaque) {
+                        inPackagingOrders++;
+                    } else {
+                        pendingOrders++;
                     }
-                    
-                    // Guardar los valores actuales (NO sumar, sino reemplazar)
-                    transaction.set(dailySnapshotRef, {
-                        pares: currentDayPares,
-                        valor: currentDayValor,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                        lastUpdatedBy: isManualTrigger ? 'manual' : 'auto'
-                    }, { merge: true });
-                    
-                    console.log(`  - Transacción completada: Guardando pares=${currentDayPares}, valor=${currentDayValor}`);
-                });
-                
-                markDailyProgressAsSavedToday(); // Mark as saved AFTER successful Firebase write
-                console.log("autoSaveDailyProgress: Progreso del día guardado exitosamente en Firebase y marcado como guardado localmente.");
-                
-                if (isManualTrigger) {
-                    playConfirmationSound();
-                    showCustomMessageModal("Éxito", "¡Progreso del día guardado exitosamente!"); // Feedback for manual trigger
-                }
-            } catch (error) {
-                console.error("autoSaveDailyProgress: Error al auto-guardar el progreso del día:", error);
-                if (isManualTrigger) {
-                    showCustomMessageModal("Error", "Error al guardar el progreso del día. Inténtelo de nuevo."); // Feedback for manual trigger
-                }
-            }
 
-            // Schedule for tomorrow's 6 PM only if not manually triggered
-            if (!isManualTrigger) {
-                const timeToNextRun = getTimeUntilNextAutoSave();
-                console.log(`autoSaveDailyProgress: Próximo auto-guardado programado en: ${timeToNextRun / (1000 * 60 * 60)} horas.`);
-                setTimeout(autoSaveDailyProgress, timeToNextRun);
-            }
+                    const fechaHoraCreacion = fecha;
+                    const isCurrentlyRetarded = !registro.enviadoAEmpaque && !registro.despachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > retardTimeMinutes);
+                    if (isCurrentlyRetarded) retardedOrders++;
+                }
+            });
+
+            currentDayPares = totalParesHoy;
+            currentDayValor = totalValorHoy;
+            accumulatedWeekValor = weekValor;
+            accumulatedMonthPares = monthPares;
+
+            document.getElementById('total_pares_day_card').textContent = currentDayPares;
+            document.getElementById('total_valor_day_card').textContent = `$${currentDayValor.toLocaleString('es-CO')}`;
+            document.getElementById('pending_orders_card').textContent = pendingOrders;
+            document.getElementById('in_packaging_orders_card').textContent = inPackagingOrders;
+            document.getElementById('dispatched_orders_card').textContent = dispatchedOrders;
+            document.getElementById('retarded_orders_card').textContent = retardedOrders;
+
+            document.getElementById('total_pares_month_card').textContent = accumulatedMonthPares;
+            document.getElementById('total_valor_month_card').textContent = `$${accumulatedWeekValor.toLocaleString('es-CO')}`;
+
+            updateGoalProgress();
         }
 
         // Centralized function to calculate and display accumulated progress
@@ -1312,89 +1330,18 @@
                 });
 
                 // --- Listener for Today's Dispatches (for "Hoy" cards) ---
-                const startOfDay = new Date();
-                startOfDay.setHours(0, 0, 0, 0);
-                const endOfDay = new Date();
-                endOfDay.setHours(23, 59, 59, 999);
+                const now = new Date();
+                const todayStart = startOfDayLocal(now);
+                const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+                monthStart.setHours(0, 0, 0, 0);
 
-                console.log(`Configurando listener de registros para: ${asesorNombreCompleto}`);
-                console.log(`Rango de fechas: ${startOfDay.toISOString()} a ${endOfDay.toISOString()}`);
-
-                // Consulta solo por fecha (no requiere índice compuesto)
-                // Luego filtramos por asesor en el código
                 db.collection('registros')
-                .where('fecha_hora', '>=', startOfDay)
-                .where('fecha_hora', '<=', endOfDay)
-                .onSnapshot(snapshot => {
-                    console.log(`Listener de registros activado. Total documentos del día: ${snapshot.size}`);
-                    
-                    // Filtrar por asesor en el código
-                    const registrosDelAsesor = [];
-                    snapshot.forEach(doc => {
-                        const data = doc.data();
-                        if (data.asesor === asesorNombreCompleto) {
-                            registrosDelAsesor.push(doc);
-                        }
-                    });
-                    
-                    console.log(`Registros del asesor ${asesorNombreCompleto}: ${registrosDelAsesor.length}`);
-                    
-                    // Crear un snapshot filtrado
-                    const filteredSnapshot = {
-                        size: registrosDelAsesor.length,
-                        forEach: (callback) => registrosDelAsesor.forEach(callback),
-                        docs: registrosDelAsesor
-                    };
-                    
-                    updateDailySummary(filteredSnapshot); // Update "Hoy" cards and trigger accumulated updates
-                }, error => {
-                    console.error("Error al escuchar los despachos de hoy:", error);
-                });
-
-                // --- Listener for Daily Sales Snapshots (for weekly/monthly accumulated progress) ---
-                // This listener will primarily handle updates when the 6 PM auto-save happens for past days,
-                // or when a manual save from a different session/device happens.
-                // When this fires, it will trigger the _calculateAndDisplayAccumulatedProgress.
-                console.log(`Configurando listener de snapshots para: users/${asesorId}/daily_sales_snapshot`);
-                db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
-                    .onSnapshot(async (snapshot) => { // Made async to use await for batch
-                        console.log(`Listener de snapshots activado. Total documentos: ${snapshot.size}`);
-                        const historicalData = [];
-                        const batch = db.batch();
-                        let documentsToDeleteCount = 0;
-
-                        snapshot.forEach(doc => {
-                            const data = doc.data();
-                            console.log(`Snapshot encontrado: ${doc.id}, pares=${data.pares}, valor=${data.valor}`);
-                            // Check if 'pares' and 'valor' are 0 or undefined/null
-                            const pares = data.pares || 0;
-                            const valor = data.valor || 0;
-
-                            if (pares === 0 && valor === 0) {
-                                console.log(`Detected document for deletion (pares=0, valor=0): ${doc.id}`);
-                                batch.delete(doc.ref);
-                                documentsToDeleteCount++;
-                            } else {
-                                historicalData.push({ id: doc.id, ...data });
-                            }
-                        });
-
-                        if (documentsToDeleteCount > 0) {
-                            try {
-                                await batch.commit();
-                                console.log(`Successfully deleted ${documentsToDeleteCount} documents with 0 pares and 0 valor.`);
-                                showCustomMessageModal("Limpieza de datos", `Se eliminaron ${documentsToDeleteCount} registros de progreso diario con valores de pares y valor en cero.`);
-                            } catch (error) {
-                                console.error("Error deleting documents with 0 pares and 0 valor:", error);
-                                showCustomMessageModal("Error", "Hubo un error al eliminar registros de progreso diario con valores en cero.");
-                            }
-                        } else {
-                            console.log("No documents with 0 pares and 0 valor found for deletion.");
-                        }
-
-                        _calculateAndDisplayAccumulatedProgress(historicalData);
+                    .where('fecha_hora', '>=', monthStart)
+                    .orderBy('fecha_hora', 'desc')
+                    .onSnapshot(snapshot => {
+                        computeFromRegistrosSnapshot(snapshot);
                     }, error => {
-                        console.error("Error al escuchar snapshots de ventas diarias:", error);
+                        console.error("Error al escuchar los registros del mes:", error);
                     });
 
 
@@ -1412,19 +1359,7 @@
                     console.error("Error al obtener la configuración de bloqueo global:", error);
                 });
 
-                // --- Schedule initial auto-save check ---
-                const timeToFirstRun = getTimeUntilNextAutoSave();
-                console.log(`Scheduler: Próximo auto-guardado programado para ejecutar en: ${timeToFirstRun / (1000 * 60)} minutos.`);
-                setTimeout(autoSaveDailyProgress, timeToFirstRun);
-
-                // Also run it immediately if it's already past 6 PM and hasn't saved yet
-                const now = new Date();
-                const autoSaveTimeToday = new Date(now);
-                autoSaveTimeToday.setHours(18, 0, 0, 0);
-                if (now.getTime() >= autoSaveTimeToday.getTime() && !hasDailyProgressBeenSavedToday()) {
-                    console.log("Scheduler: Ya pasaron las 6 PM y no se detectó guardado para hoy. Ejecutando autoSaveDailyProgress inmediatamente.");
-                    autoSaveDailyProgress();
-                }
+                // Ya no se programa auto-guardado: el progreso semanal/mensual se calcula desde 'registros'.
             } else {
                 console.log("No hay listeners de Firebase o auto-guardado programado para usuario anónimo.");
                 // Ensure dashboard shows 0s for anonymous user
@@ -1731,6 +1666,9 @@
                 showCustomMessageModal("Error", "Solo los administradores pueden editar estos valores.");
                 return;
             }
+
+            showCustomMessageModal("Información", "La edición manual de pares/valor ya no está disponible. El progreso ahora se calcula automáticamente desde los pedidos almacenados en Firebase.");
+            return;
             
             tipoEdicion = tipo;
             const modal = document.getElementById('edit_values_modal');
@@ -1819,65 +1757,7 @@
         // ========== FIN DE NUEVAS FUNCIONES ==========
 
         function updateDailySummary(snapshot) {
-            let totalParesHoy = 0;
-            let totalValorHoy = 0;
-            let pendingOrders = 0;
-            let inPackagingOrders = 0;
-            let dispatchedOrders = 0;
-            let retardedOrders = 0;
-
-            const now = new Date();
-
-            snapshot.forEach(doc => {
-                const registro = doc.data();
-                const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
-
-                totalParesHoy += parseInt(registro.num_pares || 0);
-                console.log(`updateDailySummary: Registro - valor_total: ${registro.valor_total}, parseado: ${parseFloat(registro.valor_total || 0)}`); // LOG
-                totalValorHoy += parseFloat(registro.valor_total || 0); // Usando parseFloat
-
-                if (registro.despachado) {
-                    dispatchedOrders++;
-                } else if (registro.enviadoAEmpaque) {
-                    inPackagingOrders++;
-                } else {
-                    pendingOrders++;
-                }
-
-                const isCurrentlyRetarded = !registro.enviadoAEmpaque && !registro.despachado && fechaHoraCreacion && ((now.getTime() - fechaHoraCreacion.getTime()) / (1000 * 60) > retardTimeMinutes);
-                if (isCurrentlyRetarded) {
-                    retardedOrders++;
-                }
-            });
-
-            currentDayPares = totalParesHoy;
-            currentDayValor = totalValorHoy;
-            console.log(`updateDailySummary: Total Pares Hoy: ${currentDayPares}, Total Valor Hoy: ${currentDayValor}`); // LOG
-
-            document.getElementById('total_pares_day_card').textContent = currentDayPares;
-            document.getElementById('total_valor_day_card').textContent = `$${currentDayValor.toLocaleString('es-CO')}`;
-            document.getElementById('pending_orders_card').textContent = pendingOrders;
-            document.getElementById('in_packaging_orders_card').textContent = inPackagingOrders;
-            document.getElementById('dispatched_orders_card').textContent = dispatchedOrders;
-            document.getElementById('retarded_orders_card').textContent = retardedOrders;
-
-            // Trigger re-calculation and display of accumulated progress to include today's real-time sales
-            // Only fetch if asesorId is not anonymous
-            if (asesorId !== "usuario_anonimo") {
-                db.collection('users').doc(asesorId).collection('daily_sales_snapshot')
-                    .get() // Get all historical snapshots
-                    .then(snapshot => {
-                        const historicalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        _calculateAndDisplayAccumulatedProgress(historicalData); // Pass historical data to the central function
-                    })
-                    .catch(error => {
-                        console.error("Error al obtener snapshots históricos para la actualización diaria en tiempo real:", error);
-                    });
-            } else {
-                _calculateAndDisplayAccumulatedProgress([]); // For anonymous user, treat historical data as empty
-            }
-
-            updateGoalProgress(); // This will be called again by _calculateAndDisplayAccumulatedProgress, but keeping here for direct impact on goal displays if needed.
+            computeFromRegistrosSnapshot(snapshot);
         }
 
 
