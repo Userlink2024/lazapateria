@@ -709,17 +709,6 @@
             color: #222;
         }
 
-        /* New button for deleting dispatches */
-        #block_options_modal button[onclick*="deleteAllDispatches"] {
-            background-image: linear-gradient(135deg, #dc3545 0%, #c82333 100%); /* Red gradient */
-            color: white;
-            box-shadow: 0 4px 10px rgba(220, 53, 69, 0.2);
-        }
-        #block_options_modal button[onclick*="deleteAllDispatches"]:hover {
-            background-image: linear-gradient(135deg, #c82333 0%, #bb2d3b 100%);
-            color: white;
-        }
-
         /* Styles for Transportadoras Management in NEW Management Modal */
         #modal_transportadoras_management #transportadoras_list {
             margin-top: 15px;
@@ -1527,11 +1516,6 @@
             <!-- NUEVO BOTÓN PARA ABRIR EL MODAL DE GESTIÓN DE TRANSPORTADORAS -->
             <h3>Gestión de Datos</h3>
             <button type="button" onclick="mostrarModal('modal_transportadoras_management')">Administrar Transportadoras</button>
-            
-            <hr style="margin: 20px 0;">
-            <h3>Opciones de Despachos</h3>
-            <button type="button" onclick="deleteAllDispatches()">Eliminar todos los despachos</button>
-            <p id="delete_dispatches_error" class="error-message"></p>
         </div>
     </div>
 
@@ -1716,7 +1700,7 @@
         // Valores por defecto para la hora de bloqueo, usados si no hay una hora personalizada configurada en Firebase
         const DEFAULT_BLOCK_HOUR = 17; // 5 PM
         const DEFAULT_BLOCK_MINUTE = 40; // 40 minutes
-        const DEFAULT_RETARD_MINUTES = 20; // Default retard time in minutes
+        const DEFAULT_RETARD_MINUTES = 15; // Default retard time in minutes
 
         let isGlobalManualBlock = false; // Bloqueo manual/inmediato global, controlado por Firestore
         let isAutoBlockedPermanently = false; // Nuevo: Bloqueo automático persistente, controlado por Firestore
@@ -1867,7 +1851,6 @@
                 document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
                 document.getElementById('custom_time_error').textContent = ''; // Limpiar cualquier mensaje de error previo
                 document.getElementById('retard_time_error').textContent = ''; // Clear any previous error message for retard time
-                document.getElementById('delete_dispatches_error').textContent = ''; // Limpiar mensaje de error de eliminación
                 // La gestión de errores de transportadoras se mueve al modal de gestión
             }
             if (id === 'modal_producto') {
@@ -2056,7 +2039,7 @@
 
                     showAlert("Pedido agregado exitosamente!"); // Reemplazado alert
                     // Después de agregar un pedido, verificar si hay pedidos en retardo
-                    checkForRetardedDispatches(true); // Pasar true para indicar que se debe mostrar el modal si hay retardos
+                    checkForRetardedDispatches(false);
                 } catch (error) {
                     console.error("Error guardando en Firebase:", error);
                     showAlert("Hubo un error al guardar el pedido. Inténtelo de nuevo."); // Reemplazado alert
@@ -2554,60 +2537,41 @@
                 console.log("Datos de pedidos recibidos/actualizados.");
                 console.log("Número de documentos recibidos:", snapshot.size);
 
+                const now = new Date();
+                const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+                const isTodayRegistro = (registro) => {
+                    if (!registro || !registro.fecha_hora || typeof registro.fecha_hora.toDate !== 'function') return false;
+                    const d = registro.fecha_hora.toDate();
+                    return d >= startOfDay && d <= endOfDay;
+                };
+
                 if (!isInitialLoadPedidos) {
                     scrollPosPedidos = listaPedidosContainer.scrollTop;
                 }
 
-                // Keep track of current records in the DOM to efficiently update/remove
-                const existingRecordElements = new Map();
-                listaPedidosContainer.querySelectorAll('.record').forEach(el => {
-                    existingRecordElements.set(el.dataset.id, el);
-                });
+                const docsToday = snapshot.docs.filter(d => isTodayRegistro(d.data()));
 
-                // Clear the container if it's the initial load or if the snapshot is empty after filtering
-                if (isInitialLoadPedidos || snapshot.empty) {
-                    listaPedidosContainer.innerHTML = '';
-                    if (snapshot.empty && isUserFilteredRole) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos asignados a este usuario o no se encontraron pedidos con los filtros actuales.</p>';
-                    } else if (snapshot.empty) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
+                listaPedidosContainer.innerHTML = '';
+                if (!docsToday.length) {
+                    if (isUserFilteredRole) {
+                        listaPedidosContainer.innerHTML = '<p>No hay pedidos del día de hoy para este usuario.</p>';
+                    } else {
+                        listaPedidosContainer.innerHTML = '<p>No hay pedidos del día de hoy para mostrar.</p>';
                     }
+                } else {
+                    const frag = document.createDocumentFragment();
+                    docsToday.forEach((doc, index) => {
+                        const registro = doc.data();
+                        const el = createRecordElement(doc.id, registro, index);
+                        frag.appendChild(el);
+                    });
+                    listaPedidosContainer.appendChild(frag);
+                    docsToday.forEach(doc => {
+                        updateRecordStatusAndButtons(doc.id, doc.data());
+                    });
                 }
-
-                snapshot.docChanges().forEach(change => {
-                    const doc = change.doc;
-                    const registro = doc.data();
-                    const docId = doc.id;
-                    const currentDocIndex = snapshot.docs.findIndex(d => d.id === docId);
-
-                    if (change.type === 'added') {
-                        console.log("Added record:", docId);
-                        const newRecordElement = createRecordElement(docId, registro, currentDocIndex);
-                        // Insert the new element at the correct sorted position
-                        const nextElement = listaPedidosContainer.children[currentDocIndex];
-                        if (nextElement) {
-                            listaPedidosContainer.insertBefore(newRecordElement, nextElement);
-                        } else {
-                            listaPedidosContainer.appendChild(newRecordElement);
-                        }
-                        updateRecordStatusAndButtons(docId, registro); // Apply initial status
-                    } else if (change.type === 'modified') {
-                        console.log("Modified record:", docId);
-                        const existingElement = existingRecordElements.get(docId);
-                        if (existingElement) {
-                            // If the element's position might change due to sorting, re- Con el nuevo código, la posición de los elementos
-                            // en el DOM no debería cambiar, ya que se usan solo para filtrar y mostrar/ocultar.
-                            // Si se necesita un orden estricto, la re-creación del elemento o una re-inserción más inteligente sería necesaria.
-                            updateExistingRecordElement(existingElement, registro, currentDocIndex);
-                        }
-                    } else if (change.type === 'removed') {
-                        console.log("Removed record:", docId);
-                        const existingElement = existingRecordElements.get(docId);
-                        if (existingElement) {
-                            existingElement.remove();
-                        }
-                    }
-                });
 
                 // After processing changes, re-run filter to ensure correct visibility and counts
                 filtrarYBuscarPedidos();
@@ -2619,7 +2583,7 @@
                 // For now, let's keep the `asesores` and `resumenAsesores` calculation as it was, but ensure it's based on the *current* state of the data in the snapshot.
                 let asesores = new Set();
                 let resumenAsesores = {};
-                snapshot.forEach(doc => {
+                docsToday.forEach(doc => {
                     const registro = doc.data();
                     if(registro.asesor) asesores.add(registro.asesor);
                     if (datosUsuario.permisos.toLowerCase() === 'administrador') {
@@ -4390,18 +4354,6 @@
          * Función para eliminar todos los pedidos que están marcados como "despachado".
          * Solo para administradores, requiere contraseña.
          */
-        async function deleteAllDispatches() {
-            initAudioContext(); // Initialize audio context on user interaction
-            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                showAlert("Esta acción solo puede ser realizada por un administrador."); // Reemplazado alert
-                return;
-            }
-            showPasswordModal('delete_all_dispatches'); // Show password modal for this specific action
-        }
-
-        /**
-         * Verifica la contraseña ingresada y ejecuta la acción correspondiente al tipo de bloqueo.
-         */
         async function verifyPassword() {
             const passwordInput = document.getElementById('password_input');
             const errorMessage = document.getElementById('password_error');
@@ -4516,87 +4468,6 @@
                         errorMessage.textContent = "Error al reiniciar el estado de bloqueo. Inténtelo de nuevo.";
                         return;
                     }
-                } else if (blockType === 'delete_all_dispatches') { // Handle deleting all dispatched orders
-                    // Reemplazado confirm con showConfirm
-                    showConfirm("¿Estás seguro de que deseas eliminar TODOS los despachos MARCADO como 'despachado'?", async () => {
-                        try {
-                            mostrarBarraCargando(); // Show loading bar
-                            const querySnapshot = await db.collection('registros').where('despachado', '==', true).get();
-                            const batch = db.batch();
-                            let deletedCount = 0;
-
-                            if (querySnapshot.empty) {
-                                const deleteDispatchesErrorDisplay = document.getElementById('delete_dispatches_error');
-                                if (deleteDispatchesErrorDisplay) {
-                                    deleteDispatchesErrorDisplay.textContent = "No hay pedidos despachados para eliminar.";
-                                    setTimeout(() => { deleteDispatchesErrorDisplay.textContent = ''; }, 3000);
-                                }
-                                ocultarBarraCargando();
-                                cerrarModal('password_modal');
-                                return;
-                            }
-
-                            // --- INICIO: Lógica para decrementar daily_sales_snapshot al eliminar despachos ---
-                            const today = new Date();
-                            const todayStr = today.toISOString().slice(0, 10);
-                            const userId = datosUsuario.usuario; // Assuming current user is the one performing deletion
-
-                            // Fetch the current daily snapshot value BEFORE applying decrements
-                            let currentDailyPares = 0;
-                            let currentDailyValor = 0;
-                            const dailySnapshotRef = db.collection('users').doc(userId).collection('daily_sales_snapshot').doc(todayStr);
-                            const dailySnapshotDoc = await dailySnapshotRef.get();
-                            if (dailySnapshotDoc.exists) {
-                                const data = dailySnapshotDoc.data();
-                                currentDailyPares = data.pares || 0;
-                                currentDailyValor = data.valor || 0;
-                            }
-
-                            let totalParesDeleted = 0;
-                            let totalValorDeleted = 0;
-                            // --- FIN: Lógica para decrementar daily_sales_snapshot al eliminar despachos ---
-
-                            querySnapshot.forEach(doc => {
-                                const registro = doc.data(); // Get data from the document to be deleted
-                                totalParesDeleted += parseInt(registro.num_pares || 0);
-                                totalValorDeleted += parseFloat(registro.valor_total || 0);
-                                batch.delete(doc.ref);
-                                deletedCount++;
-                            });
-
-                            await batch.commit();
-                            playConfirmationSound();
-
-                            // --- INICIO: Aplicar decremento al daily_sales_snapshot DESPUÉS del commit del batch ---
-                            if (userId && (totalParesDeleted > 0 || totalValorDeleted > 0)) {
-                                // Ensure the values don't go below zero
-                                const newPares = Math.max(0, currentDailyPares - totalParesDeleted);
-                                const newValor = Math.max(0, currentDailyValor - totalValorDeleted);
-
-                                await dailySnapshotRef.set({
-                                    pares: newPares,
-                                    valor: newValor,
-                                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                                }, { merge: true });
-                                console.log(`Progreso diario para ${userId} en ${todayStr} actualizado por eliminación masiva: Pares -${totalParesDeleted}, Valor -$${totalValorDeleted}`);
-                            }
-                            // --- FIN: Aplicar decremento al daily_sales_snapshot ---
-
-                            const deleteDispatchesErrorDisplay = document.getElementById('delete_dispatches_error');
-                            if (deleteDispatchesErrorDisplay) {
-                                deleteDispatchesErrorDisplay.textContent = `Se eliminaron ${deletedCount} pedidos despachados correctamente.`;
-                                setTimeout(() => { deleteDispatchesErrorDisplay.textContent = ''; }, 3000);
-                            }
-                            console.log(`Se eliminaron ${deletedCount} pedidos despachados.`);
-                        } catch (error) {
-                            console.error("Error al eliminar despachos:", error);
-                            errorMessage.textContent = "Error al eliminar los despachos. Inténtelo de nuevo.";
-                            const deleteDispatchesErrorDisplay = document.getElementById('delete_dispatches_error');
-                            if (deleteDispatchesErrorDisplay) deleteDispatchesErrorDisplay.textContent = 'Error al eliminar despachos.';
-                        } finally {
-                            ocultarBarraCargando();
-                        }
-                    });
                 }
                 // Limpiar la referencia del checkbox después de verificación exitosa
                 currentPasswordModalTargetCheckbox = null;
@@ -4740,4 +4611,3 @@
     </script>
 </body>
 </html>
-
