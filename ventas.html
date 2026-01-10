@@ -232,13 +232,17 @@
                     </div>
                     <div>
                         <label for="editDespachadoPor">Despachado por</label>
-                        <input id="editDespachadoPor" type="text" />
+                        <select id="editDespachadoPor"></select>
                     </div>
                     <div>
                         <label style="display:flex;align-items:center;gap:10px;color:var(--text);font-weight:900;">
                             <input id="editBloqueado" type="checkbox" />
                             Bloqueado
                         </label>
+                    </div>
+                    <div>
+                        <label for="editBloqueadoPor">Bloqueado por</label>
+                        <select id="editBloqueadoPor"></select>
                     </div>
                     <div style="grid-column:1 / -1;">
                         <label>Bodeguero(s)</label>
@@ -423,6 +427,7 @@
         const usuariosCollection = db.collection('usuarios');
         let cachedAsesores = [];
         let cachedBodegueros = [];
+        let cachedAdmins = [];
 
         const transportadorasCollection = db.collection('transportadoras');
         let cachedTransportadoras = [];
@@ -467,9 +472,10 @@
 
         async function loadUsuariosForEdit() {
             try {
-                const [operadoresSnapshot, bodeguerosSnapshot] = await Promise.all([
+                const [operadoresSnapshot, bodeguerosSnapshot, adminsSnapshot] = await Promise.all([
                     usuariosCollection.where('permisos', '==', 'Operador').get(),
-                    usuariosCollection.where('permisos', '==', 'Bodeguero').get()
+                    usuariosCollection.where('permisos', '==', 'Bodeguero').get(),
+                    usuariosCollection.where('permisos', '==', 'Administrador').get()
                 ]);
 
                 cachedAsesores = [];
@@ -485,6 +491,13 @@
                     if (d.nombreCompleto) cachedBodegueros.push(String(d.nombreCompleto));
                 });
                 cachedBodegueros = Array.from(new Set(cachedBodegueros)).sort((a, b) => a.localeCompare(b, 'es'));
+
+                cachedAdmins = [];
+                adminsSnapshot.forEach(doc => {
+                    const d = doc.data() || {};
+                    if (d.nombreCompleto) cachedAdmins.push(String(d.nombreCompleto));
+                });
+                cachedAdmins = Array.from(new Set(cachedAdmins)).sort((a, b) => a.localeCompare(b, 'es'));
 
                 const editAsesorSelect = $('editAsesor');
                 if (editAsesorSelect) {
@@ -508,6 +521,27 @@
             } catch (e) {
                 renderBodeguerosChecklist([]);
             }
+        }
+
+        function renderAdminsSelect(selectEl, currentValue) {
+            if (!selectEl) return;
+            selectEl.innerHTML = '';
+
+            const empty = document.createElement('option');
+            empty.value = '';
+            empty.textContent = '—';
+            selectEl.appendChild(empty);
+
+            cachedAdmins.forEach(n => {
+                const opt = document.createElement('option');
+                opt.value = n;
+                opt.textContent = n;
+                selectEl.appendChild(opt);
+            });
+
+            const desired = String(currentValue || '').trim();
+            const exists = Array.from(selectEl.options).some(o => o.value === desired);
+            selectEl.value = exists ? desired : '';
         }
 
         async function loadTransportadorasForEdit() {
@@ -732,8 +766,9 @@
             editingRecord = r;
             $('editId').textContent = r.id;
             $('editCliente').value = r.cliente || '';
-            $('editDespachadoPor').value = r.despachadoPor || '';
             $('editBloqueado').checked = r.bloqueado === true;
+            renderAdminsSelect($('editDespachadoPor'), r.despachadoPor || '');
+            renderAdminsSelect($('editBloqueadoPor'), r.bloqueadoPor || '');
             if (r.fecha_hora && typeof r.fecha_hora.toDate === 'function') {
                 const d = r.fecha_hora.toDate();
                 const yyyy = String(d.getFullYear());
@@ -779,6 +814,22 @@
             $('editModal').setAttribute('aria-hidden', 'false');
         }
 
+        $('editBloqueado').addEventListener('change', () => {
+            const isOn = $('editBloqueado').checked === true;
+            const sel = $('editBloqueadoPor');
+            if (!sel) return;
+
+            if (isOn) {
+                if (!sel.value) {
+                    const fallback = (datosUsuario && datosUsuario.nombreCompleto) ? String(datosUsuario.nombreCompleto) : '';
+                    const exists = Array.from(sel.options).some(o => o.value === fallback);
+                    sel.value = exists ? fallback : sel.value;
+                }
+            } else {
+                sel.value = '';
+            }
+        });
+
         function closeEditModal() {
             $('editModal').classList.remove('open');
             $('editModal').setAttribute('aria-hidden', 'true');
@@ -805,7 +856,9 @@
             const snap = await docRef.get();
             const updateData = {
                 despachado: true,
-                despachadoPor: (datosUsuario && datosUsuario.nombreCompleto) ? datosUsuario.nombreCompleto : 'Administrador'
+                despachadoPor: (cachedAdmins && cachedAdmins.length)
+                    ? ((datosUsuario && datosUsuario.nombreCompleto && cachedAdmins.includes(datosUsuario.nombreCompleto)) ? datosUsuario.nombreCompleto : cachedAdmins[0])
+                    : ((datosUsuario && datosUsuario.nombreCompleto) ? datosUsuario.nombreCompleto : 'Administrador')
             };
 
             if (snap.exists) {
@@ -834,6 +887,7 @@
                 saldo_a_favor: Number($('editSaldo').value || 0),
                 despachadoPor: String($('editDespachadoPor').value || '').trim(),
                 bloqueado: $('editBloqueado').checked === true,
+                bloqueadoPor: ($('editBloqueado').checked === true) ? String($('editBloqueadoPor').value || '').trim() : '',
                 abonos: getAbonosFromEditor(),
                 bodegueros_encargados: getSelectedBodeguerosFromChecklist(),
                 observaciones: $('editObs').value
