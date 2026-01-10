@@ -241,6 +241,19 @@
         </div>
     </div>
 
+    <div class="modal" id="appModal" aria-hidden="true">
+        <div class="modal-card" style="width:min(560px,100%);">
+            <div class="modal-head">
+                <h3 id="appModalTitle">Mensaje</h3>
+                <button class="x" type="button" id="appModalClose">×</button>
+            </div>
+            <div class="modal-body" style="padding-top:12px;">
+                <div id="appModalMessage" style="color:var(--text);font-weight:700;line-height:1.35;"></div>
+            </div>
+            <div class="modal-actions" id="appModalActions"></div>
+        </div>
+    </div>
+
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
@@ -258,18 +271,20 @@
         let datosUsuario = null;
         try { datosUsuario = JSON.parse(localStorage.getItem('datosUsuario')); } catch (e) { datosUsuario = null; }
 
+        const $ = (id) => document.getElementById(id);
+
         function enforceAdminAccess() {
             const permisos = (datosUsuario && datosUsuario.permisos) ? String(datosUsuario.permisos).toLowerCase() : '';
             if (permisos !== 'administrador') {
-                alert('Acceso restringido: esta página es solo para administradores.');
-                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                modalAlert('Acceso restringido', 'Esta página es solo para administradores.').finally(() => {
+                    window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                });
                 throw new Error('Acceso denegado');
             }
         }
 
         enforceAdminAccess();
 
-        const $ = (id) => document.getElementById(id);
         const listEl = $('list');
         const liveStateEl = $('liveState');
         const asesorSelect = $('asesorSelect');
@@ -285,6 +300,64 @@
         const prevPageBtn = $('prevPage');
         const nextPageBtn = $('nextPage');
         const pageInfoEl = $('pageInfo');
+
+        let appModalResolve = null;
+
+        function openAppModal({ title, message, actions }) {
+            $('appModalTitle').textContent = title || 'Mensaje';
+            $('appModalMessage').textContent = message || '';
+            const actionsEl = $('appModalActions');
+            actionsEl.innerHTML = '';
+            (actions || []).forEach(a => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = a.className || 'btn';
+                b.textContent = a.label || 'Aceptar';
+                b.addEventListener('click', () => {
+                    closeAppModal();
+                    if (typeof a.onClick === 'function') a.onClick();
+                });
+                actionsEl.appendChild(b);
+            });
+            $('appModal').classList.add('open');
+            $('appModal').setAttribute('aria-hidden', 'false');
+        }
+
+        function closeAppModal() {
+            $('appModal').classList.remove('open');
+            $('appModal').setAttribute('aria-hidden', 'true');
+            const r = appModalResolve;
+            appModalResolve = null;
+            if (typeof r === 'function') r(null);
+        }
+
+        function modalAlert(title, message, buttonLabel) {
+            return new Promise((resolve) => {
+                appModalResolve = resolve;
+                openAppModal({
+                    title: title || 'Mensaje',
+                    message: message || '',
+                    actions: [{ label: buttonLabel || 'Aceptar', className: 'btn primary', onClick: () => resolve(true) }]
+                });
+            });
+        }
+
+        function modalConfirm(title, message, yesLabel, noLabel) {
+            return new Promise((resolve) => {
+                appModalResolve = resolve;
+                openAppModal({
+                    title: title || 'Confirmar',
+                    message: message || '',
+                    actions: [
+                        { label: noLabel || 'Cancelar', className: 'btn', onClick: () => resolve(false) },
+                        { label: yesLabel || 'Sí', className: 'btn primary', onClick: () => resolve(true) }
+                    ]
+                });
+            });
+        }
+
+        $('appModalClose').addEventListener('click', closeAppModal);
+        $('appModal').addEventListener('click', (e) => { if (e.target === $('appModal')) closeAppModal(); });
 
         function formatCurrency(value) {
             const n = Number(value || 0);
@@ -403,7 +476,6 @@
 
                 renderBodeguerosChecklist([]);
             } catch (e) {
-                console.error('Error cargando usuarios para edición:', e);
                 renderBodeguerosChecklist([]);
             }
         }
@@ -436,7 +508,6 @@
                     }
                 }
             } catch (e) {
-                console.error('Error cargando transportadoras para edición:', e);
                 cachedTransportadoras = [];
                 const sel = $('editTransportadora');
                 if (sel) {
@@ -559,7 +630,7 @@
 
         async function toggleDespachado(id, nuevoEstado) {
             if (!nuevoEstado) {
-                const ok = confirm('¿Estás seguro de que quieres desverificar (quitar despachado) este pedido?');
+                const ok = await modalConfirm('Confirmar', '¿Estás seguro de que quieres desverificar (quitar despachado) este pedido?', 'Sí', 'Cancelar');
                 if (!ok) return { reverted: true };
                 await db.collection('registros').doc(id).update({ despachado: false, despachadoPor: '' });
                 return { reverted: false };
@@ -614,7 +685,7 @@
                 } else {
                     if (d.enviadoAEmpaque === true) {
                         $('editEnviadoEmpaque').checked = true;
-                        alert('Enviado a empaque no se puede desmarcar.');
+                        await modalAlert('Acción no permitida', 'Enviado a empaque no se puede desmarcar.');
                     }
                 }
             }
@@ -624,7 +695,7 @@
         }
 
         $('saveEdit').addEventListener('click', async () => {
-            try { await saveEdit(); } catch (e) { console.error(e); alert('Error al guardar cambios.'); }
+            try { await saveEdit(); } catch (e) { await modalAlert('Error', 'Error al guardar cambios.'); }
         });
 
         function render() {
@@ -729,18 +800,17 @@
                         const res = await toggleDespachado(r.id, nuevo);
                         if (res.reverted) ev.target.checked = !nuevo;
                     } catch (e) {
-                        console.error(e);
                         ev.target.checked = !nuevo;
-                        alert('Error al actualizar despachado.');
+                        await modalAlert('Error', 'Error al actualizar despachado.');
                     }
                 });
 
                 card.querySelector('[data-action="edit"]').addEventListener('click', () => openEditModal(r));
                 card.querySelector('[data-action="delete"]').addEventListener('click', async () => {
-                    const ok = confirm('¿Eliminar este pedido definitivamente?');
+                    const ok = await modalConfirm('Confirmar', '¿Eliminar este pedido definitivamente?', 'Eliminar', 'Cancelar');
                     if (!ok) return;
                     try { await db.collection('registros').doc(r.id).delete(); }
-                    catch (e) { console.error(e); alert('Error al eliminar.'); }
+                    catch (e) { await modalAlert('Error', 'Error al eliminar.'); }
                 });
 
                 frag.appendChild(card);
@@ -797,9 +867,9 @@
                 liveStateEl.textContent = 'En tiempo real · ' + new Date().toLocaleTimeString('es-CO');
                 render();
             }, (err) => {
-                console.error(err);
                 liveStateEl.textContent = 'Error de conexión';
-                listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Error al cargar datos. Revisa la consola.</div>';
+                listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Error al cargar datos.</div>';
+                modalAlert('Error de conexión', 'No se pudo cargar la información en tiempo real. Revisa tu conexión e intenta nuevamente.');
             });
         }
 
