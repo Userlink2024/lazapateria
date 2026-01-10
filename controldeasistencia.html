@@ -1,1 +1,962 @@
-none
+<!doctype html>
+ <html lang="es">
+ <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     <title>Control de asistencia</title>
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+ 
+     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+     <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+ 
+     <style>
+         :root{
+             --bg:#f6f8ff;
+             --panel:#ffffff;
+             --stroke:#e6eaf2;
+             --text:#0b1220;
+             --muted:#52607a;
+             --brand1:#6d5efc; --brand2:#25b1ff;
+             --good:#18c37e; --warn:#ffb020; --bad:#ff4d4f;
+             --shadow:0 18px 50px rgba(16, 24, 40, .12);
+         }
+         *{box-sizing:border-box}
+         body{
+             margin:0; font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:var(--text);
+             background:
+                 radial-gradient(1200px 600px at 15% 10%, rgba(109,94,252,.16), transparent 62%),
+                 radial-gradient(1100px 700px at 85% 15%, rgba(37,177,255,.12), transparent 62%),
+                 var(--bg);
+         }
+         .wrap{max-width:1280px;margin:0 auto;padding:22px 16px 38px}
+         .top{
+             display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+             padding:14px 14px;border:1px solid var(--stroke);background:var(--panel);border-radius:16px;box-shadow:var(--shadow)
+         }
+         h1{margin:0;font-size:18px;letter-spacing:-.02em}
+         .sub{margin-top:4px;color:var(--muted);font-size:12px}
+         .btn{
+             border:1px solid var(--stroke);
+             background:#ffffff;
+             color:var(--text);
+             padding:10px 12px;
+             border-radius:12px;
+             cursor:pointer;
+             font-weight:700;
+             text-decoration:none;
+             display:inline-flex;
+             gap:8px;
+             align-items:center
+         }
+         .btn.primary{border-color:rgba(109,94,252,.35);background:linear-gradient(135deg, rgba(109,94,252,.95), rgba(37,177,255,.85))}
+         .btn.danger{border-color:rgba(255,77,79,.4);background:linear-gradient(135deg, rgba(255,77,79,.92), rgba(255,176,32,.5))}
+         .btn:disabled{opacity:.7;cursor:not-allowed}
+ 
+         .panel{margin-top:12px;border:1px solid var(--stroke);background:var(--panel);border-radius:16px;box-shadow:var(--shadow)}
+         .section{padding:12px;border-bottom:1px solid var(--stroke)}
+         .section:last-child{border-bottom:none}
+ 
+         label{font-size:12px;color:var(--muted)}
+         input,select,textarea{
+             width:100%;
+             border:1px solid var(--stroke);
+             background:#ffffff;
+             color:var(--text);
+             border-radius:12px;
+             padding:10px 12px;
+             outline:none
+         }
+         textarea{min-height:92px;resize:vertical}
+ 
+         .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+         @media(max-width:980px){.grid{grid-template-columns:1fr}}
+ 
+         .card{border:1px solid var(--stroke);background:#ffffff;border-radius:14px;padding:12px}
+         .card h3{margin:0 0 10px 0;font-size:14px}
+         .mini{color:var(--muted);font-size:12px;font-weight:700}
+ 
+         .badge{padding:6px 10px;border-radius:999px;font-size:12px;font-weight:900;border:1px solid var(--stroke);background:#f7f9ff;display:inline-flex}
+         .badge.good{border-color:rgba(24,195,126,.35);background:rgba(24,195,126,.10)}
+         .badge.warn{border-color:rgba(255,176,32,.35);background:rgba(255,176,32,.12)}
+         .badge.bad{border-color:rgba(255,77,79,.35);background:rgba(255,77,79,.10)}
+ 
+         .list{display:grid;grid-template-columns:1fr;gap:10px}
+ 
+         .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+ 
+         .scanner{
+             display:grid;
+             grid-template-columns:420px 1fr;
+             gap:12px;
+             align-items:start
+         }
+         @media(max-width:980px){.scanner{grid-template-columns:1fr}}
+         #reader{border:1px solid var(--stroke);border-radius:14px;background:#f7f9ff;overflow:hidden}
+ 
+         .modal{position:fixed;inset:0;background:rgba(240,245,255,.92);display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}
+         .modal.open{display:flex}
+         .modal-card{width:min(760px,100%);border:1px solid rgba(20, 30, 60, .10);background:#ffffff;border-radius:16px;box-shadow:0 24px 70px rgba(8, 15, 35, .20);overflow:hidden;color:var(--text);display:flex;flex-direction:column;max-height:calc(100vh - 36px)}
+         .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(20, 30, 60, .10);flex:0 0 auto}
+         .modal-head h3{margin:0;font-size:15px}
+         .x{width:38px;height:38px;border-radius:12px;border:1px solid rgba(20, 30, 60, .14);background:rgba(240,245,255,.9);color:#0b1220;cursor:pointer;font-size:18px;font-weight:900}
+         .modal-body{padding:14px;overflow:auto;flex:1 1 auto;min-height:0}
+         .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:12px 14px;border-top:1px solid rgba(20, 30, 60, .10);flex:0 0 auto}
+ 
+         .qr-box{display:flex;justify-content:center;align-items:center;padding:12px;border:1px dashed rgba(20, 30, 60, .18);border-radius:14px;background:#f7f9ff}
+     </style>
+ </head>
+ <body>
+     <div class="wrap">
+         <div class="top">
+             <div>
+                 <h1>Control de asistencia</h1>
+                 <div class="sub" id="subtitle">Escaneo QR, entradas y salidas</div>
+             </div>
+             <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                 <a class="btn" href="https://userlink2024.github.io/lazapateria/paneldecuentas.html">Volver</a>
+                 <button class="btn" id="configBtn" type="button">Configuración</button>
+                 <button class="btn primary" id="startScan" type="button">Iniciar escáner</button>
+                 <button class="btn danger" id="stopScan" type="button" disabled>Detener</button>
+             </div>
+         </div>
+ 
+         <div class="panel">
+             <div class="section">
+                 <div class="row">
+                     <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                         <span class="badge" id="modeBadge">Modo: ENTRADA</span>
+                         <button class="btn primary" type="button" id="modeEntrada">Entrada</button>
+                         <button class="btn" type="button" id="modeSalida">Salida</button>
+                     </div>
+                     <div class="mini" id="liveState">Listo.</div>
+                 </div>
+             </div>
+ 
+             <div class="section">
+                 <div class="scanner">
+                     <div class="card">
+                         <h3>Escáner QR</h3>
+                         <div class="mini" style="margin-bottom:10px;">Permite escanear el carnet para registrar entrada o salida. Se evita doble registro.</div>
+                         <div id="reader" style="width:100%; min-height:280px;"></div>
+                         <div class="mini" style="margin-top:10px;">Último: <span id="lastScan">—</span></div>
+                     </div>
+                     <div class="card">
+                         <h3>Registro manual</h3>
+                         <div class="grid" style="margin-top:10px;">
+                             <div>
+                                 <label for="manualUser">Usuario</label>
+                                 <select id="manualUser"></select>
+                             </div>
+                             <div>
+                                 <label for="manualNote">Nota</label>
+                                 <input id="manualNote" type="text" placeholder="Ej: Olvidó el carnet" />
+                             </div>
+                         </div>
+                         <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; margin-top:10px;">
+                             <button class="btn" type="button" id="manualEntrada">Registrar entrada</button>
+                             <button class="btn" type="button" id="manualSalida">Registrar salida</button>
+                         </div>
+                         <div style="margin-top:12px;border-top:1px solid var(--stroke);padding-top:12px;">
+                             <div class="row">
+                                 <div>
+                                     <div style="font-weight:900;">Reportar ausencia</div>
+                                     <div class="mini">Registra ausencia del día (solo admin).</div>
+                                 </div>
+                             </div>
+                             <div class="grid" style="margin-top:10px;">
+                                 <div>
+                                     <label for="absUser">Usuario</label>
+                                     <select id="absUser"></select>
+                                 </div>
+                                 <div>
+                                     <label for="absReason">Motivo</label>
+                                     <input id="absReason" type="text" placeholder="Ej: Incapacidad" />
+                                 </div>
+                             </div>
+                             <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                                 <button class="btn danger" type="button" id="saveAbs">Guardar ausencia</button>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+             </div>
+ 
+             <div class="section">
+                 <div class="grid">
+                     <div class="card">
+                         <h3>Eventos de hoy</h3>
+                         <div class="mini" id="todayState">Cargando…</div>
+                         <div class="list" id="todayList" style="margin-top:10px;"></div>
+                     </div>
+                     <div class="card">
+                         <h3>Historial (últimos 100)</h3>
+                         <div class="mini" id="histState">Cargando…</div>
+                         <div class="list" id="histList" style="margin-top:10px;"></div>
+                     </div>
+                 </div>
+             </div>
+ 
+             <div class="section">
+                 <div class="card">
+                     <h3>Carnets (QR por usuario)</h3>
+                     <div class="mini" style="margin-bottom:10px;">Genera/consulta el QR de cada usuario. El QR se guarda en Firestore dentro de <strong>usuarios.qrId</strong>.</div>
+                     <div class="list" id="usersList"></div>
+                 </div>
+             </div>
+         </div>
+     </div>
+ 
+     <div class="modal" id="qrModal" aria-hidden="true">
+         <div class="modal-card" style="width:min(520px,100%);">
+             <div class="modal-head">
+                 <h3 id="qrTitle">QR</h3>
+                 <button class="x" type="button" id="qrClose">×</button>
+             </div>
+             <div class="modal-body">
+                 <div class="qr-box">
+                     <div id="qrCanvas"></div>
+                 </div>
+                 <div class="mini" style="margin-top:10px;">Valor QR: <span id="qrValue">—</span></div>
+             </div>
+             <div class="modal-actions">
+                 <button class="btn" type="button" id="qrClose2">Cerrar</button>
+             </div>
+         </div>
+     </div>
+ 
+     <div class="modal" id="configModal" aria-hidden="true">
+         <div class="modal-card">
+             <div class="modal-head">
+                 <h3>Configuración</h3>
+                 <button class="x" type="button" id="configClose">×</button>
+             </div>
+             <div class="modal-body">
+                 <div class="grid">
+                     <div>
+                         <label for="cfgEntrada">Hora entrada esperada</label>
+                         <input id="cfgEntrada" type="time" />
+                     </div>
+                     <div>
+                         <label for="cfgSalida">Hora salida esperada</label>
+                         <input id="cfgSalida" type="time" />
+                     </div>
+                     <div>
+                         <label for="cfgTol">Tolerancia (minutos)</label>
+                         <input id="cfgTol" type="number" min="0" step="1" />
+                     </div>
+                     <div>
+                         <label style="display:flex;align-items:center;gap:10px;color:var(--text);font-weight:900;margin-top:18px;">
+                             <input id="cfgHabilitarAus" type="checkbox" style="width:18px;height:18px" />
+                             Habilitar ausencias
+                         </label>
+                     </div>
+                 </div>
+                 <div style="margin-top:10px;">
+                     <label for="cfgNota">Nota</label>
+                     <input id="cfgNota" type="text" placeholder="Opcional" />
+                 </div>
+                 <div class="mini" style="margin-top:10px;">Se guarda en Firestore: <strong>asistencia_settings/global</strong>.</div>
+             </div>
+             <div class="modal-actions">
+                 <button class="btn" type="button" id="configCancel">Cancelar</button>
+                 <button class="btn primary" type="button" id="configSave">Guardar</button>
+             </div>
+         </div>
+     </div>
+ 
+     <div class="modal" id="appModal" aria-hidden="true">
+         <div class="modal-card" style="width:min(560px,100%);">
+             <div class="modal-head">
+                 <h3 id="appModalTitle">Mensaje</h3>
+                 <button class="x" type="button" id="appModalClose">×</button>
+             </div>
+             <div class="modal-body" style="padding-top:12px;">
+                 <div id="appModalMessage" style="color:var(--text);font-weight:700;line-height:1.35;"></div>
+             </div>
+             <div class="modal-actions" id="appModalActions"></div>
+         </div>
+     </div>
+ 
+     <script>
+         const firebaseConfig = {
+             apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+             authDomain: "lazapateria-c4157.firebaseapp.com",
+             projectId: "lazapateria-c4157",
+             storageBucket: "lazapateria-c4157.firebasestorage.app",
+             measurementId: "G-HVG7615JEE"
+         };
+ 
+         if (!firebase.apps || !firebase.apps.length) {
+             firebase.initializeApp(firebaseConfig);
+         }
+         const db = firebase.firestore();
+ 
+         let datosUsuario = null;
+         try { datosUsuario = JSON.parse(localStorage.getItem('datosUsuario')); } catch (e) { datosUsuario = null; }
+ 
+         const $ = (id) => document.getElementById(id);
+ 
+         function normalizePermiso() {
+             return (datosUsuario && datosUsuario.permisos) ? String(datosUsuario.permisos).trim().toLowerCase() : '';
+         }
+ 
+         function enforceAdminAccess() {
+             if (!datosUsuario || !datosUsuario.usuario || !datosUsuario.nombreCompleto || !datosUsuario.permisos) {
+                 window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                 throw new Error('Sin sesión');
+             }
+             const p = normalizePermiso();
+             if (p !== 'administrador') {
+                 window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                 throw new Error('Acceso denegado');
+             }
+         }
+ 
+         enforceAdminAccess();
+ 
+         let appModalResolve = null;
+ 
+         function openAppModal({ title, message, actions }) {
+             $('appModalTitle').textContent = title || 'Mensaje';
+             $('appModalMessage').textContent = message || '';
+             const actionsEl = $('appModalActions');
+             actionsEl.innerHTML = '';
+             (actions || []).forEach(a => {
+                 const b = document.createElement('button');
+                 b.type = 'button';
+                 b.className = a.className || 'btn';
+                 b.textContent = a.label || 'Aceptar';
+                 b.addEventListener('click', () => {
+                     if (typeof a.onClick === 'function') {
+                         a.onClick();
+                     } else {
+                         closeAppModal(null);
+                     }
+                 });
+                 actionsEl.appendChild(b);
+             });
+             $('appModal').classList.add('open');
+             $('appModal').setAttribute('aria-hidden', 'false');
+         }
+ 
+         function closeAppModal(result) {
+             $('appModal').classList.remove('open');
+             $('appModal').setAttribute('aria-hidden', 'true');
+             const r = appModalResolve;
+             appModalResolve = null;
+             if (typeof r === 'function') r(result);
+         }
+ 
+         function modalAlert(title, message, buttonLabel) {
+             return new Promise((resolve) => {
+                 appModalResolve = resolve;
+                 openAppModal({
+                     title: title || 'Mensaje',
+                     message: message || '',
+                     actions: [{ label: buttonLabel || 'Aceptar', className: 'btn primary', onClick: () => closeAppModal(true) }]
+                 });
+             });
+         }
+ 
+         function modalConfirm(title, message, yesLabel, noLabel) {
+             return new Promise((resolve) => {
+                 appModalResolve = resolve;
+                 openAppModal({
+                     title: title || 'Confirmar',
+                     message: message || '',
+                     actions: [
+                         { label: noLabel || 'Cancelar', className: 'btn', onClick: () => closeAppModal(false) },
+                         { label: yesLabel || 'Sí', className: 'btn primary', onClick: () => closeAppModal(true) }
+                     ]
+                 });
+             });
+         }
+ 
+         $('appModalClose').addEventListener('click', () => closeAppModal(null));
+         $('appModal').addEventListener('click', (e) => { if (e.target === $('appModal')) closeAppModal(null); });
+ 
+         function formatDateTime(ts) {
+             if (!ts || typeof ts.toDate !== 'function') return 'N/A';
+             const d = ts.toDate();
+             const datePart = d.toLocaleDateString('es-CO');
+             const timePart = d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+             return datePart + ', ' + timePart;
+         }
+ 
+         function getTodayStr() {
+             return new Date().toISOString().slice(0, 10);
+         }
+ 
+         function beep() {
+             try {
+                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                 const ctx = new AudioCtx();
+                 const o = ctx.createOscillator();
+                 const g = ctx.createGain();
+                 o.type = 'sine';
+                 o.frequency.value = 880;
+                 g.gain.value = 0.08;
+                 o.connect(g);
+                 g.connect(ctx.destination);
+                 o.start();
+                 setTimeout(() => {
+                     o.stop();
+                     ctx.close();
+                 }, 120);
+             } catch (e) {
+             }
+         }
+ 
+         let mode = 'entrada';
+         function setMode(m) {
+             mode = m;
+             $('modeBadge').textContent = 'Modo: ' + (mode === 'entrada' ? 'ENTRADA' : 'SALIDA');
+             if (mode === 'entrada') {
+                 $('modeEntrada').className = 'btn primary';
+                 $('modeSalida').className = 'btn';
+             } else {
+                 $('modeEntrada').className = 'btn';
+                 $('modeSalida').className = 'btn primary';
+             }
+         }
+ 
+         $('modeEntrada').addEventListener('click', () => setMode('entrada'));
+         $('modeSalida').addEventListener('click', () => setMode('salida'));
+ 
+         let cachedUsers = [];
+         const usersByQr = new Map();
+         const usersByUsuario = new Map();
+ 
+         function safeUuid() {
+             try {
+                 if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+             } catch (e) {
+             }
+             return 'qr_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+         }
+ 
+         async function loadUsers() {
+             const snap = await db.collection('usuarios').get();
+             cachedUsers = [];
+             usersByQr.clear();
+             usersByUsuario.clear();
+ 
+             snap.forEach(doc => {
+                 const d = doc.data() || {};
+                 const u = {
+                     docId: doc.id,
+                     usuario: d.usuario ? String(d.usuario) : '',
+                     nombreCompleto: d.nombreCompleto ? String(d.nombreCompleto) : '',
+                     permisos: d.permisos ? String(d.permisos) : '',
+                     qrId: d.qrId ? String(d.qrId) : ''
+                 };
+                 if (u.usuario) cachedUsers.push(u);
+             });
+ 
+             cachedUsers.sort((a, b) => (a.nombreCompleto || a.usuario).localeCompare((b.nombreCompleto || b.usuario), 'es'));
+             cachedUsers.forEach(u => {
+                 if (u.qrId) usersByQr.set(u.qrId, u);
+                 usersByUsuario.set(u.usuario, u);
+             });
+ 
+             renderUsers();
+             fillManualSelects();
+         }
+ 
+         function fillManualSelects() {
+             const manual = $('manualUser');
+             const abs = $('absUser');
+             manual.innerHTML = '';
+             abs.innerHTML = '';
+ 
+             const opt0 = document.createElement('option');
+             opt0.value = '';
+             opt0.textContent = '—';
+             manual.appendChild(opt0);
+ 
+             const opt1 = document.createElement('option');
+             opt1.value = '';
+             opt1.textContent = '—';
+             abs.appendChild(opt1);
+ 
+             cachedUsers.forEach(u => {
+                 const t = `${u.nombreCompleto || u.usuario} (${u.permisos || 'N/A'})`;
+ 
+                 const o1 = document.createElement('option');
+                 o1.value = u.usuario;
+                 o1.textContent = t;
+                 manual.appendChild(o1);
+ 
+                 const o2 = document.createElement('option');
+                 o2.value = u.usuario;
+                 o2.textContent = t;
+                 abs.appendChild(o2);
+             });
+         }
+ 
+         function openQrModal(title, qrValue) {
+             $('qrTitle').textContent = title || 'QR';
+             $('qrValue').textContent = qrValue || '';
+             const canvas = $('qrCanvas');
+             canvas.innerHTML = '';
+             if (qrValue) {
+                 new QRCode(canvas, {
+                     text: qrValue,
+                     width: 240,
+                     height: 240
+                 });
+             }
+             $('qrModal').classList.add('open');
+             $('qrModal').setAttribute('aria-hidden', 'false');
+         }
+ 
+         function closeQrModal() {
+             $('qrModal').classList.remove('open');
+             $('qrModal').setAttribute('aria-hidden', 'true');
+             $('qrCanvas').innerHTML = '';
+         }
+ 
+         $('qrClose').addEventListener('click', closeQrModal);
+         $('qrClose2').addEventListener('click', closeQrModal);
+         $('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) closeQrModal(); });
+ 
+         function renderUsers() {
+             const el = $('usersList');
+             if (!cachedUsers.length) {
+                 el.innerHTML = '<div class="card"><div class="mini">No hay usuarios.</div></div>';
+                 return;
+             }
+             el.innerHTML = '';
+             const frag = document.createDocumentFragment();
+             cachedUsers.forEach(u => {
+                 const card = document.createElement('div');
+                 card.className = 'card';
+                 const has = !!u.qrId;
+ 
+                 card.innerHTML = `
+                     <div class="row">
+                         <div>
+                             <div style="font-weight:900;">${u.nombreCompleto || u.usuario}</div>
+                             <div class="mini">Usuario: ${u.usuario} · Permiso: ${u.permisos || 'N/A'}</div>
+                             <div class="mini">QR: ${has ? u.qrId : 'No generado'}</div>
+                         </div>
+                         <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                             <button class="btn" type="button" data-action="gen">${has ? 'Regenerar' : 'Generar'} QR</button>
+                             <button class="btn primary" type="button" data-action="view" ${has ? '' : 'disabled'}>Ver QR</button>
+                         </div>
+                     </div>
+                 `;
+ 
+                 card.querySelector('[data-action="gen"]').addEventListener('click', async () => {
+                     const ok = await modalConfirm('Confirmar', `¿${has ? 'Regenerar' : 'Generar'} QR para ${u.nombreCompleto || u.usuario}?`, 'Sí', 'Cancelar');
+                     if (!ok) return;
+                     try {
+                         const qrId = safeUuid();
+                         await db.collection('usuarios').doc(u.docId).update({ qrId });
+                         u.qrId = qrId;
+                         usersByQr.set(qrId, u);
+                         renderUsers();
+                     } catch (e) {
+                         await modalAlert('Error', 'No se pudo guardar el QR.');
+                     }
+                 });
+ 
+                 const viewBtn = card.querySelector('[data-action="view"]');
+                 if (viewBtn) {
+                     viewBtn.addEventListener('click', () => {
+                         openQrModal(`QR · ${u.nombreCompleto || u.usuario}`, u.qrId);
+                     });
+                 }
+ 
+                 frag.appendChild(card);
+             });
+             el.appendChild(frag);
+         }
+ 
+         const settingsRef = db.collection('asistencia_settings').doc('global');
+         let cachedSettings = {
+             horaEntrada: '08:00',
+             horaSalida: '18:00',
+             toleranciaMin: 10,
+             habilitarAusencias: true
+         };
+ 
+         function openConfigModal() {
+             $('cfgEntrada').value = cachedSettings.horaEntrada || '';
+             $('cfgSalida').value = cachedSettings.horaSalida || '';
+             $('cfgTol').value = String(cachedSettings.toleranciaMin ?? 0);
+             $('cfgHabilitarAus').checked = cachedSettings.habilitarAusencias === true;
+             $('cfgNota').value = '';
+             $('configModal').classList.add('open');
+             $('configModal').setAttribute('aria-hidden', 'false');
+         }
+ 
+         function closeConfigModal() {
+             $('configModal').classList.remove('open');
+             $('configModal').setAttribute('aria-hidden', 'true');
+         }
+ 
+         $('configBtn').addEventListener('click', openConfigModal);
+         $('configClose').addEventListener('click', closeConfigModal);
+         $('configCancel').addEventListener('click', closeConfigModal);
+         $('configModal').addEventListener('click', (e) => { if (e.target === $('configModal')) closeConfigModal(); });
+ 
+         $('configSave').addEventListener('click', async () => {
+             try {
+                 const horaEntrada = String($('cfgEntrada').value || '').trim();
+                 const horaSalida = String($('cfgSalida').value || '').trim();
+                 const toleranciaMin = Number($('cfgTol').value || 0);
+                 const habilitarAusencias = $('cfgHabilitarAus').checked === true;
+                 await settingsRef.set({
+                     horaEntrada,
+                     horaSalida,
+                     toleranciaMin: Number.isFinite(toleranciaMin) ? toleranciaMin : 0,
+                     habilitarAusencias,
+                     updatedAt: firebase.firestore.Timestamp.fromDate(new Date()),
+                     updatedBy: String(datosUsuario.nombreCompleto || '')
+                 }, { merge: true });
+                 cachedSettings = { horaEntrada, horaSalida, toleranciaMin, habilitarAusencias };
+                 closeConfigModal();
+             } catch (e) {
+                 await modalAlert('Error', 'No se pudo guardar la configuración.');
+             }
+         });
+ 
+         async function loadSettings() {
+             try {
+                 const snap = await settingsRef.get();
+                 if (snap.exists) {
+                     const d = snap.data() || {};
+                     cachedSettings = {
+                         horaEntrada: d.horaEntrada || '08:00',
+                         horaSalida: d.horaSalida || '18:00',
+                         toleranciaMin: Number(d.toleranciaMin || 0),
+                         habilitarAusencias: d.habilitarAusencias !== false
+                     };
+                 }
+             } catch (e) {
+             }
+         }
+ 
+         function computeLateInfo(now, expectedTime, toleranceMin) {
+             const parts = String(expectedTime || '').split(':');
+             if (parts.length < 2) return { isLate: false, minutesLate: 0 };
+             const hh = Number(parts[0] || 0);
+             const mm = Number(parts[1] || 0);
+             const d = new Date(now);
+             d.setHours(hh, mm, 0, 0);
+             const limit = d.getTime() + Number(toleranceMin || 0) * 60 * 1000;
+             const isLate = now.getTime() > limit;
+             const minutesLate = isLate ? Math.max(1, Math.round((now.getTime() - d.getTime()) / 60000)) : 0;
+             return { isLate, minutesLate };
+         }
+ 
+         function dailyDocId(userDocId, todayStr) {
+             return `${userDocId}_${todayStr}`;
+         }
+ 
+         async function writeEvent({ user, type, method, note, extra }) {
+             const now = new Date();
+             const todayStr = getTodayStr();
+             const base = {
+                 userDocId: user.docId,
+                 usuario: user.usuario,
+                 nombreCompleto: user.nombreCompleto,
+                 permisos: user.permisos,
+                 type,
+                 method,
+                 note: note || '',
+                 dateStr: todayStr,
+                 timestamp: firebase.firestore.Timestamp.fromDate(now),
+                 byUserId: String(datosUsuario.usuario),
+                 byNombre: String(datosUsuario.nombreCompleto)
+             };
+             await db.collection('asistencia_eventos').add(Object.assign(base, extra || {}));
+         }
+ 
+         async function registerAttendance({ user, actionType, method, note }) {
+             const todayStr = getTodayStr();
+             const docId = dailyDocId(user.docId, todayStr);
+             const ref = db.collection('asistencia_diaria').doc(docId);
+ 
+             const now = new Date();
+             const snap = await ref.get();
+             const data = snap.exists ? (snap.data() || {}) : {};
+ 
+             if (data.ausente === true) {
+                 await modalAlert('No permitido', 'Este usuario está marcado como ausente hoy.');
+                 return;
+             }
+ 
+             if (actionType === 'entrada') {
+                 if (data.entradaAt && typeof data.entradaAt.toDate === 'function') {
+                     await modalAlert('Ya registrado', 'Este usuario ya tiene entrada registrada hoy.');
+                     return;
+                 }
+                 const late = computeLateInfo(now, cachedSettings.horaEntrada, cachedSettings.toleranciaMin);
+                 await ref.set({
+                     userDocId: user.docId,
+                     usuario: user.usuario,
+                     nombreCompleto: user.nombreCompleto,
+                     permisos: user.permisos,
+                     dateStr: todayStr,
+                     entradaAt: firebase.firestore.Timestamp.fromDate(now),
+                     entradaLate: late.isLate,
+                     entradaMinutesLate: late.minutesLate,
+                     salidaAt: data.salidaAt || null,
+                     ausente: false,
+                     updatedAt: firebase.firestore.Timestamp.fromDate(now)
+                 }, { merge: true });
+                 await writeEvent({ user, type: 'entrada', method, note, extra: { late: late.isLate, minutesLate: late.minutesLate } });
+                 beep();
+                 $('lastScan').textContent = `${user.nombreCompleto || user.usuario} · ENTRADA · ${now.toLocaleTimeString('es-CO')}`;
+                 return;
+             }
+ 
+             if (actionType === 'salida') {
+                 if (data.salidaAt && typeof data.salidaAt.toDate === 'function') {
+                     await modalAlert('Ya registrado', 'Este usuario ya tiene salida registrada hoy.');
+                     return;
+                 }
+                 if (!data.entradaAt) {
+                     const ok = await modalConfirm('Confirmar', 'No hay entrada registrada. ¿Registrar salida igualmente?', 'Registrar', 'Cancelar');
+                     if (!ok) return;
+                 }
+                 await ref.set({
+                     userDocId: user.docId,
+                     usuario: user.usuario,
+                     nombreCompleto: user.nombreCompleto,
+                     permisos: user.permisos,
+                     dateStr: todayStr,
+                     salidaAt: firebase.firestore.Timestamp.fromDate(now),
+                     entradaAt: data.entradaAt || null,
+                     ausente: false,
+                     updatedAt: firebase.firestore.Timestamp.fromDate(now)
+                 }, { merge: true });
+                 await writeEvent({ user, type: 'salida', method, note });
+                 beep();
+                 $('lastScan').textContent = `${user.nombreCompleto || user.usuario} · SALIDA · ${now.toLocaleTimeString('es-CO')}`;
+                 return;
+             }
+ 
+             throw new Error('Tipo inválido');
+         }
+ 
+         async function markAbsence(usuario, reason) {
+             if (cachedSettings.habilitarAusencias !== true) {
+                 await modalAlert('No disponible', 'Las ausencias están deshabilitadas en configuración.');
+                 return;
+             }
+             const user = usersByUsuario.get(usuario);
+             if (!user) {
+                 await modalAlert('Error', 'Usuario inválido.');
+                 return;
+             }
+             const todayStr = getTodayStr();
+             const docId = dailyDocId(user.docId, todayStr);
+             const ref = db.collection('asistencia_diaria').doc(docId);
+             const now = new Date();
+ 
+             await ref.set({
+                 userDocId: user.docId,
+                 usuario: user.usuario,
+                 nombreCompleto: user.nombreCompleto,
+                 permisos: user.permisos,
+                 dateStr: todayStr,
+                 ausente: true,
+                 ausenciaMotivo: String(reason || '').trim(),
+                 ausenciaBy: String(datosUsuario.nombreCompleto || ''),
+                 ausenciaAt: firebase.firestore.Timestamp.fromDate(now),
+                 updatedAt: firebase.firestore.Timestamp.fromDate(now)
+             }, { merge: true });
+ 
+             await writeEvent({ user, type: 'ausencia', method: 'manual', note: String(reason || '').trim() });
+         }
+ 
+         $('manualEntrada').addEventListener('click', async () => {
+             const usuario = String($('manualUser').value || '').trim();
+             const note = String($('manualNote').value || '').trim();
+             if (!usuario) { await modalAlert('Falta información', 'Selecciona un usuario.'); return; }
+             const user = usersByUsuario.get(usuario);
+             if (!user) { await modalAlert('Error', 'Usuario inválido.'); return; }
+             try { await registerAttendance({ user, actionType: 'entrada', method: 'manual', note }); }
+             catch (e) { await modalAlert('Error', 'No se pudo registrar.'); }
+         });
+ 
+         $('manualSalida').addEventListener('click', async () => {
+             const usuario = String($('manualUser').value || '').trim();
+             const note = String($('manualNote').value || '').trim();
+             if (!usuario) { await modalAlert('Falta información', 'Selecciona un usuario.'); return; }
+             const user = usersByUsuario.get(usuario);
+             if (!user) { await modalAlert('Error', 'Usuario inválido.'); return; }
+             try { await registerAttendance({ user, actionType: 'salida', method: 'manual', note }); }
+             catch (e) { await modalAlert('Error', 'No se pudo registrar.'); }
+         });
+ 
+         $('saveAbs').addEventListener('click', async () => {
+             const usuario = String($('absUser').value || '').trim();
+             const reason = String($('absReason').value || '').trim();
+             if (!usuario) { await modalAlert('Falta información', 'Selecciona un usuario.'); return; }
+             const ok = await modalConfirm('Confirmar', '¿Marcar este usuario como ausente hoy?', 'Marcar', 'Cancelar');
+             if (!ok) return;
+             try { await markAbsence(usuario, reason); $('absReason').value = ''; }
+             catch (e) { await modalAlert('Error', 'No se pudo guardar la ausencia.'); }
+         });
+ 
+         let html5Qr = null;
+         let scanning = false;
+         let lastDecoded = '';
+         let lastDecodedAt = 0;
+ 
+         async function onDecoded(text) {
+             const now = Date.now();
+             if (text === lastDecoded && (now - lastDecodedAt) < 2500) return;
+             lastDecoded = text;
+             lastDecodedAt = now;
+ 
+             const qrValue = String(text || '').trim();
+             if (!qrValue) return;
+ 
+             const user = usersByQr.get(qrValue);
+             if (!user) {
+                 await modalAlert('QR no reconocido', 'Este QR no corresponde a ningún usuario.');
+                 return;
+             }
+ 
+             try {
+                 await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
+             } catch (e) {
+                 await modalAlert('Error', 'No se pudo registrar.');
+             }
+         }
+ 
+         async function startScanner() {
+             if (scanning) return;
+             if (!cachedUsers.length) {
+                 await modalAlert('Sin usuarios', 'Primero carga los usuarios.');
+                 return;
+             }
+             $('startScan').disabled = true;
+             try {
+                 if (!html5Qr) {
+                     html5Qr = new Html5Qrcode('reader');
+                 }
+                 scanning = true;
+                 $('stopScan').disabled = false;
+                 $('liveState').textContent = 'Escaneando…';
+ 
+                 await html5Qr.start(
+                     { facingMode: 'environment' },
+                     { fps: 10, qrbox: { width: 250, height: 250 } },
+                     (decodedText) => { onDecoded(decodedText); },
+                     () => {}
+                 );
+             } catch (e) {
+                 scanning = false;
+                 $('liveState').textContent = 'No se pudo iniciar la cámara.';
+                 $('stopScan').disabled = true;
+             } finally {
+                 $('startScan').disabled = scanning;
+             }
+         }
+ 
+         async function stopScanner() {
+             if (!scanning || !html5Qr) return;
+             $('stopScan').disabled = true;
+             try {
+                 await html5Qr.stop();
+             } catch (e) {
+             }
+             scanning = false;
+             $('startScan').disabled = false;
+             $('liveState').textContent = 'Listo.';
+         }
+ 
+         $('startScan').addEventListener('click', startScanner);
+         $('stopScan').addEventListener('click', stopScanner);
+ 
+         let unsubscribeEventos = null;
+ 
+         function renderEvents(list, todayStr) {
+             const today = [];
+             const hist = [];
+ 
+             (Array.isArray(list) ? list : []).forEach(e => {
+                 if (String(e.dateStr) === todayStr) today.push(e);
+                 hist.push(e);
+             });
+ 
+             const todayEl = $('todayList');
+             const histEl = $('histList');
+             $('todayState').textContent = today.length ? '' : 'Sin eventos hoy.';
+             $('histState').textContent = hist.length ? '' : 'Sin historial.';
+ 
+             const renderItem = (ev) => {
+                 const card = document.createElement('div');
+                 card.className = 'card';
+                 const t = formatDateTime(ev.timestamp);
+                 let b = '<span class="badge">EVENTO</span>';
+                 if (ev.type === 'entrada') b = '<span class="badge good">ENTRADA</span>';
+                 else if (ev.type === 'salida') b = '<span class="badge warn">SALIDA</span>';
+                 else if (ev.type === 'ausencia') b = '<span class="badge bad">AUSENCIA</span>';
+                 const extra = ev.late === true ? ` · <span class="badge bad">RETARDO ${Number(ev.minutesLate || 0)}m</span>` : '';
+                 card.innerHTML = `
+                     <div class="row">
+                         <div>
+                             <div style="font-weight:900;">${ev.nombreCompleto || ev.usuario || '—'} ${extra}</div>
+                             <div class="mini">${t} · Método: ${ev.method || 'N/A'} · Por: ${ev.byNombre || '—'}</div>
+                             ${ev.note ? `<div class="mini">Nota: ${String(ev.note)}</div>` : ''}
+                         </div>
+                         <div>${b}</div>
+                     </div>
+                 `;
+                 return card;
+             };
+ 
+             todayEl.innerHTML = '';
+             histEl.innerHTML = '';
+ 
+             if (today.length) {
+                 const frag = document.createDocumentFragment();
+                 today.slice(0, 50).forEach(ev => frag.appendChild(renderItem(ev)));
+                 todayEl.appendChild(frag);
+             }
+             if (hist.length) {
+                 const frag = document.createDocumentFragment();
+                 hist.slice(0, 100).forEach(ev => frag.appendChild(renderItem(ev)));
+                 histEl.appendChild(frag);
+             }
+         }
+ 
+         function startRealtimeEventos() {
+             if (unsubscribeEventos) unsubscribeEventos();
+             const todayStr = getTodayStr();
+             unsubscribeEventos = db.collection('asistencia_eventos').orderBy('timestamp', 'desc').limit(100).onSnapshot((snap) => {
+                 const list = snap.docs.map(d => {
+                     const data = d.data() || {};
+                     data.id = d.id;
+                     return data;
+                 });
+                 renderEvents(list, todayStr);
+             }, () => {
+                 $('todayState').textContent = 'Error cargando.';
+                 $('histState').textContent = 'Error cargando.';
+             });
+         }
+ 
+         setMode('entrada');
+ 
+         Promise.resolve()
+             .then(loadSettings)
+             .then(loadUsers)
+             .then(startRealtimeEventos)
+             .catch(async () => {
+                 await modalAlert('Error', 'No se pudo inicializar el control de asistencia.');
+             });
+     </script>
+ </body>
+ </html>
