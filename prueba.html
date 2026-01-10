@@ -1297,7 +1297,6 @@
                 <button id="ver_pedidos_inline" onclick="iniciarVistaPedidosEnTiempoReal(true)">Ver Pedidos</button>
                 <!-- BOTÓN PARA ABRIR MODAL DE FILTRADO DE TRANSPORTADORAS -->
                 <button id="abrir_filtrar_transportadoras_btn" onclick="mostrarModal('modal_transportadoras_filter')">Transportadoras</button>
-                <button id="historial_ventas_btn" onclick="window.open('historialdeventas.html', '_blank')">Historial</button>
                 <button id="ver_progreso_btn" onclick="window.open('https://userlink2024.github.io/lazapateria/progreso.html', '_blank')">Ver Progreso</button>
                 <button id="Bodeguero_btn" onclick="window.open('https://userlink2024.github.io/lazapateria/indicadordebodega.html', '_blank')">Bodegueros</button>
                 <button id="cuentas_no_admitidas_btn" onclick="mostrarModal('modal_cuentas_no_admitidas')">Cuentas no admitidas</button>
@@ -1517,7 +1516,6 @@
             <!-- NUEVO BOTÓN PARA ABRIR EL MODAL DE GESTIÓN DE TRANSPORTADORAS -->
             <h3>Gestión de Datos</h3>
             <button type="button" onclick="mostrarModal('modal_transportadoras_management')">Administrar Transportadoras</button>
-            
         </div>
     </div>
 
@@ -1687,12 +1685,6 @@
             throw new Error("No hay datos de usuario válidos.");
         }
 
-        // Mostrar botón de historial solo para administradores
-        const historialVentasBtn = document.getElementById('historial_ventas_btn');
-        if (historialVentasBtn) {
-            historialVentasBtn.style.display = (datosUsuario.permisos.toLowerCase() === 'administrador') ? 'inline-block' : 'none';
-        }
-
         let pedidosListenerUnsubscribe = null;
         let scrollPosPedidos = 0;
         let isInitialLoadPedidos = true;
@@ -1859,8 +1851,6 @@
                 document.getElementById('current_custom_block_time').textContent = `Hora actual configurada: ${formattedTime} (hora local)`;
                 document.getElementById('custom_time_error').textContent = ''; // Limpiar cualquier mensaje de error previo
                 document.getElementById('retard_time_error').textContent = ''; // Clear any previous error message for retard time
-                const delMsg = document.getElementById('delete_dispatches_error');
-                if (delMsg) delMsg.textContent = ''; // Limpiar mensaje de error de eliminación
                 // La gestión de errores de transportadoras se mueve al modal de gestión
             }
             if (id === 'modal_producto') {
@@ -2084,7 +2074,6 @@
         function filtrarYBuscarPedidos() {
             console.log("--- Inicia filtrarYBuscarPedidos ---");
             const filtroAsesorValue = document.getElementById('filtro_asesor').value;
-            const todayStr = new Date().toISOString().slice(0, 10);
             
             // Obtener el valor del campo de búsqueda específico para pedidos
             const searchPedidosInput = document.getElementById('search_pedidos_input');
@@ -2117,13 +2106,11 @@
                 const despachadoDelRegistro = recordElement.dataset.despachado === 'true';
                 const retardoDelRegistro = recordElement.dataset.retardo === 'true'; // New: Read data-retardo
                 const usuarioDelRegistro = recordElement.dataset.usuario;
-                const dateKey = recordElement.dataset.dateKey;
                 
                 // Obtener valores adicionales para búsqueda universal
                 const paresDelRegistro = recordElement.dataset.pares ? recordElement.dataset.pares.toLowerCase() : '';
                 const valorDelRegistro = recordElement.dataset.valor ? recordElement.dataset.valor.toLowerCase() : '';
 
-                const coincideFechaHoy = !dateKey || dateKey === todayStr;
                 const coincideAsesor = filtroAsesorValue === '' || asesorDelRegistro === filtroAsesorValue;
                 let coincideBusqueda = true;
                 if (searchTerm) {
@@ -2137,7 +2124,7 @@
                 const userMatches = (isUserFilteredRole ? usuarioDelRegistro === currentUserId : true);
 
                 // Count for overall filter buttons (before applying currentDispatchFilter)
-                if (coincideFechaHoy && coincideAsesor && coincideBusqueda && userMatches) {
+                if (coincideAsesor && coincideBusqueda && userMatches) {
                     if (despachadoDelRegistro) {
                         totalDespachadosFiltered++;
                     } else {
@@ -2159,7 +2146,7 @@
                 }
                 // For 'all' filter, no specific dispatch/retardo filtering is needed here.
 
-                if (coincideFechaHoy && coincideAsesor && coincideBusqueda && userMatches && recordShouldBeDisplayed) {
+                if (coincideAsesor && coincideBusqueda && userMatches && recordShouldBeDisplayed) {
                     recordElement.style.display = 'block';
                     visibleTotalCount++;
                     const numParesElement = recordElement.querySelector('.num_pares');
@@ -2345,7 +2332,6 @@
             const enviadoAEmpaque = registro.enviadoAEmpaque === true;
             const enviadoAEmpaqueTimestamp = registro.enviadoAEmpaqueTimestamp ? registro.enviadoAEmpaqueTimestamp.toDate() : null;
             const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
-            const dateKey = fechaHoraCreacion ? fechaHoraCreacion.toISOString().slice(0, 10) : '';
 
             // Determine if the record is currently in a "retardo" state
             const now = new Date();
@@ -2363,7 +2349,6 @@
             recordElement.dataset.enviadoAEmpaque = enviadoAEmpaque;
             recordElement.dataset.enviadoAEmpaqueTimestamp = enviadoAEmpaqueTimestamp ? enviadoAEmpaqueTimestamp.toISOString() : '';
             recordElement.dataset.fechaHoraCreacionIso = fechaHoraCreacion ? fechaHoraCreacion.toISOString() : '';
-            recordElement.dataset.dateKey = dateKey;
             recordElement.dataset.retardo = isCurrentlyRetarded; // Set data-retardo attribute here
             // Store the 'usuario' (user ID) in the dataset for filtering purposes
             recordElement.dataset.usuario = registro.usuario || '';
@@ -2552,6 +2537,16 @@
                 console.log("Datos de pedidos recibidos/actualizados.");
                 console.log("Número de documentos recibidos:", snapshot.size);
 
+                const now = new Date();
+                const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+                const isTodayRegistro = (registro) => {
+                    if (!registro || !registro.fecha_hora || typeof registro.fecha_hora.toDate !== 'function') return false;
+                    const d = registro.fecha_hora.toDate();
+                    return d >= startOfDay && d <= endOfDay;
+                };
+
                 if (!isInitialLoadPedidos) {
                     scrollPosPedidos = listaPedidosContainer.scrollTop;
                 }
@@ -2562,14 +2557,8 @@
                     existingRecordElements.set(el.dataset.id, el);
                 });
 
-                // Clear the container if it's the initial load or if the snapshot is empty after filtering
-                if (isInitialLoadPedidos || snapshot.empty) {
+                if (isInitialLoadPedidos) {
                     listaPedidosContainer.innerHTML = '';
-                    if (snapshot.empty && isUserFilteredRole) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos asignados a este usuario o no se encontraron pedidos con los filtros actuales.</p>';
-                    } else if (snapshot.empty) {
-                        listaPedidosContainer.innerHTML = '<p>No hay pedidos para mostrar con los filtros actuales.</p>';
-                    }
                 }
 
                 snapshot.docChanges().forEach(change => {
@@ -2578,34 +2567,55 @@
                     const docId = doc.id;
                     const currentDocIndex = snapshot.docs.findIndex(d => d.id === docId);
 
+                    const existingElement = existingRecordElements.get(docId);
+                    const shouldShowToday = isTodayRegistro(registro);
+
                     if (change.type === 'added') {
+                        if (!shouldShowToday) return;
+                        if (listaPedidosContainer.querySelector('p')) {
+                            listaPedidosContainer.innerHTML = '';
+                        }
                         console.log("Added record:", docId);
                         const newRecordElement = createRecordElement(docId, registro, currentDocIndex);
-                        // Insert the new element at the correct sorted position
-                        const nextElement = listaPedidosContainer.children[currentDocIndex];
-                        if (nextElement) {
-                            listaPedidosContainer.insertBefore(newRecordElement, nextElement);
-                        } else {
-                            listaPedidosContainer.appendChild(newRecordElement);
+                        listaPedidosContainer.appendChild(newRecordElement);
+                        updateRecordStatusAndButtons(docId, registro);
+                        return;
+                    }
+
+                    if (change.type === 'modified') {
+                        if (!shouldShowToday) {
+                            if (existingElement) existingElement.remove();
+                            return;
                         }
-                        updateRecordStatusAndButtons(docId, registro); // Apply initial status
-                    } else if (change.type === 'modified') {
-                        console.log("Modified record:", docId);
-                        const existingElement = existingRecordElements.get(docId);
+                        if (listaPedidosContainer.querySelector('p')) {
+                            listaPedidosContainer.innerHTML = '';
+                        }
                         if (existingElement) {
-                            // If the element's position might change due to sorting, re- Con el nuevo código, la posición de los elementos
-                            // en el DOM no debería cambiar, ya que se usan solo para filtrar y mostrar/ocultar.
-                            // Si se necesita un orden estricto, la re-creación del elemento o una re-inserción más inteligente sería necesaria.
+                            console.log("Modified record:", docId);
                             updateExistingRecordElement(existingElement, registro, currentDocIndex);
+                        } else {
+                            console.log("Modified->Added (today) record:", docId);
+                            const newRecordElement = createRecordElement(docId, registro, currentDocIndex);
+                            listaPedidosContainer.appendChild(newRecordElement);
+                            updateRecordStatusAndButtons(docId, registro);
                         }
-                    } else if (change.type === 'removed') {
+                        return;
+                    }
+
+                    if (change.type === 'removed') {
                         console.log("Removed record:", docId);
-                        const existingElement = existingRecordElements.get(docId);
-                        if (existingElement) {
-                            existingElement.remove();
-                        }
+                        if (existingElement) existingElement.remove();
+                        return;
                     }
                 });
+
+                if (!listaPedidosContainer.querySelector('.record')) {
+                    if (isUserFilteredRole) {
+                        listaPedidosContainer.innerHTML = '<p>No hay pedidos del día de hoy para este usuario.</p>';
+                    } else {
+                        listaPedidosContainer.innerHTML = '<p>No hay pedidos del día de hoy para mostrar.</p>';
+                    }
+                }
 
                 // After processing changes, re-run filter to ensure correct visibility and counts
                 filtrarYBuscarPedidos();
@@ -2619,6 +2629,7 @@
                 let resumenAsesores = {};
                 snapshot.forEach(doc => {
                     const registro = doc.data();
+                    if (!isTodayRegistro(registro)) return;
                     if(registro.asesor) asesores.add(registro.asesor);
                     if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                         if (registro.asesor && !resumenAsesores[registro.asesor]) {
@@ -2872,16 +2883,9 @@
             console.log("Exportando a Excel...");
             const querySnapshot = await db.collection('registros').orderBy('fecha_hora', 'asc').get();
             let registros = [];
-            const todayStr = new Date().toISOString().slice(0, 10);
 
             querySnapshot.forEach(doc => {
                 const registro = doc.data();
-                if (registro.fecha_hora && typeof registro.fecha_hora.toDate === 'function') {
-                    const dateKey = registro.fecha_hora.toDate().toISOString().slice(0, 10);
-                    if (dateKey !== todayStr) return;
-                } else {
-                    return;
-                }
                 let fechaHoraFormateada = 'N/A';
                 if (registro.fecha_hora && typeof registro.fecha_hora.toDate === 'function') {
                     const dateObj = registro.fecha_hora.toDate();
@@ -3565,19 +3569,13 @@
                               .orderBy('fecha_hora', 'desc'); // Order by date/time for readability
 
                 const snapshot = await query.get();
-                const todayStr = new Date().toISOString().slice(0, 10);
-                const docsToday = snapshot.docs.filter(d => {
-                    const fh = d.data().fecha_hora;
-                    const dt = fh && fh.toDate ? fh.toDate() : null;
-                    return dt ? dt.toISOString().slice(0, 10) === todayStr : false;
-                });
-                countElement.textContent = docsToday.length;
+                countElement.textContent = snapshot.size;
 
                 let ordersHtml = '';
-                if (docsToday.length === 0) {
+                if (snapshot.empty) {
                     ordersHtml = '<p>No hay pedidos SIN despachar para esta transportadora.</p>';
                 } else {
-                    docsToday.forEach(doc => {
+                    snapshot.forEach(doc => {
                         const registro = doc.data();
                         const fechaHora = registro.fecha_hora ? registro.fecha_hora.toDate().toLocaleString('es-CO') : 'N/A';
                         const bodegueros = Array.isArray(registro.bodegueros_encargados) && registro.bodegueros_encargados.length > 0
@@ -4401,19 +4399,6 @@
          * Función para eliminar todos los pedidos que están marcados como "despachado".
          * Solo para administradores, requiere contraseña.
          */
-        async function deleteAllDispatches() {
-            initAudioContext(); // Initialize audio context on user interaction
-            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
-                showAlert("Esta acción solo puede ser realizada por un administrador."); // Reemplazado alert
-                return;
-            }
-            showAlert("Funcionalidad deshabilitada. Los pedidos ahora se conservan en Firebase y la vista principal solo muestra los del día.");
-            return;
-        }
-
-        /**
-         * Verifica la contraseña ingresada y ejecuta la acción correspondiente al tipo de bloqueo.
-         */
         async function verifyPassword() {
             const passwordInput = document.getElementById('password_input');
             const errorMessage = document.getElementById('password_error');
@@ -4528,8 +4513,6 @@
                         errorMessage.textContent = "Error al reiniciar el estado de bloqueo. Inténtelo de nuevo.";
                         return;
                     }
-                } else if (blockType === 'delete_all_dispatches') {
-                    showAlert("Funcionalidad deshabilitada. Los pedidos ahora se conservan en Firebase.");
                 }
                 // Limpiar la referencia del checkbox después de verificación exitosa
                 currentPasswordModalTargetCheckbox = null;
@@ -4625,10 +4608,7 @@
                         const registro = doc.data();
                         const fechaHoraCreacion = registro.fecha_hora ? registro.fecha_hora.toDate() : null;
 
-                        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-
                         if (fechaHoraCreacion) {
-                            if (fechaHoraCreacion < startOfDay) return;
                             const diffMs = now.getTime() - fechaHoraCreacion.getTime();
                             const diffMinutes = diffMs / (1000 * 60);
 
