@@ -2551,70 +2551,26 @@
                     scrollPosPedidos = listaPedidosContainer.scrollTop;
                 }
 
-                // Keep track of current records in the DOM to efficiently update/remove
-                const existingRecordElements = new Map();
-                listaPedidosContainer.querySelectorAll('.record').forEach(el => {
-                    existingRecordElements.set(el.dataset.id, el);
-                });
+                const docsToday = snapshot.docs.filter(d => isTodayRegistro(d.data()));
 
-                if (isInitialLoadPedidos) {
-                    listaPedidosContainer.innerHTML = '';
-                }
-
-                snapshot.docChanges().forEach(change => {
-                    const doc = change.doc;
-                    const registro = doc.data();
-                    const docId = doc.id;
-                    const currentDocIndex = snapshot.docs.findIndex(d => d.id === docId);
-
-                    const existingElement = existingRecordElements.get(docId);
-                    const shouldShowToday = isTodayRegistro(registro);
-
-                    if (change.type === 'added') {
-                        if (!shouldShowToday) return;
-                        if (listaPedidosContainer.querySelector('p')) {
-                            listaPedidosContainer.innerHTML = '';
-                        }
-                        console.log("Added record:", docId);
-                        const newRecordElement = createRecordElement(docId, registro, currentDocIndex);
-                        listaPedidosContainer.appendChild(newRecordElement);
-                        updateRecordStatusAndButtons(docId, registro);
-                        return;
-                    }
-
-                    if (change.type === 'modified') {
-                        if (!shouldShowToday) {
-                            if (existingElement) existingElement.remove();
-                            return;
-                        }
-                        if (listaPedidosContainer.querySelector('p')) {
-                            listaPedidosContainer.innerHTML = '';
-                        }
-                        if (existingElement) {
-                            console.log("Modified record:", docId);
-                            updateExistingRecordElement(existingElement, registro, currentDocIndex);
-                        } else {
-                            console.log("Modified->Added (today) record:", docId);
-                            const newRecordElement = createRecordElement(docId, registro, currentDocIndex);
-                            listaPedidosContainer.appendChild(newRecordElement);
-                            updateRecordStatusAndButtons(docId, registro);
-                        }
-                        return;
-                    }
-
-                    if (change.type === 'removed') {
-                        console.log("Removed record:", docId);
-                        if (existingElement) existingElement.remove();
-                        return;
-                    }
-                });
-
-                if (!listaPedidosContainer.querySelector('.record')) {
+                listaPedidosContainer.innerHTML = '';
+                if (!docsToday.length) {
                     if (isUserFilteredRole) {
                         listaPedidosContainer.innerHTML = '<p>No hay pedidos del día de hoy para este usuario.</p>';
                     } else {
                         listaPedidosContainer.innerHTML = '<p>No hay pedidos del día de hoy para mostrar.</p>';
                     }
+                } else {
+                    const frag = document.createDocumentFragment();
+                    docsToday.forEach((doc, index) => {
+                        const registro = doc.data();
+                        const el = createRecordElement(doc.id, registro, index);
+                        frag.appendChild(el);
+                    });
+                    listaPedidosContainer.appendChild(frag);
+                    docsToday.forEach(doc => {
+                        updateRecordStatusAndButtons(doc.id, doc.data());
+                    });
                 }
 
                 // After processing changes, re-run filter to ensure correct visibility and counts
@@ -2627,9 +2583,8 @@
                 // For now, let's keep the `asesores` and `resumenAsesores` calculation as it was, but ensure it's based on the *current* state of the data in the snapshot.
                 let asesores = new Set();
                 let resumenAsesores = {};
-                snapshot.forEach(doc => {
+                docsToday.forEach(doc => {
                     const registro = doc.data();
-                    if (!isTodayRegistro(registro)) return;
                     if(registro.asesor) asesores.add(registro.asesor);
                     if (datosUsuario.permisos.toLowerCase() === 'administrador') {
                         if (registro.asesor && !resumenAsesores[registro.asesor]) {
