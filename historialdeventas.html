@@ -22,7 +22,7 @@
         body{
             margin:0; font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:var(--text);
             background:
-              radial-gradient(1200px 600px at 15% 10%, rgba(109,94,252,.35), transparent 60%),
+                radial-gradient(1200px 600px at 15% 10%, rgba(109,94,252,.35), transparent 60%),
                 radial-gradient(1100px 700px at 85% 15%, rgba(37,177,255,.28), transparent 60%),
                 var(--bg);
         }
@@ -72,17 +72,30 @@
         .actions{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px}
         .toggle{display:inline-flex;gap:10px;align-items:center;padding:8px 10px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04)}
         .toggle input{width:18px;height:18px}
-        .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}
+
+        .pagination{display:flex;gap:10px;align-items:center;justify-content:center;padding:12px;border-top:1px solid var(--stroke)}
+        .page-info{color:var(--muted);font-size:12px;font-weight:800}
+
+        /* Modal tema claro (solo para el modal de edición) */
+        .modal{position:fixed;inset:0;background:rgba(240,245,255,.86);display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}
         .modal.open{display:flex}
-        .modal-card{width:min(760px,100%);border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
-        .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.12)}
+        .modal-card{width:min(760px,100%);border:1px solid rgba(20, 30, 60, .10);background:rgba(255,255,255,.96);border-radius:16px;box-shadow:0 24px 70px rgba(8, 15, 35, .25);overflow:hidden;color:#0b1220}
+        .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(20, 30, 60, .10)}
         .modal-head h3{margin:0;font-size:15px}
-        .x{width:38px;height:38px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:var(--text);cursor:pointer;font-size:18px;font-weight:900}
+        .x{width:38px;height:38px;border-radius:12px;border:1px solid rgba(20, 30, 60, .14);background:rgba(240,245,255,.9);color:#0b1220;cursor:pointer;font-size:18px;font-weight:900}
         .modal-body{padding:14px}
         .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         @media(max-width:760px){.form-grid{grid-template-columns:1fr}}
         textarea{min-height:92px;resize:vertical}
-        .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:12px 14px;border-top:1px solid rgba(255,255,255,.12)}
+        .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:12px 14px;border-top:1px solid rgba(20, 30, 60, .10)}
+
+        /* Inputs claros dentro del modal */
+        .modal-card input, .modal-card textarea, .modal-card select{
+            border:1px solid rgba(20, 30, 60, .14);
+            background:rgba(245, 248, 255, 1);
+            color:#0b1220;
+        }
+        .modal-card label{color:rgba(11,18,32,.70)}
     </style>
 </head>
 <body>
@@ -136,6 +149,12 @@
             </div>
 
             <div class="list" id="list"></div>
+
+            <div class="pagination" id="pagination" style="display:none;">
+                <button class="btn" type="button" id="prevPage">Anterior</button>
+                <div class="page-info" id="pageInfo">Página 1 de 1</div>
+                <button class="btn" type="button" id="nextPage">Siguiente</button>
+            </div>
         </div>
     </div>
 
@@ -238,6 +257,11 @@
         const sumPares = $('sumPares');
         const sumValor = $('sumValor');
 
+        const paginationEl = $('pagination');
+        const prevPageBtn = $('prevPage');
+        const nextPageBtn = $('nextPage');
+        const pageInfoEl = $('pageInfo');
+
         function formatCurrency(value) {
             const n = Number(value || 0);
             return '$' + (Number.isFinite(n) ? n.toLocaleString('es-CO') : '0');
@@ -268,6 +292,28 @@
         let allRegistros = [];
         let unsubscribe = null;
         let editingRecord = null;
+
+        const PAGE_SIZE = 10;
+        let currentPage = 1;
+        let totalPages = 1;
+
+        function clampPage() {
+            if (!Number.isFinite(currentPage) || currentPage < 1) currentPage = 1;
+            if (!Number.isFinite(totalPages) || totalPages < 1) totalPages = 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+        }
+
+        function updatePaginationUI() {
+            clampPage();
+            if (totalPages <= 1) {
+                paginationEl.style.display = 'none';
+                return;
+            }
+            paginationEl.style.display = 'flex';
+            pageInfoEl.textContent = `Página ${currentPage} de ${totalPages}`;
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = currentPage >= totalPages;
+        }
 
         function updateAsesorOptions() {
             const current = asesorSelect.value;
@@ -409,6 +455,14 @@
         function render() {
             const filtered = applyFilters(allRegistros);
 
+            totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+            clampPage();
+            updatePaginationUI();
+
+            const start = (currentPage - 1) * PAGE_SIZE;
+            const end = start + PAGE_SIZE;
+            const pageItems = filtered.slice(start, end);
+
             let totalPares = 0;
             let totalValor = 0;
             filtered.forEach(r => {
@@ -421,13 +475,14 @@
 
             if (!filtered.length) {
                 listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">No hay registros con los filtros actuales.</div>';
+                updatePaginationUI();
                 return;
             }
 
             listEl.innerHTML = '';
             const frag = document.createDocumentFragment();
 
-            filtered.forEach(r => {
+            pageItems.forEach(r => {
                 const card = document.createElement('div');
                 card.className = 'card';
 
@@ -520,12 +575,26 @@
         }
 
         function attachFilterListeners() {
-            const rerender = () => render();
-            searchInput.addEventListener('input', rerender);
-            asesorSelect.addEventListener('change', rerender);
-            statusSelect.addEventListener('change', rerender);
-            fromDate.addEventListener('change', rerender);
-            toDate.addEventListener('change', rerender);
+            const rerenderResetPage = () => { currentPage = 1; render(); };
+            searchInput.addEventListener('input', rerenderResetPage);
+            asesorSelect.addEventListener('change', rerenderResetPage);
+            statusSelect.addEventListener('change', rerenderResetPage);
+            fromDate.addEventListener('change', rerenderResetPage);
+            toDate.addEventListener('change', rerenderResetPage);
+
+            prevPageBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage -= 1;
+                    render();
+                }
+            });
+
+            nextPageBtn.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    currentPage += 1;
+                    render();
+                }
+            });
 
             $('resetBtn').addEventListener('click', () => {
                 searchInput.value = '';
@@ -533,6 +602,7 @@
                 statusSelect.value = 'all';
                 fromDate.value = '';
                 toDate.value = '';
+                currentPage = 1;
                 render();
             });
         }
@@ -547,6 +617,7 @@
                     data._searchBlob = null;
                     return data;
                 });
+                currentPage = 1;
                 updateAsesorOptions();
                 liveStateEl.textContent = 'En tiempo real · ' + new Date().toLocaleTimeString('es-CO');
                 render();
