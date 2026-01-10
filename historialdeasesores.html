@@ -1,1 +1,1199 @@
-none
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Historial disponible</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root{
+            --bg:#f6f8ff;
+            --panel:#ffffff;
+            --stroke:#e6eaf2;
+            --text:#0b1220;
+            --muted:#52607a;
+            --brand1:#6d5efc; --brand2:#25b1ff;
+            --good:#18c37e; --warn:#ffb020; --bad:#ff4d4f;
+            --shadow:0 18px 50px rgba(16, 24, 40, .12);
+        }
+        *{box-sizing:border-box}
+        body{
+            margin:0; font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:var(--text);
+            background:
+                radial-gradient(1200px 600px at 15% 10%, rgba(109,94,252,.16), transparent 62%),
+                radial-gradient(1100px 700px at 85% 15%, rgba(37,177,255,.12), transparent 62%),
+                var(--bg);
+        }
+        .wrap{max-width:1280px;margin:0 auto;padding:22px 16px 38px}
+        .top{
+            display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+            padding:14px 14px;border:1px solid var(--stroke);background:var(--panel);border-radius:16px;box-shadow:var(--shadow)
+        }
+        h1{margin:0;font-size:18px;letter-spacing:-.02em}
+        .sub{margin-top:4px;color:var(--muted);font-size:12px}
+        .btn{
+            border:1px solid var(--stroke);
+            background:#ffffff;
+            color:var(--text);
+            padding:10px 12px;
+            border-radius:12px;
+            cursor:pointer;
+            font-weight:700;
+            text-decoration:none;
+            display:inline-flex;
+            gap:8px;
+            align-items:center
+        }
+        .btn.primary{border-color:rgba(109,94,252,.35);background:linear-gradient(135deg, rgba(109,94,252,.95), rgba(37,177,255,.85))}
+        .btn.danger{border-color:rgba(255,77,79,.4);background:linear-gradient(135deg, rgba(255,77,79,.92), rgba(255,176,32,.5))}
+        .btn:disabled{opacity:.7;cursor:not-allowed}
+
+        .panel{margin-top:12px;border:1px solid var(--stroke);background:var(--panel);border-radius:16px;box-shadow:var(--shadow)}
+        .filters{display:grid;grid-template-columns:1.2fr .8fr .7fr .7fr;gap:10px;padding:12px;border-bottom:1px solid var(--stroke)}
+        @media(max-width:1100px){.filters{grid-template-columns:1fr 1fr}}
+        @media(max-width:620px){.filters{grid-template-columns:1fr}}
+        label{font-size:12px;color:var(--muted)}
+        input,select,textarea{
+            width:100%;
+            border:1px solid var(--stroke);
+            background:#ffffff;
+            color:var(--text);
+            border-radius:12px;
+            padding:10px 12px;
+            outline:none
+        }
+        textarea{min-height:96px;resize:vertical}
+
+        .summary{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--stroke)}
+        .chip{padding:8px 10px;border:1px solid var(--stroke);border-radius:999px;background:#f4f7ff;color:var(--muted);font-size:12px;font-weight:700}
+        .chip strong{color:var(--text)}
+
+        .split{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;border-bottom:1px solid var(--stroke)}
+        @media(max-width:980px){.split{grid-template-columns:1fr}}
+
+        .list{padding:10px;display:grid;grid-template-columns:1fr;gap:10px}
+        .card{border:1px solid var(--stroke);background:#ffffff;border-radius:14px;padding:12px}
+        .head{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;border-bottom:1px dashed rgba(20, 30, 60, .18);padding-bottom:10px;margin-bottom:10px}
+        .code{font-weight:900;font-size:12px;padding:6px 10px;border-radius:999px;background:rgba(109,94,252,.10);border:1px solid rgba(109,94,252,.22)}
+        .meta .dt{color:var(--muted);font-size:12px;font-weight:700;margin-left:8px}
+        .meta .cliente{margin-top:6px;font-weight:900}
+        .meta .line{margin-top:4px;color:var(--muted);font-size:13px}
+        .badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+        .badge{padding:6px 10px;border-radius:999px;font-size:12px;font-weight:900;border:1px solid var(--stroke);background:#f7f9ff}
+        .badge.good{border-color:rgba(24,195,126,.35);background:rgba(24,195,126,.10)}
+        .badge.warn{border-color:rgba(255,176,32,.35);background:rgba(255,176,32,.12)}
+        .badge.bad{border-color:rgba(255,77,79,.35);background:rgba(255,77,79,.10)}
+        .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px}
+        @media(max-width:980px){.grid{grid-template-columns:1fr}}
+        .box{border:1px solid var(--stroke);background:#f7f9ff;border-radius:12px;padding:10px}
+        .box .lbl{color:var(--muted);font-size:12px}
+        .box .val{margin-top:4px;font-weight:900}
+        ul{margin:8px 0 0;padding-left:18px;color:var(--muted)}
+        .actions{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px}
+
+        .pagination{display:flex;gap:10px;align-items:center;justify-content:center;padding:12px;border-top:1px solid var(--stroke);background:#ffffff}
+        .page-info{color:var(--muted);font-size:12px;font-weight:800}
+
+        .modal{position:fixed;inset:0;background:rgba(240,245,255,.92);display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}
+        .modal.open{display:flex}
+        .modal-card{width:min(760px,100%);border:1px solid rgba(20, 30, 60, .10);background:#ffffff;border-radius:16px;box-shadow:0 24px 70px rgba(8, 15, 35, .20);overflow:hidden;color:var(--text);display:flex;flex-direction:column;max-height:calc(100vh - 36px)}
+        .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(20, 30, 60, .10);flex:0 0 auto}
+        .modal-head h3{margin:0;font-size:15px}
+        .x{width:38px;height:38px;border-radius:12px;border:1px solid rgba(20, 30, 60, .14);background:rgba(240,245,255,.9);color:#0b1220;cursor:pointer;font-size:18px;font-weight:900}
+        .modal-body{padding:14px;overflow:auto;flex:1 1 auto;min-height:0}
+        .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        @media(max-width:760px){.form-grid{grid-template-columns:1fr}}
+        .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:12px 14px;border-top:1px solid rgba(20, 30, 60, .10);flex:0 0 auto}
+
+        .gate{position:fixed;inset:0;z-index:10000;background:rgba(240,245,255,.95);display:none;align-items:center;justify-content:center;padding:18px}
+        .gate.open{display:flex}
+        .gate-card{width:min(540px,100%);border:1px solid rgba(20, 30, 60, .10);background:#ffffff;border-radius:16px;box-shadow:0 24px 70px rgba(8, 15, 35, .20);overflow:hidden}
+        .gate-head{padding:14px;border-bottom:1px solid rgba(20, 30, 60, .10)}
+        .gate-head h2{margin:0;font-size:16px}
+        .gate-body{padding:14px}
+        .gate-foot{display:flex;gap:10px;justify-content:flex-end;padding:14px;border-top:1px solid rgba(20, 30, 60, .10)}
+
+        .mini{color:var(--muted);font-size:12px;font-weight:700}
+    </style>
+</head>
+<body>
+    <div class="gate" id="gate" aria-hidden="true">
+        <div class="gate-card">
+            <div class="gate-head">
+                <h2>Acceso requerido</h2>
+                <div class="mini" id="gateSub">Selecciona un administrador para solicitar acceso por 10 minutos.</div>
+            </div>
+            <div class="gate-body">
+                <div style="display:grid;gap:10px;">
+                    <div>
+                        <label for="adminSelect">Administrador</label>
+                        <select id="adminSelect"></select>
+                    </div>
+                    <div>
+                        <label for="gateState">Estado</label>
+                        <input id="gateState" type="text" value="Cargando..." readonly />
+                    </div>
+                </div>
+            </div>
+            <div class="gate-foot">
+                <button class="btn" type="button" id="gateCancel">Cancelar</button>
+                <button class="btn primary" type="button" id="gateRequest">Solicitar acceso</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="wrap">
+        <div class="top">
+            <div>
+                <h1>Historial disponible</h1>
+                <div class="sub" id="subtitle">Pedidos y novedades</div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
+                <div class="chip" id="sessionChip" style="display:none;">Sesión: <strong id="sessionTime">--:--</strong></div>
+                <a class="btn" href="generar_pedidos.html">Volver</a>
+                <button class="btn primary" id="resetBtn" type="button">Limpiar filtros</button>
+            </div>
+        </div>
+
+        <div class="panel" id="adminRequestsPanel" style="display:none;">
+            <div class="summary">
+                <div class="chip">Solicitudes pendientes: <strong id="reqCount">0</strong></div>
+                <div style="color:var(--muted); font-size:12px; font-weight:700;" id="reqState">—</div>
+            </div>
+            <div class="list" id="reqList"></div>
+        </div>
+
+        <div class="panel">
+            <div class="filters">
+                <div>
+                    <label for="searchInput">Búsqueda</label>
+                    <input id="searchInput" type="text" placeholder="Cliente, código, productos, transportadora..." />
+                </div>
+                <div>
+                    <label for="asesorSelect">Asesor</label>
+                    <select id="asesorSelect"><option value="">Todos</option></select>
+                </div>
+                <div>
+                    <label for="fromDate">Desde</label>
+                    <input id="fromDate" type="date" />
+                </div>
+                <div>
+                    <label for="toDate">Hasta</label>
+                    <input id="toDate" type="date" />
+                </div>
+            </div>
+
+            <div class="split">
+                <div class="card">
+                    <div style="font-weight:900; margin-bottom:8px;">Novedades pendientes</div>
+                    <div class="mini" id="pendingNovedadesState">Cargando…</div>
+                    <div class="list" id="pendingNovedadesList" style="padding:10px 0 0;"></div>
+                </div>
+                <div class="card">
+                    <div style="font-weight:900; margin-bottom:8px;">Historial de novedades</div>
+                    <div class="mini" id="historyNovedadesState">Cargando…</div>
+                    <div class="list" id="historyNovedadesList" style="padding:10px 0 0;"></div>
+                </div>
+            </div>
+
+            <div class="summary">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <div class="chip">Registros: <strong id="sumCount">0</strong></div>
+                    <div class="chip">Pares: <strong id="sumPares">0</strong></div>
+                    <div class="chip">Valor: <strong id="sumValor">$0</strong></div>
+                </div>
+                <div style="color:var(--muted); font-size:12px; font-weight:700;" id="liveState">Conectando…</div>
+            </div>
+
+            <div class="list" id="list"></div>
+
+            <div class="pagination" id="pagination" style="display:none;">
+                <button class="btn" type="button" id="prevPage">Anterior</button>
+                <div class="page-info" id="pageInfo">Página 1 de 1</div>
+                <button class="btn" type="button" id="nextPage">Siguiente</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="novedadModal" aria-hidden="true">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h3>Reportar novedad</h3>
+                <button class="x" type="button" id="closeNovedad">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="color:var(--muted); font-size:12px; font-weight:700; margin-bottom:10px;">
+                    Pedido: <span id="novPedido" style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;"></span>
+                </div>
+                <div class="form-grid">
+                    <div>
+                        <label for="novBodeguero">Asignar a bodeguero</label>
+                        <select id="novBodeguero"></select>
+                    </div>
+                    <div>
+                        <label for="novFlete">Valor flete</label>
+                        <input id="novFlete" type="number" step="1" />
+                    </div>
+                    <div>
+                        <label style="display:flex;align-items:center;gap:10px;color:var(--text);font-weight:900;margin-top:18px;">
+                            <input id="novFletePagado" type="checkbox" style="width:18px;height:18px" />
+                            Flete pagado
+                        </label>
+                    </div>
+                    <div>
+                        <label style="display:flex;align-items:center;gap:10px;color:var(--text);font-weight:900;margin-top:18px;">
+                            <input id="novResuelta" type="checkbox" style="width:18px;height:18px" disabled />
+                            Resuelta (solo admin)
+                        </label>
+                    </div>
+                    <div style="grid-column:1 / -1;">
+                        <label for="novDesc">Describe la novedad</label>
+                        <textarea id="novDesc" placeholder="Escribe qué pasó..."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" type="button" id="cancelNovedad">Cancelar</button>
+                <button class="btn primary" type="button" id="saveNovedad">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="appModal" aria-hidden="true">
+        <div class="modal-card" style="width:min(560px,100%);">
+            <div class="modal-head">
+                <h3 id="appModalTitle">Mensaje</h3>
+                <button class="x" type="button" id="appModalClose">×</button>
+            </div>
+            <div class="modal-body" style="padding-top:12px;">
+                <div id="appModalMessage" style="color:var(--text);font-weight:700;line-height:1.35;"></div>
+            </div>
+            <div class="modal-actions" id="appModalActions"></div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+            authDomain: "lazapateria-c4157.firebaseapp.com",
+            projectId: "lazapateria-c4157",
+            storageBucket: "lazapateria-c4157.firebasestorage.app",
+            measurementId: "G-HVG7615JEE"
+        };
+
+        if (!firebase.apps || !firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        let datosUsuario = null;
+        try { datosUsuario = JSON.parse(localStorage.getItem('datosUsuario')); } catch (e) { datosUsuario = null; }
+
+        const $ = (id) => document.getElementById(id);
+
+        function normalizePermiso() {
+            return (datosUsuario && datosUsuario.permisos) ? String(datosUsuario.permisos).trim().toLowerCase() : '';
+        }
+
+        function enforceBasicSession() {
+            if (!datosUsuario || !datosUsuario.usuario || !datosUsuario.nombreCompleto || !datosUsuario.permisos) {
+                window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+                throw new Error('Sin sesión');
+            }
+        }
+
+        enforceBasicSession();
+
+        const permiso = normalizePermiso();
+        const isAdmin = permiso === 'administrador';
+        const isOperador = permiso === 'operador';
+        const isBodeguero = permiso === 'bodeguero';
+
+        const listEl = $('list');
+        const liveStateEl = $('liveState');
+        const asesorSelect = $('asesorSelect');
+        const searchInput = $('searchInput');
+        const fromDate = $('fromDate');
+        const toDate = $('toDate');
+        const sumCount = $('sumCount');
+        const sumPares = $('sumPares');
+        const sumValor = $('sumValor');
+
+        const paginationEl = $('pagination');
+        const prevPageBtn = $('prevPage');
+        const nextPageBtn = $('nextPage');
+        const pageInfoEl = $('pageInfo');
+
+        let appModalResolve = null;
+
+        function openAppModal({ title, message, actions }) {
+            $('appModalTitle').textContent = title || 'Mensaje';
+            $('appModalMessage').textContent = message || '';
+            const actionsEl = $('appModalActions');
+            actionsEl.innerHTML = '';
+            (actions || []).forEach(a => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = a.className || 'btn';
+                b.textContent = a.label || 'Aceptar';
+                b.addEventListener('click', () => {
+                    if (typeof a.onClick === 'function') {
+                        a.onClick();
+                    } else {
+                        closeAppModal(null);
+                    }
+                });
+                actionsEl.appendChild(b);
+            });
+            $('appModal').classList.add('open');
+            $('appModal').setAttribute('aria-hidden', 'false');
+        }
+
+        function closeAppModal(result) {
+            $('appModal').classList.remove('open');
+            $('appModal').setAttribute('aria-hidden', 'true');
+            const r = appModalResolve;
+            appModalResolve = null;
+            if (typeof r === 'function') r(result);
+        }
+
+        function modalAlert(title, message, buttonLabel) {
+            return new Promise((resolve) => {
+                appModalResolve = resolve;
+                openAppModal({
+                    title: title || 'Mensaje',
+                    message: message || '',
+                    actions: [{ label: buttonLabel || 'Aceptar', className: 'btn primary', onClick: () => closeAppModal(true) }]
+                });
+            });
+        }
+
+        function modalConfirm(title, message, yesLabel, noLabel) {
+            return new Promise((resolve) => {
+                appModalResolve = resolve;
+                openAppModal({
+                    title: title || 'Confirmar',
+                    message: message || '',
+                    actions: [
+                        { label: noLabel || 'Cancelar', className: 'btn', onClick: () => closeAppModal(false) },
+                        { label: yesLabel || 'Sí', className: 'btn primary', onClick: () => closeAppModal(true) }
+                    ]
+                });
+            });
+        }
+
+        $('appModalClose').addEventListener('click', () => closeAppModal(null));
+        $('appModal').addEventListener('click', (e) => { if (e.target === $('appModal')) closeAppModal(null); });
+
+        function formatCurrency(value) {
+            const n = Number(value || 0);
+            return '$' + (Number.isFinite(n) ? n.toLocaleString('es-CO') : '0');
+        }
+
+        function formatDateTime(ts) {
+            if (!ts || typeof ts.toDate !== 'function') return 'N/A';
+            const d = ts.toDate();
+            const datePart = d.toLocaleDateString('es-CO');
+            const timePart = d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            return datePart + ', ' + timePart;
+        }
+
+        function normalizeStr(v) { return String(v || '').trim().toLowerCase(); }
+
+        function buildSearchBlob(r) {
+            const productos = Array.isArray(r.productos) ? r.productos : [];
+            const prodText = productos.map(p => [p.referencia, p.color, p.talla, p.precio].filter(Boolean).join(' ')).join(' | ');
+            return normalizeStr([
+                r.codigo_unico, r.cliente, r.asesor, r.transportadora, prodText
+            ].join(' '));
+        }
+
+        function applyFilters(registros) {
+            const q = normalizeStr(searchInput.value);
+            const asesor = String(asesorSelect.value || '').trim();
+            const fd = String(fromDate.value || '').trim();
+            const td = String(toDate.value || '').trim();
+            const fromTs = fd ? new Date(fd + 'T00:00:00').getTime() : null;
+            const toTs = td ? new Date(td + 'T23:59:59').getTime() : null;
+
+            return (Array.isArray(registros) ? registros : []).filter(r => {
+                if (q) {
+                    if (!r._searchBlob) r._searchBlob = buildSearchBlob(r);
+                    if (!r._searchBlob.includes(q)) return false;
+                }
+                if (asesor && String(r.asesor || '').trim() !== asesor) return false;
+                if (fromTs != null || toTs != null) {
+                    const t = (r.fecha_hora && typeof r.fecha_hora.toDate === 'function') ? r.fecha_hora.toDate().getTime() : null;
+                    if (t == null) return false;
+                    if (fromTs != null && t < fromTs) return false;
+                    if (toTs != null && t > toTs) return false;
+                }
+                return true;
+            });
+        }
+
+        let allRegistros = [];
+        let unsubscribePedidos = null;
+
+        const PAGE_SIZE = 10;
+        let currentPage = 1;
+        let totalPages = 1;
+
+        function clampPage() {
+            if (!Number.isFinite(currentPage) || currentPage < 1) currentPage = 1;
+            if (!Number.isFinite(totalPages) || totalPages < 1) totalPages = 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+        }
+
+        function updatePaginationUI() {
+            clampPage();
+            if (totalPages <= 1) {
+                paginationEl.style.display = 'none';
+                return;
+            }
+            paginationEl.style.display = 'flex';
+            pageInfoEl.textContent = `Página ${currentPage} de ${totalPages}`;
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = currentPage >= totalPages;
+        }
+
+        function updateAsesorOptions() {
+            if (isOperador) {
+                asesorSelect.innerHTML = `<option value="${String(datosUsuario.nombreCompleto || '').trim()}">${String(datosUsuario.nombreCompleto || '').trim()}</option>`;
+                asesorSelect.value = String(datosUsuario.nombreCompleto || '').trim();
+                asesorSelect.disabled = true;
+                return;
+            }
+
+            const current = asesorSelect.value;
+            const set = new Set();
+            allRegistros.forEach(r => { if (r.asesor) set.add(String(r.asesor)); });
+            const sorted = Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+            asesorSelect.innerHTML = '<option value="">Todos</option>';
+            sorted.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a;
+                opt.textContent = a;
+                asesorSelect.appendChild(opt);
+            });
+            const still = Array.from(asesorSelect.options).some(o => o.value === current);
+            asesorSelect.value = still ? current : '';
+            asesorSelect.disabled = false;
+        }
+
+        let currentPedidoForNovedad = null;
+        let cachedBodegueros = [];
+        let cachedAdmins = [];
+
+        function openNovedadModal(pedido) {
+            currentPedidoForNovedad = pedido;
+            $('novPedido').textContent = pedido ? (pedido.codigo_unico || pedido.id || '') : '';
+
+            const bodeSel = $('novBodeguero');
+            bodeSel.innerHTML = '';
+            if (!cachedBodegueros.length) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'Sin bodegueros';
+                bodeSel.appendChild(opt);
+            } else {
+                const opt0 = document.createElement('option');
+                opt0.value = '';
+                opt0.textContent = '—';
+                bodeSel.appendChild(opt0);
+                cachedBodegueros.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.usuario;
+                    opt.textContent = b.nombreCompleto;
+                    bodeSel.appendChild(opt);
+                });
+            }
+
+            $('novFlete').value = (pedido && pedido.valor_flete != null) ? String(pedido.valor_flete) : '';
+            $('novFletePagado').checked = pedido && pedido.flete_pagado === true;
+
+            $('novResuelta').checked = false;
+            $('novResuelta').disabled = !isAdmin;
+
+            $('novDesc').value = '';
+
+            $('novedadModal').classList.add('open');
+            $('novedadModal').setAttribute('aria-hidden', 'false');
+        }
+
+        function closeNovedadModal() {
+            $('novedadModal').classList.remove('open');
+            $('novedadModal').setAttribute('aria-hidden', 'true');
+            currentPedidoForNovedad = null;
+        }
+
+        $('closeNovedad').addEventListener('click', closeNovedadModal);
+        $('cancelNovedad').addEventListener('click', closeNovedadModal);
+        $('novedadModal').addEventListener('click', (e) => { if (e.target === $('novedadModal')) closeNovedadModal(); });
+
+        async function saveNovedad() {
+            const p = currentPedidoForNovedad;
+            if (!p || !p.id) throw new Error('Sin pedido');
+
+            const desc = String($('novDesc').value || '').trim();
+            if (!desc) {
+                await modalAlert('Falta información', 'Escribe la novedad antes de guardar.');
+                return;
+            }
+
+            const bodeUserId = String($('novBodeguero').value || '').trim();
+            const bodeObj = cachedBodegueros.find(b => String(b.usuario) === bodeUserId);
+            const bodeNombre = bodeObj ? String(bodeObj.nombreCompleto) : '';
+
+            const flete = Number($('novFlete').value || 0);
+            const fletePagado = $('novFletePagado').checked === true;
+
+            const now = firebase.firestore.Timestamp.fromDate(new Date());
+
+            await db.collection('registros').doc(p.id).update({
+                valor_flete: Number.isFinite(flete) ? flete : 0,
+                flete_pagado: fletePagado
+            });
+
+            await db.collection('novedades').add({
+                registroId: p.id,
+                codigo_unico: p.codigo_unico || '',
+                cliente: p.cliente || '',
+                asesor: p.asesor || '',
+                asesorUserId: p.usuario || '',
+                createdByUserId: datosUsuario.usuario,
+                createdByNombre: datosUsuario.nombreCompleto,
+                assignedBodegueroUserId: bodeUserId,
+                assignedBodegueroNombre: bodeNombre,
+                descripcion: desc,
+                resuelta: isAdmin ? ($('novResuelta').checked === true) : false,
+                resueltaPor: '',
+                resueltaAt: null,
+                createdAt: now,
+                updatedAt: now
+            });
+
+            closeNovedadModal();
+        }
+
+        $('saveNovedad').addEventListener('click', async () => {
+            try { await saveNovedad(); }
+            catch (e) { await modalAlert('Error', 'No se pudo guardar la novedad.'); }
+        });
+
+        let unsubscribeNovedades = null;
+
+        function renderNovedadesLists(novedades) {
+            const pendingEl = $('pendingNovedadesList');
+            const histEl = $('historyNovedadesList');
+
+            const pending = [];
+            const resolved = [];
+            (Array.isArray(novedades) ? novedades : []).forEach(n => {
+                if (n.resuelta === true) resolved.push(n); else pending.push(n);
+            });
+
+            $('pendingNovedadesState').textContent = pending.length ? '' : 'Sin novedades pendientes.';
+            $('historyNovedadesState').textContent = resolved.length ? '' : 'Sin historial.';
+
+            const renderItem = (n) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+
+                const dt = formatDateTime(n.createdAt);
+                const code = n.codigo_unico || n.registroId || '—';
+                const bode = n.assignedBodegueroNombre || '—';
+                const estado = n.resuelta === true ? '<span class="badge good">RESUELTA</span>' : '<span class="badge warn">PENDIENTE</span>';
+
+                card.innerHTML = `
+                    <div class="head" style="margin-bottom:8px; padding-bottom:8px;">
+                        <div class="meta">
+                            <div><span class="code">${code}</span><span class="dt">${dt}</span></div>
+                            <div class="line">Asesor: <strong>${n.asesor || 'N/A'}</strong> · Bodeguero: <strong>${bode}</strong></div>
+                        </div>
+                        <div class="badges">${estado}</div>
+                    </div>
+                    <div style="color:var(--muted); font-size:13px; font-weight:600; white-space:pre-wrap;">${String(n.descripcion || '')}</div>
+                    <div class="actions" style="margin-top:10px;">
+                        <div class="mini">ID: ${n.id || ''}</div>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                            ${isAdmin ? (n.resuelta === true
+                                ? '<button class="btn" type="button" data-action="toggle">Marcar pendiente</button>'
+                                : '<button class="btn primary" type="button" data-action="toggle">Marcar resuelta</button>')
+                                : ''}
+                        </div>
+                    </div>
+                `;
+
+                if (isAdmin) {
+                    const btn = card.querySelector('[data-action="toggle"]');
+                    if (btn) {
+                        btn.addEventListener('click', async () => {
+                            try {
+                                const nuevo = !(n.resuelta === true);
+                                await db.collection('novedades').doc(n.id).update({
+                                    resuelta: nuevo,
+                                    resueltaPor: nuevo ? String(datosUsuario.nombreCompleto || '') : '',
+                                    resueltaAt: nuevo ? firebase.firestore.Timestamp.fromDate(new Date()) : null,
+                                    updatedAt: firebase.firestore.Timestamp.fromDate(new Date())
+                                });
+                            } catch (e) {
+                                await modalAlert('Error', 'No se pudo actualizar el estado.');
+                            }
+                        });
+                    }
+                }
+
+                return card;
+            };
+
+            pendingEl.innerHTML = '';
+            histEl.innerHTML = '';
+
+            if (pending.length) {
+                const frag = document.createDocumentFragment();
+                pending.slice(0, 20).forEach(n => frag.appendChild(renderItem(n)));
+                pendingEl.appendChild(frag);
+            }
+
+            if (resolved.length) {
+                const frag = document.createDocumentFragment();
+                resolved.slice(0, 20).forEach(n => frag.appendChild(renderItem(n)));
+                histEl.appendChild(frag);
+            }
+        }
+
+        function startRealtimeNovedades() {
+            if (unsubscribeNovedades) unsubscribeNovedades();
+
+            let q = db.collection('novedades').orderBy('createdAt', 'desc');
+
+            if (isOperador) {
+                q = q.where('asesorUserId', '==', String(datosUsuario.usuario));
+            } else if (isBodeguero) {
+                q = q.where('assignedBodegueroUserId', '==', String(datosUsuario.usuario));
+            }
+
+            unsubscribeNovedades = q.onSnapshot((snap) => {
+                const novedades = snap.docs.map(d => {
+                    const data = d.data() || {};
+                    data.id = d.id;
+                    return data;
+                });
+                renderNovedadesLists(novedades);
+            }, () => {
+                $('pendingNovedadesState').textContent = 'Error cargando.';
+                $('historyNovedadesState').textContent = 'Error cargando.';
+            });
+        }
+
+        function render() {
+            const filtered = applyFilters(allRegistros);
+
+            totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+            clampPage();
+            updatePaginationUI();
+
+            const start = (currentPage - 1) * PAGE_SIZE;
+            const end = start + PAGE_SIZE;
+            const pageItems = filtered.slice(start, end);
+
+            let totalPares = 0;
+            let totalValor = 0;
+            filtered.forEach(r => {
+                totalPares += Number(r.num_pares || 0);
+                totalValor += Number(r.valor_total || 0);
+            });
+            sumCount.textContent = String(filtered.length);
+            sumPares.textContent = String(totalPares);
+            sumValor.textContent = formatCurrency(totalValor);
+
+            if (!filtered.length) {
+                listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">No hay registros con los filtros actuales.</div>';
+                updatePaginationUI();
+                return;
+            }
+
+            listEl.innerHTML = '';
+            const frag = document.createDocumentFragment();
+
+            pageItems.forEach(r => {
+                const card = document.createElement('div');
+                card.className = 'card';
+
+                const codigo = r.codigo_unico || 'SIN-CODIGO';
+                const cliente = r.cliente || 'Sin cliente';
+                const asesor = r.asesor || 'N/A';
+                const transportadora = r.transportadora || 'N/A';
+                const fechaStr = formatDateTime(r.fecha_hora);
+                const despachado = r.despachado === true;
+                const productos = Array.isArray(r.productos) ? r.productos : [];
+
+                const flete = r.valor_flete != null ? formatCurrency(r.valor_flete) : '$0';
+                const fletePagado = r.flete_pagado === true;
+
+                const badges = [
+                    despachado ? '<span class="badge good">DESPACHADO</span>' : '<span class="badge warn">NO DESPACHADO</span>',
+                    fletePagado ? '<span class="badge good">FLETE PAGADO</span>' : '<span class="badge warn">FLETE PENDIENTE</span>'
+                ].join('');
+
+                const productsHtml = productos.length
+                    ? '<ul>' + productos.map(p => {
+                        const ref = p.referencia || '';
+                        const color = p.color || '';
+                        const talla = p.talla || '';
+                        const precio = p.precio != null ? formatCurrency(p.precio) : '';
+                        const text = [ref, color, talla].filter(Boolean).join(' - ') + (precio ? (' - ' + precio) : '');
+                        return '<li>' + (text || 'Producto') + '</li>';
+                    }).join('') + '</ul>'
+                    : '<ul><li>Sin productos</li></ul>';
+
+                card.innerHTML = `
+                    <div class="head">
+                        <div class="meta">
+                            <div><span class="code">${codigo}</span><span class="dt">${fechaStr}</span></div>
+                            <div class="cliente">${cliente}</div>
+                            <div class="line">Asesor: <strong>${asesor}</strong> · Transportadora: <strong>${transportadora}</strong></div>
+                        </div>
+                        <div class="badges">${badges}</div>
+                    </div>
+
+                    <div class="grid">
+                        <div class="box">
+                            <div class="lbl">Productos</div>
+                            ${productsHtml}
+                        </div>
+                        <div style="display:grid; gap:10px;">
+                            <div class="box"><div class="lbl">Pares</div><div class="val">${Number(r.num_pares || 0)}</div></div>
+                            <div class="box"><div class="lbl">Valor total</div><div class="val">${formatCurrency(r.valor_total || 0)}</div></div>
+                            <div class="box"><div class="lbl">Flete</div><div class="val">${flete}</div></div>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <div class="mini">ID: ${r.id}</div>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                            <button class="btn primary" type="button" data-action="report">Reportar novedad</button>
+                        </div>
+                    </div>
+                `;
+
+                card.querySelector('[data-action="report"]').addEventListener('click', () => openNovedadModal(r));
+
+                frag.appendChild(card);
+            });
+
+            listEl.appendChild(frag);
+        }
+
+        function attachFilterListeners() {
+            const rerenderResetPage = () => { currentPage = 1; render(); };
+            searchInput.addEventListener('input', rerenderResetPage);
+            asesorSelect.addEventListener('change', rerenderResetPage);
+            fromDate.addEventListener('change', rerenderResetPage);
+            toDate.addEventListener('change', rerenderResetPage);
+
+            prevPageBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage -= 1;
+                    render();
+                }
+            });
+
+            nextPageBtn.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    currentPage += 1;
+                    render();
+                }
+            });
+
+            $('resetBtn').addEventListener('click', () => {
+                searchInput.value = '';
+                if (!isOperador) asesorSelect.value = '';
+                fromDate.value = '';
+                toDate.value = '';
+                currentPage = 1;
+                render();
+            });
+        }
+
+        function pedidosQueryForRole() {
+            let q = db.collection('registros').orderBy('fecha_hora', 'desc');
+            if (isOperador) {
+                q = q.where('usuario', '==', String(datosUsuario.usuario));
+            }
+            return q;
+        }
+
+        function startRealtimePedidos() {
+            if (unsubscribePedidos) unsubscribePedidos();
+            liveStateEl.textContent = 'Conectando…';
+
+            const q = pedidosQueryForRole();
+            unsubscribePedidos = q.onSnapshot((snap) => {
+                allRegistros = snap.docs.map(d => {
+                    const data = d.data() || {};
+                    data.id = d.id;
+                    data._searchBlob = null;
+                    return data;
+                });
+                currentPage = 1;
+                updateAsesorOptions();
+                liveStateEl.textContent = 'En tiempo real · ' + new Date().toLocaleTimeString('es-CO');
+                render();
+            }, async () => {
+                liveStateEl.textContent = 'Error de conexión';
+                listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Error al cargar datos.</div>';
+                await modalAlert('Error de conexión', 'No se pudo cargar la información en tiempo real. Revisa tu conexión e intenta nuevamente.');
+            });
+        }
+
+        async function loadBodeguerosAndAdmins() {
+            try {
+                const [bodeSnap, adminSnap] = await Promise.all([
+                    db.collection('usuarios').where('permisos', '==', 'Bodeguero').get(),
+                    db.collection('usuarios').where('permisos', '==', 'Administrador').get()
+                ]);
+
+                cachedBodegueros = [];
+                bodeSnap.forEach(doc => {
+                    const d = doc.data() || {};
+                    if (d.usuario && d.nombreCompleto) cachedBodegueros.push({ usuario: String(d.usuario), nombreCompleto: String(d.nombreCompleto) });
+                });
+                cachedBodegueros = cachedBodegueros.sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, 'es'));
+
+                cachedAdmins = [];
+                adminSnap.forEach(doc => {
+                    const d = doc.data() || {};
+                    if (d.usuario && d.nombreCompleto) cachedAdmins.push({ usuario: String(d.usuario), nombreCompleto: String(d.nombreCompleto) });
+                });
+                cachedAdmins = cachedAdmins.sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto, 'es'));
+
+                const adminSel = $('adminSelect');
+                adminSel.innerHTML = '';
+                if (!cachedAdmins.length) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = 'Sin administradores';
+                    adminSel.appendChild(opt);
+                } else {
+                    cachedAdmins.forEach(a => {
+                        const opt = document.createElement('option');
+                        opt.value = a.usuario;
+                        opt.textContent = a.nombreCompleto;
+                        adminSel.appendChild(opt);
+                    });
+                }
+
+                $('gateState').value = 'Listo.';
+            } catch (e) {
+                $('gateState').value = 'Error cargando administradores.';
+            }
+        }
+
+        const ACCESS_KEY = 'historialDisponibleAccess';
+        let accessTimer = null;
+
+        function getStoredAccess() {
+            try { return JSON.parse(localStorage.getItem(ACCESS_KEY)); } catch (e) { return null; }
+        }
+
+        function setStoredAccess(v) {
+            localStorage.setItem(ACCESS_KEY, JSON.stringify(v || null));
+        }
+
+        function clearStoredAccess() {
+            localStorage.removeItem(ACCESS_KEY);
+        }
+
+        function updateSessionCountdown() {
+            const chip = $('sessionChip');
+            const el = $('sessionTime');
+            if (!isOperador) {
+                chip.style.display = 'none';
+                return;
+            }
+            const a = getStoredAccess();
+            if (!a || !a.expiresAt) {
+                chip.style.display = 'none';
+                return;
+            }
+            const leftMs = Number(a.expiresAt) - Date.now();
+            if (!(leftMs > 0)) {
+                chip.style.display = 'none';
+                return;
+            }
+            chip.style.display = 'inline-flex';
+            const sec = Math.floor(leftMs / 1000);
+            const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+            const ss = String(sec % 60).padStart(2, '0');
+            el.textContent = `${mm}:${ss}`;
+        }
+
+        function startSessionTimer() {
+            if (accessTimer) clearInterval(accessTimer);
+            accessTimer = setInterval(() => {
+                updateSessionCountdown();
+                const a = getStoredAccess();
+                if (isOperador && (!a || !(Number(a.expiresAt) > Date.now()))) {
+                    stopAllRealtime();
+                    showGate();
+                }
+            }, 500);
+        }
+
+        function stopAllRealtime() {
+            if (unsubscribePedidos) { unsubscribePedidos(); unsubscribePedidos = null; }
+            if (unsubscribeNovedades) { unsubscribeNovedades(); unsubscribeNovedades = null; }
+        }
+
+        function showGate() {
+            $('gate').classList.add('open');
+            $('gate').setAttribute('aria-hidden', 'false');
+        }
+
+        function hideGate() {
+            $('gate').classList.remove('open');
+            $('gate').setAttribute('aria-hidden', 'true');
+        }
+
+        let unsubscribeRequestDoc = null;
+
+        async function requestAccess(adminUserId) {
+            const adminObj = cachedAdmins.find(a => a.usuario === adminUserId);
+            const adminNombre = adminObj ? adminObj.nombreCompleto : '';
+
+            const docRef = await db.collection('historial_access_requests').add({
+                requesterUserId: String(datosUsuario.usuario),
+                requesterNombre: String(datosUsuario.nombreCompleto),
+                requestedAdminUserId: String(adminUserId),
+                requestedAdminNombre: String(adminNombre),
+                status: 'pending',
+                createdAt: firebase.firestore.Timestamp.fromDate(new Date()),
+                approvedAt: null,
+                approvedUntil: null,
+                decidedAt: null
+            });
+
+            localStorage.setItem('pendingHistorialAccessRequestId', docRef.id);
+            $('gateState').value = 'Solicitud enviada. Esperando aprobación...';
+
+            if (unsubscribeRequestDoc) unsubscribeRequestDoc();
+            unsubscribeRequestDoc = docRef.onSnapshot((snap) => {
+                if (!snap.exists) return;
+                const d = snap.data() || {};
+                const st = String(d.status || '').toLowerCase();
+                if (st === 'approved' && d.approvedUntil && typeof d.approvedUntil.toDate === 'function') {
+                    const expiresAt = d.approvedUntil.toDate().getTime();
+                    setStoredAccess({
+                        adminUserId: String(adminUserId),
+                        expiresAt
+                    });
+                    localStorage.removeItem('pendingHistorialAccessRequestId');
+                    if (unsubscribeRequestDoc) { unsubscribeRequestDoc(); unsubscribeRequestDoc = null; }
+                    hideGate();
+                    startAppAfterAccess();
+                } else if (st === 'denied') {
+                    $('gateState').value = 'Solicitud rechazada. Elige otro administrador.';
+                    localStorage.removeItem('pendingHistorialAccessRequestId');
+                    if (unsubscribeRequestDoc) { unsubscribeRequestDoc(); unsubscribeRequestDoc = null; }
+                }
+            });
+        }
+
+        async function resumePendingRequestIfAny() {
+            const id = localStorage.getItem('pendingHistorialAccessRequestId');
+            if (!id) return;
+            try {
+                const ref = db.collection('historial_access_requests').doc(id);
+                const snap = await ref.get();
+                if (!snap.exists) {
+                    localStorage.removeItem('pendingHistorialAccessRequestId');
+                    return;
+                }
+                const d = snap.data() || {};
+                if (String(d.requesterUserId) !== String(datosUsuario.usuario) || String(d.status) !== 'pending') {
+                    localStorage.removeItem('pendingHistorialAccessRequestId');
+                    return;
+                }
+                $('gateState').value = 'Solicitud enviada. Esperando aprobación...';
+
+                if (unsubscribeRequestDoc) unsubscribeRequestDoc();
+                unsubscribeRequestDoc = ref.onSnapshot((s) => {
+                    if (!s.exists) return;
+                    const dd = s.data() || {};
+                    const st = String(dd.status || '').toLowerCase();
+                    if (st === 'approved' && dd.approvedUntil && typeof dd.approvedUntil.toDate === 'function') {
+                        const expiresAt = dd.approvedUntil.toDate().getTime();
+                        setStoredAccess({ adminUserId: String(dd.requestedAdminUserId || ''), expiresAt });
+                        localStorage.removeItem('pendingHistorialAccessRequestId');
+                        if (unsubscribeRequestDoc) { unsubscribeRequestDoc(); unsubscribeRequestDoc = null; }
+                        hideGate();
+                        startAppAfterAccess();
+                    } else if (st === 'denied') {
+                        $('gateState').value = 'Solicitud rechazada. Elige otro administrador.';
+                        localStorage.removeItem('pendingHistorialAccessRequestId');
+                        if (unsubscribeRequestDoc) { unsubscribeRequestDoc(); unsubscribeRequestDoc = null; }
+                    }
+                });
+            } catch (e) {
+                localStorage.removeItem('pendingHistorialAccessRequestId');
+            }
+        }
+
+        function hasValidOperatorAccess() {
+            if (!isOperador) return true;
+            const a = getStoredAccess();
+            return a && Number(a.expiresAt) > Date.now();
+        }
+
+        function startAppAfterAccess() {
+            updateSessionCountdown();
+            startSessionTimer();
+            startRealtimePedidos();
+            startRealtimeNovedades();
+            if (isAdmin) startAdminRequestsPanel();
+        }
+
+        async function gateFlowIfNeeded() {
+            if (!isOperador) {
+                hideGate();
+                return;
+            }
+
+            if (hasValidOperatorAccess()) {
+                hideGate();
+                return;
+            }
+
+            showGate();
+            await resumePendingRequestIfAny();
+        }
+
+        $('gateCancel').addEventListener('click', () => {
+            clearStoredAccess();
+            localStorage.removeItem('pendingHistorialAccessRequestId');
+            window.location.href = 'generar_pedidos.html';
+        });
+
+        $('gateRequest').addEventListener('click', async () => {
+            const adminUserId = String($('adminSelect').value || '').trim();
+            if (!adminUserId) {
+                $('gateState').value = 'Selecciona un administrador.';
+                return;
+            }
+            $('gateRequest').disabled = true;
+            try { await requestAccess(adminUserId); }
+            catch (e) { $('gateState').value = 'Error enviando la solicitud.'; }
+            finally { $('gateRequest').disabled = false; }
+        });
+
+        let unsubscribeAdminRequests = null;
+
+        function renderAdminRequests(list) {
+            const reqList = $('reqList');
+            const reqCount = $('reqCount');
+            reqCount.textContent = String(list.length);
+            if (!list.length) {
+                reqList.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">No hay solicitudes pendientes.</div>';
+                return;
+            }
+            reqList.innerHTML = '';
+            const frag = document.createDocumentFragment();
+            list.forEach(r => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const dt = formatDateTime(r.createdAt);
+                card.innerHTML = `
+                    <div class="head" style="margin-bottom:8px; padding-bottom:8px;">
+                        <div class="meta">
+                            <div><span class="code">ACCESO</span><span class="dt">${dt}</span></div>
+                            <div class="cliente">${r.requesterNombre || r.requesterUserId || '—'}</div>
+                            <div class="line">Solicita acceso por 10 minutos.</div>
+                        </div>
+                        <div class="badges"><span class="badge warn">PENDIENTE</span></div>
+                    </div>
+                    <div class="actions">
+                        <div class="mini">ID: ${r.id}</div>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                            <button class="btn" type="button" data-action="deny">Rechazar</button>
+                            <button class="btn primary" type="button" data-action="approve">Aprobar</button>
+                        </div>
+                    </div>
+                `;
+
+                card.querySelector('[data-action="deny"]').addEventListener('click', async () => {
+                    const ok = await modalConfirm('Confirmar', '¿Rechazar esta solicitud?', 'Rechazar', 'Cancelar');
+                    if (!ok) return;
+                    try {
+                        await db.collection('historial_access_requests').doc(r.id).update({
+                            status: 'denied',
+                            decidedAt: firebase.firestore.Timestamp.fromDate(new Date())
+                        });
+                    } catch (e) {
+                        await modalAlert('Error', 'No se pudo rechazar.');
+                    }
+                });
+
+                card.querySelector('[data-action="approve"]').addEventListener('click', async () => {
+                    const ok = await modalConfirm('Confirmar', '¿Aprobar acceso por 10 minutos?', 'Aprobar', 'Cancelar');
+                    if (!ok) return;
+                    try {
+                        const now = new Date();
+                        const until = new Date(now.getTime() + 10 * 60 * 1000);
+                        await db.collection('historial_access_requests').doc(r.id).update({
+                            status: 'approved',
+                            approvedAt: firebase.firestore.Timestamp.fromDate(now),
+                            approvedUntil: firebase.firestore.Timestamp.fromDate(until),
+                            decidedAt: firebase.firestore.Timestamp.fromDate(now)
+                        });
+                    } catch (e) {
+                        await modalAlert('Error', 'No se pudo aprobar.');
+                    }
+                });
+
+                frag.appendChild(card);
+            });
+            reqList.appendChild(frag);
+        }
+
+        function startAdminRequestsPanel() {
+            if (!isAdmin) return;
+            $('adminRequestsPanel').style.display = 'block';
+            if (unsubscribeAdminRequests) unsubscribeAdminRequests();
+            $('reqState').textContent = 'En tiempo real';
+
+            unsubscribeAdminRequests = db.collection('historial_access_requests')
+                .where('requestedAdminUserId', '==', String(datosUsuario.usuario))
+                .where('status', '==', 'pending')
+                .orderBy('createdAt', 'desc')
+                .onSnapshot((snap) => {
+                    const list = snap.docs.map(d => {
+                        const data = d.data() || {};
+                        data.id = d.id;
+                        return data;
+                    });
+                    renderAdminRequests(list);
+                }, () => {
+                    $('reqState').textContent = 'Error';
+                });
+        }
+
+        attachFilterListeners();
+        loadBodeguerosAndAdmins().finally(async () => {
+            await gateFlowIfNeeded();
+            if (hasValidOperatorAccess() || !isOperador) {
+                startAppAfterAccess();
+            } else {
+                stopAllRealtime();
+            }
+        });
+    </script>
+</body>
+</html>
