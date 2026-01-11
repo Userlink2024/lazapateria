@@ -856,20 +856,27 @@
             if (isProcessing) return;
             isProcessing = true;
 
+            // 1. Pitar primero
             beep();
+            
             const user = usersByQr.get(decodedText) || cachedUsers.find(u => u.qrId === decodedText);
             if (!user) {
                 isProcessing = false;
                 await modalAlert('Usuario no encontrado', 'El QR escaneado no corresponde a ningún usuario activo.');
                 return;
             }
+            
+            // 2. Obtener nombres
+            const primerNombre = (user.nombreCompleto || user.usuario || '').split(' ')[0];
+            const nombreCompleto = user.nombreCompleto || user.usuario || 'Usuario';
+            
+            // 3. Decir el nombre inmediatamente (antes de mostrar modal)
+            speakName(primerNombre);
+            
             try {
                 await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
                 
-                // Obtener primer nombre para mostrar y leer en voz alta
-                const primerNombre = (user.nombreCompleto || user.usuario || '').split(' ')[0];
-                
-                // Modal exitoso que muestra el nombre por 2 segundos
+                // 4. Modal con nombre completo que se cierra solo en 2 segundos
                 const modal = document.createElement('div');
                 modal.className = 'modal-overlay';
                 modal.innerHTML = `
@@ -878,7 +885,7 @@
                             <h3>✅ Registro Exitoso</h3>
                         </div>
                         <div class="modal-body">
-                            <p><strong>${primerNombre}</strong> registrado correctamente.</p>
+                            <p><strong>${nombreCompleto}</strong> registrado correctamente.</p>
                         </div>
                         <div class="modal-footer">
                             <button class="btn primary" onclick="this.closest('.modal-overlay').remove()">Aceptar</button>
@@ -886,9 +893,6 @@
                     </div>
                 `;
                 document.body.appendChild(modal);
-                
-                // Leer el nombre en voz alta
-                speakName(primerNombre);
                 
                 setTimeout(() => {
                     if (modal.parentNode) modal.remove();
