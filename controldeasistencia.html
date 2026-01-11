@@ -177,7 +177,9 @@
              <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
                  <a class="btn" href="https://userlink2024.github.io/lazapateria/paneldecuentas.html">Volver</a>
                  <button class="btn" id="configBtn" type="button">Configuración</button>
+                 <button class="btn" id="openToday" type="button">Hoy</button>
                  <button class="btn" id="openHist" type="button">Historial</button>
+                 <button class="btn" id="openUsers" type="button">Carnets (QR)</button>
                  <button class="btn primary" id="startScan" type="button">Iniciar escáner</button>
                  <button class="btn danger" id="stopScan" type="button" disabled>Detener</button>
              </div>
@@ -243,28 +245,6 @@
                      </div>
                  </div>
              </div>
- 
-             <div class="section">
-                 <div class="grid">
-                     <div class="card">
-                        <h3>Eventos de hoy</h3>
-                        <div class="mini" id="todayState">Cargando…</div>
-                        <div class="pending-counter" id="pendingCount" style="font-weight: bold; margin: 10px 0;">Calculando...</div>
-                        <div class="list" id="todayList" style="margin-top:10px;"></div>
-                    </div>
-                 </div>
-             </div>
- 
-             <div class="section">
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <h3 style="margin: 0;">Carnets (QR por usuario)</h3>
-                        <button class="btn primary" onclick="openUsersModal()">Ver todos</button>
-                    </div>
-                    <div class="mini" style="margin-bottom:10px;">Genera/consulta el QR de cada usuario. El QR se guarda en Firestore dentro de <strong>usuarios.qrId</strong>.</div>
-                    <div class="list" id="usersList"></div>
-                </div>
-            </div>
          </div>
      </div>
 
@@ -276,6 +256,23 @@
             </div>
             <div class="modal-body">
                 <div class="list" id="usersModalList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="todayModal" aria-hidden="true">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h3>Eventos de hoy</h3>
+                <button class="x" type="button" id="todayClose">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="mini" id="todayState">Cargando…</div>
+                <div class="pending-counter" id="pendingCount" style="font-weight: bold; margin: 10px 0;">Calculando...</div>
+                <div class="list" id="todayList" style="margin-top:10px;"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" type="button" id="todayClose2">Cerrar</button>
             </div>
         </div>
     </div>
@@ -565,8 +562,6 @@
                  if (u.qrId) usersByQr.set(u.qrId, u);
                  usersByUsuario.set(u.usuario, u);
              });
- 
-             renderUsers();
              fillManualSelects();
          }
  
@@ -628,11 +623,11 @@
          $('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) closeQrModal(); });
  
          function renderUsers() {
-             const el = $('usersList');
-             if (!cachedUsers.length) {
-                 el.innerHTML = '<div class="card"><div class="mini">No hay usuarios.</div></div>';
-                 return;
-             }
+            const el = $('usersModalList') || $('usersList');
+            if (!cachedUsers.length) {
+                el.innerHTML = '<div class="card"><div class="mini">No hay usuarios.</div></div>';
+                return;
+            }
              el.innerHTML = '';
              const frag = document.createDocumentFragment();
              cachedUsers.forEach(u => {
@@ -704,28 +699,58 @@
          }
 
          function openHistModal() {
-             $('histModal').classList.add('open');
-             $('histModal').setAttribute('aria-hidden', 'false');
-         }
+            ensureRealtimeEventosStarted();
+            $('histModal').classList.add('open');
+            $('histModal').setAttribute('aria-hidden', 'false');
+        }
 
-         function closeHistModal() {
-             $('histModal').classList.remove('open');
-             $('histModal').setAttribute('aria-hidden', 'true');
-         }
+        function closeHistModal() {
+            $('histModal').classList.remove('open');
+            $('histModal').setAttribute('aria-hidden', 'true');
+            maybeStopRealtimeEventos();
+        }
+
+        function openTodayModal() {
+            ensureRealtimeEventosStarted();
+            $('todayModal').classList.add('open');
+            $('todayModal').setAttribute('aria-hidden', 'false');
+        }
+
+        function closeTodayModal() {
+            $('todayModal').classList.remove('open');
+            $('todayModal').setAttribute('aria-hidden', 'true');
+            maybeStopRealtimeEventos();
+        }
+
+        function openUsersModal() {
+            $('usersModal').classList.add('open');
+            $('usersModal').setAttribute('aria-hidden', 'false');
+            renderUsers();
+        }
+
+        function closeUsersModal() {
+            $('usersModal').classList.remove('open');
+            $('usersModal').setAttribute('aria-hidden', 'true');
+        }
  
          $('configBtn').addEventListener('click', openConfigModal);
          $('configClose').addEventListener('click', closeConfigModal);
          $('configCancel').addEventListener('click', closeConfigModal);
-         $('configModal').addEventListener('click', (e) => { if (e.target === $('configModal')) closeConfigModal(); });
+        $('configModal').addEventListener('click', (e) => { if (e.target === $('configModal')) closeConfigModal(); });
 
-         $('openHist').addEventListener('click', openHistModal);
+        $('openToday').addEventListener('click', openTodayModal);
+        $('todayClose').addEventListener('click', closeTodayModal);
+        $('todayClose2').addEventListener('click', closeTodayModal);
+        $('todayModal').addEventListener('click', (e) => { if (e.target === $('todayModal')) closeTodayModal(); });
+
+        $('openHist').addEventListener('click', openHistModal);
         $('histClose').addEventListener('click', closeHistModal);
         $('histClose2').addEventListener('click', closeHistModal);
         $('histModal').addEventListener('click', (e) => { if (e.target === $('histModal')) closeHistModal(); });
         
-        // Event listeners para modal de usuarios
-        $('usersClose').addEventListener('click', () => closeAppModal('usersModal'));
-        $('usersModal').addEventListener('click', (e) => { if (e.target === $('usersModal')) closeAppModal('usersModal'); });
+        $('openUsers').addEventListener('click', openUsersModal);
+        $('usersClose').addEventListener('click', closeUsersModal);
+        $('usersModal').addEventListener('click', (e) => { if (e.target === $('usersModal')) closeUsersModal(); });
  
          $('configSave').addEventListener('click', async () => {
              try {
@@ -997,70 +1022,7 @@
             }
         }
 
-        async function openUsersModal() {
-            const modal = $('usersModal');
-            const list = $('usersModalList');
-            list.innerHTML = '';
-            
-            // Mostrar todos los usuarios con sus QR
-            const frag = document.createDocumentFragment();
-            cachedUsers.forEach(usuario => {
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.style.cssText = 'padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px;';
-                
-                const qrId = usuario.qrId || generateQRId();
-                const hasQR = !!usuario.qrId;
-                
-                card.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <strong>${usuario.nombreCompleto || usuario.usuario}</strong>
-                            <div class="mini">${usuario.usuario}</div>
-                            <div class="mini">QR: ${hasQR ? '✅ Generado' : '❌ Sin generar'}</div>
-                        </div>
-                        <button class="btn ${hasQR ? 'secondary' : 'primary'}" onclick="generateQRForUser(${JSON.stringify(usuario).replace(/"/g, '&quot;')})">
-                            ${hasQR ? 'Ver QR' : 'Generar QR'}
-                        </button>
-                    </div>
-                `;
-                frag.appendChild(card);
-            });
-            list.appendChild(frag);
-            
-            modal.classList.add('show');
-            modal.setAttribute('aria-hidden', 'false');
-        }
 
-        async function generateQRForUser(usuario) {
-            const qr = new QRCode(document.createElement('div'), {
-                text: usuario.qr,
-                width: 256,
-                height: 256,
-                correctLevel: QRCode.CorrectLevel.H
-            });
-            const modal = document.createElement('div');
-            modal.className = 'modal-overlay';
-            modal.innerHTML = `
-                <div class="modal">
-                    <div class="modal-header">
-                        <h3>${usuario.nombre}</h3>
-                    </div>
-                    <div class="modal-body">
-                        <div id="qrContainer"></div>
-                        <p style="margin-top:10px; font-size:0.9em; color:#666;">Código QR único</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn primary" onclick="this.closest('.modal-overlay').remove()">Cerrar</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-            const container = modal.querySelector('#qrContainer');
-            container.appendChild(qr._el);
-            // Actualizar en tiempo real para que otros dispositivos vean el nuevo QR
-            await loadUsers();
-        }
  
          async function startScanner() {
             if (scanning) return;
@@ -1229,45 +1191,49 @@
         } 
  
          function startRealtimeEventos() {
-            if (unsubscribeEventos) unsubscribeEventos();
-            if (unsubscribeDiaria) unsubscribeDiaria();
-            
+            if (unsubscribeEventos) return;
             const todayStr = getTodayStr();
-            
-            // Listener para eventos de asistencia
-            unsubscribeEventos = db.collection('asistencia_eventos').orderBy('timestamp', 'desc').limit(100).onSnapshot((snap) => {
-                const list = snap.docs.map(d => {
-                    const data = d.data() || {};
-                    data.id = d.id;
-                    return data;
+
+            unsubscribeEventos = db.collection('asistencia_eventos')
+                .orderBy('timestamp', 'desc')
+                .limit(200)
+                .onSnapshot((snap) => {
+                    const list = snap.docs.map(d => {
+                        const data = d.data() || {};
+                        data.id = d.id;
+                        return data;
+                    });
+                    renderEvents(list, todayStr);
+                }, () => {
+                    $('todayState').textContent = 'Error cargando.';
+                    $('histModalState').textContent = 'Error cargando.';
                 });
-                renderEvents(list, todayStr);
-            }, () => {
-                $('todayState').textContent = 'Error cargando.';
-                $('histModalState').textContent = 'Error cargando.';
-            });
-            
-            // Listener para asistencia diaria (actualización inmediata)
-            unsubscribeDiaria = db.collection('asistencia_diaria')
-                .where('dateStr', '==', todayStr)
-                .onSnapshot(() => {
-                    // Forzar recarga de eventos cuando cambia asistencia_diaria
-                    if (unsubscribeEventos) {
-                        unsubscribeEventos();
-                        startRealtimeEventos();
-                    }
-                });
+        }
+
+        function ensureRealtimeEventosStarted() {
+            $('todayState').textContent = 'Cargando…';
+            $('histModalState').textContent = 'Cargando…';
+            startRealtimeEventos();
+        }
+
+        function maybeStopRealtimeEventos() {
+            const todayOpen = $('todayModal') && $('todayModal').classList.contains('open');
+            const histOpen = $('histModal') && $('histModal').classList.contains('open');
+            if (todayOpen || histOpen) return;
+            if (unsubscribeEventos) {
+                unsubscribeEventos();
+                unsubscribeEventos = null;
+            }
         }
  
          setMode('entrada');
- 
-         Promise.resolve()
-             .then(loadSettings)
-             .then(loadUsers)
-             .then(startRealtimeEventos)
-             .catch(async () => {
-                 await modalAlert('Error', 'No se pudo inicializar el control de asistencia.');
-             });
+
+        Promise.resolve()
+            .then(loadSettings)
+            .then(loadUsers)
+            .catch(async () => {
+                await modalAlert('Error', 'No se pudo inicializar el control de asistencia.');
+            });
      </script>
  </body>
  </html>
