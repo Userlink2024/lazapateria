@@ -280,7 +280,7 @@
     <div class="modal" id="histModal" aria-hidden="true">
          <div class="modal-card">
              <div class="modal-head">
-                 <h3>Historial (últimos 100)</h3>
+                 <h3>Historial</h3>
                  <button class="x" type="button" id="histClose">×</button>
              </div>
              <div class="modal-body">
@@ -288,6 +288,9 @@
                  <div class="list" id="histModalList" style="margin-top:10px;"></div>
              </div>
              <div class="modal-actions">
+                 <button class="btn" type="button" id="histPrev" disabled>Anterior</button>
+                 <div class="mini" id="histPageInfo" style="align-self:center;">Página 1</div>
+                 <button class="btn" type="button" id="histNext" disabled>Siguiente</button>
                  <button class="btn" type="button" id="histClose2">Cerrar</button>
              </div>
          </div>
@@ -699,15 +702,14 @@
          }
 
          function openHistModal() {
-            ensureRealtimeEventosStarted();
             $('histModal').classList.add('open');
             $('histModal').setAttribute('aria-hidden', 'false');
+            loadHistPage('init');
         }
 
         function closeHistModal() {
             $('histModal').classList.remove('open');
             $('histModal').setAttribute('aria-hidden', 'true');
-            maybeStopRealtimeEventos();
         }
 
         function openTodayModal() {
@@ -747,6 +749,8 @@
         $('histClose').addEventListener('click', closeHistModal);
         $('histClose2').addEventListener('click', closeHistModal);
         $('histModal').addEventListener('click', (e) => { if (e.target === $('histModal')) closeHistModal(); });
+        $('histPrev').addEventListener('click', () => loadHistPage('prev'));
+        $('histNext').addEventListener('click', () => loadHistPage('next'));
         
         $('openUsers').addEventListener('click', openUsersModal);
         $('usersClose').addEventListener('click', closeUsersModal);
@@ -835,17 +839,15 @@
              const data = snap.exists ? (snap.data() || {}) : {};
  
              if (data.ausente === true) {
-                 await modalAlert('No permitido', 'Este usuario está marcado como ausente hoy.');
-                 return;
-             }
+                return { ok: false, title: 'No permitido', message: 'Este usuario está marcado como ausente hoy.' };
+            }
  
              if (actionType === 'entrada') {
-                 if (data.entradaAt && typeof data.entradaAt.toDate === 'function') {
-                     await modalAlert('Ya registrado', 'Este usuario ya tiene entrada registrada hoy.');
-                     return;
-                 }
-                 const late = computeLateInfo(now, cachedSettings.horaEntrada, cachedSettings.toleranciaMin);
-                 await ref.set({
+                if (data.entradaAt && typeof data.entradaAt.toDate === 'function') {
+                    return { ok: false, title: 'Ya registrado', message: 'Este usuario ya tiene entrada registrada hoy.' };
+                }
+                const late = computeLateInfo(now, cachedSettings.horaEntrada, cachedSettings.toleranciaMin);
+                await ref.set({
                      userDocId: user.docId,
                      usuario: user.usuario,
                      nombreCompleto: user.nombreCompleto,
@@ -858,22 +860,20 @@
                      ausente: false,
                      updatedAt: firebase.firestore.Timestamp.fromDate(now)
                  }, { merge: true });
-                 await writeEvent({ user, type: 'entrada', method, note, extra: { late: late.isLate, minutesLate: late.minutesLate } });
-                 beep();
-                 $('lastScan').textContent = `${user.nombreCompleto || user.usuario} · ENTRADA · ${now.toLocaleTimeString('es-CO')}`;
-                 return;
-             }
+                await writeEvent({ user, type: 'entrada', method, note, extra: { late: late.isLate, minutesLate: late.minutesLate } });
+                $('lastScan').textContent = `${user.nombreCompleto || user.usuario} · ENTRADA · ${now.toLocaleTimeString('es-CO')}`;
+                return { ok: true, action: 'entrada' };
+            }
  
              if (actionType === 'salida') {
-                 if (data.salidaAt && typeof data.salidaAt.toDate === 'function') {
-                     await modalAlert('Ya registrado', 'Este usuario ya tiene salida registrada hoy.');
-                     return;
-                 }
-                 if (!data.entradaAt) {
-                     const ok = await modalConfirm('Confirmar', 'No hay entrada registrada. ¿Registrar salida igualmente?', 'Registrar', 'Cancelar');
-                     if (!ok) return;
-                 }
-                 await ref.set({
+                if (data.salidaAt && typeof data.salidaAt.toDate === 'function') {
+                    return { ok: false, title: 'Ya registrado', message: 'Este usuario ya tiene salida registrada hoy.' };
+                }
+                if (!data.entradaAt) {
+                    const ok = await modalConfirm('Confirmar', 'No hay entrada registrada. ¿Registrar salida igualmente?', 'Registrar', 'Cancelar');
+                    if (!ok) return { ok: false, title: 'Cancelado', message: 'Operación cancelada.' };
+                }
+                await ref.set({
                      userDocId: user.docId,
                      usuario: user.usuario,
                      nombreCompleto: user.nombreCompleto,
@@ -884,11 +884,10 @@
                      ausente: false,
                      updatedAt: firebase.firestore.Timestamp.fromDate(now)
                  }, { merge: true });
-                 await writeEvent({ user, type: 'salida', method, note });
-                 beep();
-                 $('lastScan').textContent = `${user.nombreCompleto || user.usuario} · SALIDA · ${now.toLocaleTimeString('es-CO')}`;
-                 return;
-             }
+                await writeEvent({ user, type: 'salida', method, note });
+                $('lastScan').textContent = `${user.nombreCompleto || user.usuario} · SALIDA · ${now.toLocaleTimeString('es-CO')}`;
+                return { ok: true, action: 'salida' };
+            }
  
              throw new Error('Tipo inválido');
          }
@@ -926,24 +925,40 @@
          }
  
          $('manualEntrada').addEventListener('click', async () => {
-             const usuario = String($('manualUser').value || '').trim();
-             const note = String($('manualNote').value || '').trim();
-             if (!usuario) { await modalAlert('Falta información', 'Selecciona un usuario.'); return; }
-             const user = usersByUsuario.get(usuario);
-             if (!user) { await modalAlert('Error', 'Usuario inválido.'); return; }
-             try { await registerAttendance({ user, actionType: 'entrada', method: 'manual', note }); }
-             catch (e) { await modalAlert('Error', 'No se pudo registrar.'); }
-         });
+            const usuario = String($('manualUser').value || '').trim();
+            const note = String($('manualNote').value || '').trim();
+            if (!usuario) { await modalAlert('Falta información', 'Selecciona un usuario.'); return; }
+            const user = usersByUsuario.get(usuario);
+            if (!user) { await modalAlert('Error', 'Usuario inválido.'); return; }
+            try {
+                const res = await registerAttendance({ user, actionType: 'entrada', method: 'manual', note });
+                if (!res || res.ok !== true) {
+                    if (res && res.title && res.message) await modalAlert(res.title, res.message);
+                    return;
+                }
+                await beep();
+            } catch (e) {
+                await modalAlert('Error', 'No se pudo registrar.');
+            }
+        });
  
          $('manualSalida').addEventListener('click', async () => {
-             const usuario = String($('manualUser').value || '').trim();
-             const note = String($('manualNote').value || '').trim();
-             if (!usuario) { await modalAlert('Falta información', 'Selecciona un usuario.'); return; }
-             const user = usersByUsuario.get(usuario);
-             if (!user) { await modalAlert('Error', 'Usuario inválido.'); return; }
-             try { await registerAttendance({ user, actionType: 'salida', method: 'manual', note }); }
-             catch (e) { await modalAlert('Error', 'No se pudo registrar.'); }
-         });
+            const usuario = String($('manualUser').value || '').trim();
+            const note = String($('manualNote').value || '').trim();
+            if (!usuario) { await modalAlert('Falta información', 'Selecciona un usuario.'); return; }
+            const user = usersByUsuario.get(usuario);
+            if (!user) { await modalAlert('Error', 'Usuario inválido.'); return; }
+            try {
+                const res = await registerAttendance({ user, actionType: 'salida', method: 'manual', note });
+                if (!res || res.ok !== true) {
+                    if (res && res.title && res.message) await modalAlert(res.title, res.message);
+                    return;
+                }
+                await beep();
+            } catch (e) {
+                await modalAlert('Error', 'No se pudo registrar.');
+            }
+        });
  
          $('saveAbs').addEventListener('click', async () => {
              const usuario = String($('absUser').value || '').trim();
@@ -959,9 +974,19 @@
          let scanning = false;
          let isProcessing = false; // Nueva estrategia para evitar múltiples escaneos
  
-         async function onDecoded(decodedText) {
+         const scanCooldownMs = 8000;
+        const lastScanByQr = new Map();
+
+        async function onDecoded(decodedText) {
             // Nueva estrategia: si ya está procesando, ignorar completamente
             if (isProcessing) return;
+
+            const tNow = Date.now();
+            const lastT = lastScanByQr.get(decodedText) || 0;
+            if ((tNow - lastT) < scanCooldownMs) {
+                return;
+            }
+            lastScanByQr.set(decodedText, tNow);
             isProcessing = true;
 
             // 1. Pitar primero (ahora asíncrono)
@@ -979,17 +1004,18 @@
             const nombreCompleto = user.nombreCompleto || user.usuario || 'Usuario';
             
             try {
-                await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
-                
-                // Forzar actualización inmediata de eventos en tiempo real
-                if (unsubscribeEventos) {
-                    unsubscribeEventos();
-                    startRealtimeEventos();
+                const res = await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
+                if (!res || res.ok !== true) {
+                    isProcessing = false;
+                    if (res && res.title && res.message) {
+                        await modalAlert(res.title, res.message);
+                    }
+                    return;
                 }
-                
-                // 3. Decir el nombre inmediatamente
+
+                // 3. Decir el nombre inmediatamente (solo si se registró)
                 speakName(primerNombre);
-                
+
                 // 4. Modal con nombre completo que se cierra solo en 2 segundos
                 const modal = document.createElement('div');
                 modal.className = 'modal-overlay';
@@ -1091,7 +1117,12 @@
          $('stopScan').addEventListener('click', stopScanner);
  
          let unsubscribeEventos = null;
-         let unsubscribeDiaria = null; // Nuevo listener para asistencia_diaria
+         let unsubscribeDiaria = null; // (Reservado)
+
+         const histPageSize = 20;
+         let histCursorStack = [];
+         let histHasNext = false;
+         let histLastDoc = null;
  
          function renderEvents(list, todayStr) {
             const today = [];
@@ -1122,9 +1153,7 @@
             $('pendingCount').style.color = salidasPendientes > 0 ? '#e74c3c' : '#27ae60';
 
             const todayEl = $('todayList');
-            const histEl = $('histModalList');
             todayEl.innerHTML = '';
-            histEl.innerHTML = '';
 
             if (!today.length) {
                 todayEl.innerHTML = '<div class="empty">Sin eventos hoy</div>';
@@ -1180,15 +1209,67 @@
                 });
                 todayEl.appendChild(frag);
             }
-            
-            if (!hist.length) {
-                histEl.innerHTML = '<div class="empty">Sin historial</div>';
-            } else {
-                const frag = document.createDocumentFragment();
-                hist.slice(0, 100).forEach(ev => frag.appendChild(renderItem(ev)));
-                histEl.appendChild(frag);
-            }
         } 
+ 
+         async function loadHistPage(direction) {
+             const stateEl = $('histModalState');
+             const listEl = $('histModalList');
+             const prevBtn = $('histPrev');
+             const nextBtn = $('histNext');
+             const pageInfo = $('histPageInfo');
+
+             if (!stateEl || !listEl || !prevBtn || !nextBtn || !pageInfo) return;
+
+             if (direction === 'init') {
+                 histCursorStack = [];
+                 histLastDoc = null;
+                 histHasNext = false;
+             } else if (direction === 'next') {
+                 if (!histHasNext || !histLastDoc) return;
+                 histCursorStack.push(histLastDoc);
+             } else if (direction === 'prev') {
+                 if (histCursorStack.length === 0) return;
+                 histCursorStack.pop();
+             }
+
+             stateEl.textContent = 'Cargando…';
+             listEl.innerHTML = '';
+             prevBtn.disabled = true;
+             nextBtn.disabled = true;
+
+             try {
+                 const base = db.collection('asistencia_eventos').orderBy('timestamp', 'desc');
+                 let q = base;
+                 const cursor = histCursorStack.length ? histCursorStack[histCursorStack.length - 1] : null;
+                 if (cursor) q = q.startAfter(cursor);
+
+                 // Pedimos 1 extra para saber si hay siguiente
+                 const snap = await q.limit(histPageSize + 1).get();
+                 let docs = snap.docs || [];
+                 histHasNext = docs.length > histPageSize;
+                 if (histHasNext) docs = docs.slice(0, histPageSize);
+                 histLastDoc = docs.length ? docs[docs.length - 1] : null;
+
+                 stateEl.textContent = docs.length ? '' : 'Sin historial.';
+                 pageInfo.textContent = `Página ${histCursorStack.length + 1}`;
+                 prevBtn.disabled = histCursorStack.length === 0;
+                 nextBtn.disabled = !histHasNext;
+
+                 if (!docs.length) return;
+
+                 const frag = document.createDocumentFragment();
+                 docs.forEach(d => {
+                     const data = d.data() || {};
+                     data.id = d.id;
+                     frag.appendChild(renderItem(data));
+                 });
+                 listEl.appendChild(frag);
+             } catch (e) {
+                 console.error('Error cargando historial:', e);
+                 stateEl.textContent = 'Error cargando.';
+                 pageInfo.textContent = '—';
+             }
+         }
  
          function startRealtimeEventos() {
             if (unsubscribeEventos) return;
