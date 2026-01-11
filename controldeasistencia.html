@@ -9,9 +9,8 @@
      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
  
      <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-     <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
  
      <style>
          :root{
@@ -420,25 +419,6 @@
                     ctx.close();
                 }, 120);
             } catch (e) {
-            }
-        }
-
-        function loadScript(src) {
-            return new Promise((resolve, reject) => {
-                const s = document.createElement('script');
-                s.src = src;
-                s.async = true;
-                s.onload = resolve;
-                s.onerror = reject;
-                document.head.appendChild(s);
-            });
-        }
-
-        async function ensureHtml5QrcodeLoaded() {
-            if (typeof window.Html5Qrcode === 'function' && typeof window.Html5Qrcode.getCameras === 'function') return;
-            await loadScript('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.10/minified/html5-qrcode.min.js');
-            if (typeof window.Html5Qrcode !== 'function') {
-                throw new Error('No se pudo cargar html5-qrcode. Revisa conexión o bloqueadores.');
             }
         }
  
@@ -894,39 +874,43 @@
             }
             $('startScan').disabled = true;
             try {
-                await ensureHtml5QrcodeLoaded();
+                // Cargar html5-qrcode dinámicamente solo al iniciar escáner (patrón del ejemplo)
+                if (typeof Html5Qrcode === 'undefined') {
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+                        s.onload = resolve;
+                        s.onerror = reject;
+                        document.head.appendChild(s);
+                    });
+                }
+                if (typeof Html5Qrcode === 'undefined') {
+                    throw new Error('No se pudo cargar la librería html5-qrcode. Revisa conexión o bloqueadores.');
+                }
                 if (!html5Qr) {
-                    html5Qr = new window.Html5Qrcode('reader');
+                    html5Qr = new Html5Qrcode('reader');
                 }
                 scanning = true;
                 $('stopScan').disabled = false;
                 $('liveState').textContent = 'Escaneando…';
 
-                 let cameraConfig = { facingMode: 'environment' };
-                try {
-                    const cams = await window.Html5Qrcode.getCameras();
-                    if (Array.isArray(cams) && cams.length) {
-                        const pick = cams.find(c => /back|rear|environment/i.test(String(c.label || ''))) || cams[cams.length - 1];
-                        if (pick && pick.id) cameraConfig = { deviceId: { exact: pick.id } };
-                    }
-                } catch (e) {
-                }
-
-                 await html5Qr.start(
-                     cameraConfig,
-                     { fps: 10, qrbox: { width: 250, height: 250 } },
-                     (decodedText) => { onDecoded(decodedText); },
-                     () => {}
-                 );
-             } catch (e) {
-                 scanning = false;
-                 $('liveState').textContent = 'No se pudo iniciar la cámara.';
-                 $('stopScan').disabled = true;
-                 await modalAlert('No se pudo iniciar la cámara', String((e && e.message) ? e.message : e));
-             } finally {
-                 $('startScan').disabled = scanning;
-             }
-         }
+                // Configuración directa: cámara trasera sin listar dispositivos (como en tu ejemplo)
+                const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+                await html5Qr.start(
+                    { facingMode: 'environment' },
+                    config,
+                    (decodedText) => { onDecoded(decodedText); },
+                    () => {}
+                );
+            } catch (e) {
+                scanning = false;
+                $('liveState').textContent = 'No se pudo iniciar la cámara.';
+                $('stopScan').disabled = true;
+                await modalAlert('No se pudo iniciar la cámara', String((e && e.message) ? e.message : e));
+            } finally {
+                $('startScan').disabled = scanning;
+            }
+        } 
  
          async function stopScanner() {
              if (!scanning || !html5Qr) return;
