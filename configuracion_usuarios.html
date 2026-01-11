@@ -393,24 +393,54 @@ const firebaseConfig = {
         <h1>Configuración de Usuarios</h1>
         <p id="estadoUsuarios"></p>
     <script>
+        const USERS_PAGE_SIZE = 100;
+        let usersLastDoc = null;
+        let usersHasMore = true;
+
         async function cargarUsuarios() {
             document.getElementById('estadoUsuarios').textContent = "Cargando usuarios...";
             try {
-                const snapshot = await db.collection('usuarios').get();
                 const usuariosSelect = document.getElementById('usuariosSelect');
                 if (!usuariosSelect) {
                     throw new Error("usuariosSelect no está definido.");
                 }
+
+                usersLastDoc = null;
+                usersHasMore = true;
                 usuariosSelect.innerHTML = '<option value="">Seleccionar Usuario</option>';
-                snapshot.forEach(doc => {
+
+                await cargarMasUsuarios();
+                document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
+            } catch (error) {
+                document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
+            }
+        }
+
+        async function cargarMasUsuarios() {
+            const usuariosSelect = document.getElementById('usuariosSelect');
+            const btn = document.getElementById('loadMoreUsersBtn');
+            if (!usuariosSelect) return;
+            if (btn) btn.disabled = true;
+
+            try {
+                let q = db.collection('usuarios').orderBy('nombreCompleto').limit(USERS_PAGE_SIZE);
+                if (usersLastDoc) q = q.startAfter(usersLastDoc);
+                const snapshot = await q.get();
+
+                const docs = snapshot.docs || [];
+                docs.forEach(doc => {
                     const usuario = doc.data().nombreCompleto;
                     const option = document.createElement('option');
                     option.value = doc.id;
                     option.textContent = usuario;
                     usuariosSelect.appendChild(option);
                 });
-                document.getElementById('estadoUsuarios').textContent = "Usuarios cargados correctamente.";
+
+                usersHasMore = docs.length === USERS_PAGE_SIZE;
+                usersLastDoc = docs.length ? docs[docs.length - 1] : usersLastDoc;
+                if (btn) btn.disabled = !usersHasMore;
             } catch (error) {
+                if (btn) btn.disabled = false;
                 document.getElementById('estadoUsuarios').textContent = "Error al cargar usuarios: " + error.message;
             }
         }
@@ -419,7 +449,7 @@ const firebaseConfig = {
             const empresaSelect = document.getElementById('empresaSeleccionadaRegistro');
             empresaSelect.innerHTML = '<option value="">Seleccionar Empresa</option>';
             try {
-                const snapshot = await db.collection('empresas').get();
+                const snapshot = await db.collection('empresas').orderBy('nombre').limit(200).get();
                 snapshot.forEach(doc => {
                     const option = document.createElement('option');
                     option.value = doc.data().nombre;
@@ -626,6 +656,9 @@ const firebaseConfig = {
             <select id="usuariosSelect" onchange="mostrarDatosUsuario()">
                 <option value="">Seleccionar Usuario</option>
             </select>
+            <div class="actions">
+                <button type="button" id="loadMoreUsersBtn" onclick="cargarMasUsuarios()">Cargar más</button>
+            </div>
         </div>
     <script>
         async function mostrarDatosUsuario() {
