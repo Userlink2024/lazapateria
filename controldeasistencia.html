@@ -840,8 +840,16 @@
          let lastDecodedAt = 0;
  
          async function onDecoded(decodedText) {
+            // Evitar múltiples escaneos seguidos (2 segundos de bloqueo)
+            const now = Date.now();
+            if (lastDecoded === decodedText && (now - lastDecodedAt) < 2000) {
+                return;
+            }
+            lastDecoded = decodedText;
+            lastDecodedAt = now;
+
             beep();
-            const user = cachedUsers.find(u => u.qr === decodedText);
+            const user = usersByQr.get(decodedText) || cachedUsers.find(u => u.qrId === decodedText);
             if (!user) {
                 await modalAlert('Usuario no encontrado', 'El QR escaneado no corresponde a ningún usuario activo.');
                 return;
