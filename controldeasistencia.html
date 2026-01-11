@@ -477,29 +477,38 @@
              return new Date().toISOString().slice(0, 10);
          }
  
-         function beep() {
-            return new Promise((resolve) => {
-                try {
-                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                    const ctx = new AudioCtx();
-                    const o = ctx.createOscillator();
-                    const g = ctx.createGain();
-                    o.type = 'sine';
-                    o.frequency.value = 1200; // Más agudo y fuerte
-                    g.gain.value = 0.3; // Más volumen
-                    o.connect(g);
-                    g.connect(ctx.destination);
-                    o.start();
-                    setTimeout(() => {
-                        o.stop();
-                        ctx.close();
-                        resolve();
-                    }, 200);
-                } catch (e) {
-                    resolve();
-                }
-            });
-        }
+         let audioCtx = null;
+         async function ensureAudioContext() {
+             try {
+                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                 if (!AudioCtx) return null;
+                 if (!audioCtx) audioCtx = new AudioCtx();
+                 if (audioCtx && audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') {
+                     await audioCtx.resume();
+                 }
+                 return audioCtx;
+             } catch (e) {
+                 return null;
+             }
+         }
+
+         async function beep() {
+             try {
+                 const ctx = await ensureAudioContext();
+                 if (!ctx) return;
+                 const o = ctx.createOscillator();
+                 const g = ctx.createGain();
+                 o.type = 'sine';
+                 o.frequency.value = 1400;
+                 g.gain.value = 0.45;
+                 o.connect(g);
+                 g.connect(ctx.destination);
+                 o.start();
+                 await new Promise((r) => setTimeout(r, 180));
+                 try { o.stop(); } catch (e) {}
+             } catch (e) {
+             }
+         }
 
         function speakName(nombre) {
             try {
@@ -975,51 +984,48 @@
          let isProcessing = false; // Nueva estrategia para evitar múltiples escaneos
  
          const scanCooldownMs = 8000;
-        const lastScanByQr = new Map();
-
-        async function onDecoded(decodedText) {
-            // Nueva estrategia: si ya está procesando, ignorar completamente
-            if (isProcessing) return;
+         const lastScanByQr = new Map();
+ 
+         async function onDecoded(decodedText) {
+             // Nueva estrategia: si ya está procesando, ignorar completamente
+             if (isProcessing) return;
 
             const tNow = Date.now();
             const lastT = lastScanByQr.get(decodedText) || 0;
             if ((tNow - lastT) < scanCooldownMs) {
                 return;
             }
-            lastScanByQr.set(decodedText, tNow);
-            isProcessing = true;
+             lastScanByQr.set(decodedText, tNow);
+             isProcessing = true;
 
-            // 1. Pitar primero (ahora asíncrono)
-            await beep();
-            
-            const user = usersByQr.get(decodedText) || cachedUsers.find(u => u.qrId === decodedText);
-            if (!user) {
-                isProcessing = false;
-                await modalAlert('Usuario no encontrado', 'El QR escaneado no corresponde a ningún usuario activo.');
-                return;
-            }
-            
+             const user = usersByQr.get(decodedText) || cachedUsers.find(u => u.qrId === decodedText);
+             if (!user) {
+                 isProcessing = false;
+                 await modalAlert('Usuario no encontrado', 'El QR escaneado no corresponde a ningún usuario activo.');
+                 return;
+             }
+
             // 2. Obtener nombres
             const primerNombre = (user.nombreCompleto || user.usuario || '').split(' ')[0];
             const nombreCompleto = user.nombreCompleto || user.usuario || 'Usuario';
-            
+
+            await beep();
+            speakName(primerNombre);
+
             try {
                 const res = await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
-                if (!res || res.ok !== true) {
-                    isProcessing = false;
-                    if (res && res.title && res.message) {
-                        await modalAlert(res.title, res.message);
-                    }
-                    return;
-                }
+                 if (!res || res.ok !== true) {
+                     isProcessing = false;
+                     if (res && res.title && res.message) {
+                         await modalAlert(res.title, res.message);
+                     }
+                     return;
+                 }
 
-                // 3. Decir el nombre inmediatamente (solo si se registró)
-                speakName(primerNombre);
-
-                // 4. Modal con nombre completo que se cierra solo en 2 segundos
-                const modal = document.createElement('div');
-                modal.className = 'modal-overlay';
-                modal.style.display = 'flex !important';
+                 // 4. Modal con nombre completo que se cierra solo en 2 segundos
+                 const modal = document.createElement('div');
+                 modal.className = 'modal-overlay';
+                 modal.style.display = 'flex !important';
                 modal.style.alignItems = 'center';
                 modal.style.justifyContent = 'center';
                 modal.style.zIndex = '9999';
@@ -1056,6 +1062,7 @@
                 await modalAlert('Sin usuarios', 'Primero carga los usuarios.');
                 return;
             }
+            await ensureAudioContext();
             const isSecure = window.isSecureContext === true || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
             if (!isSecure) {
                 await modalAlert('Permiso de cámara', 'Para usar la cámara debes abrir esta página en HTTPS (o localhost).');
@@ -1123,6 +1130,30 @@
          let histCursorStack = [];
          let histHasNext = false;
          let histLastDoc = null;
+
+         function renderItem(ev) {
+             const el = document.createElement('div');
+             el.className = 'card';
+             const nombre = String(ev && (ev.nombreCompleto || ev.usuario) ? (ev.nombreCompleto || ev.usuario) : '—');
+             const tipo = String(ev && ev.type ? ev.type : '—');
+             const metodo = String(ev && ev.method ? ev.method : '');
+             const nota = String(ev && ev.note ? ev.note : '');
+             const fecha = ev && ev.timestamp ? formatDateTime(ev.timestamp) : 'N/A';
+             const badgeClass = tipo === 'entrada' ? 'ok' : (tipo === 'salida' ? 'warn' : '');
+             const tipoTxt = tipo ? tipo.toUpperCase() : '';
+             el.innerHTML = `
+                 <div class="row">
+                     <div>
+                         <div style="font-weight:900;">${nombre}</div>
+                         <div class="mini">${fecha}${metodo ? ` · ${metodo}` : ''}${nota ? ` · ${nota}` : ''}</div>
+                     </div>
+                     <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                         <span class="badge ${badgeClass}">${tipoTxt}</span>
+                     </div>
+                 </div>
+             `;
+             return el;
+         }
  
          function renderEvents(list, todayStr) {
             const today = [];
