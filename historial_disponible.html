@@ -187,6 +187,9 @@
                     <label for="toDate">Hasta</label>
                     <input id="toDate" type="date" />
                 </div>
+                <div style="display:flex; align-items:flex-end;">
+                    <button class="btn primary" id="searchBtn" type="button" style="width:100%; justify-content:center;">Buscar</button>
+                </div>
             </div>
 
             <div class="split">
@@ -476,6 +479,9 @@
         let registroIdsConNovedad = new Set();
         let codigosConNovedad = new Set();
         let unsubscribePedidos = null;
+
+        let hasLoadedPedidos = false;
+        let hasLoadedNovedades = false;
 
         function rebuildNovedadIndex(novedades) {
             registroIdsConNovedad = new Set();
@@ -786,41 +792,64 @@
             }
         }
 
-        function startRealtimeNovedades() {
-            if (unsubscribeNovedades) unsubscribeNovedades();
-
-            const NOVEDADES_LIMIT = 200;
-
-            let q = db.collection('novedades');
-            if (isOperador) {
-                q = q.where('asesorUserId', '==', String(datosUsuario.usuario)).limit(NOVEDADES_LIMIT);
-            } else if (isBodeguero) {
-                q = q.where('assignedBodegueroUserId', '==', String(datosUsuario.usuario)).limit(NOVEDADES_LIMIT);
-            } else {
-                q = q.orderBy('createdAt', 'desc').limit(NOVEDADES_LIMIT);
+        async function loadNovedadesByDateRange() {
+            const fromStr = String(fromDate.value || '').trim();
+            const toStr = String(toDate.value || '').trim();
+            if (!fromStr || !toStr) {
+                await modalAlert('Falta rango de fechas', 'Selecciona <strong>Desde</strong> y <strong>Hasta</strong> para buscar.');
+                return;
             }
 
-            unsubscribeNovedades = q.onSnapshot((snap) => {
+            const from = new Date(fromStr + 'T00:00:00');
+            const to = new Date(toStr + 'T23:59:59');
+            if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+                await modalAlert('Rango inválido', 'Revisa las fechas seleccionadas.');
+                return;
+            }
+
+            hasLoadedNovedades = false;
+            $('pendingNovedadesState').textContent = 'Buscando…';
+            $('historyNovedadesState').textContent = 'Buscando…';
+            $('pendingNovedadesList').innerHTML = '';
+
+            try {
+                const NOVEDADES_LIMIT = 200;
+                let q = db.collection('novedades').orderBy('createdAt', 'desc');
+
+                if (isOperador) {
+                    q = db.collection('novedades')
+                        .where('asesorUserId', '==', String(datosUsuario.usuario))
+                        .orderBy('createdAt', 'desc');
+                } else if (isBodeguero) {
+                    q = db.collection('novedades')
+                        .where('assignedBodegueroUserId', '==', String(datosUsuario.usuario))
+                        .orderBy('createdAt', 'desc');
+                }
+
+                const fromTs = firebase.firestore.Timestamp.fromDate(from);
+                const toTs = firebase.firestore.Timestamp.fromDate(to);
+                q = q.where('createdAt', '>=', fromTs).where('createdAt', '<=', toTs).limit(NOVEDADES_LIMIT);
+
+                const snap = await q.get();
                 const novedades = snap.docs.map(d => {
                     const data = d.data() || {};
                     data.id = d.id;
                     return data;
-                })
-                .sort((a, b) => {
+                }).sort((a, b) => {
                     const at = a.createdAt && typeof a.createdAt.toMillis === 'function' ? a.createdAt.toMillis() : 0;
                     const bt = b.createdAt && typeof b.createdAt.toMillis === 'function' ? b.createdAt.toMillis() : 0;
                     return bt - at;
                 });
 
                 allNovedades = novedades;
+                hasLoadedNovedades = true;
                 rebuildNovedadIndex(allNovedades);
                 renderNovedadesLists(allNovedades);
-                render();
-            }, (err) => {
-                console.error('Error escuchando novedades:', err);
+            } catch (e) {
+                console.error('Error cargando novedades por fecha:', e);
                 $('pendingNovedadesState').textContent = 'Error cargando.';
                 $('historyNovedadesState').textContent = 'Error cargando.';
-            });
+            }
         }
 
         function render() {
@@ -965,33 +994,71 @@
             return q;
         }
 
-        function startRealtimePedidos() {
-            if (unsubscribePedidos) unsubscribePedidos();
-            liveStateEl.textContent = 'Conectando…';
+        async function loadPedidosByDateRange() {
+            const fromStr = String(fromDate.value || '').trim();
+            const toStr = String(toDate.value || '').trim();
+            if (!fromStr || !toStr) {
+                await modalAlert('Falta rango de fechas', 'Selecciona <strong>Desde</strong> y <strong>Hasta</strong> para buscar.');
+                return;
+            }
 
-            const q = pedidosQueryForRole();
-            unsubscribePedidos = q.onSnapshot((snap) => {
+            const from = new Date(fromStr + 'T00:00:00');
+            const to = new Date(toStr + 'T23:59:59');
+            if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+                await modalAlert('Rango inválido', 'Revisa las fechas seleccionadas.');
+                return;
+            }
+
+            if (unsubscribePedidos) { unsubscribePedidos(); unsubscribePedidos = null; }
+
+            hasLoadedPedidos = false;
+            liveStateEl.textContent = 'Buscando…';
+            listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Buscando registros…</div>';
+            paginationEl.style.display = 'none';
+
+            try {
+                const MAX_REGISTROS = 200;
+                const fromTs = firebase.firestore.Timestamp.fromDate(from);
+                const toTs = firebase.firestore.Timestamp.fromDate(to);
+
+                let q = db.collection('registros')
+                    .orderBy('fecha_hora', 'desc')
+                    .where('fecha_hora', '>=', fromTs)
+                    .where('fecha_hora', '<=', toTs)
+                    .limit(MAX_REGISTROS);
+
+                if (isOperador) {
+                    q = db.collection('registros')
+                        .where('usuario', '==', String(datosUsuario.usuario))
+                        .orderBy('fecha_hora', 'desc')
+                        .where('fecha_hora', '>=', fromTs)
+                        .where('fecha_hora', '<=', toTs)
+                        .limit(MAX_REGISTROS);
+                }
+
+                const snap = await q.get();
                 allRegistros = snap.docs.map(d => {
                     const data = d.data() || {};
                     data.id = d.id;
                     data._searchBlob = null;
                     return data;
-                })
-                .sort((a, b) => {
+                }).sort((a, b) => {
                     const at = a.fecha_hora && typeof a.fecha_hora.toMillis === 'function' ? a.fecha_hora.toMillis() : 0;
                     const bt = b.fecha_hora && typeof b.fecha_hora.toMillis === 'function' ? b.fecha_hora.toMillis() : 0;
                     return bt - at;
                 });
+
+                hasLoadedPedidos = true;
                 currentPage = 1;
                 updateAsesorOptions();
-                liveStateEl.textContent = 'En tiempo real · ' + new Date().toLocaleTimeString('es-CO');
+                liveStateEl.textContent = 'Cargado · ' + new Date().toLocaleTimeString('es-CO');
                 render();
-            }, async (err) => {
-                console.error('Error escuchando pedidos:', err);
-                liveStateEl.textContent = 'Error de conexión';
+            } catch (e) {
+                console.error('Error cargando pedidos por fecha:', e);
+                liveStateEl.textContent = 'Error';
                 listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Error al cargar datos.</div>';
-                await modalAlert('Error de conexión', 'No se pudo cargar la información en tiempo real. Revisa tu conexión e intenta nuevamente.');
-            });
+                await modalAlert('Error', 'No se pudo cargar la información.');
+            }
         }
 
         async function loadBodeguerosAndAdmins() {
@@ -1196,9 +1263,12 @@
         function startAppAfterAccess() {
             updateSessionCountdown();
             startSessionTimer();
-            startRealtimePedidos();
-            startRealtimeNovedades();
             if (isAdmin) startAdminRequestsPanel();
+            liveStateEl.textContent = 'Selecciona fechas y pulsa Buscar';
+            $('pendingNovedadesState').textContent = 'Selecciona fechas y pulsa Buscar';
+            $('historyNovedadesState').textContent = 'Selecciona fechas y pulsa Buscar';
+            render();
+            renderNovedadesLists([]);
         }
 
         async function gateFlowIfNeeded() {
@@ -1339,6 +1409,11 @@
             } else {
                 stopAllRealtime();
             }
+        });
+
+        $('searchBtn').addEventListener('click', async () => {
+            await loadPedidosByDateRange();
+            await loadNovedadesByDateRange();
         });
     </script>
 </body>
