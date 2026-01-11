@@ -439,6 +439,9 @@
         }
 
         let allRegistros = [];
+        let allNovedades = [];
+        let registroIdsConNovedad = new Set();
+        let codigosConNovedad = new Set();
         let unsubscribePedidos = null;
 
         const PAGE_SIZE = 10;
@@ -608,7 +611,13 @@
 
                 const dt = formatDateTime(n.createdAt);
                 const code = n.codigo_unico || n.registroId || '—';
-                const bode = n.assignedBodegueroNombre || '—';
+                const bodeFromCache = (() => {
+                    const id = String(n.assignedBodegueroUserId || '').trim();
+                    if (!id) return '';
+                    const obj = cachedBodegueros.find(b => String(b.usuario) === id);
+                    return obj ? String(obj.nombreCompleto) : '';
+                })();
+                const bode = n.assignedBodegueroNombre || bodeFromCache || n.assignedBodegueroUserId || '—';
                 const estado = n.resuelta === true ? '<span class="badge good">RESUELTA</span>' : '<span class="badge warn">PENDIENTE</span>';
 
                 card.innerHTML = `
@@ -672,12 +681,13 @@
         function startRealtimeNovedades() {
             if (unsubscribeNovedades) unsubscribeNovedades();
 
-            let q = db.collection('novedades').orderBy('createdAt', 'desc');
-
+            let q = db.collection('novedades');
             if (isOperador) {
                 q = q.where('asesorUserId', '==', String(datosUsuario.usuario));
             } else if (isBodeguero) {
                 q = q.where('assignedBodegueroUserId', '==', String(datosUsuario.usuario));
+            } else {
+                q = q.orderBy('createdAt', 'desc');
             }
 
             unsubscribeNovedades = q.onSnapshot((snap) => {
@@ -685,9 +695,19 @@
                     const data = d.data() || {};
                     data.id = d.id;
                     return data;
+                })
+                .sort((a, b) => {
+                    const at = a.createdAt && typeof a.createdAt.toMillis === 'function' ? a.createdAt.toMillis() : 0;
+                    const bt = b.createdAt && typeof b.createdAt.toMillis === 'function' ? b.createdAt.toMillis() : 0;
+                    return bt - at;
                 });
-                renderNovedadesLists(novedades);
-            }, () => {
+
+                allNovedades = novedades;
+                rebuildNovedadIndex(allNovedades);
+                renderNovedadesLists(allNovedades);
+                render();
+            }, (err) => {
+                console.error('Error escuchando novedades:', err);
                 $('pendingNovedadesState').textContent = 'Error cargando.';
                 $('historyNovedadesState').textContent = 'Error cargando.';
             });
@@ -738,10 +758,16 @@
                 const flete = r.valor_flete != null ? formatCurrency(r.valor_flete) : '$0';
                 const fletePagado = r.flete_pagado === true;
 
+                const tieneNovedad = pedidoTieneNovedad(r);
+
+                const fleteBadge = tieneNovedad
+                    ? (fletePagado ? '<span class="badge good">FLETE PAGADO</span>' : '<span class="badge warn">FLETE PENDIENTE</span>')
+                    : '';
+
                 const badges = [
                     despachado ? '<span class="badge good">DESPACHADO</span>' : '<span class="badge warn">NO DESPACHADO</span>',
-                    fletePagado ? '<span class="badge good">FLETE PAGADO</span>' : '<span class="badge warn">FLETE PENDIENTE</span>'
-                ].join('');
+                    fleteBadge
+                ].filter(Boolean).join('');
 
                 const productsHtml = productos.length
                     ? '<ul>' + productos.map(p => {
@@ -824,9 +850,12 @@
         }
 
         function pedidosQueryForRole() {
-            let q = db.collection('registros').orderBy('fecha_hora', 'desc');
+            let q = db.collection('registros');
             if (isOperador) {
+                // Evita índice compuesto (where + orderBy) ordenando en cliente
                 q = q.where('usuario', '==', String(datosUsuario.usuario));
+            } else {
+                q = q.orderBy('fecha_hora', 'desc');
             }
             return q;
         }
@@ -842,12 +871,18 @@
                     data.id = d.id;
                     data._searchBlob = null;
                     return data;
+                })
+                .sort((a, b) => {
+                    const at = a.fecha_hora && typeof a.fecha_hora.toMillis === 'function' ? a.fecha_hora.toMillis() : 0;
+                    const bt = b.fecha_hora && typeof b.fecha_hora.toMillis === 'function' ? b.fecha_hora.toMillis() : 0;
+                    return bt - at;
                 });
                 currentPage = 1;
                 updateAsesorOptions();
                 liveStateEl.textContent = 'En tiempo real · ' + new Date().toLocaleTimeString('es-CO');
                 render();
-            }, async () => {
+            }, async (err) => {
+                console.error('Error escuchando pedidos:', err);
                 liveStateEl.textContent = 'Error de conexión';
                 listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Error al cargar datos.</div>';
                 await modalAlert('Error de conexión', 'No se pudo cargar la información en tiempo real. Revisa tu conexión e intenta nuevamente.');
