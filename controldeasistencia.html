@@ -409,15 +409,15 @@
                 const o = ctx.createOscillator();
                 const g = ctx.createGain();
                 o.type = 'sine';
-                o.frequency.value = 880;
-                g.gain.value = 0.08;
+                o.frequency.value = 1200; // Más agudo y fuerte
+                g.gain.value = 0.3; // Más volumen
                 o.connect(g);
                 g.connect(ctx.destination);
                 o.start();
                 setTimeout(() => {
                     o.stop();
                     ctx.close();
-                }, 120);
+                }, 200);
             } catch (e) {
             }
         }
@@ -839,27 +839,68 @@
          let lastDecoded = '';
          let lastDecodedAt = 0;
  
-         async function onDecoded(text) {
-             const now = Date.now();
-             if (text === lastDecoded && (now - lastDecodedAt) < 2500) return;
-             lastDecoded = text;
-             lastDecodedAt = now;
- 
-             const qrValue = String(text || '').trim();
-             if (!qrValue) return;
- 
-             const user = usersByQr.get(qrValue);
-             if (!user) {
-                 await modalAlert('QR no reconocido', 'Este QR no corresponde a ningún usuario.');
-                 return;
-             }
- 
-             try {
-                 await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
-             } catch (e) {
-                 await modalAlert('Error', 'No se pudo registrar.');
-             }
-         }
+         async function onDecoded(decodedText) {
+            beep();
+            const user = cachedUsers.find(u => u.qr === decodedText);
+            if (!user) {
+                await modalAlert('Usuario no encontrado', 'El QR escaneado no corresponde a ningún usuario activo.');
+                return;
+            }
+            try {
+                await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
+                // Modal exitoso que se cierra solo en 2 segundos
+                const modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.innerHTML = `
+                    <div class="modal">
+                        <div class="modal-header">
+                            <h3>✅ Registro Exitoso</h3>
+                        </div>
+                        <div class="modal-body">
+                            <p><strong>${user.nombre}</strong> registrado correctamente.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn primary" onclick="this.closest('.modal-overlay').remove()">Aceptar</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                setTimeout(() => {
+                    if (modal.parentNode) modal.remove();
+                }, 2000);
+            } catch (e) {
+                await modalAlert('Error', 'No se pudo registrar.');
+            }
+        }
+
+        async function generateQRForUser(usuario) {
+            const qr = new QRCode(document.createElement('div'), {
+                text: usuario.qr,
+                width: 256,
+                height: 256,
+                correctLevel: QRCode.CorrectLevel.H
+            });
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3>${usuario.nombre}</h3>
+                    </div>
+                    <div class="modal-body">
+                        <div id="qrContainer"></div>
+                        <p style="margin-top:10px; font-size:0.9em; color:#666;">Código QR único</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn primary" onclick="this.closest('.modal-overlay').remove()">Cerrar</button>
+                    </div>
+                `;
+            document.body.appendChild(modal);
+            const container = modal.querySelector('#qrContainer');
+            container.appendChild(qr._el);
+            // Actualizar en tiempo real para que otros dispositivos vean el nuevo QR
+            await loadUsers();
+        }
  
          async function startScanner() {
             if (scanning) return;
