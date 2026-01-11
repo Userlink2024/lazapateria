@@ -1171,17 +1171,23 @@
 
             unsubscribeAdminRequests = db.collection('historial_access_requests')
                 .where('requestedAdminUserId', '==', String(datosUsuario.usuario))
-                .where('status', '==', 'pending')
-                .orderBy('createdAt', 'desc')
                 .onSnapshot((snap) => {
                     const list = snap.docs.map(d => {
                         const data = d.data() || {};
                         data.id = d.id;
                         return data;
+                    })
+                    .filter(r => String(r.status || '').toLowerCase() === 'pending')
+                    .sort((a, b) => {
+                        const at = a.createdAt && typeof a.createdAt.toMillis === 'function' ? a.createdAt.toMillis() : 0;
+                        const bt = b.createdAt && typeof b.createdAt.toMillis === 'function' ? b.createdAt.toMillis() : 0;
+                        return bt - at;
                     });
+
                     renderAdminRequests(list);
-                }, () => {
-                    $('reqState').textContent = 'Error';
+                }, (err) => {
+                    console.error('Error escuchando solicitudes admin:', err);
+                    $('reqState').textContent = 'Sin conexión';
                 });
         }
 
