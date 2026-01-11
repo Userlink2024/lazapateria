@@ -119,6 +119,7 @@
              <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
                  <a class="btn" href="https://userlink2024.github.io/lazapateria/paneldecuentas.html">Volver</a>
                  <button class="btn" id="configBtn" type="button">Configuración</button>
+                 <button class="btn" id="openHist" type="button">Historial</button>
                  <button class="btn primary" id="startScan" type="button">Iniciar escáner</button>
                  <button class="btn danger" id="stopScan" type="button" disabled>Detener</button>
              </div>
@@ -192,11 +193,6 @@
                          <div class="mini" id="todayState">Cargando…</div>
                          <div class="list" id="todayList" style="margin-top:10px;"></div>
                      </div>
-                     <div class="card">
-                         <h3>Historial (últimos 100)</h3>
-                         <div class="mini" id="histState">Cargando…</div>
-                         <div class="list" id="histList" style="margin-top:10px;"></div>
-                     </div>
                  </div>
              </div>
  
@@ -206,6 +202,22 @@
                      <div class="mini" style="margin-bottom:10px;">Genera/consulta el QR de cada usuario. El QR se guarda en Firestore dentro de <strong>usuarios.qrId</strong>.</div>
                      <div class="list" id="usersList"></div>
                  </div>
+             </div>
+         </div>
+     </div>
+
+     <div class="modal" id="histModal" aria-hidden="true">
+         <div class="modal-card">
+             <div class="modal-head">
+                 <h3>Historial (últimos 100)</h3>
+                 <button class="x" type="button" id="histClose">×</button>
+             </div>
+             <div class="modal-body">
+                 <div class="mini" id="histModalState">Cargando…</div>
+                 <div class="list" id="histModalList" style="margin-top:10px;"></div>
+             </div>
+             <div class="modal-actions">
+                 <button class="btn" type="button" id="histClose2">Cerrar</button>
              </div>
          </div>
      </div>
@@ -599,11 +611,26 @@
              $('configModal').classList.remove('open');
              $('configModal').setAttribute('aria-hidden', 'true');
          }
+
+         function openHistModal() {
+             $('histModal').classList.add('open');
+             $('histModal').setAttribute('aria-hidden', 'false');
+         }
+
+         function closeHistModal() {
+             $('histModal').classList.remove('open');
+             $('histModal').setAttribute('aria-hidden', 'true');
+         }
  
          $('configBtn').addEventListener('click', openConfigModal);
          $('configClose').addEventListener('click', closeConfigModal);
          $('configCancel').addEventListener('click', closeConfigModal);
          $('configModal').addEventListener('click', (e) => { if (e.target === $('configModal')) closeConfigModal(); });
+
+         $('openHist').addEventListener('click', openHistModal);
+         $('histClose').addEventListener('click', closeHistModal);
+         $('histClose2').addEventListener('click', closeHistModal);
+         $('histModal').addEventListener('click', (e) => { if (e.target === $('histModal')) closeHistModal(); });
  
          $('configSave').addEventListener('click', async () => {
              try {
@@ -840,6 +867,11 @@
                  await modalAlert('Sin usuarios', 'Primero carga los usuarios.');
                  return;
              }
+             const isSecure = window.isSecureContext === true || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+             if (!isSecure) {
+                 await modalAlert('Permiso de cámara', 'Para usar la cámara debes abrir esta página en HTTPS (o localhost).');
+                 return;
+             }
              $('startScan').disabled = true;
              try {
                  if (!html5Qr) {
@@ -848,9 +880,19 @@
                  scanning = true;
                  $('stopScan').disabled = false;
                  $('liveState').textContent = 'Escaneando…';
- 
+
+                 let cameraConfig = { facingMode: 'environment' };
+                 try {
+                     const cams = await Html5Qrcode.getCameras();
+                     if (Array.isArray(cams) && cams.length) {
+                         const pick = cams.find(c => /back|rear|environment/i.test(String(c.label || ''))) || cams[cams.length - 1];
+                         if (pick && pick.id) cameraConfig = { deviceId: { exact: pick.id } };
+                     }
+                 } catch (e) {
+                 }
+
                  await html5Qr.start(
-                     { facingMode: 'environment' },
+                     cameraConfig,
                      { fps: 10, qrbox: { width: 250, height: 250 } },
                      (decodedText) => { onDecoded(decodedText); },
                      () => {}
@@ -859,6 +901,7 @@
                  scanning = false;
                  $('liveState').textContent = 'No se pudo iniciar la cámara.';
                  $('stopScan').disabled = true;
+                 await modalAlert('No se pudo iniciar la cámara', String((e && e.message) ? e.message : e));
              } finally {
                  $('startScan').disabled = scanning;
              }
@@ -891,9 +934,8 @@
              });
  
              const todayEl = $('todayList');
-             const histEl = $('histList');
              $('todayState').textContent = today.length ? '' : 'Sin eventos hoy.';
-             $('histState').textContent = hist.length ? '' : 'Sin historial.';
+             $('histModalState').textContent = hist.length ? '' : 'Sin historial.';
  
              const renderItem = (ev) => {
                  const card = document.createElement('div');
@@ -918,6 +960,7 @@
              };
  
              todayEl.innerHTML = '';
+             const histEl = $('histModalList');
              histEl.innerHTML = '';
  
              if (today.length) {
@@ -944,7 +987,7 @@
                  renderEvents(list, todayStr);
              }, () => {
                  $('todayState').textContent = 'Error cargando.';
-                 $('histState').textContent = 'Error cargando.';
+                 $('histModalState').textContent = 'Error cargando.';
              });
          }
  
