@@ -421,6 +421,19 @@
             } catch (e) {
             }
         }
+
+        function speakName(nombre) {
+            try {
+                const utterance = new SpeechSynthesisUtterance(nombre);
+                utterance.lang = 'es-CO';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 0.8;
+                window.speechSynthesis.speak(utterance);
+            } catch (e) {
+                // Silenciar error si no hay soporte de voz
+            }
+        }
  
          let mode = 'entrada';
          function setMode(m) {
@@ -836,27 +849,27 @@
  
          let html5Qr = null;
          let scanning = false;
-         let lastDecoded = '';
-         let lastDecodedAt = 0;
+         let isProcessing = false; // Nueva estrategia para evitar múltiples escaneos
  
          async function onDecoded(decodedText) {
-            // Evitar múltiples escaneos seguidos (2 segundos de bloqueo)
-            const now = Date.now();
-            if (lastDecoded === decodedText && (now - lastDecodedAt) < 2000) {
-                return;
-            }
-            lastDecoded = decodedText;
-            lastDecodedAt = now;
+            // Nueva estrategia: si ya está procesando, ignorar completamente
+            if (isProcessing) return;
+            isProcessing = true;
 
             beep();
             const user = usersByQr.get(decodedText) || cachedUsers.find(u => u.qrId === decodedText);
             if (!user) {
+                isProcessing = false;
                 await modalAlert('Usuario no encontrado', 'El QR escaneado no corresponde a ningún usuario activo.');
                 return;
             }
             try {
                 await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
-                // Modal exitoso que se cierra solo en 2 segundos
+                
+                // Obtener primer nombre para mostrar y leer en voz alta
+                const primerNombre = (user.nombreCompleto || user.usuario || '').split(' ')[0];
+                
+                // Modal exitoso que muestra el nombre por 2 segundos
                 const modal = document.createElement('div');
                 modal.className = 'modal-overlay';
                 modal.innerHTML = `
@@ -865,7 +878,7 @@
                             <h3>✅ Registro Exitoso</h3>
                         </div>
                         <div class="modal-body">
-                            <p><strong>${user.nombre}</strong> registrado correctamente.</p>
+                            <p><strong>${primerNombre}</strong> registrado correctamente.</p>
                         </div>
                         <div class="modal-footer">
                             <button class="btn primary" onclick="this.closest('.modal-overlay').remove()">Aceptar</button>
@@ -873,10 +886,16 @@
                     </div>
                 `;
                 document.body.appendChild(modal);
+                
+                // Leer el nombre en voz alta
+                speakName(primerNombre);
+                
                 setTimeout(() => {
                     if (modal.parentNode) modal.remove();
+                    isProcessing = false; // Permitir nuevo escaneo después de 2 segundos
                 }, 2000);
             } catch (e) {
+                isProcessing = false;
                 await modalAlert('Error', 'No se pudo registrar.');
             }
         }
