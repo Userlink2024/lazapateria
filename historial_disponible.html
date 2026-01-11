@@ -198,7 +198,9 @@
                 <div class="card">
                     <div style="font-weight:900; margin-bottom:8px;">Historial de novedades</div>
                     <div class="mini" id="historyNovedadesState">Cargando…</div>
-                    <div class="list" id="historyNovedadesList" style="padding:10px 0 0;"></div>
+                    <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                        <button class="btn" type="button" id="openHistoryNovedades">Ver historial</button>
+                    </div>
                 </div>
             </div>
 
@@ -275,6 +277,22 @@
                 <div id="appModalMessage" style="color:var(--text);font-weight:700;line-height:1.35;"></div>
             </div>
             <div class="modal-actions" id="appModalActions"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="historyNovedadesModal" aria-hidden="true">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h3>Historial de novedades</h3>
+                <button class="x" type="button" id="historyNovedadesClose">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="mini" id="historyNovedadesModalState">Cargando…</div>
+                <div class="list" id="historyNovedadesModalList" style="padding:10px 0 0;"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" type="button" id="historyNovedadesClose2">Cerrar</button>
+            </div>
         </div>
     </div>
 
@@ -390,6 +408,21 @@
 
         $('appModalClose').addEventListener('click', () => closeAppModal(null));
         $('appModal').addEventListener('click', (e) => { if (e.target === $('appModal')) closeAppModal(null); });
+
+        function openHistoryNovedadesModal() {
+            $('historyNovedadesModal').classList.add('open');
+            $('historyNovedadesModal').setAttribute('aria-hidden', 'false');
+        }
+
+        function closeHistoryNovedadesModal() {
+            $('historyNovedadesModal').classList.remove('open');
+            $('historyNovedadesModal').setAttribute('aria-hidden', 'true');
+        }
+
+        $('openHistoryNovedades').addEventListener('click', openHistoryNovedadesModal);
+        $('historyNovedadesClose').addEventListener('click', closeHistoryNovedadesModal);
+        $('historyNovedadesClose2').addEventListener('click', closeHistoryNovedadesModal);
+        $('historyNovedadesModal').addEventListener('click', (e) => { if (e.target === $('historyNovedadesModal')) closeHistoryNovedadesModal(); });
 
         function formatCurrency(value) {
             const n = Number(value || 0);
@@ -537,11 +570,12 @@
                 });
             }
 
-            $('novFlete').value = (pedido && pedido.valor_flete != null) ? String(pedido.valor_flete) : '';
-            $('novFletePagado').checked = pedido && pedido.flete_pagado === true;
+            $('novFlete').value = '';
+            $('novFletePagado').checked = false;
+            $('novFletePagado').disabled = !isAdmin;
 
             $('novResuelta').checked = false;
-            $('novResuelta').disabled = !isAdmin;
+            $('novResuelta').disabled = true;
 
             $('novDesc').value = '';
 
@@ -559,6 +593,21 @@
         $('cancelNovedad').addEventListener('click', closeNovedadModal);
         $('novedadModal').addEventListener('click', (e) => { if (e.target === $('novedadModal')) closeNovedadModal(); });
 
+        function syncResueltaControlInModal() {
+            if (!isAdmin) {
+                $('novResuelta').disabled = true;
+                $('novFletePagado').disabled = true;
+                return;
+            }
+            const flete = Number($('novFlete').value || 0);
+            const fletePagado = $('novFletePagado').checked === true;
+            const requiresPago = Number.isFinite(flete) && flete > 0;
+            $('novResuelta').disabled = requiresPago ? !fletePagado : false;
+        }
+
+        $('novFlete').addEventListener('input', syncResueltaControlInModal);
+        $('novFletePagado').addEventListener('change', syncResueltaControlInModal);
+
         async function saveNovedad() {
             const p = currentPedidoForNovedad;
             if (!p || !p.id) throw new Error('Sin pedido');
@@ -574,14 +623,16 @@
             const bodeNombre = bodeObj ? String(bodeObj.nombreCompleto) : '';
 
             const flete = Number($('novFlete').value || 0);
-            const fletePagado = $('novFletePagado').checked === true;
+            const fletePagado = isAdmin ? ($('novFletePagado').checked === true) : false;
+            const requiresPago = Number.isFinite(flete) && flete > 0;
+            const resuelta = isAdmin ? ($('novResuelta').checked === true) : false;
+
+            if (resuelta && requiresPago && !fletePagado) {
+                await modalAlert('No permitido', 'Para marcar como resuelta, primero debes marcar el flete como pagado.');
+                return;
+            }
 
             const now = firebase.firestore.Timestamp.fromDate(new Date());
-
-            await db.collection('registros').doc(p.id).update({
-                valor_flete: Number.isFinite(flete) ? flete : 0,
-                flete_pagado: fletePagado
-            });
 
             await db.collection('novedades').add({
                 registroId: p.id,
@@ -594,7 +645,11 @@
                 assignedBodegueroUserId: bodeUserId,
                 assignedBodegueroNombre: bodeNombre,
                 descripcion: desc,
-                resuelta: isAdmin ? ($('novResuelta').checked === true) : false,
+                fleteValor: Number.isFinite(flete) ? flete : 0,
+                fletePagado: fletePagado,
+                fletePagadoAt: (fletePagado ? now : null),
+                fletePagadoPor: (fletePagado ? String(datosUsuario.nombreCompleto || '') : ''),
+                resuelta: resuelta,
                 resueltaPor: '',
                 resueltaAt: null,
                 createdAt: now,
@@ -613,7 +668,7 @@
 
         function renderNovedadesLists(novedades) {
             const pendingEl = $('pendingNovedadesList');
-            const histEl = $('historyNovedadesList');
+            const histEl = $('historyNovedadesModalList');
 
             const pending = [];
             const resolved = [];
@@ -622,7 +677,8 @@
             });
 
             $('pendingNovedadesState').textContent = pending.length ? '' : 'Sin novedades pendientes.';
-            $('historyNovedadesState').textContent = resolved.length ? '' : 'Sin historial.';
+            $('historyNovedadesState').textContent = resolved.length ? `Historial: ${resolved.length}` : 'Sin historial.';
+            $('historyNovedadesModalState').textContent = resolved.length ? '' : 'Sin historial.';
 
             const renderItem = (n) => {
                 const card = document.createElement('div');
@@ -638,6 +694,12 @@
                 })();
                 const bode = n.assignedBodegueroNombre || bodeFromCache || n.assignedBodegueroUserId || '—';
                 const estado = n.resuelta === true ? '<span class="badge good">RESUELTA</span>' : '<span class="badge warn">PENDIENTE</span>';
+                const fleteValor = Number(n.fleteValor || 0);
+                const hasFlete = Number.isFinite(fleteValor) && fleteValor > 0;
+                const fletePagado = n.fletePagado === true;
+                const fleteInfo = hasFlete
+                    ? `<div class="mini" style="margin-top:8px;">Flete: <strong>${formatCurrency(fleteValor)}</strong> · ${fletePagado ? '<span class="badge good">PAGADO</span>' : '<span class="badge warn">PENDIENTE</span>'}</div>`
+                    : '';
 
                 card.innerHTML = `
                     <div class="head" style="margin-bottom:8px; padding-bottom:8px;">
@@ -648,9 +710,14 @@
                         <div class="badges">${estado}</div>
                     </div>
                     <div style="color:var(--muted); font-size:13px; font-weight:600; white-space:pre-wrap;">${String(n.descripcion || '')}</div>
+                    ${fleteInfo}
                     <div class="actions" style="margin-top:10px;">
                         <div class="mini">ID: ${n.id || ''}</div>
                         <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                            ${isAdmin && hasFlete ? (fletePagado
+                                ? '<button class="btn" type="button" data-action="toggleFlete">Marcar flete pendiente</button>'
+                                : '<button class="btn primary" type="button" data-action="toggleFlete">Marcar flete pagado</button>')
+                                : ''}
                             ${isAdmin ? (n.resuelta === true
                                 ? '<button class="btn" type="button" data-action="toggle">Marcar pendiente</button>'
                                 : '<button class="btn primary" type="button" data-action="toggle">Marcar resuelta</button>')
@@ -660,11 +727,33 @@
                 `;
 
                 if (isAdmin) {
+                    const btnFlete = card.querySelector('[data-action="toggleFlete"]');
+                    if (btnFlete) {
+                        btnFlete.addEventListener('click', async () => {
+                            try {
+                                const nuevoPago = !(n.fletePagado === true);
+                                await db.collection('novedades').doc(n.id).update({
+                                    fletePagado: nuevoPago,
+                                    fletePagadoAt: nuevoPago ? firebase.firestore.Timestamp.fromDate(new Date()) : null,
+                                    fletePagadoPor: nuevoPago ? String(datosUsuario.nombreCompleto || '') : '',
+                                    updatedAt: firebase.firestore.Timestamp.fromDate(new Date())
+                                });
+                            } catch (e) {
+                                await modalAlert('Error', 'No se pudo actualizar el flete.');
+                            }
+                        });
+                    }
                     const btn = card.querySelector('[data-action="toggle"]');
                     if (btn) {
                         btn.addEventListener('click', async () => {
                             try {
                                 const nuevo = !(n.resuelta === true);
+                                const v = Number(n.fleteValor || 0);
+                                const needsPago = Number.isFinite(v) && v > 0;
+                                if (nuevo && needsPago && n.fletePagado !== true) {
+                                    await modalAlert('No permitido', 'Primero marca el flete como pagado para poder marcar la novedad como resuelta.');
+                                    return;
+                                }
                                 await db.collection('novedades').doc(n.id).update({
                                     resuelta: nuevo,
                                     resueltaPor: nuevo ? String(datosUsuario.nombreCompleto || '') : '',
@@ -692,7 +781,7 @@
 
             if (resolved.length) {
                 const frag = document.createDocumentFragment();
-                resolved.slice(0, 20).forEach(n => frag.appendChild(renderItem(n)));
+                resolved.slice(0, 100).forEach(n => frag.appendChild(renderItem(n)));
                 histEl.appendChild(frag);
             }
         }
@@ -778,18 +867,8 @@
                     ? r.bodegueros_encargados.join(', ')
                     : '—';
 
-                const flete = r.valor_flete != null ? formatCurrency(r.valor_flete) : '$0';
-                const fletePagado = r.flete_pagado === true;
-
-                const tieneNovedad = pedidoTieneNovedad(r);
-
-                const fleteBadge = tieneNovedad
-                    ? (fletePagado ? '<span class="badge good">FLETE PAGADO</span>' : '<span class="badge warn">FLETE PENDIENTE</span>')
-                    : '';
-
                 const badges = [
-                    despachado ? '<span class="badge good">DESPACHADO</span>' : '<span class="badge warn">NO DESPACHADO</span>',
-                    fleteBadge
+                    despachado ? '<span class="badge good">DESPACHADO</span>' : '<span class="badge warn">NO DESPACHADO</span>'
                 ].filter(Boolean).join('');
 
                 const productsHtml = productos.length
@@ -822,7 +901,6 @@
                         <div style="display:grid; gap:10px;">
                             <div class="box"><div class="lbl">Pares</div><div class="val">${Number(r.num_pares || 0)}</div></div>
                             <div class="box"><div class="lbl">Valor total</div><div class="val">${formatCurrency(r.valor_total || 0)}</div></div>
-                            <div class="box"><div class="lbl">Flete</div><div class="val">${flete}</div></div>
                         </div>
                     </div>
 
