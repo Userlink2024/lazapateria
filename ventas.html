@@ -166,6 +166,9 @@
                         <option value="noDespachados">No despachados</option>
                     </select>
                 </div>
+                <div style="display:flex; align-items:flex-end;">
+                    <button class="btn primary" id="searchBtn" type="button" style="width:100%; justify-content:center;">Buscar</button>
+                </div>
             </div>
 
             <div class="summary">
@@ -427,6 +430,9 @@
         let unsubscribe = null;
         let editingRecord = null;
 
+        let hasLoaded = false;
+        let editMetaLoaded = false;
+
         const usuariosCollection = db.collection('usuarios');
         let cachedAsesores = [];
         let cachedBodegueros = [];
@@ -439,6 +445,15 @@
         const REALTIME_LIMIT = 300;
         let currentPage = 1;
         let totalPages = 1;
+
+        async function ensureEditMetaLoaded() {
+            if (editMetaLoaded) return;
+            editMetaLoaded = true;
+            await Promise.all([
+                loadUsuariosForEdit().catch(() => {}),
+                loadTransportadorasForEdit().catch(() => {})
+            ]);
+        }
 
         function clampPage() {
             if (!Number.isFinite(currentPage) || currentPage < 1) currentPage = 1;
@@ -767,6 +782,7 @@
         }
 
         function openEditModal(r) {
+            ensureEditMetaLoaded();
             editingRecord = r;
             $('editId').textContent = r.id;
             $('editCliente').value = r.cliente || '';
@@ -849,6 +865,7 @@
         });
 
         async function toggleDespachado(id, nuevoEstado) {
+            await ensureEditMetaLoaded();
             if (!nuevoEstado) {
                 const ok = await modalConfirm('Confirmar', '¿Estás seguro de que quieres desverificar (quitar despachado) este pedido?', 'Sí', 'Cancelar');
                 if (!ok) return { reverted: true };
@@ -948,6 +965,14 @@
         });
 
         function render() {
+            if (!hasLoaded) {
+                listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Selecciona un rango de fechas y pulsa <strong>Buscar</strong>.</div>';
+                paginationEl.style.display = 'none';
+                sumCount.textContent = '0';
+                sumPares.textContent = '0';
+                sumValor.textContent = '$0';
+                return;
+            }
             const filtered = applyFilters(allRegistros);
 
             totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -1097,35 +1122,69 @@
                 fromDate.value = '';
                 toDate.value = '';
                 currentPage = 1;
+                allRegistros = [];
+                hasLoaded = false;
+                liveStateEl.textContent = 'Selecciona fechas y pulsa Buscar';
                 render();
             });
         }
 
-        function startRealtime() {
-            if (unsubscribe) unsubscribe();
-            liveStateEl.textContent = 'Conectando…';
-            unsubscribe = db.collection('registros').orderBy('fecha_hora', 'desc').limit(REALTIME_LIMIT).onSnapshot((snap) => {
+        async function loadRegistrosByDateRange() {
+            const fromStr = String(fromDate.value || '').trim();
+            const toStr = String(toDate.value || '').trim();
+            if (!fromStr || !toStr) {
+                await modalAlert('Falta rango de fechas', 'Selecciona <strong>Desde</strong> y <strong>Hasta</strong> para buscar.');
+                return;
+            }
+
+            const from = new Date(fromStr + 'T00:00:00');
+            const to = new Date(toStr + 'T23:59:59');
+            if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+                await modalAlert('Rango inválido', 'Revisa las fechas seleccionadas.');
+                return;
+            }
+
+            if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+            hasLoaded = false;
+            liveStateEl.textContent = 'Buscando…';
+            listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Buscando registros…</div>';
+            paginationEl.style.display = 'none';
+
+            try {
+                const fromTs = firebase.firestore.Timestamp.fromDate(from);
+                const toTs = firebase.firestore.Timestamp.fromDate(to);
+
+                const snap = await db.collection('registros')
+                    .orderBy('fecha_hora', 'desc')
+                    .where('fecha_hora', '>=', fromTs)
+                    .where('fecha_hora', '<=', toTs)
+                    .limit(REALTIME_LIMIT)
+                    .get();
+
                 allRegistros = snap.docs.map(d => {
                     const data = d.data() || {};
                     data.id = d.id;
                     data._searchBlob = null;
                     return data;
                 });
+                hasLoaded = true;
                 currentPage = 1;
                 updateAsesorOptions();
-                liveStateEl.textContent = 'En tiempo real · ' + new Date().toLocaleTimeString('es-CO');
+                liveStateEl.textContent = 'Cargado · ' + new Date().toLocaleTimeString('es-CO');
                 render();
-            }, (err) => {
-                liveStateEl.textContent = 'Error de conexión';
+            } catch (e) {
+                console.error('Error cargando por fecha:', e);
+                liveStateEl.textContent = 'Error';
                 listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Error al cargar datos.</div>';
-                modalAlert('Error de conexión', 'No se pudo cargar la información en tiempo real. Revisa tu conexión e intenta nuevamente.');
-            });
+                await modalAlert('Error', 'No se pudo cargar la información.');
+            }
         }
 
         attachFilterListeners();
-        loadUsuariosForEdit();
-        loadTransportadorasForEdit();
-        startRealtime();
+        $('searchBtn').addEventListener('click', loadRegistrosByDateRange);
+
+        liveStateEl.textContent = 'Selecciona fechas y pulsa Buscar';
+        render();
     </script>
 </body>
 </html>
