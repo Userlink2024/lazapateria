@@ -84,6 +84,65 @@
          .badge.bad{border-color:rgba(255,77,79,.35);background:rgba(255,77,79,.10)}
  
          .list{display:grid;grid-template-columns:1fr;gap:10px}
+        .event-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            background: #f9f9f9;
+        }
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .status-badge.pending {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .status-badge.completed {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-badge.absent {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .event-times {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .time-entry {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .time-entry.entrada {
+            background: #e8f5e8;
+            border-left: 3px solid #28a745;
+        }
+        .time-entry.salida {
+            background: #ffeaea;
+            border-left: 3px solid #dc3545;
+        }
+        .pending-counter {
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            text-align: center;
+        }
  
          .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
  
@@ -188,10 +247,11 @@
              <div class="section">
                  <div class="grid">
                      <div class="card">
-                         <h3>Eventos de hoy</h3>
-                         <div class="mini" id="todayState">Cargando…</div>
-                         <div class="list" id="todayList" style="margin-top:10px;"></div>
-                     </div>
+                        <h3>Eventos de hoy</h3>
+                        <div class="mini" id="todayState">Cargando…</div>
+                        <div class="pending-counter" id="pendingCount" style="font-weight: bold; margin: 10px 0;">Calculando...</div>
+                        <div class="list" id="todayList" style="margin-top:10px;"></div>
+                    </div>
                  </div>
              </div>
  
@@ -877,6 +937,12 @@
             try {
                 await registerAttendance({ user, actionType: mode, method: 'qr', note: '' });
                 
+                // Forzar actualización inmediata de eventos en tiempo real
+                if (unsubscribeEventos) {
+                    unsubscribeEventos();
+                    startRealtimeEventos();
+                }
+                
                 // 3. Decir el nombre inmediatamente
                 speakName(primerNombre);
                 
@@ -1008,73 +1074,132 @@
          $('stopScan').addEventListener('click', stopScanner);
  
          let unsubscribeEventos = null;
+         let unsubscribeDiaria = null; // Nuevo listener para asistencia_diaria
  
          function renderEvents(list, todayStr) {
-             const today = [];
-             const hist = [];
- 
-             (Array.isArray(list) ? list : []).forEach(e => {
-                 if (String(e.dateStr) === todayStr) today.push(e);
-                 hist.push(e);
-             });
- 
-             const todayEl = $('todayList');
-             $('todayState').textContent = today.length ? '' : 'Sin eventos hoy.';
-             $('histModalState').textContent = hist.length ? '' : 'Sin historial.';
- 
-             const renderItem = (ev) => {
-                 const card = document.createElement('div');
-                 card.className = 'card';
-                 const t = formatDateTime(ev.timestamp);
-                 let b = '<span class="badge">EVENTO</span>';
-                 if (ev.type === 'entrada') b = '<span class="badge good">ENTRADA</span>';
-                 else if (ev.type === 'salida') b = '<span class="badge warn">SALIDA</span>';
-                 else if (ev.type === 'ausencia') b = '<span class="badge bad">AUSENCIA</span>';
-                 const extra = ev.late === true ? ` · <span class="badge bad">RETARDO ${Number(ev.minutesLate || 0)}m</span>` : '';
-                 card.innerHTML = `
-                     <div class="row">
-                         <div>
-                             <div style="font-weight:900;">${ev.nombreCompleto || ev.usuario || '—'} ${extra}</div>
-                             <div class="mini">${t} · Método: ${ev.method || 'N/A'} · Por: ${ev.byNombre || '—'}</div>
-                             ${ev.note ? `<div class="mini">Nota: ${String(ev.note)}</div>` : ''}
-                         </div>
-                         <div>${b}</div>
-                     </div>
-                 `;
-                 return card;
-             };
- 
-             todayEl.innerHTML = '';
-             const histEl = $('histModalList');
-             histEl.innerHTML = '';
- 
-             if (today.length) {
-                 const frag = document.createDocumentFragment();
-                 today.slice(0, 50).forEach(ev => frag.appendChild(renderItem(ev)));
-                 todayEl.appendChild(frag);
-             }
-             if (hist.length) {
-                 const frag = document.createDocumentFragment();
-                 hist.slice(0, 100).forEach(ev => frag.appendChild(renderItem(ev)));
-                 histEl.appendChild(frag);
-             }
-         }
+            const today = [];
+            const hist = [];
+
+            (Array.isArray(list) ? list : []).forEach(e => {
+                if (String(e.dateStr) === todayStr) today.push(e);
+                hist.push(e);
+            });
+
+            // Contador de salidas pendientes
+            const usuariosConEntrada = new Set();
+            const usuariosConSalida = new Set();
+            
+            today.forEach(e => {
+                if (e.type === 'entrada') {
+                    usuariosConEntrada.add(e.userDocId);
+                } else if (e.type === 'salida') {
+                    usuariosConSalida.add(e.userDocId);
+                }
+            });
+            
+            const salidasPendientes = usuariosConEntrada.size - usuariosConSalida.size;
+            $('pendingCount').textContent = salidasPendientes > 0 ? `${salidasPendientes} pendientes` : 'Ninguna pendiente';
+            $('pendingCount').style.color = salidasPendientes > 0 ? '#e74c3c' : '#27ae60';
+
+            const todayEl = $('todayEvents');
+            const histEl = $('historyEvents');
+            todayEl.innerHTML = '';
+            histEl.innerHTML = '';
+
+            if (!today.length) {
+                todayEl.innerHTML = '<div class="empty">Sin eventos hoy</div>';
+            } else {
+                // Agrupar por usuario y mostrar entrada/salida juntos
+                const usuariosHoy = new Map();
+                today.forEach(e => {
+                    if (!usuariosHoy.has(e.userDocId)) {
+                        usuariosHoy.set(e.userDocId, {
+                            nombre: e.nombreCompleto || e.usuario || 'Desconocido',
+                            entrada: null,
+                            salida: null
+                        });
+                    }
+                    const usuario = usuariosHoy.get(e.userDocId);
+                    if (e.type === 'entrada') {
+                        usuario.entrada = e;
+                    } else if (e.type === 'salida') {
+                        usuario.salida = e;
+                    }
+                });
+
+                const frag = document.createDocumentFragment();
+                usuariosHoy.forEach((usuario) => {
+                    const card = document.createElement('div');
+                    card.className = 'event-card';
+                    
+                    const tieneEntrada = !!usuario.entrada;
+                    const tieneSalida = !!usuario.salida;
+                    const estadoClass = tieneEntrada && !tieneSalida ? 'pending' : (tieneSalida ? 'completed' : 'absent');
+                    const estadoIcono = tieneEntrada && !tieneSalida ? '⏳' : (tieneSalida ? '✅' : '❌');
+                    const estadoTexto = tieneEntrada && !tieneSalida ? 'Pendiente de salida' : (tieneSalida ? 'Completo' : 'Sin entrada');
+                    
+                    card.innerHTML = `
+                        <div class="event-header">
+                            <strong>${usuario.nombre}</strong>
+                            <span class="status-badge ${estadoClass}">${estadoIcono} ${estadoTexto}</span>
+                        </div>
+                        <div class="event-times">
+                            ${usuario.entrada ? `
+                                <div class="time-entry entrada">
+                                    🟢 Entrada: ${formatDateTime(usuario.entrada.timestamp)}
+                                </div>
+                            ` : ''}
+                            ${usuario.salida ? `
+                                <div class="time-entry salida">
+                                    🔴 Salida: ${formatDateTime(usuario.salida.timestamp)}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                    frag.appendChild(card);
+                });
+                todayEl.appendChild(frag);
+            }
+            
+            if (!hist.length) {
+                histEl.innerHTML = '<div class="empty">Sin historial</div>';
+            } else {
+                const frag = document.createDocumentFragment();
+                hist.slice(0, 100).forEach(ev => frag.appendChild(renderItem(ev)));
+                histEl.appendChild(frag);
+            }
+        } 
  
          function startRealtimeEventos() {
-             if (unsubscribeEventos) unsubscribeEventos();
-             const todayStr = getTodayStr();
-             unsubscribeEventos = db.collection('asistencia_eventos').orderBy('timestamp', 'desc').limit(100).onSnapshot((snap) => {
-                 const list = snap.docs.map(d => {
-                     const data = d.data() || {};
-                     data.id = d.id;
-                     return data;
-                 });
-                 renderEvents(list, todayStr);
-             }, () => {
-                 $('todayState').textContent = 'Error cargando.';
-                 $('histModalState').textContent = 'Error cargando.';
-             });
-         }
+            if (unsubscribeEventos) unsubscribeEventos();
+            if (unsubscribeDiaria) unsubscribeDiaria();
+            
+            const todayStr = getTodayStr();
+            
+            // Listener para eventos de asistencia
+            unsubscribeEventos = db.collection('asistencia_eventos').orderBy('timestamp', 'desc').limit(100).onSnapshot((snap) => {
+                const list = snap.docs.map(d => {
+                    const data = d.data() || {};
+                    data.id = d.id;
+                    return data;
+                });
+                renderEvents(list, todayStr);
+            }, () => {
+                $('todayState').textContent = 'Error cargando.';
+                $('histModalState').textContent = 'Error cargando.';
+            });
+            
+            // Listener para asistencia diaria (actualización inmediata)
+            unsubscribeDiaria = db.collection('asistencia_diaria')
+                .where('dateStr', '==', todayStr)
+                .onSnapshot(() => {
+                    // Forzar recarga de eventos cuando cambia asistencia_diaria
+                    if (unsubscribeEventos) {
+                        unsubscribeEventos();
+                        startRealtimeEventos();
+                    }
+                });
+        }
  
          setMode('entrada');
  
