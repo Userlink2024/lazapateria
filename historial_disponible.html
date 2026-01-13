@@ -247,6 +247,12 @@
                     </div>
                     <div>
                         <label style="display:flex;align-items:center;gap:10px;color:var(--text);font-weight:900;margin-top:18px;">
+                            <input id="novFletePendiente" type="checkbox" style="width:18px;height:18px" />
+                            Flete pendiente (valor por definir)
+                        </label>
+                    </div>
+                    <div>
+                        <label style="display:flex;align-items:center;gap:10px;color:var(--text);font-weight:900;margin-top:18px;">
                             <input id="novFletePagado" type="checkbox" style="width:18px;height:18px" />
                             Flete pagado
                         </label>
@@ -577,6 +583,8 @@
             }
 
             $('novFlete').value = '';
+            $('novFletePendiente').checked = false;
+            $('novFletePendiente').disabled = false;
             $('novFletePagado').checked = false;
             $('novFletePagado').disabled = !isAdmin;
 
@@ -587,6 +595,9 @@
 
             $('novedadModal').classList.add('open');
             $('novedadModal').setAttribute('aria-hidden', 'false');
+
+            syncFletePendienteInModal();
+            syncResueltaControlInModal();
         }
 
         function closeNovedadModal() {
@@ -611,8 +622,32 @@
             $('novResuelta').disabled = requiresPago ? !fletePagado : false;
         }
 
-        $('novFlete').addEventListener('input', syncResueltaControlInModal);
+        function syncFletePendienteInModal() {
+            const pendiente = $('novFletePendiente').checked === true;
+            const fleteEl = $('novFlete');
+            const pagadoEl = $('novFletePagado');
+
+            if (pendiente) {
+                fleteEl.value = '';
+                fleteEl.disabled = true;
+                pagadoEl.checked = false;
+                pagadoEl.disabled = true;
+                if (isOperador) $('novFletePendiente').disabled = true;
+            } else {
+                fleteEl.disabled = false;
+                pagadoEl.disabled = !isAdmin;
+            }
+        }
+
+        $('novFlete').addEventListener('input', () => {
+            syncFletePendienteInModal();
+            syncResueltaControlInModal();
+        });
         $('novFletePagado').addEventListener('change', syncResueltaControlInModal);
+        $('novFletePendiente').addEventListener('change', () => {
+            syncFletePendienteInModal();
+            syncResueltaControlInModal();
+        });
 
         async function saveNovedad() {
             const p = currentPedidoForNovedad;
@@ -628,9 +663,10 @@
             const bodeObj = cachedBodegueros.find(b => String(b.usuario) === bodeUserId);
             const bodeNombre = bodeObj ? String(bodeObj.nombreCompleto) : '';
 
-            const flete = Number($('novFlete').value || 0);
-            const fletePagado = isAdmin ? ($('novFletePagado').checked === true) : false;
-            const requiresPago = Number.isFinite(flete) && flete > 0;
+            const fletePendiente = $('novFletePendiente').checked === true;
+            const flete = fletePendiente ? 0 : Number($('novFlete').value || 0);
+            const fletePagado = (isAdmin && !fletePendiente) ? ($('novFletePagado').checked === true) : false;
+            const requiresPago = !fletePendiente && Number.isFinite(flete) && flete > 0;
             const resuelta = isAdmin ? ($('novResuelta').checked === true) : false;
 
             if (resuelta && requiresPago && !fletePagado) {
@@ -652,6 +688,7 @@
                 assignedBodegueroNombre: bodeNombre,
                 descripcion: desc,
                 fleteValor: Number.isFinite(flete) ? flete : 0,
+                fletePendiente: fletePendiente,
                 fletePagado: fletePagado,
                 fletePagadoAt: (fletePagado ? now : null),
                 fletePagadoPor: (fletePagado ? String(datosUsuario.nombreCompleto || '') : ''),
@@ -700,11 +737,12 @@
                 })();
                 const bode = n.assignedBodegueroNombre || bodeFromCache || n.assignedBodegueroUserId || '—';
                 const estado = n.resuelta === true ? '<span class="badge good">RESUELTA</span>' : '<span class="badge warn">PENDIENTE</span>';
+                const fletePendiente = n.fletePendiente === true;
                 const fleteValor = Number(n.fleteValor || 0);
                 const hasFlete = Number.isFinite(fleteValor) && fleteValor > 0;
                 const fletePagado = n.fletePagado === true;
-                const fleteInfo = hasFlete
-                    ? `<div class="mini" style="margin-top:8px;">Flete: <strong>${formatCurrency(fleteValor)}</strong> · ${fletePagado ? '<span class="badge good">PAGADO</span>' : '<span class="badge warn">PENDIENTE</span>'}</div>`
+                const fleteInfo = (fletePendiente || hasFlete)
+                    ? `<div class="mini" style="margin-top:8px;">Flete: ${fletePendiente ? '<span class="badge warn">VALOR PENDIENTE</span>' : `<strong>${formatCurrency(fleteValor)}</strong>`} · ${(!fletePendiente && hasFlete) ? (fletePagado ? '<span class="badge good">PAGADO</span>' : '<span class="badge warn">PENDIENTE</span>') : ''}</div>`
                     : '';
 
                 card.innerHTML = `
@@ -754,17 +792,54 @@
                         btn.addEventListener('click', async () => {
                             try {
                                 const nuevo = !(n.resuelta === true);
-                                const v = Number(n.fleteValor || 0);
+                                const now = firebase.firestore.Timestamp.fromDate(new Date());
+
+                                let v = Number(n.fleteValor || 0);
+                                const pendiente = n.fletePendiente === true;
+
+                                if (nuevo && (pendiente || !(Number.isFinite(v) && v > 0))) {
+                                    const raw = window.prompt('Ingresa el valor del flete para resolver esta novedad:', '');
+                                    if (raw == null) return;
+                                    const parsed = Number(String(raw).replace(/[^0-9.-]/g, ''));
+                                    if (!Number.isFinite(parsed) || parsed < 0) {
+                                        await modalAlert('Valor inválido', 'Ingresa un número válido para el flete.');
+                                        return;
+                                    }
+                                    v = parsed;
+
+                                    const baseUpdate = {
+                                        fleteValor: v,
+                                        fletePendiente: false,
+                                        updatedAt: now
+                                    };
+
+                                    const needsPagoAfter = Number.isFinite(v) && v > 0;
+                                    if (needsPagoAfter && n.fletePagado !== true) {
+                                        await db.collection('novedades').doc(n.id).update(baseUpdate);
+                                        await modalAlert('No permitido', 'Primero marca el flete como pagado para poder marcar la novedad como resuelta.');
+                                        return;
+                                    }
+
+                                    await db.collection('novedades').doc(n.id).update({
+                                        ...baseUpdate,
+                                        resuelta: true,
+                                        resueltaPor: String(datosUsuario.nombreCompleto || ''),
+                                        resueltaAt: now
+                                    });
+                                    return;
+                                }
+
                                 const needsPago = Number.isFinite(v) && v > 0;
                                 if (nuevo && needsPago && n.fletePagado !== true) {
                                     await modalAlert('No permitido', 'Primero marca el flete como pagado para poder marcar la novedad como resuelta.');
                                     return;
                                 }
+
                                 await db.collection('novedades').doc(n.id).update({
                                     resuelta: nuevo,
                                     resueltaPor: nuevo ? String(datosUsuario.nombreCompleto || '') : '',
-                                    resueltaAt: nuevo ? firebase.firestore.Timestamp.fromDate(new Date()) : null,
-                                    updatedAt: firebase.firestore.Timestamp.fromDate(new Date())
+                                    resueltaAt: nuevo ? now : null,
+                                    updatedAt: now
                                 });
                             } catch (e) {
                                 await modalAlert('Error', 'No se pudo actualizar el estado.');
