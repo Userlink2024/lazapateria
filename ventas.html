@@ -1113,8 +1113,19 @@
                 card.querySelector('[data-action="delete"]').addEventListener('click', async () => {
                     const ok = await modalConfirm('Confirmar', '¿Eliminar este pedido definitivamente?', 'Eliminar', 'Cancelar');
                     if (!ok) return;
-                    try { await db.collection('registros').doc(r.id).delete(); }
-                    catch (e) { await modalAlert('Error', 'Error al eliminar.'); }
+                    try {
+                        await db.collection('registros').doc(r.id).delete();
+                        allRegistros = allRegistros.filter(x => String(x.id) !== String(r.id));
+                        const remaining = applyFilters(allRegistros);
+                        totalPages = Math.max(1, Math.ceil(remaining.length / PAGE_SIZE));
+                        if (currentPage > totalPages) currentPage = totalPages;
+                        render();
+                        await modalAlert('Eliminado', 'El pedido fue eliminado.');
+                    }
+                    catch (e) {
+                        console.error('Error eliminando registro:', e);
+                        await modalAlert('Error', 'Error al eliminar.');
+                    }
                 });
 
                 frag.appendChild(card);
