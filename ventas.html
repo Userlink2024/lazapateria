@@ -10,6 +10,7 @@
 
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <style>
         :root{
@@ -91,6 +92,13 @@
         .toggle{display:inline-flex;gap:10px;align-items:center;padding:8px 10px;border-radius:12px;border:1px solid var(--stroke);background:#f4f7ff}
         .toggle input{width:18px;height:18px}
 
+        .tools{position:relative;display:inline-flex;align-items:center}
+        .tools-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:220px;z-index:999;
+            border:1px solid var(--stroke);background:#ffffff;border-radius:14px;box-shadow:var(--shadow);padding:8px;display:none}
+        .tools-menu.open{display:block}
+        .tools-menu .btn{width:100%;justify-content:center}
+        .iconbtn{width:42px;justify-content:center}
+
         .pagination{display:flex;gap:10px;align-items:center;justify-content:center;padding:12px;border-top:1px solid var(--stroke);background:#ffffff}
         .page-info{color:var(--muted);font-size:12px;font-weight:800}
 
@@ -134,6 +142,14 @@
                 <div class="sub" id="subtitle">Vista administrativa en tiempo real</div>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                <div class="tools">
+                    <button class="btn iconbtn" id="toolsBtn" type="button" title="Herramientas">⚙</button>
+                    <div class="tools-menu" id="toolsMenu" aria-hidden="true">
+                        <button class="btn" id="exportExcelBtn" type="button">Descargar Excel</button>
+                        <button class="btn" id="importExcelBtn" type="button">Importar</button>
+                        <input id="importExcelFile" type="file" accept=".xlsx,.xls" style="display:none" />
+                    </div>
+                </div>
                 <a class="btn" href="https://userlink2024.github.io/lazapateria/paneldecuentas.html">Volver</a>
                 <a class="btn" href="generar_pedidos.html">Volver a Generar Pedidos</a>
                 <button class="btn primary" id="resetBtn" type="button">Limpiar filtros</button>
@@ -410,6 +426,20 @@
             const datePart = d.toLocaleDateString('es-CO');
             const timePart = d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
             return datePart + ', ' + timePart;
+        }
+
+        function formatDateYMD(d) {
+            const yyyy = String(d.getFullYear());
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        function formatTimeHMS(d) {
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mi = String(d.getMinutes()).padStart(2, '0');
+            const ss = String(d.getSeconds()).padStart(2, '0');
+            return `${hh}:${mi}:${ss}`;
         }
 
         function normalizeStr(v) { return String(v || '').trim().toLowerCase(); }
@@ -1182,6 +1212,286 @@
 
         attachFilterListeners();
         $('searchBtn').addEventListener('click', loadRegistrosByDateRange);
+
+        function closeToolsMenu() {
+            const m = $('toolsMenu');
+            if (!m) return;
+            m.classList.remove('open');
+            m.setAttribute('aria-hidden', 'true');
+        }
+
+        function toggleToolsMenu() {
+            const m = $('toolsMenu');
+            if (!m) return;
+            const isOpen = m.classList.contains('open');
+            if (isOpen) closeToolsMenu();
+            else {
+                m.classList.add('open');
+                m.setAttribute('aria-hidden', 'false');
+            }
+        }
+
+        const EXCEL_HEADERS = [
+            'Fecha',
+            'Hora',
+            'Código',
+            'Cliente',
+            'Asesor',
+            'Usuario',
+            'Transportadora',
+            'Pares',
+            'Valor total',
+            'Saldo a favor',
+            'Despachado',
+            'Bloqueado',
+            'Bodegueros',
+            'Observaciones',
+            'Productos(JSON)',
+            'Abonos(JSON)',
+            'ID'
+        ];
+
+        function normalizeHeader(v) {
+            return String(v || '').trim().toLowerCase();
+        }
+
+        function headersMatch(actual, expected) {
+            if (!Array.isArray(actual)) return false;
+            if (actual.length < expected.length) return false;
+            for (let i = 0; i < expected.length; i++) {
+                if (normalizeHeader(actual[i]) !== normalizeHeader(expected[i])) return false;
+            }
+            return true;
+        }
+
+        function buildExcelAoAFromRegistros(registros) {
+            const aoa = [EXCEL_HEADERS.slice()];
+
+            (Array.isArray(registros) ? registros : []).forEach(r => {
+                const ts = r.fecha_hora;
+                const d = (ts && typeof ts.toDate === 'function') ? ts.toDate() : null;
+                const fecha = d ? formatDateYMD(d) : '';
+                const hora = d ? formatTimeHMS(d) : '';
+
+                const productos = Array.isArray(r.productos) ? r.productos : [];
+                const abonos = Array.isArray(r.abonos) ? r.abonos : [];
+                const bodegueros = Array.isArray(r.bodegueros_encargados) ? r.bodegueros_encargados : [];
+
+                aoa.push([
+                    fecha,
+                    hora,
+                    String(r.codigo_unico || ''),
+                    String(r.cliente || ''),
+                    String(r.asesor || ''),
+                    String(r.usuario || ''),
+                    String(r.transportadora || ''),
+                    Number(r.num_pares || 0),
+                    Number(r.valor_total || 0),
+                    Number(r.saldo_a_favor || 0),
+                    (r.despachado === true ? 'SI' : 'NO'),
+                    (r.bloqueado === true ? 'SI' : 'NO'),
+                    bodegueros.join(', '),
+                    String(r.observaciones || ''),
+                    JSON.stringify(productos),
+                    JSON.stringify(abonos),
+                    String(r.id || '')
+                ]);
+            });
+
+            return aoa;
+        }
+
+        async function exportExcel() {
+            closeToolsMenu();
+
+            if (!(window.XLSX && XLSX.utils && XLSX.writeFile)) {
+                await modalAlert('No disponible', 'No se pudo cargar la librería de Excel (xlsx).');
+                return;
+            }
+
+            if (!hasLoaded) {
+                await modalAlert('Sin datos', 'Primero selecciona un rango de fechas y pulsa Buscar.');
+                return;
+            }
+
+            const filtered = applyFilters(allRegistros);
+            if (!filtered.length) {
+                await modalAlert('Sin datos', 'No hay registros con los filtros actuales para exportar.');
+                return;
+            }
+
+            const aoa = buildExcelAoAFromRegistros(filtered);
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Ventas');
+
+            const fromStr = String(fromDate.value || '').trim();
+            const toStr = String(toDate.value || '').trim();
+            const suffix = (fromStr && toStr) ? `${fromStr}_a_${toStr}` : formatDateYMD(new Date());
+            const filename = `ventas_${suffix}.xlsx`;
+
+            XLSX.writeFile(wb, filename);
+        }
+
+        function parseBoolSiNo(v) {
+            const s = String(v || '').trim().toLowerCase();
+            if (!s) return false;
+            return s === 'si' || s === 'sí' || s === 'true' || s === '1' || s === 'x';
+        }
+
+        function safeParseJson(v, fallback) {
+            if (v == null) return fallback;
+            const s = String(v).trim();
+            if (!s) return fallback;
+            try { return JSON.parse(s); } catch (e) { return fallback; }
+        }
+
+        async function importExcelFile(file) {
+            closeToolsMenu();
+
+            if (!(window.XLSX && XLSX.utils)) {
+                await modalAlert('No disponible', 'No se pudo cargar la librería de Excel (xlsx).');
+                return;
+            }
+
+            if (!file) return;
+
+            const btnImport = $('importExcelBtn');
+            const btnExport = $('exportExcelBtn');
+            btnImport.disabled = true;
+            btnExport.disabled = true;
+
+            try {
+                const buf = await file.arrayBuffer();
+                const wb = XLSX.read(buf, { type: 'array' });
+                const sheetName = wb.SheetNames && wb.SheetNames[0];
+                if (!sheetName) {
+                    await modalAlert('Archivo inválido', 'El archivo no contiene hojas.');
+                    return;
+                }
+
+                const ws = wb.Sheets[sheetName];
+                const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+                if (!Array.isArray(aoa) || aoa.length < 2) {
+                    await modalAlert('Archivo vacío', 'No hay filas para importar.');
+                    return;
+                }
+
+                const header = aoa[0];
+                const expectedNoId = EXCEL_HEADERS.slice(0, EXCEL_HEADERS.length - 1);
+                const okWithId = headersMatch(header, EXCEL_HEADERS);
+                const okNoId = headersMatch(header, expectedNoId);
+                if (!okWithId && !okNoId) {
+                    await modalAlert('Formato inválido', 'El Excel no tiene el formato esperado. Exporta primero un Excel desde aquí y úsalo como plantilla.');
+                    return;
+                }
+
+                const hasId = okWithId;
+                const rows = aoa.slice(1).filter(r => Array.isArray(r) && r.some(c => String(c || '').trim() !== ''));
+                if (!rows.length) {
+                    await modalAlert('Archivo vacío', 'No hay filas para importar.');
+                    return;
+                }
+
+                const ok = await modalConfirm('Confirmar', `Se importarán ${rows.length} fila(s). ${hasId ? 'Se actualizará por ID cuando exista.' : 'Las filas sin ID se crearán como nuevos registros.'}`, 'Importar', 'Cancelar');
+                if (!ok) return;
+
+                let created = 0;
+                let updated = 0;
+                let skipped = 0;
+
+                for (const r of rows) {
+                    const fecha = String(r[0] || '').trim();
+                    const hora = String(r[1] || '').trim();
+                    const codigo = String(r[2] || '').trim();
+                    const cliente = String(r[3] || '').trim();
+                    const asesor = String(r[4] || '').trim();
+                    const usuario = String(r[5] || '').trim();
+                    const transportadora = String(r[6] || '').trim();
+                    const pares = Number(r[7] || 0);
+                    const valorTotal = Number(r[8] || 0);
+                    const saldo = Number(r[9] || 0);
+                    const despachado = parseBoolSiNo(r[10]);
+                    const bloqueado = parseBoolSiNo(r[11]);
+                    const bodeguerosTxt = String(r[12] || '').trim();
+                    const observaciones = String(r[13] || '');
+                    const productos = safeParseJson(r[14], []);
+                    const abonos = safeParseJson(r[15], []);
+                    const id = hasId ? String(r[16] || '').trim() : '';
+
+                    if (!fecha) {
+                        skipped += 1;
+                        continue;
+                    }
+
+                    const dt = new Date(`${fecha}T${hora || '00:00:00'}`);
+                    if (Number.isNaN(dt.getTime())) {
+                        skipped += 1;
+                        continue;
+                    }
+
+                    const data = {
+                        codigo_unico: codigo,
+                        cliente: cliente,
+                        asesor: asesor,
+                        usuario: usuario,
+                        transportadora: transportadora,
+                        num_pares: Number.isFinite(pares) ? pares : 0,
+                        valor_total: Number.isFinite(valorTotal) ? valorTotal : 0,
+                        saldo_a_favor: Number.isFinite(saldo) ? saldo : 0,
+                        despachado: despachado,
+                        bloqueado: bloqueado,
+                        bodegueros_encargados: bodeguerosTxt ? bodeguerosTxt.split(',').map(s => s.trim()).filter(Boolean) : [],
+                        observaciones: observaciones,
+                        fecha_hora: firebase.firestore.Timestamp.fromDate(dt),
+                        productos: Array.isArray(productos) ? productos : [],
+                        abonos: Array.isArray(abonos) ? abonos : []
+                    };
+
+                    if (id) {
+                        await db.collection('registros').doc(id).set(data, { merge: true });
+                        updated += 1;
+                    } else {
+                        await db.collection('registros').add(data);
+                        created += 1;
+                    }
+                }
+
+                await modalAlert('Importación finalizada', `Actualizados: ${updated}\nCreados: ${created}\nOmitidos: ${skipped}`);
+            } catch (e) {
+                console.error('Error importando Excel:', e);
+                await modalAlert('Error', 'No se pudo importar el archivo.');
+            } finally {
+                btnImport.disabled = false;
+                btnExport.disabled = false;
+                const inp = $('importExcelFile');
+                if (inp) inp.value = '';
+            }
+        }
+
+        $('toolsBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleToolsMenu();
+        });
+
+        document.addEventListener('click', (e) => {
+            const menu = $('toolsMenu');
+            const btn = $('toolsBtn');
+            if (!menu || !btn) return;
+            if (menu.contains(e.target) || btn.contains(e.target)) return;
+            closeToolsMenu();
+        });
+
+        $('exportExcelBtn').addEventListener('click', () => { exportExcel(); });
+        $('importExcelBtn').addEventListener('click', () => {
+            closeToolsMenu();
+            $('importExcelFile').click();
+        });
+
+        $('importExcelFile').addEventListener('change', async (e) => {
+            const f = e.target && e.target.files ? e.target.files[0] : null;
+            await importExcelFile(f);
+        });
 
         liveStateEl.textContent = 'Selecciona fechas y pulsa Buscar';
         render();
