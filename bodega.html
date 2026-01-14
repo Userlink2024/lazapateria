@@ -262,6 +262,39 @@
     let despachosModal = [];
     let bodegueroActual = "";
 
+    function getRecordDate(data) {
+      if (!data) return null;
+      const candidates = ['fecha_hora', 'fechaHora', 'fecha', 'createdAt', 'timestamp', 'fecha_registro'];
+      for (const k of candidates) {
+        if (!(k in data)) continue;
+        const v = data[k];
+        if (!v) continue;
+        if (typeof v.toDate === 'function') {
+          const d = v.toDate();
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+        if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+        if (typeof v === 'number') {
+          const d = new Date(v);
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+        if (typeof v === 'string') {
+          const d = new Date(v);
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+      }
+      return null;
+    }
+
+    function isTodayDate(d) {
+      if (!d || Number.isNaN(d.getTime())) return false;
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      return d >= start && d <= end;
+    }
+
     async function cargarBodegueros() {
       const snapshot = await db.collection("usuarios").get();
       bodeguerosDisponibles = snapshot.docs
@@ -286,6 +319,8 @@
 
         snapshot.forEach(doc => {
           const data = doc.data();
+          const d = getRecordDate(data);
+          if (!d || !isTodayDate(d)) return;
           cacheRegistros.push({ id: doc.id, ref: doc.ref, ...data });
 
           const despachado = data.despachado === true || data.despachado === "si" || data.despachado === "despachado";
