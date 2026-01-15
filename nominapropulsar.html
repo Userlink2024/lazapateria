@@ -1,1 +1,709 @@
-none
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nómina PROPULSAR - Control de Consignaciones</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --primary-light: #4caf50;
+            --accent: #ff9800;
+            --background: #f5f5f5;
+            --card: #ffffff;
+            --text: #333333;
+            --border: #e0e0e0;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --danger: #f44336;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--background);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: var(--card);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px 0;
+            margin-bottom: 30px;
+            border-radius: 8px;
+        }
+
+        h1 {
+            color: var(--primary);
+            text-align: center;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text);
+            opacity: 0.8;
+        }
+
+        .account-info {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .account-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            font-size: 1.1em;
+            color: var(--text);
+        }
+
+        .controls {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .control-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--primary);
+        }
+
+        input[type="number"] {
+            padding: 12px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background: var(--primary-light);
+        }
+
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .chart-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .summary-title {
+            font-size: 0.9em;
+            color: var(--text);
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+
+        .summary-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .summary-card.success .summary-value {
+            color: var(--success);
+        }
+
+        .summary-card.warning .summary-value {
+            color: var(--warning);
+        }
+
+        .summary-card.danger .summary-value {
+            color: var(--danger);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text);
+            opacity: 0.7;
+        }
+
+        .error {
+            background: #ffebee;
+            color: var(--danger);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--danger);
+        }
+
+        .success {
+            background: #e8f5e8;
+            color: var(--success);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--success);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .control-group {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Nómina PROPULSAR</h1>
+            <p class="subtitle">Control de Consignaciones Mensuales</p>
+        </header>
+
+        <div id="error-message" class="error" style="display: none;"></div>
+        <div id="success-message" class="success" style="display: none;"></div>
+
+        <section class="account-info">
+            <h2>Información de Cuenta</h2>
+            <div class="account-details">
+                <div class="detail-item">
+                    <span class="detail-label">Cuenta:</span>
+                    <span class="detail-value" id="account-name">PROPULSAR</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Número de Cuenta:</span>
+                    <span class="detail-value" id="account-number">02000017130</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Estado:</span>
+                    <span class="detail-value" id="account-status">Activa</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="controls">
+            <h2>Configuración de Topes Mensuales</h2>
+            <div class="control-group">
+                <div class="form-field">
+                    <label for="year-select">Año:</label>
+                    <select id="year-select">
+                        <!-- Options will be populated dynamically -->
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="monthly-limit">Tope Mensual de Consignaciones ($):</label>
+                    <input type="number" id="monthly-limit" min="0" step="1000000" placeholder="Ej: 80000000">
+                </div>
+            </div>
+            <button onclick="saveMonthlyLimits()">Guardar Topes del Año</button>
+        </section>
+
+        <section class="summary-cards">
+            <div class="summary-card">
+                <div class="summary-title">Total Consignado Año</div>
+                <div class="summary-value" id="total-year">Cargando...</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">Promedio Mensual</div>
+                <div class="summary-value" id="average-monthly">Cargando...</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-title">Mes Mayor Consignación</div>
+                <div class="summary-value" id="highest-month">Cargando...</div>
+            </div>
+        </section>
+
+        <section class="charts-section">
+            <div class="chart-container">
+                <h3 class="chart-title">Indicador Mensual de Consignaciones</h3>
+                <div class="chart-wrapper">
+                    <canvas id="monthly-indicator-chart"></canvas>
+                </div>
+            </div>
+            <div class="chart-container">
+                <h3 class="chart-title">Comparativo Mensual</h3>
+                <div class="chart-wrapper">
+                    <canvas id="monthly-comparison-chart"></canvas>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCkLp1j2-5nE3xQ2jY4rK7m8n9p0q1r2s3",
+            authDomain: "your-project.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Global variables
+        let monthlyIndicatorChart = null;
+        let monthlyComparisonChart = null;
+        let currentYear = new Date().getFullYear();
+        let monthlyData = {};
+        let monthlyLimits = {};
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                await initializeApp();
+            } catch (error) {
+                showError('Error al inicializar la aplicación: ' + error.message);
+            }
+        });
+
+        async function initializeApp() {
+            // Populate year selector
+            populateYearSelector();
+            
+            // Load data
+            await loadMonthlyData();
+            await loadMonthlyLimits();
+            
+            // Update UI
+            updateSummaryCards();
+            updateCharts();
+        }
+
+        function populateYearSelector() {
+            const yearSelect = document.getElementById('year-select');
+            const currentYear = new Date().getFullYear();
+            
+            for (let year = currentYear - 2; year <= currentYear + 2; year++) {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                if (year === currentYear) {
+                    option.selected = true;
+                }
+                yearSelect.appendChild(option);
+            }
+            
+            yearSelect.addEventListener('change', async function() {
+                currentYear = parseInt(this.value);
+                await loadMonthlyData();
+                await loadMonthlyLimits();
+                updateSummaryCards();
+                updateCharts();
+            });
+        }
+
+        async function loadMonthlyData() {
+            try {
+                // Find PROPULSAR account
+                const accountsSnapshot = await db.collection('cuentas')
+                    .where('name', '==', 'PROPULSAR')
+                    .where('number', '==', '02000017130')
+                    .get();
+                
+                if (accountsSnapshot.empty) {
+                    showError('No se encontró la cuenta PROPULSAR 02000017130');
+                    return;
+                }
+                
+                const accountDoc = accountsSnapshot.docs[0];
+                const accountId = accountDoc.id;
+                
+                // Load consignations for the current year
+                const startDate = new Date(currentYear, 0, 1);
+                const endDate = new Date(currentYear, 11, 31);
+                
+                const consignationsSnapshot = await db.collection('cuentas')
+                    .doc(accountId)
+                    .collection('consignaciones')
+                    .where('fecha', '>=', firebase.firestore.Timestamp.fromDate(startDate))
+                    .where('fecha', '<=', firebase.firestore.Timestamp.fromDate(endDate))
+                    .get();
+                
+                // Initialize monthly data
+                monthlyData = {};
+                for (let month = 1; month <= 12; month++) {
+                    monthlyData[month] = 0;
+                }
+                
+                // Sum consignations by month
+                consignationsSnapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.fecha && data.valor) {
+                        const date = data.fecha.toDate();
+                        const month = date.getMonth() + 1;
+                        if (month >= 1 && month <= 12) {
+                            monthlyData[month] += data.valor;
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                showError('Error al cargar datos de consignaciones: ' + error.message);
+            }
+        }
+
+        async function loadMonthlyLimits() {
+            try {
+                const doc = await db.collection('settings').doc('propulsar_limits').get();
+                
+                if (doc.exists) {
+                    const data = doc.data();
+                    monthlyLimits = data[currentYear] || {};
+                    
+                    // Update the input field with current year's limit
+                    const monthlyLimitInput = document.getElementById('monthly-limit');
+                    if (monthlyLimits.default) {
+                        monthlyLimitInput.value = monthlyLimits.default;
+                    }
+                } else {
+                    // Initialize with empty object
+                    monthlyLimits = {};
+                }
+            } catch (error) {
+                showError('Error al cargar topes mensuales: ' + error.message);
+            }
+        }
+
+        async function saveMonthlyLimits() {
+            try {
+                const monthlyLimit = parseFloat(document.getElementById('monthly-limit').value) || 0;
+                
+                if (monthlyLimit <= 0) {
+                    showError('Por favor ingrese un tope mensual válido');
+                    return;
+                }
+                
+                // Update monthly limits for current year
+                if (!monthlyLimits[currentYear]) {
+                    monthlyLimits[currentYear] = {};
+                }
+                
+                // Set the same limit for all months
+                for (let month = 1; month <= 12; month++) {
+                    monthlyLimits[currentYear][month] = monthlyLimit;
+                }
+                monthlyLimits[currentYear].default = monthlyLimit;
+                
+                // Save to Firestore
+                await db.collection('settings').doc('propulsar_limits').set(monthlyLimits);
+                
+                showSuccess('Topes mensuales guardados exitosamente');
+                updateCharts();
+                
+            } catch (error) {
+                showError('Error al guardar topes mensuales: ' + error.message);
+            }
+        }
+
+        function updateSummaryCards() {
+            // Calculate total for the year
+            let totalYear = 0;
+            let highestMonth = { month: 0, amount: 0 };
+            
+            for (let month = 1; month <= 12; month++) {
+                const amount = monthlyData[month] || 0;
+                totalYear += amount;
+                
+                if (amount > highestMonth.amount) {
+                    highestMonth = { month, amount };
+                }
+            }
+            
+            const averageMonthly = totalYear / 12;
+            
+            // Update UI
+            document.getElementById('total-year').textContent = formatCurrency(totalYear);
+            document.getElementById('average-monthly').textContent = formatCurrency(averageMonthly);
+            
+            const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            document.getElementById('highest-month').textContent = 
+                highestMonth.month > 0 ? `${monthNames[highestMonth.month - 1]} (${formatCurrency(highestMonth.amount)})` : 'N/A';
+        }
+
+        function updateCharts() {
+            updateMonthlyIndicatorChart();
+            updateMonthlyComparisonChart();
+        }
+
+        function updateMonthlyIndicatorChart() {
+            const ctx = document.getElementById('monthly-indicator-chart').getContext('2d');
+            
+            const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                              'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+            
+            const data = [];
+            const limits = [];
+            const percentages = [];
+            
+            for (let month = 1; month <= 12; month++) {
+                const amount = monthlyData[month] || 0;
+                const limit = monthlyLimits[currentYear]?.[month] || 0;
+                const percentage = limit > 0 ? (amount / limit) * 100 : 0;
+                
+                data.push(amount);
+                limits.push(limit);
+                percentages.push(percentage);
+            }
+            
+            if (monthlyIndicatorChart) {
+                monthlyIndicatorChart.destroy();
+            }
+            
+            monthlyIndicatorChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: monthNames,
+                    datasets: [
+                        {
+                            label: 'Consignado',
+                            data: data,
+                            backgroundColor: 'rgba(46, 125, 50, 0.8)',
+                            borderColor: 'rgba(46, 125, 50, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Tope',
+                            data: limits,
+                            type: 'line',
+                            borderColor: 'rgba(255, 152, 0, 1)',
+                            backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = formatCurrency(context.raw);
+                                    const percentage = percentages[context.dataIndex];
+                                    return `${label}: ${value} (${percentage.toFixed(1)}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatCurrency(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateMonthlyComparisonChart() {
+            const ctx = document.getElementById('monthly-comparison-chart').getContext('2d');
+            
+            const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 
+                              'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            
+            const data = [];
+            const backgroundColors = [];
+            
+            for (let month = 1; month <= 12; month++) {
+                const amount = monthlyData[month] || 0;
+                const limit = monthlyLimits[currentYear]?.[month] || 0;
+                const percentage = limit > 0 ? (amount / limit) * 100 : 0;
+                
+                data.push(amount);
+                
+                // Color based on percentage
+                if (percentage >= 90) {
+                    backgroundColors.push('rgba(244, 67, 54, 0.8)'); // Red
+                } else if (percentage >= 75) {
+                    backgroundColors.push('rgba(255, 152, 0, 0.8)'); // Orange
+                } else {
+                    backgroundColors.push('rgba(76, 175, 80, 0.8)'); // Green
+                }
+            }
+            
+            if (monthlyComparisonChart) {
+                monthlyComparisonChart.destroy();
+            }
+            
+            monthlyComparisonChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: monthNames,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = formatCurrency(context.raw);
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? (context.raw / total) * 100 : 0;
+                                    return `${context.label}: ${value} (${percentage.toFixed(1)}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency: 'COP',
+                minimumFractionDigits: 0
+            }).format(amount);
+        }
+
+        function showError(message) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+            
+            setTimeout(() => {
+                errorElement.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successElement = document.getElementById('success-message');
+            successElement.textContent = message;
+            successElement.style.display = 'block';
+            
+            setTimeout(() => {
+                successElement.style.display = 'none';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
