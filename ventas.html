@@ -476,6 +476,7 @@
         let cachedAsesores = [];
         let cachedBodegueros = [];
         let cachedAdmins = [];
+        let usuariosMap = new Map(); // usuario -> nombreCompleto
 
         const transportadorasCollection = db.collection('transportadoras');
         let cachedTransportadoras = [];
@@ -539,7 +540,10 @@
                 cachedAsesores = [];
                 operadoresSnapshot.forEach(doc => {
                     const d = doc.data() || {};
-                    if (d.nombreCompleto) cachedAsesores.push(String(d.nombreCompleto));
+                    if (d.nombreCompleto && d.usuario) {
+                        cachedAsesores.push(String(d.nombreCompleto));
+                        usuariosMap.set(String(d.nombreCompleto), String(d.usuario));
+                    }
                 });
                 cachedAsesores = Array.from(new Set(cachedAsesores)).sort((a, b) => a.localeCompare(b, 'es'));
 
@@ -955,6 +959,12 @@
                 bodegueros_encargados: getSelectedBodeguerosFromChecklist(),
                 observaciones: $('editObs').value
             };
+
+            // Actualizar automáticamente el campo 'usuario' si cambia el asesor
+            const nuevoAsesor = String($('editAsesor').value || '').trim();
+            if (nuevoAsesor && usuariosMap.has(nuevoAsesor)) {
+                updateData.usuario = usuariosMap.get(nuevoAsesor);
+            }
 
             const fechaStr = String($('editFecha').value || '').trim();
             const horaStr = String($('editHora').value || '').trim();
