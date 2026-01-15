@@ -82,6 +82,22 @@
         th{font-size:12px;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.04em}
         .tag{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;border:1px solid var(--stroke);background:#f7f9ff;font-weight:900;font-size:12px;cursor:pointer;user-select:none}
         .tag input{width:18px;height:18px}
+
+        .modal{position:fixed;inset:0;background:rgba(240,245,255,.92);display:none;align-items:center;justify-content:center;padding:18px;z-index:9999}
+        .modal.open{display:flex}
+        .modal-card{width:min(860px,100%);border:1px solid rgba(20, 30, 60, .10);background:#ffffff;border-radius:16px;box-shadow:0 24px 70px rgba(8, 15, 35, .20);overflow:hidden;color:var(--text);display:flex;flex-direction:column;max-height:calc(100vh - 36px)}
+        .modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(20, 30, 60, .10);flex:0 0 auto}
+        .modal-head h3{margin:0;font-size:15px}
+        .x{width:38px;height:38px;border-radius:12px;border:1px solid rgba(20, 30, 60, .14);background:rgba(240,245,255,.9);color:#0b1220;cursor:pointer;font-size:18px;font-weight:900}
+        .modal-body{padding:14px;overflow:auto;flex:1 1 auto;min-height:0}
+        .modal-actions{display:flex;gap:10px;justify-content:flex-end;padding:12px 14px;border-top:1px solid rgba(20, 30, 60, .10);flex:0 0 auto}
+        .compare-list{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        @media(max-width:820px){.compare-list{grid-template-columns:1fr}}
+        .compare-card{border:1px solid var(--stroke);border-radius:14px;padding:10px;background:#fff;display:flex;gap:10px;align-items:center}
+        .compare-card input{width:18px;height:18px}
+        .compare-name{font-weight:900;font-size:13px;line-height:1.2}
+        .compare-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
+        .compare-scroll{max-height:52vh;overflow:auto;padding-right:6px}
     </style>
 </head>
 <body>
@@ -110,8 +126,9 @@
                 </div>
                 <div>
                     <label>Comparar asesores (barras)</label>
-                    <div id="compareWrap" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; border:1px solid var(--stroke); border-radius:12px; padding:10px 12px; background:#fff;">
-                        <span class="mini">Cargando…</span>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <button class="btn" type="button" id="openCompare">Elegir asesores</button>
+                        <span class="mini" id="compareSummary">—</span>
                     </div>
                 </div>
                 <div class="mini" id="state" style="text-align:right">Conectando…</div>
@@ -168,6 +185,35 @@
                         <tbody id="tbody"></tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="compareModal" aria-hidden="true">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h3>Comparar asesores</h3>
+                <button class="x" type="button" id="compareClose">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="compare-tools">
+                    <div style="flex:1 1 260px; min-width:220px;">
+                        <label for="compareSearch">Buscar</label>
+                        <input id="compareSearch" type="text" placeholder="Escribe un nombre…" />
+                    </div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
+                        <button class="btn" type="button" id="compareAll">Todos</button>
+                        <button class="btn" type="button" id="compareNone">Ninguno</button>
+                    </div>
+                </div>
+                <div class="compare-scroll">
+                    <div class="compare-list" id="compareList"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <div class="mini" id="compareState" style="margin-right:auto">—</div>
+                <button class="btn" type="button" id="compareCancel">Cancelar</button>
+                <button class="btn primary" type="button" id="compareApply">Aplicar</button>
             </div>
         </div>
     </div>
@@ -253,6 +299,9 @@
         let chartComparePares = null;
         let chartMonthValor = null;
         let chartMonthPares = null;
+
+        let compareSelectedSet = new Set();
+        let compareDraftSet = new Set();
 
         function destroyCharts() {
             if (chartCompareValor) { chartCompareValor.destroy(); chartCompareValor = null; }
@@ -436,35 +485,57 @@
             if (current && asesores.includes(current)) sel.value = current;
         }
 
-        function getSelectedCompareSet() {
-            const selected = new Set();
-            const inputs = Array.from(document.querySelectorAll('#compareWrap input[type="checkbox"][data-asesor]'));
-            inputs.forEach(inp => {
-                if (inp.checked === true) selected.add(String(inp.getAttribute('data-asesor') || ''));
-            });
-            selected.delete('');
-            return selected;
+        function setCompareSummary(allAsesores, selectedSet) {
+            const total = Array.isArray(allAsesores) ? allAsesores.length : 0;
+            const count = selectedSet && selectedSet.size ? selectedSet.size : total;
+            $('compareSummary').textContent = (total > 0)
+                ? `${count} de ${total} seleccionados`
+                : '—';
         }
 
-        function renderCompareSelector(asesores) {
-            const wrap = $('compareWrap');
-            wrap.innerHTML = '';
-            const current = getSelectedCompareSet();
+        function openCompareModal() {
+            compareDraftSet = new Set(compareSelectedSet);
+            $('compareSearch').value = '';
+            renderCompareModalList();
+            $('compareState').textContent = '—';
+            $('compareModal').classList.add('open');
+            $('compareModal').setAttribute('aria-hidden', 'false');
+            setTimeout(() => { try { $('compareSearch').focus(); } catch (e) {} }, 50);
+        }
 
-            asesores.slice(0, 14).forEach((a) => {
-                const tag = document.createElement('label');
-                tag.className = 'tag';
-                const checked = current.size ? current.has(a) : true;
-                tag.innerHTML = `<input type="checkbox" data-asesor="${a}" ${checked ? 'checked' : ''}/> ${a}`;
-                wrap.appendChild(tag);
-            });
+        function closeCompareModal() {
+            $('compareModal').classList.remove('open');
+            $('compareModal').setAttribute('aria-hidden', 'true');
+        }
 
-            if (asesores.length > 14) {
-                const more = document.createElement('div');
-                more.className = 'mini';
-                more.textContent = `Mostrando 14 de ${asesores.length}. Usa el selector de asesor para ver detalle.`;
-                wrap.appendChild(more);
+        function renderCompareModalList() {
+            const listEl = $('compareList');
+            const q = String($('compareSearch').value || '').trim().toLowerCase();
+            listEl.innerHTML = '';
+
+            const asesores = cachedAsesores || [];
+            const filtered = q ? asesores.filter(a => String(a).toLowerCase().includes(q)) : asesores;
+
+            if (!filtered.length) {
+                const empty = document.createElement('div');
+                empty.className = 'mini';
+                empty.textContent = 'Sin resultados.';
+                listEl.appendChild(empty);
+                return;
             }
+
+            const frag = document.createDocumentFragment();
+            filtered.forEach(a => {
+                const row = document.createElement('label');
+                row.className = 'compare-card';
+                const checked = compareDraftSet.size ? compareDraftSet.has(a) : true;
+                row.innerHTML = `
+                    <input type="checkbox" data-asesor="${a}" ${checked ? 'checked' : ''} />
+                    <div class="compare-name">${a}</div>
+                `;
+                frag.appendChild(row);
+            });
+            listEl.appendChild(frag);
         }
 
         let cachedYearDocs = [];
@@ -514,6 +585,13 @@
 
             cachedAsesores = asesores;
             cachedTotalsByAsesor = totalsByAsesor;
+
+            if (!compareSelectedSet || compareSelectedSet.size === 0) {
+                compareSelectedSet = new Set(asesores);
+            } else {
+                compareSelectedSet = new Set(Array.from(compareSelectedSet).filter(a => asesores.includes(a)));
+                if (compareSelectedSet.size === 0) compareSelectedSet = new Set(asesores);
+            }
         }
 
         function computeMonthTotalsForAsesor(asesor) {
@@ -533,10 +611,8 @@
         function renderAll() {
             const asesores = cachedAsesores;
             renderAsesorOptions(asesores);
-            renderCompareSelector(asesores);
-
-            const selectedSet = getSelectedCompareSet();
-            renderCompareCharts(asesores, cachedTotalsByAsesor, selectedSet);
+            setCompareSummary(asesores, compareSelectedSet);
+            renderCompareCharts(asesores, cachedTotalsByAsesor, compareSelectedSet);
 
             const asesor = String($('asesorSelect').value || '').trim() || (asesores[0] || '');
             $('asesorSelect').value = asesor;
@@ -572,11 +648,40 @@
         $('asesorSelect').addEventListener('change', () => {
             renderAll();
         });
-        document.addEventListener('change', (e) => {
-            if (e && e.target && e.target.matches && e.target.matches('#compareWrap input[type="checkbox"][data-asesor]')) {
-                const selectedSet = getSelectedCompareSet();
-                renderCompareCharts(cachedAsesores, cachedTotalsByAsesor, selectedSet);
-            }
+
+        $('openCompare').addEventListener('click', openCompareModal);
+        $('compareClose').addEventListener('click', closeCompareModal);
+        $('compareCancel').addEventListener('click', closeCompareModal);
+        $('compareModal').addEventListener('click', (e) => { if (e.target === $('compareModal')) closeCompareModal(); });
+
+        $('compareSearch').addEventListener('input', () => {
+            renderCompareModalList();
+        });
+
+        $('compareAll').addEventListener('click', () => {
+            compareDraftSet = new Set(cachedAsesores || []);
+            renderCompareModalList();
+        });
+
+        $('compareNone').addEventListener('click', () => {
+            compareDraftSet = new Set();
+            renderCompareModalList();
+        });
+
+        $('compareList').addEventListener('change', (e) => {
+            const t = e && e.target;
+            if (!t || !t.matches || !t.matches('input[type="checkbox"][data-asesor]')) return;
+            const a = String(t.getAttribute('data-asesor') || '').trim();
+            if (!a) return;
+            if (t.checked === true) compareDraftSet.add(a);
+            else compareDraftSet.delete(a);
+        });
+
+        $('compareApply').addEventListener('click', () => {
+            compareSelectedSet = new Set(compareDraftSet);
+            setCompareSummary(cachedAsesores, compareSelectedSet);
+            renderCompareCharts(cachedAsesores, cachedTotalsByAsesor, compareSelectedSet);
+            closeCompareModal();
         });
 
         fillYearOptions();
