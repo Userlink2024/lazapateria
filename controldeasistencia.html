@@ -1132,37 +1132,58 @@
          let histLastDoc = null;
 
          function renderItem(ev) {
-             const el = document.createElement('div');
-             el.className = 'card';
-             const nombre = String(ev && (ev.nombreCompleto || ev.usuario) ? (ev.nombreCompleto || ev.usuario) : '—');
-             const tipo = String(ev && ev.type ? ev.type : '—');
-             const metodo = String(ev && ev.method ? ev.method : '');
-             const nota = String(ev && ev.note ? ev.note : '');
-             const fecha = ev && ev.timestamp ? formatDateTime(ev.timestamp) : 'N/A';
-             const badgeClass = tipo === 'entrada' ? 'ok' : (tipo === 'salida' ? 'warn' : '');
-             const tipoTxt = tipo ? tipo.toUpperCase() : '';
-             el.innerHTML = `
-                 <div class="row">
-                     <div>
-                         <div style="font-weight:900;">${nombre}</div>
-                         <div class="mini">${fecha}${metodo ? ` · ${metodo}` : ''}${nota ? ` · ${nota}` : ''}</div>
-                     </div>
-                     <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-                         <span class="badge ${badgeClass}">${tipoTxt}</span>
-                     </div>
-                 </div>
-             `;
-             return el;
-         }
+            const el = document.createElement('div');
+            el.className = 'card';
+            const nombre = String(ev && (ev.nombreCompleto || ev.usuario) ? (ev.nombreCompleto || ev.usuario) : '—');
+            const tipo = String(ev && ev.type ? ev.type : '—');
+            const metodo = String(ev && ev.method ? ev.method : '');
+            const nota = String(ev && ev.note ? ev.note : '');
+            const fecha = ev && ev.timestamp ? formatDateTime(ev.timestamp) : 'N/A';
+            const badgeClass = tipo === 'entrada' ? 'ok' : (tipo === 'salida' ? 'warn' : '');
+            const tipoTxt = tipo ? tipo.toUpperCase() : '';
+
+            let lateBadge = '';
+            if (tipo === 'entrada') {
+                const hasLateField = (ev && (ev.late === true || ev.late === false || ev.entradaLate === true || ev.entradaLate === false));
+                let lateInfo = null;
+                if (hasLateField) {
+                    const isLate = (ev.late === true) || (ev.entradaLate === true);
+                    const minutesLate = Number(ev.minutesLate ?? ev.entradaMinutesLate ?? 0);
+                    lateInfo = { isLate: isLate, minutesLate: Number.isFinite(minutesLate) ? minutesLate : 0 };
+                } else if (ev && ev.timestamp && typeof ev.timestamp.toDate === 'function') {
+                    const d = ev.timestamp.toDate();
+                    lateInfo = computeLateInfo(d, cachedSettings.horaEntrada, cachedSettings.toleranciaMin);
+                }
+
+                if (lateInfo) {
+                    lateBadge = lateInfo.isLate
+                        ? `<span class="badge bad">RETARDO${lateInfo.minutesLate ? ` ${lateInfo.minutesLate} min` : ''}</span>`
+                        : `<span class="badge good">A TIEMPO</span>`;
+                }
+            }
+            el.innerHTML = `
+                <div class="row">
+                    <div>
+                        <div style="font-weight:900;">${nombre}</div>
+                        <div class="mini">${fecha}${metodo ? ` · ${metodo}` : ''}${nota ? ` · ${nota}` : ''}</div>
+                    </div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                        <span class="badge ${badgeClass}">${tipoTxt}</span>
+                        ${lateBadge}
+                    </div>
+                </div>
+            `;
+            return el;
+        }
  
          function renderEvents(list, todayStr) {
-            const today = [];
-            const hist = [];
+           const today = [];
+           const hist = [];
 
-            (Array.isArray(list) ? list : []).forEach(e => {
-                if (String(e.dateStr) === todayStr) today.push(e);
-                hist.push(e);
-            });
+           (Array.isArray(list) ? list : []).forEach(e => {
+               if (String(e.dateStr) === todayStr) today.push(e);
+               hist.push(e);
+           });
 
             // Actualizar estado
             $('todayState').textContent = today.length ? '' : 'Sin eventos hoy.';
@@ -1217,6 +1238,24 @@
                     const estadoClass = tieneEntrada && !tieneSalida ? 'pending' : (tieneSalida ? 'completed' : 'absent');
                     const estadoIcono = tieneEntrada && !tieneSalida ? '⏳' : (tieneSalida ? '✅' : '❌');
                     const estadoTexto = tieneEntrada && !tieneSalida ? 'Pendiente de salida' : (tieneSalida ? 'Completo' : 'Sin entrada');
+
+                    let entradaLateInfo = null;
+                    if (usuario.entrada) {
+                        const isLate = (usuario.entrada.late === true) || (usuario.entrada.entradaLate === true);
+                        const minutesLate = Number(usuario.entrada.minutesLate ?? usuario.entrada.entradaMinutesLate ?? 0);
+                        if (usuario.entrada.late === true || usuario.entrada.late === false || usuario.entrada.entradaLate === true || usuario.entrada.entradaLate === false) {
+                            entradaLateInfo = { isLate: isLate, minutesLate: Number.isFinite(minutesLate) ? minutesLate : 0 };
+                        } else if (usuario.entrada.timestamp && typeof usuario.entrada.timestamp.toDate === 'function') {
+                            const d = usuario.entrada.timestamp.toDate();
+                            entradaLateInfo = computeLateInfo(d, cachedSettings.horaEntrada, cachedSettings.toleranciaMin);
+                        }
+                    }
+
+                    const entradaLateBadge = (usuario.entrada && entradaLateInfo)
+                        ? (entradaLateInfo.isLate
+                            ? `<span class="badge bad" style="margin-left:8px;">RETARDO${entradaLateInfo.minutesLate ? ` ${entradaLateInfo.minutesLate} min` : ''}</span>`
+                            : `<span class="badge good" style="margin-left:8px;">A TIEMPO</span>`)
+                        : '';
                     
                     card.innerHTML = `
                         <div class="event-header">
@@ -1226,7 +1265,7 @@
                         <div class="event-times">
                             ${usuario.entrada ? `
                                 <div class="time-entry entrada">
-                                    🟢 Entrada: ${formatDateTime(usuario.entrada.timestamp)}
+                                    🟢 Entrada: ${formatDateTime(usuario.entrada.timestamp)} ${entradaLateBadge}
                                 </div>
                             ` : ''}
                             ${usuario.salida ? `
