@@ -1,1 +1,586 @@
-none
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gráfica por Asesor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <style>
+        :root{
+            --bg:#f6f8ff;
+            --panel:#ffffff;
+            --stroke:#e6eaf2;
+            --text:#0b1220;
+            --muted:#52607a;
+            --brand1:#6d5efc; --brand2:#25b1ff;
+            --good:#18c37e; --warn:#ffb020; --bad:#ff4d4f;
+            --shadow:0 18px 50px rgba(16, 24, 40, .12);
+        }
+        *{box-sizing:border-box}
+        body{
+            margin:0; font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:var(--text);
+            background:
+                radial-gradient(1200px 600px at 15% 10%, rgba(109,94,252,.16), transparent 62%),
+                radial-gradient(1100px 700px at 85% 15%, rgba(37,177,255,.12), transparent 62%),
+                var(--bg);
+        }
+        .wrap{max-width:1280px;margin:0 auto;padding:22px 16px 38px}
+        .top{
+            display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+            padding:14px 14px;border:1px solid var(--stroke);background:var(--panel);border-radius:16px;box-shadow:var(--shadow)
+        }
+        h1{margin:0;font-size:18px;letter-spacing:-.02em}
+        .sub{margin-top:4px;color:var(--muted);font-size:12px}
+        .btn{
+            border:1px solid var(--stroke);
+            background:#ffffff;
+            color:var(--text);
+            padding:10px 12px;
+            border-radius:12px;
+            cursor:pointer;
+            font-weight:800;
+            text-decoration:none;
+            display:inline-flex;
+            gap:8px;
+            align-items:center
+        }
+        .btn.primary{border-color:rgba(109,94,252,.35);background:linear-gradient(135deg, rgba(109,94,252,.95), rgba(37,177,255,.85));color:#fff}
+        .panel{margin-top:12px;border:1px solid var(--stroke);background:var(--panel);border-radius:16px;box-shadow:var(--shadow)}
+        .controls{display:grid;grid-template-columns: .7fr 1.3fr 1fr auto;gap:10px;padding:12px;border-bottom:1px solid var(--stroke);align-items:end}
+        @media(max-width:980px){.controls{grid-template-columns:1fr}}
+        label{font-size:12px;color:var(--muted)}
+        input,select{
+            width:100%;
+            border:1px solid var(--stroke);
+            background:#ffffff;
+            color:var(--text);
+            border-radius:12px;
+            padding:10px 12px;
+            outline:none
+        }
+        .mini{color:var(--muted);font-size:12px;font-weight:800}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px}
+        @media(max-width:980px){.grid{grid-template-columns:1fr}}
+        .card{border:1px solid var(--stroke);background:#fff;border-radius:14px;padding:12px}
+        .card h3{margin:0 0 10px 0;font-size:14px}
+        .chart-area{position:relative;height:280px}
+        .chart-area canvas{width:100% !important;height:100% !important;display:block}
+        .summary{display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;padding:12px;border-bottom:1px solid var(--stroke)}
+        @media(max-width:900px){.summary{grid-template-columns:1fr}}
+        .chip{border:1px solid var(--stroke);background:#f7f9ff;border-radius:14px;padding:12px}
+        .chip .lbl{color:var(--muted);font-size:12px;font-weight:800}
+        .chip .val{margin-top:6px;font-weight:900;font-size:18px}
+        table{width:100%;border-collapse:collapse}
+        th,td{border-bottom:1px solid rgba(20, 30, 60, .10);padding:10px 8px;text-align:left;font-size:13px}
+        th{font-size:12px;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+        .tag{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;border:1px solid var(--stroke);background:#f7f9ff;font-weight:900;font-size:12px;cursor:pointer;user-select:none}
+        .tag input{width:18px;height:18px}
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="top">
+            <div>
+                <h1>Gráfica por asesor (año en curso)</h1>
+                <div class="sub">Comparativa de valores y pares, con filtro por asesor.</div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <a class="btn" href="ventas.html">Volver a ventas</a>
+                <a class="btn" href="graficageneral.html">Ver gráfica general</a>
+                <button class="btn primary" type="button" id="reloadBtn">Recargar</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="controls">
+                <div>
+                    <label for="yearSelect">Año</label>
+                    <select id="yearSelect"></select>
+                </div>
+                <div>
+                    <label for="asesorSelect">Asesor (para detalle mensual)</label>
+                    <select id="asesorSelect"></select>
+                </div>
+                <div>
+                    <label>Comparar asesores (barras)</label>
+                    <div id="compareWrap" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; border:1px solid var(--stroke); border-radius:12px; padding:10px 12px; background:#fff;">
+                        <span class="mini">Cargando…</span>
+                    </div>
+                </div>
+                <div class="mini" id="state" style="text-align:right">Conectando…</div>
+            </div>
+
+            <div class="summary">
+                <div class="chip">
+                    <div class="lbl">Valor (asesor seleccionado)</div>
+                    <div class="val" id="sumValor">$0</div>
+                </div>
+                <div class="chip">
+                    <div class="lbl">Pares (asesor seleccionado)</div>
+                    <div class="val" id="sumPares">0</div>
+                </div>
+                <div class="chip">
+                    <div class="lbl">Asesor</div>
+                    <div class="val" id="selAsesor">—</div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>Comparativa por asesor (VALOR)</h3>
+                    <div class="chart-area"><canvas id="chartCompareValor"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3>Comparativa por asesor (PARES)</h3>
+                    <div class="chart-area"><canvas id="chartComparePares"></canvas></div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>Tendencia mensual (VALOR)</h3>
+                    <div class="chart-area"><canvas id="chartMonthValor"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3>Tendencia mensual (PARES)</h3>
+                    <div class="chart-area"><canvas id="chartMonthPares"></canvas></div>
+                </div>
+            </div>
+
+            <div class="card" style="margin:12px;">
+                <h3>Detalle mensual (asesor seleccionado)</h3>
+                <div style="overflow:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Mes</th>
+                                <th>Pares</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+            authDomain: "lazapateria-c4157.firebaseapp.com",
+            projectId: "lazapateria-c4157",
+            storageBucket: "lazapateria-c4157.appspot.com",
+            messagingSenderId: "514023223216",
+            appId: "1:514023223216:web:56e8c870137d50e57ac0b2",
+            measurementId: "G-L4F5HTZCW4"
+        };
+
+        if (!firebase.apps || !firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        const $ = (id) => document.getElementById(id);
+        const MONTHS = [
+            { key: 'ene', label: 'Ene' },
+            { key: 'feb', label: 'Feb' },
+            { key: 'mar', label: 'Mar' },
+            { key: 'abr', label: 'Abr' },
+            { key: 'may', label: 'May' },
+            { key: 'jun', label: 'Jun' },
+            { key: 'jul', label: 'Jul' },
+            { key: 'ago', label: 'Ago' },
+            { key: 'sep', label: 'Sep' },
+            { key: 'oct', label: 'Oct' },
+            { key: 'nov', label: 'Nov' },
+            { key: 'dic', label: 'Dic' }
+        ];
+
+        function formatCurrency(n) {
+            const v = Number(n || 0);
+            try {
+                return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
+            } catch (e) {
+                return '$' + Math.round(v).toLocaleString('es-CO');
+            }
+        }
+
+        function safeTsToDate(ts) {
+            if (!ts) return null;
+            if (typeof ts.toDate === 'function') return ts.toDate();
+            if (typeof ts === 'string' || typeof ts === 'number') {
+                const d = new Date(ts);
+                if (!Number.isNaN(d.getTime())) return d;
+            }
+            return null;
+        }
+
+        function normalizeName(s) {
+            return String(s || '').trim();
+        }
+
+        function computeYearRange(year) {
+            const start = new Date(Number(year), 0, 1, 0, 0, 0, 0);
+            const end = new Date(Number(year), 11, 31, 23, 59, 59, 999);
+            return {
+                fromTs: firebase.firestore.Timestamp.fromDate(start),
+                toTs: firebase.firestore.Timestamp.fromDate(end)
+            };
+        }
+
+        function fillYearOptions() {
+            const y = new Date().getFullYear();
+            const sel = $('yearSelect');
+            sel.innerHTML = '';
+            for (let i = y - 2; i <= y + 1; i += 1) {
+                const opt = document.createElement('option');
+                opt.value = String(i);
+                opt.textContent = String(i);
+                if (i === y) opt.selected = true;
+                sel.appendChild(opt);
+            }
+        }
+
+        let chartCompareValor = null;
+        let chartComparePares = null;
+        let chartMonthValor = null;
+        let chartMonthPares = null;
+
+        function destroyCharts() {
+            if (chartCompareValor) { chartCompareValor.destroy(); chartCompareValor = null; }
+            if (chartComparePares) { chartComparePares.destroy(); chartComparePares = null; }
+            if (chartMonthValor) { chartMonthValor.destroy(); chartMonthValor = null; }
+            if (chartMonthPares) { chartMonthPares.destroy(); chartMonthPares = null; }
+        }
+
+        function renderCompareCharts(asesores, totalsByAsesor, selectedSet) {
+            const selected = Array.from(selectedSet);
+            const labels = selected.length ? selected : asesores;
+            const valor = labels.map(a => Number((totalsByAsesor.get(a) || {}).valor || 0));
+            const pares = labels.map(a => Number((totalsByAsesor.get(a) || {}).pares || 0));
+
+            if (chartCompareValor) { chartCompareValor.destroy(); chartCompareValor = null; }
+            if (chartComparePares) { chartComparePares.destroy(); chartComparePares = null; }
+
+            const baseOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                resizeDelay: 150,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { grid: { color: 'rgba(20, 30, 60, .10)' } }
+                }
+            };
+
+            chartCompareValor = new Chart($('chartCompareValor').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Valor',
+                        data: valor,
+                        backgroundColor: 'rgba(109, 94, 252, .75)',
+                        borderColor: 'rgba(109, 94, 252, 1)',
+                        borderWidth: 1,
+                        borderRadius: 10
+                    }]
+                },
+                options: Object.assign({}, baseOptions, {
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: {
+                            grid: { color: 'rgba(20, 30, 60, .10)' },
+                            ticks: { callback: (v) => {
+                                const n = Number(v || 0);
+                                if (n >= 1000000) return (n / 1000000).toFixed(0) + 'M';
+                                if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+                                return String(n);
+                            } }
+                        }
+                    }
+                })
+            });
+
+            chartComparePares = new Chart($('chartComparePares').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Pares',
+                        data: pares,
+                        backgroundColor: 'rgba(37, 177, 255, .70)',
+                        borderColor: 'rgba(37, 177, 255, 1)',
+                        borderWidth: 1,
+                        borderRadius: 10
+                    }]
+                },
+                options: baseOptions
+            });
+        }
+
+        function renderMonthCharts(asesor, monthTotals) {
+            if (chartMonthValor) { chartMonthValor.destroy(); chartMonthValor = null; }
+            if (chartMonthPares) { chartMonthPares.destroy(); chartMonthPares = null; }
+
+            const labels = MONTHS.map(m => m.label);
+            const valor = monthTotals.map(m => Number(m.valor || 0));
+            const pares = monthTotals.map(m => Number(m.pares || 0));
+
+            const baseOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                resizeDelay: 150,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { grid: { color: 'rgba(20, 30, 60, .10)' } }
+                }
+            };
+
+            chartMonthValor = new Chart($('chartMonthValor').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: `Valor - ${asesor}`,
+                        data: valor,
+                        borderColor: 'rgba(109, 94, 252, 1)',
+                        backgroundColor: 'rgba(109, 94, 252, .12)',
+                        tension: .25,
+                        fill: true,
+                        pointRadius: 2
+                    }]
+                },
+                options: Object.assign({}, baseOptions, {
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: {
+                            grid: { color: 'rgba(20, 30, 60, .10)' },
+                            ticks: { callback: (v) => {
+                                const n = Number(v || 0);
+                                if (n >= 1000000) return (n / 1000000).toFixed(0) + 'M';
+                                if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+                                return String(n);
+                            } }
+                        }
+                    }
+                })
+            });
+
+            chartMonthPares = new Chart($('chartMonthPares').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: `Pares - ${asesor}`,
+                        data: pares,
+                        borderColor: 'rgba(37, 177, 255, 1)',
+                        backgroundColor: 'rgba(37, 177, 255, .12)',
+                        tension: .25,
+                        fill: true,
+                        pointRadius: 2
+                    }]
+                },
+                options: baseOptions
+            });
+        }
+
+        function renderDetailTable(monthTotals) {
+            const tbody = $('tbody');
+            tbody.innerHTML = '';
+            monthTotals.forEach((m, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-weight:900;">${MONTHS[idx].key}</td>
+                    <td>${Number(m.pares || 0).toLocaleString('es-CO')}</td>
+                    <td>${formatCurrency(m.valor || 0)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderAsesorOptions(asesores) {
+            const sel = $('asesorSelect');
+            const current = String(sel.value || '').trim();
+            sel.innerHTML = '';
+
+            const opt0 = document.createElement('option');
+            opt0.value = '';
+            opt0.textContent = '— Selecciona —';
+            sel.appendChild(opt0);
+
+            asesores.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a;
+                opt.textContent = a;
+                sel.appendChild(opt);
+            });
+
+            if (current && asesores.includes(current)) sel.value = current;
+        }
+
+        function getSelectedCompareSet() {
+            const selected = new Set();
+            const inputs = Array.from(document.querySelectorAll('#compareWrap input[type="checkbox"][data-asesor]'));
+            inputs.forEach(inp => {
+                if (inp.checked === true) selected.add(String(inp.getAttribute('data-asesor') || ''));
+            });
+            selected.delete('');
+            return selected;
+        }
+
+        function renderCompareSelector(asesores) {
+            const wrap = $('compareWrap');
+            wrap.innerHTML = '';
+            const current = getSelectedCompareSet();
+
+            asesores.slice(0, 14).forEach((a) => {
+                const tag = document.createElement('label');
+                tag.className = 'tag';
+                const checked = current.size ? current.has(a) : true;
+                tag.innerHTML = `<input type="checkbox" data-asesor="${a}" ${checked ? 'checked' : ''}/> ${a}`;
+                wrap.appendChild(tag);
+            });
+
+            if (asesores.length > 14) {
+                const more = document.createElement('div');
+                more.className = 'mini';
+                more.textContent = `Mostrando 14 de ${asesores.length}. Usa el selector de asesor para ver detalle.`;
+                wrap.appendChild(more);
+            }
+        }
+
+        let cachedYearDocs = [];
+        let cachedAsesores = [];
+        let cachedTotalsByAsesor = new Map();
+
+        async function loadYearDocs(year) {
+            const { fromTs, toTs } = computeYearRange(year);
+            $('state').textContent = 'Cargando ventas del año…';
+
+            try {
+                const snap = await db.collection('registros')
+                    .orderBy('fecha_hora', 'asc')
+                    .where('fecha_hora', '>=', fromTs)
+                    .where('fecha_hora', '<=', toTs)
+                    .get();
+
+                cachedYearDocs = (snap.docs || []).map(d => d.data() || {});
+                $('state').textContent = `Listo. Registros: ${(snap.docs || []).length}`;
+            } catch (e) {
+                console.error('Error cargando registros:', e);
+                cachedYearDocs = [];
+                $('state').textContent = 'Error cargando datos.';
+            }
+        }
+
+        function buildAsesorAggregates() {
+            const set = new Set();
+            const totalsByAsesor = new Map();
+
+            cachedYearDocs.forEach(r => {
+                const asesor = normalizeName(r.asesor);
+                if (!asesor) return;
+                set.add(asesor);
+                if (!totalsByAsesor.has(asesor)) totalsByAsesor.set(asesor, { valor: 0, pares: 0 });
+                const t = totalsByAsesor.get(asesor);
+                t.valor += Number(r.valor_total || 0);
+                t.pares += Number(r.num_pares || 0);
+            });
+
+            const asesores = Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+            asesores.sort((a, b) => {
+                const av = Number((totalsByAsesor.get(a) || {}).valor || 0);
+                const bv = Number((totalsByAsesor.get(b) || {}).valor || 0);
+                return bv - av;
+            });
+
+            cachedAsesores = asesores;
+            cachedTotalsByAsesor = totalsByAsesor;
+        }
+
+        function computeMonthTotalsForAsesor(asesor) {
+            const monthTotals = MONTHS.map(() => ({ valor: 0, pares: 0 }));
+            cachedYearDocs.forEach(r => {
+                if (normalizeName(r.asesor) !== asesor) return;
+                const d = safeTsToDate(r.fecha_hora);
+                if (!d) return;
+                const m = d.getMonth();
+                if (m < 0 || m > 11) return;
+                monthTotals[m].valor += Number(r.valor_total || 0);
+                monthTotals[m].pares += Number(r.num_pares || 0);
+            });
+            return monthTotals;
+        }
+
+        function renderAll() {
+            const asesores = cachedAsesores;
+            renderAsesorOptions(asesores);
+            renderCompareSelector(asesores);
+
+            const selectedSet = getSelectedCompareSet();
+            renderCompareCharts(asesores, cachedTotalsByAsesor, selectedSet);
+
+            const asesor = String($('asesorSelect').value || '').trim() || (asesores[0] || '');
+            $('asesorSelect').value = asesor;
+            $('selAsesor').textContent = asesor || '—';
+
+            if (!asesor) {
+                $('sumValor').textContent = '$0';
+                $('sumPares').textContent = '0';
+                renderMonthCharts('—', MONTHS.map(() => ({ valor: 0, pares: 0 })));
+                renderDetailTable(MONTHS.map(() => ({ valor: 0, pares: 0 })));
+                return;
+            }
+
+            const totals = cachedTotalsByAsesor.get(asesor) || { valor: 0, pares: 0 };
+            $('sumValor').textContent = formatCurrency(totals.valor || 0);
+            $('sumPares').textContent = Number(totals.pares || 0).toLocaleString('es-CO');
+
+            const monthTotals = computeMonthTotalsForAsesor(asesor);
+            renderMonthCharts(asesor, monthTotals);
+            renderDetailTable(monthTotals);
+        }
+
+        async function reloadAll() {
+            destroyCharts();
+            const year = Number($('yearSelect').value || new Date().getFullYear());
+            await loadYearDocs(year);
+            buildAsesorAggregates();
+            renderAll();
+        }
+
+        $('reloadBtn').addEventListener('click', () => { reloadAll(); });
+        $('yearSelect').addEventListener('change', () => { reloadAll(); });
+        $('asesorSelect').addEventListener('change', () => {
+            renderAll();
+        });
+        document.addEventListener('change', (e) => {
+            if (e && e.target && e.target.matches && e.target.matches('#compareWrap input[type="checkbox"][data-asesor]')) {
+                const selectedSet = getSelectedCompareSet();
+                renderCompareCharts(cachedAsesores, cachedTotalsByAsesor, selectedSet);
+            }
+        });
+
+        fillYearOptions();
+        reloadAll();
+    </script>
+</body>
+</html>
