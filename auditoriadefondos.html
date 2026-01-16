@@ -81,6 +81,14 @@
             <input id="toDate" type="date" />
           </div>
           <div>
+            <label for="empaqueSelect">Enviado a empaque</label>
+            <select id="empaqueSelect"><option value="all">Todos</option><option value="no" selected>No</option><option value="si">Sí</option></select>
+          </div>
+          <div>
+            <label for="bodeguerosSelect">Tiene bodegueros</label>
+            <select id="bodeguerosSelect"><option value="all">Todos</option><option value="no" selected>No</option><option value="si">Sí</option></select>
+          </div>
+          <div>
             <label for="asesorSelect">Asesor</label>
             <select id="asesorSelect"><option value="">Todos</option></select>
           </div>
@@ -261,6 +269,10 @@
       $('btnCajaRecargar').addEventListener('click', cajaCargar);
 
       $('searchInput').addEventListener('input', renderResults);
+      $('fromDate').addEventListener('change', () => refreshAll(false));
+      $('toDate').addEventListener('change', () => refreshAll(false));
+      $('empaqueSelect').addEventListener('change', renderResults);
+      $('bodeguerosSelect').addEventListener('change', renderResults);
       $('asesorSelect').addEventListener('change', renderResults);
       $('bloqueadoSelect').addEventListener('change', renderResults);
 
@@ -490,13 +502,26 @@
       const to = $('toDate').value;
 
       let q = COL_REGISTROS.orderBy('fecha_hora', 'desc');
-      if (from) {
-        const d = new Date(from + 'T00:00:00');
-        q = q.where('fecha_hora', '>=', firebase.firestore.Timestamp.fromDate(d));
-      }
-      if (to) {
-        const d = new Date(to + 'T23:59:59');
-        q = q.where('fecha_hora', '<=', firebase.firestore.Timestamp.fromDate(d));
+
+      const hasFrom = Boolean(from);
+      const hasTo = Boolean(to);
+      const now = new Date();
+
+      if (hasFrom || hasTo) {
+        if (hasFrom) {
+          const d = new Date(from + 'T00:00:00');
+          q = q.where('fecha_hora', '>=', firebase.firestore.Timestamp.fromDate(d));
+        }
+        if (hasTo) {
+          const d = new Date(to + 'T23:59:59');
+          q = q.where('fecha_hora', '<=', firebase.firestore.Timestamp.fromDate(d));
+        }
+      } else {
+        const dTo = now;
+        const dFrom = new Date(now);
+        dFrom.setDate(dFrom.getDate() - 30);
+        q = q.where('fecha_hora', '>=', firebase.firestore.Timestamp.fromDate(dFrom));
+        q = q.where('fecha_hora', '<=', firebase.firestore.Timestamp.fromDate(dTo));
       }
 
       const snap = await q.get();
@@ -506,12 +531,18 @@
     function applyFilters(){
       const asesor = $('asesorSelect').value;
       const bloqueado = $('bloqueadoSelect').value;
+      const empaque = $('empaqueSelect').value;
+      const tieneBodegueros = $('bodeguerosSelect').value;
       const search = safeStr($('searchInput').value).toLowerCase();
 
       let list = allRegistros.slice();
 
-      // Excluir pedidos enviados a empaque
-      list = list.filter(r => r.enviadoAEmpaque !== true);
+      if (empaque === 'si') list = list.filter(r => r.enviadoAEmpaque === true);
+      if (empaque === 'no') list = list.filter(r => r.enviadoAEmpaque !== true);
+
+      const hasBodegueros = (r) => Array.isArray(r.bodegueros_encargados) && r.bodegueros_encargados.length > 0;
+      if (tieneBodegueros === 'si') list = list.filter(r => hasBodegueros(r));
+      if (tieneBodegueros === 'no') list = list.filter(r => !hasBodegueros(r));
 
       // Excluir bodegueros: elimina si el asesor está identificado como Bodeguero
       if (cachedBodegueros.length) list = list.filter(r => !cachedBodegueros.includes(String(r.asesor || '')));
@@ -525,10 +556,14 @@
           const productos = Array.isArray(r.productos) ? r.productos : [];
           const abonos = Array.isArray(r.abonos) ? r.abonos : [];
           const refs = Array.isArray(r.referencias_bancarias_refs) ? r.referencias_bancarias_refs : [];
+          const bodegueros = Array.isArray(r.bodegueros_encargados) ? r.bodegueros_encargados : [];
           const prodText = productos.map(p => [p.referencia, p.color, p.talla, p.precio].filter(Boolean).join(' ')).join(' | ');
           const abonosText = abonos.map(a => [a.fecha, a.monto].filter(Boolean).join(' ')).join(' | ');
           const blob = safeStr([
             r.codigo_unico, r.cliente, r.asesor, r.usuario, r.observaciones,
+            r.transportadora, r.saldo_a_favor, r.num_pares, r.valor_total,
+            String(r.enviadoAEmpaque === true ? 'ENVIADO A EMPAQUE' : ''),
+            bodegueros.join(' '),
             refs.join(' '), prodText, abonosText
           ].join(' ')).toLowerCase();
           return blob.includes(search);
@@ -599,7 +634,8 @@
             <div class="grid" style="grid-template-columns: 1fr auto auto">
               <div>
                 <label>Vincular referencia</label>
-                <input type="text" placeholder="Escribe y presiona Enter o Vincular" data-ref-input="${r.id}" />
+                <input type="text" placeholder="Escribe mínimo 3 caracteres y selecciona la referencia" data-ref-input="${r.id}" list="refList_${r.id}" autocomplete="off" />
+                <datalist id="refList_${r.id}"></datalist>
               </div>
               <div style="display:flex;align-items:end">
                 <button class="btn primary" type="button" data-btn-vincular="${r.id}"><i class="fas fa-link"></i> Vincular</button>
@@ -623,6 +659,10 @@
 
       const inputs = Array.from(document.querySelectorAll('input[data-ref-input]'));
       inputs.forEach(input => {
+        input.addEventListener('input', async () => {
+          const id = input.getAttribute('data-ref-input');
+          await updateRefSuggestions(id, input.value);
+        });
         input.addEventListener('keydown', async (e) => {
           if (e.key !== 'Enter') return;
           e.preventDefault();
@@ -671,21 +711,70 @@
         return;
       }
 
-      const match = findBestReferencia(q);
-      if (!match) {
-        showError('No se encontró una referencia disponible que coincida.');
+      if (!consignacionesIndex.length) {
+        try { await loadConsignacionesIndex(); } catch (e) { /* no-op */ }
+      }
+      if (!usedRefsSet || !usedRefsSet.size) {
+        try { await loadUsedRefs(); } catch (e) { /* no-op */ }
+      }
+
+      const exact = consignacionesIndex.find(x => x && x.referencia === q);
+      if (!exact) {
+        showError('Selecciona una referencia válida de la lista.');
+        return;
+      }
+      if (usedRefsSet.has(q)) {
+        showError(`La referencia ${q} ya fue utilizada.`);
         return;
       }
 
       setLoading(true);
       try{
-        await vincularReferenciaARegistro(registroId, match);
+        await vincularReferenciaARegistro(registroId, exact);
         await refreshAll(false);
       }catch(e){
         showError(e && e.message ? e.message : String(e));
       }finally{
         setLoading(false);
       }
+    }
+
+    async function updateRefSuggestions(registroId, rawInput){
+      const q = normalizeRef(rawInput);
+      const list = document.getElementById(`refList_${registroId}`);
+      if (!list) return;
+      list.innerHTML = '';
+
+      if (!q || q.length < 3) return;
+
+      if (!consignacionesIndex.length) {
+        try { await loadConsignacionesIndex(); } catch (e) { /* no-op */ }
+      }
+      if (!usedRefsSet || !usedRefsSet.size) {
+        try { await loadUsedRefs(); } catch (e) { /* no-op */ }
+      }
+
+      const candidates = consignacionesIndex
+        .filter(x => x && x.referencia && x.referencia.includes(q))
+        .filter(x => !usedRefsSet.has(x.referencia));
+
+      if (!candidates.length) return;
+
+      candidates.sort((a,b) => {
+        const al = a.referencia.length;
+        const bl = b.referencia.length;
+        if (al !== bl) return al - bl;
+        const ad = tsToDate(a.fecha) ? tsToDate(a.fecha).getTime() : 0;
+        const bd = tsToDate(b.fecha) ? tsToDate(b.fecha).getTime() : 0;
+        return bd - ad;
+      });
+
+      const top = candidates.slice(0, 12);
+      top.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.referencia;
+        list.appendChild(opt);
+      });
     }
 
     async function searchByReference(){
@@ -815,19 +904,8 @@
       bindUi();
       $('filtersCard').style.display='none';
       $('resultsCard').style.display='none';
-
-      const now = new Date();
-      const to = new Date(now);
-      const from = new Date(now);
-      from.setDate(from.getDate() - 30);
-      const fmt = (d) => {
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
-      };
-      if (!$('fromDate').value) $('fromDate').value = fmt(from);
-      if (!$('toDate').value) $('toDate').value = fmt(to);
+      $('fromDate').value = '';
+      $('toDate').value = '';
     });
   </script>
 </body>
