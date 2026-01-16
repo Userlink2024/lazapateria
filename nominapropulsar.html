@@ -7,6 +7,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --primary: #2e7d32;
@@ -59,6 +60,27 @@
             text-align: center;
             color: var(--text);
             opacity: 0.8;
+        }
+
+        .back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .back-button:hover {
+            background: var(--primary-light);
+            transform: translateY(-1px);
         }
 
         .account-info {
@@ -261,6 +283,10 @@
 <body>
     <div class="container">
         <header>
+            <a href="https://userlink2024.github.io/lazapateria/paneldecuentas.html" class="back-button">
+                <i class="fas fa-arrow-left"></i>
+                Volver al Panel de Cuentas
+            </a>
             <h1>Nómina PROPULSAR</h1>
             <p class="subtitle">Control de Consignaciones Mensuales</p>
         </header>
@@ -395,6 +421,12 @@
             
             yearSelect.addEventListener('change', async function() {
                 currentYear = parseInt(this.value);
+                
+                // Remove existing listener
+                if (window.consignationsListener) {
+                    window.consignationsListener();
+                }
+                
                 await loadMonthlyData();
                 await loadMonthlyLimits();
                 updateSummaryCards();
@@ -447,9 +479,54 @@
                     }
                 });
                 
+                // Set up real-time listener for consignations
+                setupRealtimeListener(accountId);
+                
             } catch (error) {
                 showError('Error al cargar datos de consignaciones: ' + error.message);
             }
+        }
+
+        function setupRealtimeListener(accountId) {
+            // Remove existing listener if any
+            if (window.consignationsListener) {
+                window.consignationsListener();
+            }
+            
+            // Set up new real-time listener
+            const startDate = new Date(currentYear, 0, 1);
+            const endDate = new Date(currentYear, 11, 31);
+            
+            window.consignationsListener = db.collection('cuentas')
+                .doc(accountId)
+                .collection('consignaciones')
+                .where('fecha', '>=', firebase.firestore.Timestamp.fromDate(startDate))
+                .where('fecha', '<=', firebase.firestore.Timestamp.fromDate(endDate))
+                .onSnapshot((snapshot) => {
+                    // Reset monthly data
+                    for (let month = 1; month <= 12; month++) {
+                        monthlyData[month] = 0;
+                    }
+                    
+                    // Recalculate from real-time data
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        if (data.fecha && data.valor) {
+                            const date = data.fecha.toDate();
+                            const month = date.getMonth() + 1;
+                            if (month >= 1 && month <= 12) {
+                                monthlyData[month] += data.valor;
+                            }
+                        }
+                    });
+                    
+                    // Update UI in real-time
+                    updateSummaryCards();
+                    updateCharts();
+                }, (error) => {
+                    console.error('Error en tiempo real:', error);
+                    showError('Error en actualización en tiempo real: ' + error.message);
+                });
         }
 
         async function loadMonthlyLimits() {
