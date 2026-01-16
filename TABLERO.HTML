@@ -496,6 +496,8 @@
         firebase.initializeApp(firebaseConfig);
         console.log("Configuración de Firebase completada.");
 
+        const db = firebase.firestore();
+
         // ===== DETECCIÓN DE DISPOSITIVOS =====
         function detectDevice() {
             const userAgent = navigator.userAgent.toLowerCase();
@@ -605,6 +607,13 @@
         let modalCancelButton;
         let modalErrorMessage;
 
+        let switchUserModal;
+        let switchUserUserInput;
+        let switchUserPassInput;
+        let switchUserOkButton;
+        let switchUserCancelButton;
+        let switchUserErrorMessage;
+
         window.onload = () => {
             const device = detectDevice();
             console.log('Dispositivo detectado:', device);
@@ -614,6 +623,8 @@
             
             // Configurar modal
             setupModal();
+
+            setupSwitchUserModal();
             
             // Verificar usuario y mostrar opciones
             checkUserAndShowOptions();
@@ -719,6 +730,31 @@
                         </div>
                     </div>
                 </div>
+
+                <div id="switchUserModal" class="modal-overlay" style="display: none;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>
+                                <i class="fas fa-user-circle"></i>
+                                Iniciar Otra Sesión
+                            </h2>
+                        </div>
+                        <div class="modal-body">
+                            <p>Ingresa las credenciales del nuevo usuario</p>
+                            <input type="text" id="nuevo_usuario" class="modal-input" placeholder="Usuario">
+                            <input type="password" id="nuevo_password" class="modal-input" placeholder="Contraseña">
+                            <p id="switchUserError" class="error" style="display: none;"></p>
+                            <div class="modal-buttons">
+                                <button id="switchUserOkButton" class="modal-btn modal-btn-primary">
+                                    <i class="fas fa-check"></i> Ingresar
+                                </button>
+                                <button id="switchUserCancelButton" class="modal-btn modal-btn-secondary">
+                                    <i class="fas fa-times"></i> Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             `;
         }
 
@@ -737,6 +773,42 @@
                     if (event.key === 'Enter') {
                         event.preventDefault();
                         checkInventarioPassword();
+                    }
+                });
+            }
+        }
+
+        function setupSwitchUserModal() {
+            switchUserModal = document.getElementById('switchUserModal');
+            switchUserUserInput = document.getElementById('nuevo_usuario');
+            switchUserPassInput = document.getElementById('nuevo_password');
+            switchUserOkButton = document.getElementById('switchUserOkButton');
+            switchUserCancelButton = document.getElementById('switchUserCancelButton');
+            switchUserErrorMessage = document.getElementById('switchUserError');
+
+            if (switchUserOkButton) switchUserOkButton.addEventListener('click', autenticarNuevoUsuario);
+            if (switchUserCancelButton) switchUserCancelButton.addEventListener('click', cerrarModalCambioUsuario);
+
+            if (switchUserModal) {
+                switchUserModal.addEventListener('click', (event) => {
+                    if (event.target === switchUserModal) cerrarModalCambioUsuario();
+                });
+            }
+
+            if (switchUserUserInput) {
+                switchUserUserInput.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        autenticarNuevoUsuario();
+                    }
+                });
+            }
+
+            if (switchUserPassInput) {
+                switchUserPassInput.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        autenticarNuevoUsuario();
                     }
                 });
             }
@@ -876,7 +948,77 @@
         }
 
         function abrirModalCambioUsuario() {
-            window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
+            if (!switchUserModal) {
+                setupSwitchUserModal();
+            }
+
+            if (switchUserUserInput) switchUserUserInput.value = '';
+            if (switchUserPassInput) switchUserPassInput.value = '';
+            if (switchUserErrorMessage) {
+                switchUserErrorMessage.textContent = '';
+                switchUserErrorMessage.style.display = 'none';
+            }
+
+            if (switchUserModal) switchUserModal.style.display = 'flex';
+            if (switchUserUserInput) switchUserUserInput.focus();
+        }
+
+        function cerrarModalCambioUsuario() {
+            if (switchUserModal) switchUserModal.style.display = 'none';
+        }
+
+        async function autenticarNuevoUsuario() {
+            const usuarioInput = (switchUserUserInput ? switchUserUserInput.value : '').trim();
+            const passwordInput = (switchUserPassInput ? switchUserPassInput.value : '').trim();
+
+            if (!usuarioInput || !passwordInput) {
+                if (switchUserErrorMessage) {
+                    switchUserErrorMessage.textContent = 'Por favor, complete todos los campos.';
+                    switchUserErrorMessage.style.display = 'block';
+                }
+                return;
+            }
+
+            if (switchUserOkButton) {
+                switchUserOkButton.disabled = true;
+                switchUserOkButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
+            }
+
+            try {
+                const snapshot = await db.collection('usuarios').where('usuario', '==', usuarioInput).get();
+                let loginExitoso = false;
+
+                if (!snapshot.empty) {
+                    snapshot.forEach(doc => {
+                        const usuarioEncontrado = doc.data();
+                        if (usuarioEncontrado.contraseña && usuarioEncontrado.contraseña === passwordInput) {
+                            loginExitoso = true;
+                            localStorage.setItem('datosUsuario', JSON.stringify(usuarioEncontrado));
+                            location.reload();
+                        }
+                    });
+                }
+
+                if (!loginExitoso) {
+                    if (switchUserErrorMessage) {
+                        switchUserErrorMessage.textContent = 'Usuario o contraseña incorrectos.';
+                        switchUserErrorMessage.style.display = 'block';
+                    }
+                    if (switchUserOkButton) {
+                        switchUserOkButton.disabled = false;
+                        switchUserOkButton.innerHTML = '<i class="fas fa-check"></i> Ingresar';
+                    }
+                }
+            } catch (error) {
+                if (switchUserErrorMessage) {
+                    switchUserErrorMessage.textContent = 'Error: ' + error.message;
+                    switchUserErrorMessage.style.display = 'block';
+                }
+                if (switchUserOkButton) {
+                    switchUserOkButton.disabled = false;
+                    switchUserOkButton.innerHTML = '<i class="fas fa-check"></i> Ingresar';
+                }
+            }
         }
 
         // ===== FUNCIONES DEL MODAL (MANTIENEN LA FUNCIONALIDAD ORIGINAL) =====
