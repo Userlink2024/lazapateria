@@ -241,8 +241,6 @@
     let consignacionesIndex = [];
 
     let usedRefsSet = new Set();
-    let usedRefsLoaded = false;
-    let usedRefsLoadPromise = null;
 
     let consignacionesLoaded = false;
     let consignacionesLoadPromise = null;
@@ -336,7 +334,6 @@
 
     async function preloadAuditoriaData(){
       try { await loadUsuarios(); } catch (e) { /* no-op */ }
-      try { await loadUsedRefs(); } catch (e) { /* no-op */ }
       try { await loadConsignacionesIndex(); } catch (e) { /* no-op */ }
     }
 
@@ -348,7 +345,7 @@
 
     function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
-    async function withRetry(fn, { retries = 4, baseDelay = 350 } = {}){
+    async function withRetry(fn, { retries = 2, baseDelay = 1200 } = {}){
       let last;
       for (let i = 0; i <= retries; i++) {
         try {
@@ -362,18 +359,6 @@
         }
       }
       throw last;
-    }
-
-    async function ensureUsedRefsLoaded(){
-      if (usedRefsLoaded) return;
-      if (!usedRefsLoadPromise) {
-        usedRefsLoadPromise = (async () => {
-          await loadUsedRefs();
-        })().finally(() => {
-          usedRefsLoaded = true;
-        });
-      }
-      await usedRefsLoadPromise;
     }
 
     async function ensureConsignacionesLoaded(){
@@ -413,7 +398,7 @@
       return candidates[0];
     }
 
-    async function vincularReferenciaARegistro(registroId, consignacion){
+    async function vincularReferenciaARegistro(registroId, registroData, consignacion){
       const ref = normalizeRef(consignacion && consignacion.referencia);
       if (!ref) throw new Error('Referencia inválida.');
       if (usedRefsSet.has(ref)) throw new Error(`La referencia ${ref} ya fue utilizada.`);
@@ -423,7 +408,7 @@
       const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
 
       await withRetry(() => db.runTransaction(async (tx) => {
-        const [linkSnap, regSnap] = await Promise.all([tx.get(linkDoc), tx.get(regDoc)]);
+        const linkSnap = await tx.get(linkDoc);
 
         if (linkSnap.exists) {
           const ld = linkSnap.data() || {};
@@ -432,40 +417,18 @@
           }
         }
 
-        if (!regSnap.exists) throw new Error('Pedido no existe.');
-        const r = regSnap.data() || {};
-
-        const refsArr = Array.isArray(r.referencias_bancarias) ? r.referencias_bancarias.slice() : [];
-        const refsFlat = buildRegistroRefsFlat(r);
-
-        if (refsFlat.includes(ref)) {
-          // Ya estaba
-          tx.set(linkDoc, {
+        const r = registroData || {};
+        tx.update(regDoc, {
+          referencias_bancarias: firebase.firestore.FieldValue.arrayUnion({
             referencia: ref,
-            linkedRegistroId: registroId,
-            linkedCodigoUnico: safeStr(r.codigo_unico) || registroId,
-            linkedAsesor: safeStr(r.asesor) || '',
-            linkedCliente: safeStr(r.cliente) || '',
-            linkedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            linkedBy: who
-          }, { merge: true });
-          return;
-        }
-
-        refsArr.push({
-          referencia: ref,
-          valor: Number(consignacion.valor || 0),
-          fecha: consignacion.fecha || null,
-          cuentaId: safeStr(consignacion.cuentaId),
-          consignacionId: safeStr(consignacion.consignacionId),
-          path: safeStr(consignacion.path)
+            valor: Number(consignacion.valor || 0),
+            fecha: consignacion.fecha || null,
+            cuentaId: safeStr(consignacion.cuentaId),
+            consignacionId: safeStr(consignacion.consignacionId),
+            path: safeStr(consignacion.path)
+          }),
+          referencias_bancarias_refs: firebase.firestore.FieldValue.arrayUnion(ref)
         });
-        refsFlat.push(ref);
-
-        tx.set(regDoc, {
-          referencias_bancarias: refsArr,
-          referencias_bancarias_refs: refsFlat
-        }, { merge: true });
 
         tx.set(linkDoc, {
           referencia: ref,
@@ -482,8 +445,6 @@
           linkedBy: who
         }, { merge: true });
       }));
-
-      usedRefsSet.add(ref);
     }
 
     async function bloquearRegistro(registro){
@@ -535,14 +496,19 @@
       sel.value = prev;
     }
 
-    async function loadUsedRefs(){
-      usedRefsSet = new Set();
-      const snap = await COL_REF_LINKS.get();
-      snap.forEach(doc => {
-        const d = doc.data() || {};
-        const ref = normalizeRef(d.referencia || doc.id);
-        if (ref) usedRefsSet.add(ref);
-      });
+    async function fetchUsedRefsForList(refs){
+      const ids = Array.from(new Set((Array.isArray(refs) ? refs : []).map(normalizeRef).filter(Boolean)));
+      if (!ids.length) return;
+
+      const fieldPath = firebase.firestore.FieldPath.documentId();
+      for (let i = 0; i < ids.length; i += 10) {
+        const chunk = ids.slice(i, i + 10);
+        const snap = await withRetry(() => COL_REF_LINKS.where(fieldPath, 'in', chunk).get());
+        snap.forEach(doc => {
+          const ref = normalizeRef(doc.id);
+          if (ref) usedRefsSet.add(ref);
+        });
+      }
     }
 
     async function loadConsignacionesIndex(){
@@ -815,11 +781,28 @@
         return;
       }
 
+      const registroData = allRegistros.find(r => String(r.id) === String(registroId)) || null;
+
       setLoading(true);
       try{
-        await withRetry(() => vincularReferenciaARegistro(registroId, exact));
+        await vincularReferenciaARegistro(registroId, registroData, exact);
         usedRefsSet.add(q);
-        await withRetry(() => refreshAll(false));
+        if (registroData) {
+          const refsFlat = buildRegistroRefsFlat(registroData);
+          if (!refsFlat.includes(q)) {
+            if (!Array.isArray(registroData.referencias_bancarias)) registroData.referencias_bancarias = [];
+            registroData.referencias_bancarias.push({
+              referencia: q,
+              valor: Number(exact.valor || 0),
+              fecha: exact.fecha || null,
+              cuentaId: safeStr(exact.cuentaId),
+              consignacionId: safeStr(exact.consignacionId),
+              path: safeStr(exact.path)
+            });
+            registroData.referencias_bancarias_refs = refsFlat.concat([q]);
+          }
+        }
+        renderResults();
       }catch(e){
         showError(e && e.message ? e.message : String(e));
       }finally{
@@ -836,7 +819,6 @@
       if (!q || q.length < 3) { hideRefSuggest(registroId); return; }
 
       await ensureConsignacionesLoaded();
-      await ensureUsedRefsLoaded();
 
       const candidates = consignacionesIndex
         .filter(x => x && x.referencia && x.referencia.includes(q));
@@ -853,6 +835,7 @@
       });
 
       const top = candidates.slice(0, 18);
+      await fetchUsedRefsForList(top.map(x => x.referencia));
       top.forEach(c => {
         const isUsed = usedRefsSet.has(c.referencia);
         const row = document.createElement('div');
