@@ -239,7 +239,13 @@
     let cachedBodegueros = [];
     let allRegistros = [];
     let consignacionesIndex = [];
+
     let usedRefsSet = new Set();
+    let usedRefsLoaded = false;
+    let usedRefsLoadPromise = null;
+
+    let consignacionesLoaded = false;
+    let consignacionesLoadPromise = null;
 
     function showError(msg){ const el = $('errorBox'); if (!el) return; el.style.display='block'; el.textContent=msg; }
     function clearError(){ const el = $('errorBox'); if (!el) return; el.style.display='none'; el.textContent=''; }
@@ -334,6 +340,54 @@
       try { await loadConsignacionesIndex(); } catch (e) { /* no-op */ }
     }
 
+    function isRateLimitError(e){
+      const code = (e && (e.code || e.status)) ? String(e.code || e.status) : '';
+      const msg = (e && e.message) ? String(e.message) : '';
+      return code === '429' || code === 'resource-exhausted' || msg.includes('429') || msg.toLowerCase().includes('resource') || msg.toLowerCase().includes('exhausted');
+    }
+
+    function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+    async function withRetry(fn, { retries = 4, baseDelay = 350 } = {}){
+      let last;
+      for (let i = 0; i <= retries; i++) {
+        try {
+          return await fn();
+        } catch (e) {
+          last = e;
+          if (!isRateLimitError(e) || i === retries) throw e;
+          const jitter = Math.floor(Math.random() * 120);
+          const delay = Math.min(5000, baseDelay * Math.pow(2, i) + jitter);
+          await sleep(delay);
+        }
+      }
+      throw last;
+    }
+
+    async function ensureUsedRefsLoaded(){
+      if (usedRefsLoaded) return;
+      if (!usedRefsLoadPromise) {
+        usedRefsLoadPromise = (async () => {
+          await loadUsedRefs();
+        })().finally(() => {
+          usedRefsLoaded = true;
+        });
+      }
+      await usedRefsLoadPromise;
+    }
+
+    async function ensureConsignacionesLoaded(){
+      if (consignacionesLoaded) return;
+      if (!consignacionesLoadPromise) {
+        consignacionesLoadPromise = (async () => {
+          await loadConsignacionesIndex();
+        })().finally(() => {
+          consignacionesLoaded = true;
+        });
+      }
+      await consignacionesLoadPromise;
+    }
+
     function findBestReferencia(input){
       const q = normalizeRef(input);
       if (!q) return null;
@@ -368,7 +422,7 @@
       const regDoc = COL_REGISTROS.doc(registroId);
       const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
 
-      await db.runTransaction(async (tx) => {
+      await withRetry(() => db.runTransaction(async (tx) => {
         const [linkSnap, regSnap] = await Promise.all([tx.get(linkDoc), tx.get(regDoc)]);
 
         if (linkSnap.exists) {
@@ -427,7 +481,7 @@
           linkedAt: firebase.firestore.FieldValue.serverTimestamp(),
           linkedBy: who
         }, { merge: true });
-      });
+      }));
 
       usedRefsSet.add(ref);
     }
@@ -442,10 +496,10 @@
       }
 
       const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
-      await COL_REGISTROS.doc(id).set({
+      await withRetry(() => COL_REGISTROS.doc(id).set({
         bloqueado: true,
         bloqueadoPor: who
-      }, { merge: true });
+      }, { merge: true }));
     }
 
     async function loadUsuarios(){
@@ -748,12 +802,8 @@
         return;
       }
 
-      if (!consignacionesIndex.length) {
-        try { await loadConsignacionesIndex(); } catch (e) { /* no-op */ }
-      }
-      if (!usedRefsSet || !usedRefsSet.size) {
-        try { await loadUsedRefs(); } catch (e) { /* no-op */ }
-      }
+      await ensureConsignacionesLoaded();
+      await ensureUsedRefsLoaded();
 
       const exact = consignacionesIndex.find(x => x && x.referencia === q);
       if (!exact) {
@@ -767,8 +817,9 @@
 
       setLoading(true);
       try{
-        await vincularReferenciaARegistro(registroId, exact);
-        await refreshAll(false);
+        await withRetry(() => vincularReferenciaARegistro(registroId, exact));
+        usedRefsSet.add(q);
+        await withRetry(() => refreshAll(false));
       }catch(e){
         showError(e && e.message ? e.message : String(e));
       }finally{
@@ -784,12 +835,8 @@
 
       if (!q || q.length < 3) { hideRefSuggest(registroId); return; }
 
-      if (!consignacionesIndex.length) {
-        try { await loadConsignacionesIndex(); } catch (e) { /* no-op */ }
-      }
-      if (!usedRefsSet || !usedRefsSet.size) {
-        try { await loadUsedRefs(); } catch (e) { /* no-op */ }
-      }
+      await ensureConsignacionesLoaded();
+      await ensureUsedRefsLoaded();
 
       const candidates = consignacionesIndex
         .filter(x => x && x.referencia && x.referencia.includes(q));
