@@ -47,6 +47,7 @@
     .ref-opt.disabled:hover{background:transparent}
     .ref-meta{display:flex;align-items:center;gap:8px;min-width:0}
     .ref-code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ref-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:120px}
     .ref-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);font-weight:900;font-size:11px}
     .ref-badge.ok{background:rgba(22,163,74,.10);color:var(--ok);border-color:rgba(22,163,74,.20)}
     .ref-badge.bad{background:rgba(220,38,38,.10);color:var(--danger);border-color:rgba(220,38,38,.20)}
@@ -492,6 +493,19 @@
 
     async function loadConsignacionesIndex(){
       consignacionesIndex = [];
+
+      const cuentasMap = new Map();
+      try {
+        const cuentasSnap = await db.collection('cuentas').get();
+        cuentasSnap.forEach(doc => {
+          const d = doc.data() || {};
+          const nombre = safeStr(d.nombre || d.nombreCuenta || d.banco || doc.id);
+          cuentasMap.set(doc.id, nombre || doc.id);
+        });
+      } catch (e) {
+        // no-op
+      }
+
       const snap = await db.collectionGroup('consignaciones').get();
       snap.forEach(doc => {
         const d = doc.data() || {};
@@ -499,11 +513,13 @@
         const ref = normalizeRef(d.referencia);
         if (!ref) return;
         const cuentaId = (doc.ref.parent && doc.ref.parent.parent) ? doc.ref.parent.parent.id : '';
+        const cuentaNombre = cuentasMap.get(cuentaId) || cuentaId || '';
         consignacionesIndex.push({
           referencia: ref,
           valor: Number(d.valor || 0),
           fecha: d.fecha || null,
           cuentaId,
+          cuentaNombre,
           consignacionId: doc.id,
           path: doc.ref.path
         });
@@ -651,6 +667,7 @@
                   <input type="text" placeholder="Escribe mínimo 3 caracteres y selecciona la referencia" data-ref-input="${r.id}" autocomplete="off" />
                   <div class="ref-suggest-list" id="refSuggest_${r.id}"></div>
                 </div>
+                <div class="hint" id="refInfo_${r.id}" style="display:none;margin-top:6px"></div>
               </div>
               <div style="display:flex;align-items:end">
                 <button class="btn primary" type="button" data-btn-vincular="${r.id}"><i class="fas fa-link"></i> Vincular</button>
@@ -793,6 +810,8 @@
         const isUsed = usedRefsSet.has(c.referencia);
         const row = document.createElement('div');
         row.className = 'ref-opt' + (isUsed ? ' disabled' : '');
+        const cuenta = safeStr(c.cuentaNombre || c.cuentaId || '');
+        const valor = fmtCOP(Number(c.valor || 0));
         row.innerHTML = `
           <div class="ref-meta">
             <span class="ref-badge ${isUsed ? 'bad' : 'ok'}">
@@ -801,11 +820,20 @@
             </span>
             <span class="ref-code">${c.referencia}</span>
           </div>
+          <div class="ref-right">
+            <span class="hint" style="font-weight:900;color:var(--text)">${valor}</span>
+            <span class="hint">${cuenta || 'Cuenta'}</span>
+          </div>
         `;
         if (!isUsed) {
           row.addEventListener('click', () => {
             const input = document.querySelector(`input[data-ref-input="${registroId}"]`);
             if (input) input.value = c.referencia;
+            const info = document.getElementById(`refInfo_${registroId}`);
+            if (info) {
+              info.style.display = '';
+              info.textContent = `Cuenta: ${cuenta || 'N/A'} • Valor: ${valor}`;
+            }
             hideRefSuggest(registroId);
           });
         }
