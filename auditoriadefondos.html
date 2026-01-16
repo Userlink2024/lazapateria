@@ -37,6 +37,19 @@
     .hint{font-size:12px;color:var(--muted);font-weight:700}
     .list{display:grid;gap:10px}
     .item{border:1px solid var(--border);border-radius:14px;padding:12px;background:#fff}
+    .ref-suggest{position:relative}
+    .ref-suggest-list{position:absolute;left:0;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.12);max-height:240px;overflow:auto;z-index:20;display:none}
+    .ref-suggest-list.open{display:block}
+    .ref-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-weight:900;font-size:12px}
+    .ref-opt:last-child{border-bottom:none}
+    .ref-opt:hover{background:rgba(37,99,235,.06)}
+    .ref-opt.disabled{cursor:not-allowed;opacity:.6}
+    .ref-opt.disabled:hover{background:transparent}
+    .ref-meta{display:flex;align-items:center;gap:8px;min-width:0}
+    .ref-code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ref-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);font-weight:900;font-size:11px}
+    .ref-badge.ok{background:rgba(22,163,74,.10);color:var(--ok);border-color:rgba(22,163,74,.20)}
+    .ref-badge.bad{background:rgba(220,38,38,.10);color:var(--danger);border-color:rgba(220,38,38,.20)}
     .chips{display:flex;gap:8px;flex-wrap:wrap}
     .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(37,99,235,.06);font-size:12px;font-weight:900;color:var(--primary)}
     .chip.danger{background:rgba(220,38,38,.10);color:var(--danger);border-color:rgba(220,38,38,.20)}
@@ -634,8 +647,10 @@
             <div class="grid" style="grid-template-columns: 1fr auto auto">
               <div>
                 <label>Vincular referencia</label>
-                <input type="text" placeholder="Escribe mínimo 3 caracteres y selecciona la referencia" data-ref-input="${r.id}" list="refList_${r.id}" autocomplete="off" />
-                <datalist id="refList_${r.id}"></datalist>
+                <div class="ref-suggest">
+                  <input type="text" placeholder="Escribe mínimo 3 caracteres y selecciona la referencia" data-ref-input="${r.id}" autocomplete="off" />
+                  <div class="ref-suggest-list" id="refSuggest_${r.id}"></div>
+                </div>
               </div>
               <div style="display:flex;align-items:end">
                 <button class="btn primary" type="button" data-btn-vincular="${r.id}"><i class="fas fa-link"></i> Vincular</button>
@@ -663,12 +678,17 @@
           const id = input.getAttribute('data-ref-input');
           await updateRefSuggestions(id, input.value);
         });
+        input.addEventListener('focus', async () => {
+          const id = input.getAttribute('data-ref-input');
+          await updateRefSuggestions(id, input.value);
+        });
         input.addEventListener('keydown', async (e) => {
           if (e.key !== 'Enter') return;
           e.preventDefault();
           const id = input.getAttribute('data-ref-input');
           await doLink(id, input.value);
           input.value = '';
+          hideRefSuggest(id);
         });
       });
 
@@ -741,11 +761,11 @@
 
     async function updateRefSuggestions(registroId, rawInput){
       const q = normalizeRef(rawInput);
-      const list = document.getElementById(`refList_${registroId}`);
-      if (!list) return;
-      list.innerHTML = '';
+      const box = document.getElementById(`refSuggest_${registroId}`);
+      if (!box) return;
+      box.innerHTML = '';
 
-      if (!q || q.length < 3) return;
+      if (!q || q.length < 3) { hideRefSuggest(registroId); return; }
 
       if (!consignacionesIndex.length) {
         try { await loadConsignacionesIndex(); } catch (e) { /* no-op */ }
@@ -755,10 +775,9 @@
       }
 
       const candidates = consignacionesIndex
-        .filter(x => x && x.referencia && x.referencia.includes(q))
-        .filter(x => !usedRefsSet.has(x.referencia));
+        .filter(x => x && x.referencia && x.referencia.includes(q));
 
-      if (!candidates.length) return;
+      if (!candidates.length) { hideRefSuggest(registroId); return; }
 
       candidates.sort((a,b) => {
         const al = a.referencia.length;
@@ -769,12 +788,43 @@
         return bd - ad;
       });
 
-      const top = candidates.slice(0, 12);
+      const top = candidates.slice(0, 18);
       top.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.referencia;
-        list.appendChild(opt);
+        const isUsed = usedRefsSet.has(c.referencia);
+        const row = document.createElement('div');
+        row.className = 'ref-opt' + (isUsed ? ' disabled' : '');
+        row.innerHTML = `
+          <div class="ref-meta">
+            <span class="ref-badge ${isUsed ? 'bad' : 'ok'}">
+              <i class="fas ${isUsed ? 'fa-xmark' : 'fa-check'}"></i>
+              ${isUsed ? 'Vinculada' : 'Disponible'}
+            </span>
+            <span class="ref-code">${c.referencia}</span>
+          </div>
+        `;
+        if (!isUsed) {
+          row.addEventListener('click', () => {
+            const input = document.querySelector(`input[data-ref-input="${registroId}"]`);
+            if (input) input.value = c.referencia;
+            hideRefSuggest(registroId);
+          });
+        }
+        box.appendChild(row);
       });
+
+      showRefSuggest(registroId);
+    }
+
+    function showRefSuggest(registroId){
+      const box = document.getElementById(`refSuggest_${registroId}`);
+      if (!box) return;
+      box.classList.add('open');
+    }
+
+    function hideRefSuggest(registroId){
+      const box = document.getElementById(`refSuggest_${registroId}`);
+      if (!box) return;
+      box.classList.remove('open');
     }
 
     async function searchByReference(){
@@ -906,6 +956,14 @@
       $('resultsCard').style.display='none';
       $('fromDate').value = '';
       $('toDate').value = '';
+
+      document.addEventListener('click', (e) => {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+        const inside = t.closest('.ref-suggest');
+        if (inside) return;
+        document.querySelectorAll('.ref-suggest-list.open').forEach(el => el.classList.remove('open'));
+      });
     });
   </script>
 </body>
