@@ -6,9 +6,17 @@
     <title>Generar Guía Inter Rapidisimo - La Zapatería</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
+        :root {
+            --inter-primary: #007bff;
+            --inter-primary-dark: #0056b3;
+            --inter-bg: #e7f3ff;
+            --inter-card: #ffffff;
+            --inter-border: #e7e7e7;
+        }
+
         body {
             font-family: Arial, sans-serif;
-            background-color: #e7f3ff;
+            background-color: var(--inter-bg);
             margin: 0;
             padding: 10px;
             display: flex;
@@ -19,14 +27,15 @@
             box-sizing: border-box;
         }
         .container {
-            background-color: #fff;
+            background-color: var(--inter-card);
             padding: 10px;
             border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
             width: 95%;
             max-width: 800px;
             margin-bottom: 20px;
             box-sizing: border-box;
+            border: 1px solid var(--inter-border);
         }
         h2 {
             text-align: center;
@@ -67,7 +76,7 @@
             font-size: 1em;
         }
         button {
-            background-color: #007bff;
+            background-color: var(--inter-primary);
             color: white;
             padding: 10px 15px;
             border: none;
@@ -77,9 +86,13 @@
             margin-top: 5px;
             width: 100%;
             box-sizing: border-box;
+            box-shadow: 0 8px 18px rgba(0, 123, 255, 0.18);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
         }
         button:hover {
-            background-color: #0056b3;
+            background-color: var(--inter-primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 22px rgba(0, 123, 255, 0.22);
         }
         .error-message {
             color: red;
@@ -171,6 +184,17 @@
         }
         .help-icon:hover {
             color: #0056b3;
+        }
+
+        .history-icon {
+            cursor: pointer;
+            color: #6c757d;
+            font-size: 1.15em;
+            transition: color 0.3s ease;
+        }
+
+        .history-icon:hover {
+            color: #5a6268;
         }
 
         /* Estilos para el modal personalizado (NUEVO) */
@@ -307,6 +331,9 @@
         let guiaAEditarId = null;
         let datosUsuario = null; // Variable global para almacenar los datos del usuario
 
+        let historicoPage = 1;
+        const historicoPageSize = 20;
+
         window.onload = () => {
             cargarUsuarioLogueado();
             verificarRolParaExportar();
@@ -349,6 +376,102 @@
             filterCheckboxes.forEach(checkbox => {
                 checkbox.addEventListener('change', filtrarGuias);
             });
+        }
+
+        function abrirHistoricoVerificadas() {
+            historicoPage = 1;
+            document.getElementById('historicoVerificadasModal').classList.add('active');
+
+            const asesoresUnicos = new Set();
+            guiasInterrapidissimo.forEach(g => {
+                if (g && g.usuario) asesoresUnicos.add(g.usuario);
+            });
+            const asesorSelect = document.getElementById('historicoAsesor');
+            if (asesorSelect) {
+                const current = asesorSelect.value;
+                asesorSelect.innerHTML = '<option value="">Todos los Asesores</option>';
+                asesoresUnicos.forEach(a => {
+                    const option = document.createElement('option');
+                    option.value = a;
+                    option.textContent = a;
+                    asesorSelect.appendChild(option);
+                });
+                asesorSelect.value = current;
+            }
+
+            renderHistoricoVerificadas();
+        }
+
+        function cerrarHistoricoVerificadas() {
+            document.getElementById('historicoVerificadasModal').classList.remove('active');
+        }
+
+        function getHistoricoFiltrado() {
+            const search = (document.getElementById('historicoSearch')?.value || '').toLowerCase();
+            const asesor = document.getElementById('historicoAsesor')?.value || '';
+
+            return guiasInterrapidissimo
+                .filter(g => g && g.verificado === true)
+                .filter(g => {
+                    const coincideAsesor = !asesor || (g.usuario && g.usuario === asesor);
+                    const coincideSearch = !search || Object.values(g).some(v => {
+                        if (typeof v === 'string' || typeof v === 'number') return String(v).toLowerCase().includes(search);
+                        return false;
+                    });
+                    return coincideAsesor && coincideSearch;
+                });
+        }
+
+        function renderHistoricoVerificadas() {
+            const lista = document.getElementById('historicoListaGuias');
+            if (!lista) return;
+            lista.innerHTML = '';
+
+            const data = getHistoricoFiltrado();
+            const totalPages = Math.max(1, Math.ceil(data.length / historicoPageSize));
+            if (historicoPage > totalPages) historicoPage = totalPages;
+
+            const start = (historicoPage - 1) * historicoPageSize;
+            const pageItems = data.slice(start, start + historicoPageSize);
+
+            const pageLabel = document.getElementById('historicoPageLabel');
+            if (pageLabel) pageLabel.textContent = String(historicoPage);
+
+            if (pageItems.length === 0) {
+                lista.innerHTML = '<li>No hay guías verificadas para mostrar.</li>';
+                return;
+            }
+
+            pageItems.forEach(guia => {
+                const li = document.createElement('li');
+                li.style.borderBottom = '1px solid #eee';
+                li.style.padding = '10px 0';
+                li.style.marginBottom = '10px';
+                li.style.fontSize = '0.9em';
+                li.innerHTML = `
+                    <div><strong>Número de Guía:</strong> ${guia.numeroGuia || 'N/A'}</div>
+                    <div><strong>Nombre del Cliente:</strong> ${guia.nombreCliente || ''}</div>
+                    <div><strong>Fecha:</strong> ${guia.fecha || ''}</div>
+                    <div><strong>Valor:</strong> ${guia.valorMercancia !== undefined ? guia.valorMercancia : 'N/A'}</div>
+                    <div><strong>Usuario (Asesor):</strong> ${guia.usuario || ''}</div>
+                `;
+                lista.appendChild(li);
+            });
+        }
+
+        function nextHistoricoPage() {
+            const totalPages = Math.max(1, Math.ceil(getHistoricoFiltrado().length / historicoPageSize));
+            if (historicoPage < totalPages) {
+                historicoPage++;
+                renderHistoricoVerificadas();
+            }
+        }
+
+        function prevHistoricoPage() {
+            if (historicoPage > 1) {
+                historicoPage--;
+                renderHistoricoVerificadas();
+            }
         }
 
         async function cargarUsuarioLogueado() {
@@ -562,7 +685,9 @@
                 const coincideAnulado = !filtroAnulado || guia.anulado === true;
                 const coincideNovedad = !filtroNovedad || guia.novedad === true;
 
-                return coincideBusqueda && coincideAsesor && coincidePendiente && coincideVerificado && coincideAnulado && coincideNovedad;
+                const esNoVerificado = guia.verificado !== true;
+
+                return esNoVerificado && coincideBusqueda && coincideAsesor && coincidePendiente && coincideVerificado && coincideAnulado && coincideNovedad;
             });
 
             if (guiasFiltradas.length === 0) {
@@ -851,6 +976,7 @@
     <div class="container" id="guiasModulo">
         <h2>
             Listado de Guías de Inter Rapidisimo
+            <i class="fas fa-history history-icon" title="Histórico" onclick="abrirHistoricoVerificadas()"></i>
             <i class="fas fa-cog help-icon" onclick="mostrarFiltrosModal()"></i>
         </h2>
         <input type="text" id="buscadorGuias" onkeyup="filtrarGuias()" placeholder="Buscar en todas las guías...">
@@ -862,6 +988,25 @@
 
         <ul id="listaGuias">
             </ul>
+    </div>
+
+    <div id="historicoVerificadasModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="cerrarHistoricoVerificadas()">&times;</button>
+            <h3>Histórico (Verificadas)</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="historicoSearch" placeholder="Buscar en verificadas..." onkeyup="renderHistoricoVerificadas()">
+                <select id="historicoAsesor" onchange="renderHistoricoVerificadas()">
+                    <option value="">Todos los Asesores</option>
+                </select>
+            </div>
+            <ul id="historicoListaGuias" style="list-style: none; padding: 0; margin: 0;"></ul>
+            <div class="modal-actions" style="justify-content: space-between; align-items: center;">
+                <button class="cancel-btn" onclick="prevHistoricoPage()">Anterior</button>
+                <div style="font-weight: 600; color: #555;">Página <span id="historicoPageLabel">1</span></div>
+                <button class="confirm-btn" onclick="nextHistoricoPage()">Siguiente</button>
+            </div>
+        </div>
     </div>
 
     <div id="filterModal" class="modal-overlay">
@@ -945,7 +1090,7 @@
                 </label>
             </div>
             <div class="modal-actions">
-                <button class="confirm-btn" onclick="const selectedFilter = document.querySelector('input[name=exportFilter]:checked').value; exportarGuiasExcel(selectedFilter); closeExportModal();">Exportar</button>
+                <button class="confirm-btn" onclick="const exportSelectedFilter = document.querySelector('input[name=exportFilter]:checked').value; exportarGuiasExcel(exportSelectedFilter); closeExportModal();">Exportar</button>
                 <button class="cancel-btn" onclick="closeExportModal()">Cancelar</button>
             </div>
         </div>
@@ -972,7 +1117,7 @@
                 </label>
             </div>
             <div class="modal-actions">
-                <button class="confirm-btn" onclick="const selectedFilter = document.querySelector('input[name=deleteFilter]:checked').value; eliminarGuiasPorEstado(selectedFilter); closeDeleteModal();">Eliminar</button>
+                <button class="confirm-btn" onclick="const deleteSelectedFilter = document.querySelector('input[name=deleteFilter]:checked').value; eliminarGuiasPorEstado(deleteSelectedFilter); closeDeleteModal();">Eliminar</button>
                 <button class="cancel-btn" onclick="closeDeleteModal()">Cancelar</button>
             </div>
         </div>
