@@ -343,6 +343,12 @@
       return code === '429' || code === 'resource-exhausted' || msg.includes('429') || msg.toLowerCase().includes('resource') || msg.toLowerCase().includes('exhausted');
     }
 
+    function isAlreadyExistsError(e){
+      const code = (e && (e.code || e.status)) ? String(e.code || e.status) : '';
+      const msg = (e && e.message) ? String(e.message) : '';
+      return code === 'already-exists' || msg.toLowerCase().includes('already exists');
+    }
+
     function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
     async function withRetry(fn, { retries = 2, baseDelay = 1200 } = {}){
@@ -407,30 +413,9 @@
       const regDoc = COL_REGISTROS.doc(registroId);
       const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
 
-      await withRetry(() => db.runTransaction(async (tx) => {
-        const linkSnap = await tx.get(linkDoc);
-
-        if (linkSnap.exists) {
-          const ld = linkSnap.data() || {};
-          if (ld.linkedRegistroId && String(ld.linkedRegistroId) !== String(registroId)) {
-            throw new Error(`La referencia ${ref} ya está vinculada a otro pedido.`);
-          }
-        }
-
-        const r = registroData || {};
-        tx.update(regDoc, {
-          referencias_bancarias: firebase.firestore.FieldValue.arrayUnion({
-            referencia: ref,
-            valor: Number(consignacion.valor || 0),
-            fecha: consignacion.fecha || null,
-            cuentaId: safeStr(consignacion.cuentaId),
-            consignacionId: safeStr(consignacion.consignacionId),
-            path: safeStr(consignacion.path)
-          }),
-          referencias_bancarias_refs: firebase.firestore.FieldValue.arrayUnion(ref)
-        });
-
-        tx.set(linkDoc, {
+      const r = registroData || {};
+      try {
+        await withRetry(() => linkDoc.create({
           referencia: ref,
           valor: Number(consignacion.valor || 0),
           fecha: consignacion.fecha || null,
@@ -443,7 +428,24 @@
           linkedCliente: safeStr(r.cliente) || '',
           linkedAt: firebase.firestore.FieldValue.serverTimestamp(),
           linkedBy: who
-        }, { merge: true });
+        }));
+      } catch (e) {
+        if (isAlreadyExistsError(e)) {
+          throw new Error(`La referencia ${ref} ya está vinculada.`);
+        }
+        throw e;
+      }
+
+      await withRetry(() => regDoc.update({
+        referencias_bancarias: firebase.firestore.FieldValue.arrayUnion({
+          referencia: ref,
+          valor: Number(consignacion.valor || 0),
+          fecha: consignacion.fecha || null,
+          cuentaId: safeStr(consignacion.cuentaId),
+          consignacionId: safeStr(consignacion.consignacionId),
+          path: safeStr(consignacion.path)
+        }),
+        referencias_bancarias_refs: firebase.firestore.FieldValue.arrayUnion(ref)
       }));
     }
 
