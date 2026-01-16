@@ -1,1 +1,831 @@
-none
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auditoría de Fondos - La Zapatería</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+  <style>
+    :root{--bg:#f6f8fb;--card:#fff;--text:#111827;--muted:#6b7280;--border:rgba(17,24,39,.10);--shadow:0 10px 25px rgba(0,0,0,.08);--primary:#2563eb;--primary2:#1d4ed8;--danger:#dc2626;--ok:#16a34a}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:radial-gradient(1200px 600px at 15% 10%, rgba(37,99,235,.10), transparent 65%),radial-gradient(1000px 500px at 85% 15%, rgba(245,158,11,.10), transparent 60%),var(--bg);color:var(--text)}
+    .app{max-width:1280px;margin:0 auto;padding:18px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);position:sticky;top:0;z-index:30}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--primary2));display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 10px 20px rgba(37,99,235,.25)}
+    h1{margin:0;font-size:16px}
+    .sub{color:var(--muted);font-size:12px;font-weight:700;margin-top:2px}
+    .actions{display:flex;gap:10px;align-items:center}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:rgba(17,24,39,.04);border:1px solid var(--border);font-size:12px;font-weight:800;color:var(--muted)}
+    .pill strong{color:var(--text)}
+    .btn{border:none;border-radius:12px;padding:10px 12px;cursor:pointer;font-weight:800;font-size:13px;display:inline-flex;align-items:center;gap:8px}
+    .btn.primary{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff}
+    .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+    .btn.danger{background:rgba(220,38,38,.12);color:var(--danger);border:1px solid rgba(220,38,38,.25)}
+    .layout{display:grid;grid-template-columns:380px 1fr;gap:16px;margin-top:16px}
+    @media(max-width:1100px){.layout{grid-template-columns:1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:14px}
+    .card h2{margin:0 0 10px 0;font-size:14px;display:flex;align-items:center;gap:10px}
+    label{font-size:12px;font-weight:900;color:var(--muted);display:block;margin-bottom:6px}
+    input,select,textarea{width:100%;padding:10px;border-radius:12px;border:1px solid var(--border);background:#fff;outline:none;font-size:13px}
+    textarea{min-height:84px;resize:vertical}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media(max-width:520px){.grid{grid-template-columns:1fr}}
+    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .hint{font-size:12px;color:var(--muted);font-weight:700}
+    .list{display:grid;gap:10px}
+    .item{border:1px solid var(--border);border-radius:14px;padding:12px;background:#fff}
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(37,99,235,.06);font-size:12px;font-weight:900;color:var(--primary)}
+    .chip.danger{background:rgba(220,38,38,.10);color:var(--danger);border-color:rgba(220,38,38,.20)}
+    .chip.ok{background:rgba(22,163,74,.10);color:var(--ok);border-color:rgba(22,163,74,.20)}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:100}
+    .modal.open{display:flex}
+    .modal-card{width:min(560px,100%);background:var(--card);border-radius:16px;border:1px solid var(--border);box-shadow:0 30px 90px rgba(0,0,0,.35);overflow:hidden}
+    .modal-head{padding:14px 16px;background:linear-gradient(135deg,rgba(37,99,235,.12),rgba(245,158,11,.08));display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .modal-head h3{margin:0;font-size:14px}
+    .modal-body{padding:14px 16px}
+    .modal-actions{padding:14px 16px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border)}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo"><i class="fas fa-clipboard-check"></i></div>
+        <div>
+          <h1>Auditoría de Fondos</h1>
+          <div class="sub">Vinculación de referencias + bloqueo + caja menor</div>
+        </div>
+      </div>
+      <div class="actions">
+        <div class="pill" id="userPill"><i class="fas fa-user"></i> <strong>...</strong></div>
+        <button class="btn ghost" type="button" onclick="location.href='https://userlink2024.github.io/lazapateria/paneldecuentas.html'">
+          <i class="fas fa-arrow-left"></i> Volver
+        </button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="card" id="filtersCard">
+        <h2><i class="fas fa-filter" style="color:var(--primary)"></i> Filtros</h2>
+        <div class="grid">
+          <div>
+            <label for="fromDate">Desde</label>
+            <input id="fromDate" type="date" />
+          </div>
+          <div>
+            <label for="toDate">Hasta</label>
+            <input id="toDate" type="date" />
+          </div>
+          <div>
+            <label for="asesorSelect">Asesor</label>
+            <select id="asesorSelect"><option value="">Todos</option></select>
+          </div>
+          <div>
+            <label for="bloqueadoSelect">Bloqueado</label>
+            <select id="bloqueadoSelect"><option value="all">Todos</option><option value="si">Sí</option><option value="no">No</option></select>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label for="searchInput">Búsqueda</label>
+          <input id="searchInput" type="text" placeholder="Cliente, código único, observaciones, referencia..." />
+        </div>
+        <div class="toolbar" style="margin-top:12px">
+          <button class="btn primary" type="button" id="btnReload"><i class="fas fa-rotate"></i> Recargar</button>
+          <button class="btn ghost" type="button" id="btnOpenHistory"><i class="fas fa-clock-rotate-left"></i> Historial por Referencia</button>
+        </div>
+        <div class="hint" style="margin-top:10px">Este módulo se conectará con consignaciones (cuentas) y ventas (registros).</div>
+      </div>
+
+      <div class="card" id="resultsCard">
+        <h2><i class="fas fa-list" style="color:var(--primary)"></i> Pedidos</h2>
+        <div id="errorBox" class="hint" style="display:none;color:var(--danger);font-weight:900"></div>
+        <div id="loadingBox" class="hint" style="display:none">Cargando...</div>
+        <div id="results" class="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal open" id="modeModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3><i class="fas fa-circle-question" style="color:var(--primary)"></i> Selecciona el módulo</h3>
+        <span class="hint"><i class="fas fa-lock"></i></span>
+      </div>
+      <div class="modal-body">
+        <div class="hint" style="margin-bottom:12px">¿Vas para caja menor o para auditar referencias bancarias?</div>
+        <div class="grid">
+          <button class="btn primary" type="button" id="btnGoAuditoria"><i class="fas fa-building-columns"></i> Auditoría Bancaria</button>
+          <button class="btn ghost" type="button" id="btnGoCaja"><i class="fas fa-cash-register"></i> Caja Menor</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" type="button" onclick="location.href='https://userlink2024.github.io/lazapateria/paneldecuentas.html'">
+          <i class="fas fa-arrow-left"></i> Volver
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="historyModal">
+    <div class="modal-card" style="width:min(860px,100%)">
+      <div class="modal-head">
+        <h3><i class="fas fa-clock-rotate-left" style="color:var(--primary)"></i> Historial por Referencia</h3>
+        <button class="btn ghost" type="button" onclick="closeHistory()"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="grid">
+          <div>
+            <label for="historyRef">Referencia</label>
+            <input id="historyRef" type="text" placeholder="Ej: ABC123" />
+          </div>
+          <div style="display:flex;align-items:end">
+            <button class="btn primary" type="button" id="btnSearchRef"><i class="fas fa-magnifying-glass"></i> Buscar</button>
+          </div>
+        </div>
+        <div id="historyResults" class="list" style="margin-top:12px"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" type="button" onclick="closeHistory()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="cajaModal">
+    <div class="modal-card" style="width:min(860px,100%)">
+      <div class="modal-head">
+        <h3><i class="fas fa-cash-register" style="color:var(--primary)"></i> Caja Menor (básico)</h3>
+        <button class="btn ghost" type="button" onclick="closeCaja()"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="grid">
+          <div>
+            <label for="cajaTipo">Tipo</label>
+            <select id="cajaTipo"><option value="ingreso">Ingreso</option><option value="egreso">Egreso</option></select>
+          </div>
+          <div>
+            <label for="cajaValor">Valor</label>
+            <input id="cajaValor" type="number" min="0" step="1" placeholder="0" />
+          </div>
+          <div>
+            <label for="cajaFlete">Flete</label>
+            <input id="cajaFlete" type="number" min="0" step="1" placeholder="0" />
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label for="cajaObs">Observaciones</label>
+          <textarea id="cajaObs" placeholder="Fletes, notas, motivo..."></textarea>
+        </div>
+        <div class="toolbar" style="margin-top:12px">
+          <button class="btn primary" type="button" id="btnCajaGuardar"><i class="fas fa-floppy-disk"></i> Guardar</button>
+          <button class="btn ghost" type="button" id="btnCajaRecargar"><i class="fas fa-rotate"></i> Recargar</button>
+          <button class="btn ghost" type="button" onclick="window.open('historial_disponible.html','_blank')"><i class="fas fa-up-right-from-square"></i> Historial disponible</button>
+        </div>
+        <div id="cajaList" class="list" style="margin-top:12px"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" type="button" onclick="closeCaja()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+      authDomain: "lazapateria-c4157.firebaseapp.com",
+      projectId: "lazapateria-c4157",
+      storageBucket: "lazapateria-c4157.firebasestorage.app",
+      messagingSenderId: "300241769138",
+      appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+      measurementId: "G-HVG7615JEE"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const $ = (id) => document.getElementById(id);
+
+    const COL_REGISTROS = db.collection('registros');
+    const COL_USUARIOS = db.collection('usuarios');
+    const COL_REF_LINKS = db.collection('auditoria_fondos_refs');
+    const COL_CAJA = db.collection('caja_menor');
+
+    let currentUser = null;
+    let cachedOperadores = [];
+    let cachedBodegueros = [];
+    let allRegistros = [];
+    let consignacionesIndex = [];
+    let usedRefsSet = new Set();
+
+    function showError(msg){ const el = $('errorBox'); if (!el) return; el.style.display='block'; el.textContent=msg; }
+    function clearError(){ const el = $('errorBox'); if (!el) return; el.style.display='none'; el.textContent=''; }
+    function setLoading(v){ const el = $('loadingBox'); if (!el) return; el.style.display = v ? 'block' : 'none'; }
+
+    function safeStr(v){ return String(v || '').trim(); }
+    function normalizeRef(v){ return safeStr(v).toUpperCase(); }
+    function fmtCOP(n){ return '$' + new Intl.NumberFormat('es-CO').format(Number(n || 0)); }
+    function tsToDate(ts){ try { return ts && ts.toDate ? ts.toDate() : null; } catch { return null; } }
+    function formatDateTime(ts){ const d = tsToDate(ts); return d ? d.toLocaleString('es-CO') : ''; }
+    function sumAbonos(abonos){ return (Array.isArray(abonos) ? abonos : []).reduce((acc,a)=> acc + Number((a && a.monto) || 0), 0); }
+
+    function buildRegistroRefsFlat(r){
+      if (Array.isArray(r.referencias_bancarias_refs)) return r.referencias_bancarias_refs.map(normalizeRef).filter(Boolean);
+      if (Array.isArray(r.referencias_bancarias)) return r.referencias_bancarias.map(x => normalizeRef(x && x.referencia)).filter(Boolean);
+      return [];
+    }
+
+    function openHistory(){ $('historyModal').classList.add('open'); }
+    function closeHistory(){ $('historyModal').classList.remove('open'); }
+    function openCaja(){ $('cajaModal').classList.add('open'); }
+    function closeCaja(){ $('cajaModal').classList.remove('open'); }
+
+    function setModeAuditoria(){
+      $('modeModal').classList.remove('open');
+      $('filtersCard').style.display='';
+      $('resultsCard').style.display='';
+    }
+    function setModeCaja(){
+      $('modeModal').classList.remove('open');
+      $('filtersCard').style.display='none';
+      $('resultsCard').style.display='none';
+      openCaja();
+    }
+
+    function bindUi(){
+      $('btnReload').addEventListener('click', () => refreshAll(false));
+      $('btnOpenHistory').addEventListener('click', openHistory);
+      $('btnSearchRef').addEventListener('click', searchByReference);
+      $('btnCajaGuardar').addEventListener('click', cajaGuardar);
+      $('btnCajaRecargar').addEventListener('click', cajaCargar);
+
+      $('searchInput').addEventListener('input', renderResults);
+      $('asesorSelect').addEventListener('change', renderResults);
+      $('bloqueadoSelect').addEventListener('change', renderResults);
+
+      $('btnGoAuditoria').addEventListener('click', async () => {
+        setModeAuditoria();
+        await refreshAll(true);
+      });
+      $('btnGoCaja').addEventListener('click', async () => {
+        setModeCaja();
+        await cajaCargar();
+      });
+    }
+
+    function loadCurrentUser(){
+      const json = localStorage.getItem('datosUsuario');
+      if (!json) { location.href='https://userlink2024.github.io/lazapateria/index.html'; return; }
+      try{
+        currentUser = JSON.parse(json);
+        const label = (currentUser && (currentUser.nombreCompleto || currentUser.usuario)) ? (currentUser.nombreCompleto || currentUser.usuario) : 'Usuario';
+        $('userPill').innerHTML = `<i class="fas fa-user"></i> <strong>${label}</strong>`;
+      }catch{
+        localStorage.removeItem('datosUsuario');
+        location.href='https://userlink2024.github.io/lazapateria/index.html';
+      }
+    }
+
+    async function refreshAll(loadHeavy){
+      clearError();
+      setLoading(true);
+      try{
+        if (loadHeavy) {
+          await loadUsuarios();
+          await loadUsedRefs();
+          await loadConsignacionesIndex();
+        }
+        await loadRegistros();
+        renderResults();
+      } catch (e) {
+        showError(e && e.message ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function findBestReferencia(input){
+      const q = normalizeRef(input);
+      if (!q) return null;
+
+      // Exact match first
+      const exact = consignacionesIndex.find(x => x.referencia === q);
+      if (exact && !usedRefsSet.has(exact.referencia)) return exact;
+
+      const candidates = consignacionesIndex
+        .filter(x => x && x.referencia && x.referencia.includes(q))
+        .filter(x => !usedRefsSet.has(x.referencia));
+
+      if (!candidates.length) return null;
+
+      candidates.sort((a,b) => {
+        const al = a.referencia.length;
+        const bl = b.referencia.length;
+        if (al !== bl) return al - bl;
+        const ad = tsToDate(a.fecha) ? tsToDate(a.fecha).getTime() : 0;
+        const bd = tsToDate(b.fecha) ? tsToDate(b.fecha).getTime() : 0;
+        return bd - ad;
+      });
+      return candidates[0];
+    }
+
+    async function vincularReferenciaARegistro(registroId, consignacion){
+      const ref = normalizeRef(consignacion && consignacion.referencia);
+      if (!ref) throw new Error('Referencia inválida.');
+      if (usedRefsSet.has(ref)) throw new Error(`La referencia ${ref} ya fue utilizada.`);
+
+      const linkDoc = COL_REF_LINKS.doc(ref);
+      const regDoc = COL_REGISTROS.doc(registroId);
+      const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
+
+      await db.runTransaction(async (tx) => {
+        const [linkSnap, regSnap] = await Promise.all([tx.get(linkDoc), tx.get(regDoc)]);
+
+        if (linkSnap.exists) {
+          const ld = linkSnap.data() || {};
+          if (ld.linkedRegistroId && String(ld.linkedRegistroId) !== String(registroId)) {
+            throw new Error(`La referencia ${ref} ya está vinculada a otro pedido.`);
+          }
+        }
+
+        if (!regSnap.exists) throw new Error('Pedido no existe.');
+        const r = regSnap.data() || {};
+
+        const refsArr = Array.isArray(r.referencias_bancarias) ? r.referencias_bancarias.slice() : [];
+        const refsFlat = buildRegistroRefsFlat(r);
+
+        if (refsFlat.includes(ref)) {
+          // Ya estaba
+          tx.set(linkDoc, {
+            referencia: ref,
+            linkedRegistroId: registroId,
+            linkedCodigoUnico: safeStr(r.codigo_unico) || registroId,
+            linkedAsesor: safeStr(r.asesor) || '',
+            linkedCliente: safeStr(r.cliente) || '',
+            linkedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            linkedBy: who
+          }, { merge: true });
+          return;
+        }
+
+        refsArr.push({
+          referencia: ref,
+          valor: Number(consignacion.valor || 0),
+          fecha: consignacion.fecha || null,
+          cuentaId: safeStr(consignacion.cuentaId),
+          consignacionId: safeStr(consignacion.consignacionId),
+          path: safeStr(consignacion.path)
+        });
+        refsFlat.push(ref);
+
+        tx.set(regDoc, {
+          referencias_bancarias: refsArr,
+          referencias_bancarias_refs: refsFlat
+        }, { merge: true });
+
+        tx.set(linkDoc, {
+          referencia: ref,
+          valor: Number(consignacion.valor || 0),
+          fecha: consignacion.fecha || null,
+          cuentaId: safeStr(consignacion.cuentaId),
+          consignacionId: safeStr(consignacion.consignacionId),
+          path: safeStr(consignacion.path),
+          linkedRegistroId: registroId,
+          linkedCodigoUnico: safeStr(r.codigo_unico) || registroId,
+          linkedAsesor: safeStr(r.asesor) || '',
+          linkedCliente: safeStr(r.cliente) || '',
+          linkedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          linkedBy: who
+        }, { merge: true });
+      });
+
+      usedRefsSet.add(ref);
+    }
+
+    async function bloquearRegistro(registro){
+      const id = registro && registro.id;
+      if (!id) throw new Error('ID inválido.');
+
+      const refs = buildRegistroRefsFlat(registro);
+      if (!refs.length) {
+        throw new Error('Primero vincula al menos una referencia para poder bloquear el pedido.');
+      }
+
+      const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
+      await COL_REGISTROS.doc(id).set({
+        bloqueado: true,
+        bloqueadoPor: who
+      }, { merge: true });
+    }
+
+    async function loadUsuarios(){
+      cachedOperadores = [];
+      cachedBodegueros = [];
+
+      const [operadoresSnapshot, bodeguerosSnapshot] = await Promise.all([
+        COL_USUARIOS.where('permisos', '==', 'Operador').get(),
+        COL_USUARIOS.where('permisos', '==', 'Bodeguero').get()
+      ]);
+
+      operadoresSnapshot.forEach(doc => {
+        const d = doc.data() || {};
+        if (d.nombreCompleto) cachedOperadores.push(String(d.nombreCompleto));
+      });
+      bodeguerosSnapshot.forEach(doc => {
+        const d = doc.data() || {};
+        if (d.nombreCompleto) cachedBodegueros.push(String(d.nombreCompleto));
+      });
+
+      cachedOperadores = Array.from(new Set(cachedOperadores)).sort((a,b)=>a.localeCompare(b,'es'));
+      cachedBodegueros = Array.from(new Set(cachedBodegueros)).sort((a,b)=>a.localeCompare(b,'es'));
+
+      const sel = $('asesorSelect');
+      const prev = sel.value;
+      sel.innerHTML = '<option value="">Todos</option>';
+      cachedOperadores.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n;
+        sel.appendChild(opt);
+      });
+      sel.value = prev;
+    }
+
+    async function loadUsedRefs(){
+      usedRefsSet = new Set();
+      const snap = await COL_REF_LINKS.get();
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        const ref = normalizeRef(d.referencia || doc.id);
+        if (ref) usedRefsSet.add(ref);
+      });
+    }
+
+    async function loadConsignacionesIndex(){
+      consignacionesIndex = [];
+      const snap = await db.collectionGroup('consignaciones').get();
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+        if (d.isSeparator === true) return;
+        const ref = normalizeRef(d.referencia);
+        if (!ref) return;
+        const cuentaId = (doc.ref.parent && doc.ref.parent.parent) ? doc.ref.parent.parent.id : '';
+        consignacionesIndex.push({
+          referencia: ref,
+          valor: Number(d.valor || 0),
+          fecha: d.fecha || null,
+          cuentaId,
+          consignacionId: doc.id,
+          path: doc.ref.path
+        });
+      });
+    }
+
+    async function loadRegistros(){
+      const from = $('fromDate').value;
+      const to = $('toDate').value;
+
+      let q = COL_REGISTROS.orderBy('fecha_hora', 'desc');
+      if (from) {
+        const d = new Date(from + 'T00:00:00');
+        q = q.where('fecha_hora', '>=', firebase.firestore.Timestamp.fromDate(d));
+      }
+      if (to) {
+        const d = new Date(to + 'T23:59:59');
+        q = q.where('fecha_hora', '<=', firebase.firestore.Timestamp.fromDate(d));
+      }
+
+      const snap = await q.get();
+      allRegistros = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+    }
+
+    function applyFilters(){
+      const asesor = $('asesorSelect').value;
+      const bloqueado = $('bloqueadoSelect').value;
+      const search = safeStr($('searchInput').value).toLowerCase();
+
+      let list = allRegistros.slice();
+
+      // Excluir pedidos enviados a empaque
+      list = list.filter(r => r.enviadoAEmpaque !== true);
+
+      // Excluir bodegueros: solo lista asesor que esté en Operadores
+      if (cachedOperadores.length) list = list.filter(r => cachedOperadores.includes(String(r.asesor || '')));
+
+      if (asesor) list = list.filter(r => String(r.asesor || '') === asesor);
+      if (bloqueado === 'si') list = list.filter(r => r.bloqueado === true);
+      if (bloqueado === 'no') list = list.filter(r => r.bloqueado !== true);
+
+      if (search) {
+        list = list.filter(r => {
+          const productos = Array.isArray(r.productos) ? r.productos : [];
+          const abonos = Array.isArray(r.abonos) ? r.abonos : [];
+          const refs = Array.isArray(r.referencias_bancarias_refs) ? r.referencias_bancarias_refs : [];
+          const prodText = productos.map(p => [p.referencia, p.color, p.talla, p.precio].filter(Boolean).join(' ')).join(' | ');
+          const abonosText = abonos.map(a => [a.fecha, a.monto].filter(Boolean).join(' ')).join(' | ');
+          const blob = safeStr([
+            r.codigo_unico, r.cliente, r.asesor, r.usuario, r.observaciones,
+            refs.join(' '), prodText, abonosText
+          ].join(' ')).toLowerCase();
+          return blob.includes(search);
+        });
+      }
+
+      return list;
+    }
+
+    function renderResults(){
+      const container = $('results');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const list = applyFilters();
+      if (!list.length) {
+        container.innerHTML = '<div class="hint">No hay pedidos con esos filtros.</div>';
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+      list.forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'item';
+
+        const total = Number(r.valor_total || 0);
+        const totalAbonos = sumAbonos(r.abonos);
+        const coincide = Math.round(total) === Math.round(totalAbonos);
+
+        const refs = buildRegistroRefsFlat(r);
+        const saldoPendiente = Math.max(0, Math.round(total - totalAbonos));
+
+        const productos = Array.isArray(r.productos) ? r.productos : [];
+        const abonos = Array.isArray(r.abonos) ? r.abonos : [];
+
+        item.innerHTML = `
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+            <div>
+              <div class="item-title">${safeStr(r.cliente) || 'Cliente'} <span class="hint">• ${safeStr(r.asesor) || 'Asesor'}</span></div>
+              <div class="hint">Código único: <strong>${safeStr(r.codigo_unico) || r.id}</strong> • Registro: <strong>${r.id}</strong> • Fecha: <strong>${formatDateTime(r.fecha_hora)}</strong></div>
+              <div class="hint">Valor total: <strong>${fmtCOP(total)}</strong> • Abonos: <strong style="color:${coincide ? 'var(--ok)' : 'var(--danger)'}">${fmtCOP(totalAbonos)}</strong> • Pendiente: <strong>${fmtCOP(saldoPendiente)}</strong></div>
+              <div class="hint">Pares: <strong>${Number(r.num_pares || 0)}</strong> • Usuario: <strong>${safeStr(r.usuario) || 'N/A'}</strong> • Transportadora: <strong>${safeStr(r.transportadora) || 'N/A'}</strong></div>
+            </div>
+            <div class="chips">
+              ${r.bloqueado === true ? '<span class="chip danger"><i class="fas fa-lock"></i> Bloqueado</span>' : '<span class="chip ok"><i class="fas fa-unlock"></i> No bloqueado</span>'}
+              ${coincide ? '<span class="chip ok"><i class="fas fa-check"></i> Abonos OK</span>' : '<span class="chip danger"><i class="fas fa-triangle-exclamation"></i> Abonos NO</span>'}
+            </div>
+          </div>
+          <div style="margin-top:12px;display:grid;gap:10px">
+            <div class="hint">Observaciones: <strong>${safeStr(r.observaciones) || 'N/A'}</strong></div>
+            <div class="hint">Referencias vinculadas: <strong>${refs.length ? refs.join(', ') : 'Ninguna'}</strong></div>
+
+            <div class="grid">
+              <div>
+                <label>Productos</label>
+                <div class="hint" style="line-height:1.6">
+                  ${productos.length ? productos.map(p => `• ${(p.referencia||'')}${p.color ? ' ' + p.color : ''}${p.talla ? ' T:' + p.talla : ''}${p.precio != null ? ' $' + p.precio : ''}`).join('<br>') : 'Sin productos'}
+                </div>
+              </div>
+              <div>
+                <label>Abonos</label>
+                <div class="hint" style="line-height:1.6">
+                  ${abonos.length ? abonos.map(a => `• ${(a.fecha||'')}: ${fmtCOP(a.monto || 0)}`).join('<br>') : 'Sin abonos'}
+                </div>
+              </div>
+            </div>
+
+            <div class="grid" style="grid-template-columns: 1fr auto auto">
+              <div>
+                <label>Vincular referencia</label>
+                <input type="text" placeholder="Escribe y presiona Enter o Vincular" data-ref-input="${r.id}" />
+              </div>
+              <div style="display:flex;align-items:end">
+                <button class="btn primary" type="button" data-btn-vincular="${r.id}"><i class="fas fa-link"></i> Vincular</button>
+              </div>
+              <div style="display:flex;align-items:end">
+                <button class="btn danger" type="button" data-btn-bloquear="${r.id}"><i class="fas fa-lock"></i> Bloquear</button>
+              </div>
+            </div>
+            <div class="hint">Solo permite referencias existentes en consignaciones y que no estén usadas.</div>
+          </div>
+        `;
+        frag.appendChild(item);
+      });
+      container.appendChild(frag);
+
+      attachRowHandlers(list);
+    }
+
+    function attachRowHandlers(currentList){
+      const listById = new Map(currentList.map(r => [String(r.id), r]));
+
+      const inputs = Array.from(document.querySelectorAll('input[data-ref-input]'));
+      inputs.forEach(input => {
+        input.addEventListener('keydown', async (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          const id = input.getAttribute('data-ref-input');
+          await doLink(id, input.value);
+          input.value = '';
+        });
+      });
+
+      const btnsLink = Array.from(document.querySelectorAll('button[data-btn-vincular]'));
+      btnsLink.forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-btn-vincular');
+          const input = document.querySelector(`input[data-ref-input="${id}"]`);
+          const val = input ? input.value : '';
+          await doLink(id, val);
+          if (input) input.value = '';
+        });
+      });
+
+      const btnsBlock = Array.from(document.querySelectorAll('button[data-btn-bloquear]'));
+      btnsBlock.forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-btn-bloquear');
+          const r = listById.get(String(id));
+          if (!r) return;
+          clearError();
+          setLoading(true);
+          try{
+            await bloquearRegistro(r);
+            await refreshAll(false);
+          }catch(e){
+            showError(e && e.message ? e.message : String(e));
+          }finally{
+            setLoading(false);
+          }
+        });
+      });
+    }
+
+    async function doLink(registroId, rawInput){
+      clearError();
+      const q = normalizeRef(rawInput);
+      if (!q || q.length < 3) {
+        showError('Escribe al menos 3 caracteres de la referencia.');
+        return;
+      }
+
+      const match = findBestReferencia(q);
+      if (!match) {
+        showError('No se encontró una referencia disponible que coincida.');
+        return;
+      }
+
+      setLoading(true);
+      try{
+        await vincularReferenciaARegistro(registroId, match);
+        await refreshAll(false);
+      }catch(e){
+        showError(e && e.message ? e.message : String(e));
+      }finally{
+        setLoading(false);
+      }
+    }
+
+    async function searchByReference(){
+      const container = $('historyResults');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const ref = normalizeRef($('historyRef').value);
+      if (!ref) {
+        container.innerHTML = '<div class="hint">Ingresa una referencia.</div>';
+        return;
+      }
+
+      clearError();
+      setLoading(true);
+      try{
+        const snap = await COL_REGISTROS.where('referencias_bancarias_refs', 'array-contains', ref).get();
+        const rows = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+        if (!rows.length) {
+          container.innerHTML = '<div class="hint">No se encontraron pedidos vinculados a esa referencia.</div>';
+          return;
+        }
+
+        const frag = document.createDocumentFragment();
+        rows.forEach(r => {
+          const item = document.createElement('div');
+          item.className = 'item';
+          item.innerHTML = `
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+              <div>
+                <div class="item-title">${safeStr(r.cliente) || 'Cliente'} <span class="hint">• ${safeStr(r.asesor) || 'Asesor'}</span></div>
+                <div class="hint">Código único: <strong>${safeStr(r.codigo_unico) || r.id}</strong> • Fecha: <strong>${formatDateTime(r.fecha_hora)}</strong></div>
+              </div>
+              <div class="chips">
+                <span class="chip"><i class="fas fa-hashtag"></i> ${ref}</span>
+                ${r.bloqueado === true ? '<span class="chip danger"><i class="fas fa-lock"></i> Bloqueado</span>' : ''}
+              </div>
+            </div>
+            <div class="hint" style="margin-top:10px">Observaciones: <strong>${safeStr(r.observaciones) || 'N/A'}</strong></div>
+          `;
+          frag.appendChild(item);
+        });
+        container.appendChild(frag);
+      }catch(e){
+        showError(e && e.message ? e.message : String(e));
+      }finally{
+        setLoading(false);
+      }
+    }
+
+    async function cajaGuardar(){
+      clearError();
+      const tipo = $('cajaTipo').value;
+      const valor = Number($('cajaValor').value || 0);
+      const flete = Number($('cajaFlete').value || 0);
+      const obs = safeStr($('cajaObs').value);
+      if (!valor || valor <= 0) {
+        showError('Caja menor: valor inválido.');
+        return;
+      }
+
+      const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
+      setLoading(true);
+      try{
+        await COL_CAJA.add({
+          tipo,
+          valor,
+          flete,
+          observaciones: obs,
+          usuario: who,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        $('cajaValor').value = '';
+        $('cajaFlete').value = '';
+        $('cajaObs').value = '';
+        await cajaCargar();
+      }catch(e){
+        showError(e && e.message ? e.message : String(e));
+      }finally{
+        setLoading(false);
+      }
+    }
+
+    async function cajaCargar(){
+      const list = $('cajaList');
+      if (!list) return;
+      list.innerHTML = '';
+      clearError();
+      setLoading(true);
+      try{
+        const snap = await COL_CAJA.orderBy('createdAt', 'desc').limit(30).get();
+        const items = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+        if (!items.length) {
+          list.innerHTML = '<div class="hint">Sin movimientos aún.</div>';
+          return;
+        }
+        const frag = document.createDocumentFragment();
+        items.forEach(m => {
+          const d = tsToDate(m.createdAt);
+          const item = document.createElement('div');
+          item.className = 'item';
+          item.innerHTML = `
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+              <div>
+                <div class="item-title">${m.tipo === 'egreso' ? 'Egreso' : 'Ingreso'} • ${fmtCOP(m.valor || 0)}</div>
+                <div class="hint">Flete: <strong>${fmtCOP(m.flete || 0)}</strong> • ${d ? d.toLocaleString('es-CO') : ''}</div>
+                <div class="hint">Usuario: <strong>${safeStr(m.usuario) || 'N/A'}</strong></div>
+              </div>
+              <div class="chips">
+                <span class="chip ${m.tipo === 'egreso' ? 'danger' : 'ok'}"><i class="fas fa-circle"></i> ${safeStr(m.tipo) || ''}</span>
+              </div>
+            </div>
+            <div class="hint" style="margin-top:10px">${safeStr(m.observaciones) || 'Sin observaciones.'}</div>
+          `;
+          frag.appendChild(item);
+        });
+        list.appendChild(frag);
+      }catch(e){
+        showError(e && e.message ? e.message : String(e));
+      }finally{
+        setLoading(false);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadCurrentUser();
+      bindUi();
+      $('filtersCard').style.display='none';
+      $('resultsCard').style.display='none';
+
+      const now = new Date();
+      const to = new Date(now);
+      const from = new Date(now);
+      from.setDate(from.getDate() - 7);
+      const fmt = (d) => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      };
+      if (!$('fromDate').value) $('fromDate').value = fmt(from);
+      if (!$('toDate').value) $('toDate').value = fmt(to);
+    });
+  </script>
+</body>
+</html>
