@@ -266,7 +266,8 @@
 
       $('btnGoAuditoria').addEventListener('click', async () => {
         setModeAuditoria();
-        await refreshAll(true);
+        await refreshAll(false);
+        preloadAuditoriaData();
       });
       $('btnGoCaja').addEventListener('click', async () => {
         setModeCaja();
@@ -291,11 +292,7 @@
       clearError();
       setLoading(true);
       try{
-        if (loadHeavy) {
-          await loadUsuarios();
-          await loadUsedRefs();
-          await loadConsignacionesIndex();
-        }
+        if (loadHeavy) preloadAuditoriaData();
         await loadRegistros();
         renderResults();
       } catch (e) {
@@ -303,6 +300,12 @@
       } finally {
         setLoading(false);
       }
+    }
+
+    async function preloadAuditoriaData(){
+      try { await loadUsuarios(); } catch (e) { /* no-op */ }
+      try { await loadUsedRefs(); } catch (e) { /* no-op */ }
+      try { await loadConsignacionesIndex(); } catch (e) { /* no-op */ }
     }
 
     function findBestReferencia(input){
@@ -424,8 +427,8 @@
       cachedBodegueros = [];
 
       const [operadoresSnapshot, bodeguerosSnapshot] = await Promise.all([
-        COL_USUARIOS.where('permisos', '==', 'Operador').get(),
-        COL_USUARIOS.where('permisos', '==', 'Bodeguero').get()
+        COL_USUARIOS.where('permisos', 'in', ['Operador', 'operador']).get(),
+        COL_USUARIOS.where('permisos', 'in', ['Bodeguero', 'bodeguero']).get()
       ]);
 
       operadoresSnapshot.forEach(doc => {
@@ -510,8 +513,8 @@
       // Excluir pedidos enviados a empaque
       list = list.filter(r => r.enviadoAEmpaque !== true);
 
-      // Excluir bodegueros: solo lista asesor que esté en Operadores
-      if (cachedOperadores.length) list = list.filter(r => cachedOperadores.includes(String(r.asesor || '')));
+      // Excluir bodegueros: elimina si el asesor está identificado como Bodeguero
+      if (cachedBodegueros.length) list = list.filter(r => !cachedBodegueros.includes(String(r.asesor || '')));
 
       if (asesor) list = list.filter(r => String(r.asesor || '') === asesor);
       if (bloqueado === 'si') list = list.filter(r => r.bloqueado === true);
@@ -816,7 +819,7 @@
       const now = new Date();
       const to = new Date(now);
       const from = new Date(now);
-      from.setDate(from.getDate() - 7);
+      from.setDate(from.getDate() - 30);
       const fmt = (d) => {
         const yyyy = d.getFullYear();
         const mm = String(d.getMonth() + 1).padStart(2, '0');
