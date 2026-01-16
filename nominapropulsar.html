@@ -169,6 +169,38 @@
             background: var(--primary-light);
         }
 
+        .monthly-limits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .month-limit-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .month-limit-item label {
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 0.9em;
+        }
+
+        .month-limit-item input {
+            padding: 10px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .month-limit-item input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
         .charts-section {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -321,9 +353,56 @@
                         <!-- Options will be populated dynamically -->
                     </select>
                 </div>
-                <div class="form-field">
-                    <label for="monthly-limit">Tope Mensual de Consignaciones ($):</label>
-                    <input type="number" id="monthly-limit" min="0" step="1000000" placeholder="Ej: 80000000">
+            </div>
+            
+            <div class="monthly-limits-grid">
+                <div class="month-limit-item">
+                    <label for="limit-1">Enero:</label>
+                    <input type="number" id="limit-1" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-2">Febrero:</label>
+                    <input type="number" id="limit-2" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-3">Marzo:</label>
+                    <input type="number" id="limit-3" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-4">Abril:</label>
+                    <input type="number" id="limit-4" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-5">Mayo:</label>
+                    <input type="number" id="limit-5" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-6">Junio:</label>
+                    <input type="number" id="limit-6" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-7">Julio:</label>
+                    <input type="number" id="limit-7" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-8">Agosto:</label>
+                    <input type="number" id="limit-8" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-9">Septiembre:</label>
+                    <input type="number" id="limit-9" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-10">Octubre:</label>
+                    <input type="number" id="limit-10" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-11">Noviembre:</label>
+                    <input type="number" id="limit-11" min="0" step="1000000" placeholder="0">
+                </div>
+                <div class="month-limit-item">
+                    <label for="limit-12">Diciembre:</label>
+                    <input type="number" id="limit-12" min="0" step="1000000" placeholder="0">
                 </div>
             </div>
             <button onclick="saveMonthlyLimits()">Guardar Topes del Año</button>
@@ -537,10 +616,12 @@
                     const data = doc.data();
                     monthlyLimits = data[currentYear] || {};
                     
-                    // Update the input field with current year's limit
-                    const monthlyLimitInput = document.getElementById('monthly-limit');
-                    if (monthlyLimits.default) {
-                        monthlyLimitInput.value = monthlyLimits.default;
+                    // Update all monthly limit input fields
+                    for (let month = 1; month <= 12; month++) {
+                        const input = document.getElementById(`limit-${month}`);
+                        if (input) {
+                            input.value = monthlyLimits[month] || '';
+                        }
                     }
                 } else {
                     // Initialize with empty object
@@ -553,10 +634,22 @@
 
         async function saveMonthlyLimits() {
             try {
-                const monthlyLimit = parseFloat(document.getElementById('monthly-limit').value) || 0;
+                // Collect limits from all month inputs
+                const newLimits = {};
+                let hasValidLimit = false;
                 
-                if (monthlyLimit <= 0) {
-                    showError('Por favor ingrese un tope mensual válido');
+                for (let month = 1; month <= 12; month++) {
+                    const input = document.getElementById(`limit-${month}`);
+                    const value = parseFloat(input.value) || 0;
+                    
+                    if (value > 0) {
+                        newLimits[month] = value;
+                        hasValidLimit = true;
+                    }
+                }
+                
+                if (!hasValidLimit) {
+                    showError('Por favor ingrese al menos un tope mensual válido');
                     return;
                 }
                 
@@ -565,11 +658,12 @@
                     monthlyLimits[currentYear] = {};
                 }
                 
-                // Set the same limit for all months
+                // Save individual monthly limits
                 for (let month = 1; month <= 12; month++) {
-                    monthlyLimits[currentYear][month] = monthlyLimit;
+                    if (newLimits[month]) {
+                        monthlyLimits[currentYear][month] = newLimits[month];
+                    }
                 }
-                monthlyLimits[currentYear].default = monthlyLimit;
                 
                 // Save to Firestore
                 await db.collection('settings').doc('propulsar_limits').set(monthlyLimits);
@@ -673,7 +767,10 @@
                                     const label = context.dataset.label || '';
                                     const value = formatCurrency(context.raw);
                                     const percentage = percentages[context.dataIndex];
-                                    return `${label}: ${value} (${percentage.toFixed(1)}%)`;
+                                    if (label === 'Consignado') {
+                                        return `${label}: ${value} (${percentage.toFixed(1)}% del tope)`;
+                                    }
+                                    return `${label}: ${value}`;
                                 }
                             }
                         }
