@@ -372,39 +372,63 @@
             }
         }
 
-        // Cargar todas las referencias
+        // Cargar todas las referencias (usando collectionGroup como en auditoriadefondos.html)
         async function cargarReferencias() {
             try {
                 mostrarLoading();
                 
-                // Cargar desde auditoria_fondos_refs
-                const refsSnapshot = await db.collection('auditoria_fondos_refs').get();
                 todasLasReferencias = [];
                 
-                for (const doc of refsSnapshot.docs) {
-                    const data = doc.data();
-                    todasLasReferencias.push({
-                        id: doc.id,
-                        referencia: data.referencia || doc.id,
-                        valor: data.valor || 0,
-                        fecha: data.fecha || null,
-                        cuentaId: data.cuentaId || '',
-                        linkedRegistroId: data.linkedRegistroId || '',
-                        linkedCodigoUnico: data.linkedCodigoUnico || '',
-                        linkedAsesor: data.linkedAsesor || '',
-                        linkedCliente: data.linkedCliente || '',
-                        linkedAt: data.linkedAt || null,
-                        linkedBy: data.linkedBy || '',
-                        consignacionId: data.consignacionId || '',
-                        path: data.path || ''
+                // Cargar cuentas para mostrar nombres
+                const cuentasMap = new Map();
+                try {
+                    const cuentasSnap = await db.collection('cuentas').get();
+                    cuentasSnap.forEach(doc => {
+                        const d = doc.data() || {};
+                        const nombre = d.name || d.nombre || d.nombreCuenta || d.banco || doc.id;
+                        cuentasMap.set(doc.id, nombre || doc.id);
                     });
+                } catch (e) {
+                    console.error('Error cargando cuentas:', e);
                 }
+                
+                // Cargar desde collectionGroup('consignaciones') como en auditoriadefondos.html
+                const snap = await db.collectionGroup('consignaciones').get();
+                snap.forEach(doc => {
+                    const d = doc.data() || {};
+                    if (d.isSeparator === true) return;
+                    
+                    const ref = normalizeRef(d.referencia);
+                    if (!ref) return;
+                    
+                    const cuentaId = (doc.ref.parent && doc.ref.parent.parent) ? doc.ref.parent.parent.id : '';
+                    const cuentaNombre = cuentasMap.get(cuentaId) || cuentaId || '';
+                    
+                    todasLasReferencias.push({
+                        id: ref, // Usar la referencia como ID único
+                        referencia: ref,
+                        valor: Number(d.valor || 0),
+                        fecha: d.fecha || null,
+                        cuentaId: cuentaId,
+                        cuentaNombre: cuentaNombre,
+                        consignacionId: doc.id,
+                        path: doc.ref.path,
+                        linkedRegistroId: '', // No disponible en consignaciones
+                        linkedCodigoUnico: '',
+                        linkedAsesor: '',
+                        linkedCliente: '',
+                        linkedAt: null,
+                        linkedBy: ''
+                    });
+                });
                 
                 // Ordenar por fecha descendente
                 todasLasReferencias.sort((a, b) => {
                     if (!a.fecha) return 1;
                     if (!b.fecha) return -1;
-                    return b.fecha.toDate() - a.fecha.toDate();
+                    const fechaA = a.fecha.toDate ? a.fecha.toDate() : new Date(a.fecha);
+                    const fechaB = b.fecha.toDate ? b.fecha.toDate() : new Date(b.fecha);
+                    return fechaB - fechaA;
                 });
                 
                 aplicarFiltros();
@@ -413,6 +437,12 @@
                 console.error('Error cargando referencias:', error);
                 mostrarError('Error cargando referencias: ' + error.message);
             }
+        }
+
+        // Función para normalizar referencias (copiada de auditoriadefondos.html)
+        function normalizeRef(str) {
+            if (!str) return '';
+            return String(str).trim().replace(/\s+/g, '').toUpperCase();
         }
 
         // Aplicar filtros
@@ -483,7 +513,7 @@
                     <td class="ref-cell">${ref.referencia}</td>
                     <td class="date-cell">${formatFecha(ref.fecha)}</td>
                     <td>${formatValor(ref.valor)}</td>
-                    <td>${cuentasMap.get(ref.cuentaId) || ref.cuentaId}</td>
+                    <td>${ref.cuentaNombre || ref.cuentaId}</td>
                     <td>${ref.linkedCodigoUnico ? `Código: ${ref.linkedCodigoUnico}<br>Asesor: ${ref.linkedAsesor}<br>Cliente: ${ref.linkedCliente}` : 'No vinculada'}</td>
                     <td class="date-cell">${formatFecha(ref.linkedAt)}</td>
                     <td>${ref.linkedBy || ''}</td>
@@ -566,21 +596,30 @@
             document.getElementById('selectAll').checked = false;
         }
 
-        // Eliminar referencias seleccionadas
+        // Eliminar referencias seleccionadas (desde collectionGroup consignaciones)
         async function eliminarSeleccionados() {
             if (seleccionados.size === 0) return;
             
-            const confirmar = confirm(`¿Estás seguro de eliminar ${seleccionados.size} referencia(s)? Esta acción no se puede deshacer.`);
+            const confirmar = confirm(`¿Estás seguro de eliminar ${seleccionados.size} referencia(s)? Esta acción eliminará las consignaciones y no se puede deshacer.`);
             if (!confirmar) return;
             
             try {
                 mostrarLoading();
                 
+                // Crear un batch para eliminar de collectionGroup('consignaciones')
                 const batch = db.batch();
-                seleccionados.forEach(id => {
-                    const docRef = db.collection('auditoria_fondos_refs').doc(id);
-                    batch.delete(docRef);
-                });
+                
+                // Para cada referencia seleccionada, buscar y eliminar el documento en consignaciones
+                for (const ref of seleccionados) {
+                    // Buscar el documento en todas las subcolecciones de consignaciones
+                    const snap = await db.collectionGroup('consignaciones')
+                        .where('referencia', '==', ref)
+                        .get();
+                    
+                    snap.forEach(doc => {
+                        batch.delete(doc.ref);
+                    });
+                }
                 
                 await batch.commit();
                 
@@ -588,7 +627,7 @@
                 todasLasReferencias = todasLasReferencias.filter(ref => !seleccionados.has(ref.id));
                 seleccionados.clear();
                 
-                mostrarExito(`Se eliminaron ${seleccionados.size} referencias correctamente.`);
+                mostrarExito(`Se eliminaron ${seleccionados.size} consignaciones correctamente.`);
                 
                 // Recargar
                 await cargarReferencias();
@@ -610,7 +649,7 @@
                 'Referencia': ref.referencia,
                 'Fecha': formatFecha(ref.fecha),
                 'Valor': ref.valor,
-                'Cuenta': cuentasMap.get(ref.cuentaId) || ref.cuentaId,
+                'Cuenta': ref.cuentaNombre || ref.cuentaId,
                 'Vinculada a': ref.linkedCodigoUnico || 'No',
                 'Asesor': ref.linkedAsesor || '',
                 'Cliente': ref.linkedCliente || '',
