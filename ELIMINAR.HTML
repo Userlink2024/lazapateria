@@ -1,1 +1,668 @@
-none
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eliminar Referencias - La Zapatería</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary: #dc3545;
+            --primary-dark: #c82333;
+            --bg: #f8f9fa;
+            --card: #ffffff;
+            --border: #dee2e6;
+            --text: #212529;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: var(--card);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            width: 95%;
+            max-width: 1200px;
+            box-sizing: border-box;
+            border: 1px solid var(--border);
+        }
+
+        h2 {
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f1f3f5;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #495057;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--primary-dark);
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+
+        th, td {
+            padding: 12px 8px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            color: #495057;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .checkbox-cell {
+            width: 40px;
+            text-align: center;
+        }
+
+        .date-cell {
+            white-space: nowrap;
+        }
+
+        .ref-cell {
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #c3e6cb;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+        }
+
+        .pagination-info {
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .filters {
+                grid-template-columns: 1fr;
+            }
+            
+            .actions {
+                flex-direction: column;
+            }
+            
+            .table-container {
+                font-size: 12px;
+            }
+            
+            th, td {
+                padding: 8px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2><i class="fas fa-trash"></i> Eliminar Referencias Bancarias</h2>
+        
+        <div id="messageContainer"></div>
+        
+        <div class="filters">
+            <div class="filter-group">
+                <label for="fechaDesde">Desde:</label>
+                <input type="date" id="fechaDesde">
+            </div>
+            <div class="filter-group">
+                <label for="fechaHasta">Hasta:</label>
+                <input type="date" id="fechaHasta">
+            </div>
+            <div class="filter-group">
+                <label for="cuentaFiltro">Cuenta:</label>
+                <select id="cuentaFiltro">
+                    <option value="">Todas las cuentas</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="refBusqueda">Buscar referencia:</label>
+                <input type="text" id="refBusqueda" placeholder="Escribe para buscar...">
+            </div>
+            <div class="filter-group">
+                <label>&nbsp;</label>
+                <button onclick="aplicarFiltros()">Aplicar Filtros</button>
+            </div>
+            <div class="filter-group">
+                <label>&nbsp;</label>
+                <button onclick="limpiarFiltros()" class="btn-secondary">Limpiar</button>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button onclick="seleccionarTodos()" id="btnSeleccionarTodos">Seleccionar Todos</button>
+            <button onclick="deseleccionarTodos()" id="btnDeseleccionarTodos">Deseleccionar Todos</button>
+            <button onclick="eliminarSeleccionados()" id="btnEliminar" disabled class="btn-danger">
+                <i class="fas fa-trash"></i> Eliminar Seleccionadas (<span id="contadorSeleccion">0</span>)
+            </button>
+            <button onclick="exportarExcel()" class="btn-success">
+                <i class="fas fa-file-excel"></i> Exportar Excel
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table id="tablaReferencias">
+                <thead>
+                    <tr>
+                        <th class="checkbox-cell">
+                            <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                        </th>
+                        <th>Referencia</th>
+                        <th>Fecha</th>
+                        <th>Valor</th>
+                        <th>Cuenta</th>
+                        <th>Vinculada a</th>
+                        <th>Fecha Vinculación</th>
+                        <th>Usuario</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaBody">
+                    <tr>
+                        <td colspan="8" class="loading">
+                            <i class="fas fa-spinner fa-spin"></i> Cargando referencias...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button onclick="paginaAnterior()" id="btnAnterior" disabled>Anterior</button>
+            <span class="pagination-info">
+                Página <span id="paginaActual">1</span> de <span id="totalPaginas">1</span>
+                (<span id="totalRegistros">0</span> registros)
+            </span>
+            <button onclick="paginaSiguiente()" id="btnSiguiente" disabled>Siguiente</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBz_sHLN3RjYtKJZC5d7O8dQn9QvLzWqE",
+            authDomain: "lazapateria-c4157.firebaseapp.com",
+            projectId: "lazapateria-c4157",
+            storageBucket: "lazapateria-c4157.appspot.com",
+            messagingSenderId: "10387654321",
+            appId: "1:10387654321:web:abc123def456"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Variables globales
+        let todasLasReferencias = [];
+        let referenciasFiltradas = [];
+        let cuentasMap = new Map();
+        let paginaActual = 1;
+        const registrosPorPagina = 50;
+        let seleccionados = new Set();
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', async () => {
+            await cargarCuentas();
+            await cargarReferencias();
+            
+            // Establecer fechas por defecto (hasta 13 de enero 2026)
+            document.getElementById('fechaHasta').value = '2026-01-13';
+            document.getElementById('fechaDesde').value = '2024-01-01';
+            
+            // Auto-aplicar filtros al cambiar inputs
+            ['fechaDesde', 'fechaHasta', 'cuentaFiltro', 'refBusqueda'].forEach(id => {
+                document.getElementById(id).addEventListener('change', aplicarFiltros);
+                document.getElementById(id).addEventListener('keyup', () => {
+                    if (id === 'refBusqueda') aplicarFiltros();
+                });
+            });
+        });
+
+        // Cargar cuentas para mostrar nombres
+        async function cargarCuentas() {
+            try {
+                const snapshot = await db.collection('cuentas').get();
+                const select = document.getElementById('cuentaFiltro');
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const nombre = data.name || data.nombre || data.nombreCuenta || data.banco || doc.id;
+                    cuentasMap.set(doc.id, nombre);
+                    
+                    const option = document.createElement('option');
+                    option.value = doc.id;
+                    option.textContent = nombre;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error cargando cuentas:', error);
+                mostrarError('Error cargando cuentas: ' + error.message);
+            }
+        }
+
+        // Cargar todas las referencias
+        async function cargarReferencias() {
+            try {
+                mostrarLoading();
+                
+                // Cargar desde auditoria_fondos_refs
+                const refsSnapshot = await db.collection('auditoria_fondos_refs').get();
+                todasLasReferencias = [];
+                
+                for (const doc of refsSnapshot.docs) {
+                    const data = doc.data();
+                    todasLasReferencias.push({
+                        id: doc.id,
+                        referencia: data.referencia || doc.id,
+                        valor: data.valor || 0,
+                        fecha: data.fecha || null,
+                        cuentaId: data.cuentaId || '',
+                        linkedRegistroId: data.linkedRegistroId || '',
+                        linkedCodigoUnico: data.linkedCodigoUnico || '',
+                        linkedAsesor: data.linkedAsesor || '',
+                        linkedCliente: data.linkedCliente || '',
+                        linkedAt: data.linkedAt || null,
+                        linkedBy: data.linkedBy || '',
+                        consignacionId: data.consignacionId || '',
+                        path: data.path || ''
+                    });
+                }
+                
+                // Ordenar por fecha descendente
+                todasLasReferencias.sort((a, b) => {
+                    if (!a.fecha) return 1;
+                    if (!b.fecha) return -1;
+                    return b.fecha.toDate() - a.fecha.toDate();
+                });
+                
+                aplicarFiltros();
+                
+            } catch (error) {
+                console.error('Error cargando referencias:', error);
+                mostrarError('Error cargando referencias: ' + error.message);
+            }
+        }
+
+        // Aplicar filtros
+        function aplicarFiltros() {
+            const fechaDesde = document.getElementById('fechaDesde').value;
+            const fechaHasta = document.getElementById('fechaHasta').value;
+            const cuentaFiltro = document.getElementById('cuentaFiltro').value;
+            const refBusqueda = document.getElementById('refBusqueda').value.toLowerCase();
+            
+            referenciasFiltradas = todasLasReferencias.filter(ref => {
+                // Filtro por fecha desde
+                if (fechaDesde && ref.fecha) {
+                    const fechaRef = ref.fecha.toDate();
+                    const fechaDesdeObj = new Date(fechaDesde + 'T00:00:00');
+                    if (fechaRef < fechaDesdeObj) return false;
+                }
+                
+                // Filtro por fecha hasta
+                if (fechaHasta && ref.fecha) {
+                    const fechaRef = ref.fecha.toDate();
+                    const fechaHastaObj = new Date(fechaHasta + 'T23:59:59');
+                    if (fechaRef > fechaHastaObj) return false;
+                }
+                
+                // Filtro por cuenta
+                if (cuentaFiltro && ref.cuentaId !== cuentaFiltro) return false;
+                
+                // Filtro por referencia
+                if (refBusqueda && !ref.referencia.toLowerCase().includes(refBusqueda)) return false;
+                
+                return true;
+            });
+            
+            paginaActual = 1;
+            renderTabla();
+            actualizarPaginacion();
+        }
+
+        // Limpiar filtros
+        function limpiarFiltros() {
+            document.getElementById('fechaDesde').value = '';
+            document.getElementById('fechaHasta').value = '';
+            document.getElementById('cuentaFiltro').value = '';
+            document.getElementById('refBusqueda').value = '';
+            aplicarFiltros();
+        }
+
+        // Renderizar tabla
+        function renderTabla() {
+            const tbody = document.getElementById('tablaBody');
+            const inicio = (paginaActual - 1) * registrosPorPagina;
+            const fin = inicio + registrosPorPagina;
+            const pagina = referenciasFiltradas.slice(inicio, fin);
+            
+            if (pagina.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No se encontraron referencias con los filtros aplicados.</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = pagina.map(ref => `
+                <tr>
+                    <td class="checkbox-cell">
+                        <input type="checkbox" 
+                               value="${ref.id}" 
+                               ${seleccionados.has(ref.id) ? 'checked' : ''}
+                               onchange="toggleSeleccion('${ref.id}')">
+                    </td>
+                    <td class="ref-cell">${ref.referencia}</td>
+                    <td class="date-cell">${formatFecha(ref.fecha)}</td>
+                    <td>${formatValor(ref.valor)}</td>
+                    <td>${cuentasMap.get(ref.cuentaId) || ref.cuentaId}</td>
+                    <td>${ref.linkedCodigoUnico ? `Código: ${ref.linkedCodigoUnico}<br>Asesor: ${ref.linkedAsesor}<br>Cliente: ${ref.linkedCliente}` : 'No vinculada'}</td>
+                    <td class="date-cell">${formatFecha(ref.linkedAt)}</td>
+                    <td>${ref.linkedBy || ''}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Actualizar paginación
+        function actualizarPaginacion() {
+            const totalPaginas = Math.max(1, Math.ceil(referenciasFiltradas.length / registrosPorPagina));
+            
+            document.getElementById('paginaActual').textContent = paginaActual;
+            document.getElementById('totalPaginas').textContent = totalPaginas;
+            document.getElementById('totalRegistros').textContent = referenciasFiltradas.length;
+            
+            document.getElementById('btnAnterior').disabled = paginaActual === 1;
+            document.getElementById('btnSiguiente').disabled = paginaActual === totalPaginas;
+        }
+
+        // Navegación de paginación
+        function paginaAnterior() {
+            if (paginaActual > 1) {
+                paginaActual--;
+                renderTabla();
+                actualizarPaginacion();
+            }
+        }
+
+        function paginaSiguiente() {
+            const totalPaginas = Math.ceil(referenciasFiltradas.length / registrosPorPagina);
+            if (paginaActual < totalPaginas) {
+                paginaActual++;
+                renderTabla();
+                actualizarPaginacion();
+            }
+        }
+
+        // Selección
+        function toggleSeleccion(id) {
+            if (seleccionados.has(id)) {
+                seleccionados.delete(id);
+            } else {
+                seleccionados.add(id);
+            }
+            actualizarContadorSeleccion();
+        }
+
+        function toggleSelectAll() {
+            const checkbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('#tablaBody input[type="checkbox"]');
+            
+            checkboxes.forEach(cb => {
+                cb.checked = checkbox.checked;
+                const id = cb.value;
+                if (checkbox.checked) {
+                    seleccionados.add(id);
+                } else {
+                    seleccionados.delete(id);
+                }
+            });
+            
+            actualizarContadorSeleccion();
+        }
+
+        function seleccionarTodos() {
+            referenciasFiltradas.forEach(ref => seleccionados.add(ref.id));
+            renderTabla();
+            actualizarContadorSeleccion();
+        }
+
+        function deseleccionarTodos() {
+            seleccionados.clear();
+            renderTabla();
+            actualizarContadorSeleccion();
+        }
+
+        function actualizarContadorSeleccion() {
+            document.getElementById('contadorSeleccion').textContent = seleccionados.size;
+            document.getElementById('btnEliminar').disabled = seleccionados.size === 0;
+            document.getElementById('selectAll').checked = false;
+        }
+
+        // Eliminar referencias seleccionadas
+        async function eliminarSeleccionados() {
+            if (seleccionados.size === 0) return;
+            
+            const confirmar = confirm(`¿Estás seguro de eliminar ${seleccionados.size} referencia(s)? Esta acción no se puede deshacer.`);
+            if (!confirmar) return;
+            
+            try {
+                mostrarLoading();
+                
+                const batch = db.batch();
+                seleccionados.forEach(id => {
+                    const docRef = db.collection('auditoria_fondos_refs').doc(id);
+                    batch.delete(docRef);
+                });
+                
+                await batch.commit();
+                
+                // Actualizar datos locales
+                todasLasReferencias = todasLasReferencias.filter(ref => !seleccionados.has(ref.id));
+                seleccionados.clear();
+                
+                mostrarExito(`Se eliminaron ${seleccionados.size} referencias correctamente.`);
+                
+                // Recargar
+                await cargarReferencias();
+                
+            } catch (error) {
+                console.error('Error eliminando referencias:', error);
+                mostrarError('Error eliminando referencias: ' + error.message);
+            }
+        }
+
+        // Exportar a Excel
+        function exportarExcel() {
+            if (referenciasFiltradas.length === 0) {
+                mostrarError('No hay datos para exportar.');
+                return;
+            }
+            
+            const datos = referenciasFiltradas.map(ref => ({
+                'Referencia': ref.referencia,
+                'Fecha': formatFecha(ref.fecha),
+                'Valor': ref.valor,
+                'Cuenta': cuentasMap.get(ref.cuentaId) || ref.cuentaId,
+                'Vinculada a': ref.linkedCodigoUnico || 'No',
+                'Asesor': ref.linkedAsesor || '',
+                'Cliente': ref.linkedCliente || '',
+                'Fecha Vinculación': formatFecha(ref.linkedAt),
+                'Usuario': ref.linkedBy || ''
+            }));
+            
+            const ws = XLSX.utils.json_to_sheet(datos);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Referencias');
+            XLSX.writeFile(wb, `referencias_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        // Utilidades
+        function formatFecha(fecha) {
+            if (!fecha) return '';
+            const date = fecha.toDate ? fecha.toDate() : new Date(fecha);
+            return date.toLocaleDateString('es-CO', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+        }
+
+        function formatValor(valor) {
+            return new Intl.NumberFormat('es-CO', {
+                style: 'currency',
+                currency: 'COP'
+            }).format(valor || 0);
+        }
+
+        function mostrarLoading() {
+            document.getElementById('tablaBody').innerHTML = `
+                <tr>
+                    <td colspan="8" class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> Cargando...
+                    </td>
+                </tr>
+            `;
+        }
+
+        function mostrarError(mensaje) {
+            const container = document.getElementById('messageContainer');
+            container.innerHTML = `<div class="error">${mensaje}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        function mostrarExito(mensaje) {
+            const container = document.getElementById('messageContainer');
+            container.innerHTML = `<div class="success">${mensaje}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+    </script>
+</body>
+</html>
