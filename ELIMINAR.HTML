@@ -606,28 +606,27 @@
             try {
                 mostrarLoading();
                 
-                // Crear un batch para eliminar de collectionGroup('consignaciones')
+                // Crear un batch para eliminar las consignaciones
                 const batch = db.batch();
                 
-                // Para cada referencia seleccionada, buscar y eliminar el documento en consignaciones
-                for (const ref of seleccionados) {
-                    // Buscar el documento en todas las subcolecciones de consignaciones
-                    const snap = await db.collectionGroup('consignaciones')
-                        .where('referencia', '==', ref)
-                        .get();
-                    
-                    snap.forEach(doc => {
-                        batch.delete(doc.ref);
-                    });
+                // Para cada referencia seleccionada, eliminar usando el path guardado
+                for (const refId of seleccionados) {
+                    const refData = todasLasReferencias.find(r => r.id === refId);
+                    if (refData && refData.path) {
+                        // Eliminar directamente usando el path del documento
+                        const docRef = db.doc(refData.path);
+                        batch.delete(docRef);
+                    }
                 }
                 
                 await batch.commit();
                 
                 // Actualizar datos locales
+                const eliminadasCount = seleccionados.size;
                 todasLasReferencias = todasLasReferencias.filter(ref => !seleccionados.has(ref.id));
                 seleccionados.clear();
                 
-                mostrarExito(`Se eliminaron ${seleccionados.size} consignaciones correctamente.`);
+                mostrarExito(`Se eliminaron ${eliminadasCount} consignaciones correctamente.`);
                 
                 // Recargar
                 await cargarReferencias();
