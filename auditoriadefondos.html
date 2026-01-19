@@ -965,12 +965,17 @@
       clearError();
       setLoading(true);
       try{
-        const snap = await COL_REGISTROS.where('referencias_bancarias_refs', 'array-contains', ref).get();
+        const [snap, linkSnap] = await Promise.all([
+          COL_REGISTROS.where('referencias_bancarias_refs', 'array-contains', ref).get(),
+          COL_REF_LINKS.doc(ref).get()
+        ]);
         const rows = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
         if (!rows.length) {
           container.innerHTML = '<div class="hint">No se encontraron pedidos vinculados a esa referencia.</div>';
           return;
         }
+
+        const linkData = linkSnap && linkSnap.exists ? (linkSnap.data() || {}) : null;
 
         const frag = document.createDocumentFragment();
         rows.forEach(r => {
@@ -988,15 +993,170 @@
               </div>
             </div>
             <div class="hint" style="margin-top:10px">Observaciones: <strong>${safeStr(r.observaciones) || 'N/A'}</strong></div>
+            ${linkData ? `<div class="hint" style="margin-top:8px">Cuenta: <strong>${safeStr(linkData.cuentaId) || 'N/A'}</strong> • Valor: <strong>${fmtCOP(Number(linkData.valor || 0))}</strong> • Vinculada por: <strong>${safeStr(linkData.linkedBy) || 'N/A'}</strong></div>` : ''}
+            <div class="toolbar" style="margin-top:12px; justify-content:flex-end; gap:10px">
+              <button class="btn ghost" type="button" data-hist-edit="${r.id}"><i class="fas fa-pen-to-square"></i> Editar</button>
+              <button class="btn danger" type="button" data-hist-del="${r.id}"><i class="fas fa-trash"></i> Eliminar</button>
+            </div>
           `;
           frag.appendChild(item);
         });
         container.appendChild(frag);
+
+        attachHistoryHandlers(ref, rows, linkData);
       }catch(e){
         showError(e && e.message ? e.message : String(e));
       }finally{
         setLoading(false);
       }
+    }
+
+    async function getRegistroByIdOrCodigo(input){
+      const q = safeStr(input);
+      if (!q) return null;
+
+      const direct = await COL_REGISTROS.doc(q).get();
+      if (direct.exists) return { id: direct.id, ...(direct.data() || {}) };
+
+      const snap = await COL_REGISTROS.where('codigo_unico', '==', q).limit(1).get();
+      if (snap.empty) return null;
+      const doc = snap.docs[0];
+      return { id: doc.id, ...(doc.data() || {}) };
+    }
+
+    async function unlinkRefFromRegistro(registroId, ref){
+      const regDoc = COL_REGISTROS.doc(registroId);
+      const snap = await regDoc.get();
+      if (!snap.exists) return;
+      const d = snap.data() || {};
+
+      const refsArr = Array.isArray(d.referencias_bancarias_refs) ? d.referencias_bancarias_refs : [];
+      const refsNew = refsArr.filter(x => normalizeRef(x) !== normalizeRef(ref));
+
+      const objsArr = Array.isArray(d.referencias_bancarias) ? d.referencias_bancarias : [];
+      const objsNew = objsArr.filter(x => normalizeRef(x && x.referencia) !== normalizeRef(ref));
+
+      await regDoc.set({
+        referencias_bancarias_refs: refsNew,
+        referencias_bancarias: objsNew
+      }, { merge: true });
+    }
+
+    async function linkRefToRegistro(registroId, registroData, ref, linkData){
+      const regDoc = COL_REGISTROS.doc(registroId);
+
+      let payload = linkData;
+      if (!payload) {
+        try { await ensureConsignacionesLoaded(); } catch (e) { /* no-op */ }
+        const found = findBestReferencia(ref);
+        payload = found ? {
+          referencia: normalizeRef(found.referencia),
+          valor: Number(found.valor || 0),
+          fecha: found.fecha || null,
+          cuentaId: safeStr(found.cuentaId),
+          consignacionId: safeStr(found.consignacionId),
+          path: safeStr(found.path)
+        } : { referencia: normalizeRef(ref) };
+      }
+
+      const obj = {
+        referencia: normalizeRef(payload.referencia || ref),
+        valor: Number(payload.valor || 0),
+        fecha: payload.fecha || null,
+        cuentaId: safeStr(payload.cuentaId),
+        consignacionId: safeStr(payload.consignacionId),
+        path: safeStr(payload.path)
+      };
+
+      const current = await regDoc.get();
+      const d = current.exists ? (current.data() || {}) : {};
+      const refsArr = Array.isArray(d.referencias_bancarias_refs) ? d.referencias_bancarias_refs : [];
+      const objsArr = Array.isArray(d.referencias_bancarias) ? d.referencias_bancarias : [];
+
+      const refNorm = normalizeRef(obj.referencia);
+      const refsNew = Array.from(new Set(refsArr.concat([refNorm])));
+      const objsNew = objsArr.filter(x => normalizeRef(x && x.referencia) !== refNorm).concat([obj]);
+
+      await regDoc.set({
+        referencias_bancarias_refs: refsNew,
+        referencias_bancarias: objsNew
+      }, { merge: true });
+
+      const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
+      const r = registroData || {};
+      await COL_REF_LINKS.doc(refNorm).set({
+        referencia: refNorm,
+        valor: Number(obj.valor || 0),
+        fecha: obj.fecha || null,
+        cuentaId: safeStr(obj.cuentaId),
+        consignacionId: safeStr(obj.consignacionId),
+        path: safeStr(obj.path),
+        linkedRegistroId: registroId,
+        linkedCodigoUnico: safeStr(r.codigo_unico) || registroId,
+        linkedAsesor: safeStr(r.asesor) || '',
+        linkedCliente: safeStr(r.cliente) || '',
+        linkedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        linkedBy: who
+      }, { merge: false });
+    }
+
+    function attachHistoryHandlers(ref, rows, linkData){
+      const editBtns = Array.from(document.querySelectorAll('button[data-hist-edit]'));
+      const delBtns = Array.from(document.querySelectorAll('button[data-hist-del]'));
+
+      editBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const oldRegistroId = btn.getAttribute('data-hist-edit');
+          const input = prompt('Ingresa el ID del registro o el código único al que deseas mover esta referencia:');
+          if (!input) return;
+
+          setLoading(true);
+          clearError();
+          try {
+            const newRegistro = await getRegistroByIdOrCodigo(input);
+            if (!newRegistro) throw new Error('No se encontró el registro destino con ese ID/código único.');
+            const refNorm = normalizeRef(ref);
+
+            if (newRegistro.id === oldRegistroId) return;
+
+            const currentLink = await COL_REF_LINKS.doc(refNorm).get();
+            const currentLinkData = currentLink.exists ? (currentLink.data() || {}) : linkData;
+
+            await withRetry(() => unlinkRefFromRegistro(oldRegistroId, refNorm));
+            await withRetry(() => COL_REF_LINKS.doc(refNorm).delete());
+
+            await withRetry(() => linkRefToRegistro(newRegistro.id, newRegistro, refNorm, currentLinkData));
+
+            await searchByReference();
+          } catch (e) {
+            showError(e && e.message ? e.message : String(e));
+          } finally {
+            setLoading(false);
+          }
+        });
+      });
+
+      delBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const registroId = btn.getAttribute('data-hist-del');
+          const ok = confirm('¿Eliminar esta referencia del historial? Esto la desvincula del pedido y borra el registro de auditoría.');
+          if (!ok) return;
+
+          setLoading(true);
+          clearError();
+          try {
+            const refNorm = normalizeRef(ref);
+            await withRetry(() => unlinkRefFromRegistro(registroId, refNorm));
+            await withRetry(() => COL_REF_LINKS.doc(refNorm).delete());
+            usedRefsSet.delete(refNorm);
+            await searchByReference();
+          } catch (e) {
+            showError(e && e.message ? e.message : String(e));
+          } finally {
+            setLoading(false);
+          }
+        });
+      });
     }
 
     async function cajaGuardar(){
