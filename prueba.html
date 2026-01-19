@@ -1909,11 +1909,38 @@ function getConsignsScrollContainer(){
 }
 
 function applyDragSelectionAtPoint(x, y){
+    const container = getConsignsScrollContainer();
+    if (container && container.getBoundingClientRect) {
+        const r = container.getBoundingClientRect();
+        const safeX = Math.min(Math.max(x, r.left + 6), r.right - 24);
+        const safeY = Math.min(Math.max(y, r.top + 6), r.bottom - 6);
+        x = safeX;
+        y = safeY;
+    }
+
     const el = document.elementFromPoint(x, y);
     if (!el) return;
     const row = el.closest ? el.closest('#consigns-body tr') : null;
     if (!row) return;
     const chk = row.querySelector('input[type="checkbox"]');
+    if (!chk) return;
+    setRowCheckbox(chk, mouseSelectValue);
+}
+
+function selectEdgeRowInView(direction){
+    const container = getConsignsScrollContainer();
+    if (!container || !container.getBoundingClientRect) return;
+    const contRect = container.getBoundingClientRect();
+    const rows = Array.from(document.querySelectorAll('#consigns-body tr'));
+    if (!rows.length) return;
+
+    const visible = rows
+        .map(r => ({ r, rect: r.getBoundingClientRect() }))
+        .filter(x => x.rect.bottom > contRect.top && x.rect.top < contRect.bottom);
+    if (!visible.length) return;
+
+    const target = direction > 0 ? visible[visible.length - 1].r : visible[0].r;
+    const chk = target.querySelector('input[type="checkbox"]');
     if (!chk) return;
     setRowCheckbox(chk, mouseSelectValue);
 }
@@ -1934,7 +1961,11 @@ function dragAutoScrollTick(){
 
         if (delta !== 0) {
             container.scrollTop += delta;
+            // Mientras el scroll se mueve, seleccionar continuamente el borde visible
+            selectEdgeRowInView(delta);
+            // y además intentar seleccionar donde apunta el mouse
             applyDragSelectionAtPoint(dragMouseX, dragMouseY);
+            updateFloatingVerifyButton();
             lastDragSelectAt = Date.now();
         }
     }
@@ -1984,6 +2015,10 @@ $('consigns-body').addEventListener('mousedown', (e)=>{
 
     setRowCheckbox(chk, mouseSelectValue);
     updateFloatingVerifyButton();
+
+    if (!dragAutoScrollRaf) {
+        dragAutoScrollRaf = requestAnimationFrame(dragAutoScrollTick);
+    }
 
     const idx = parseInt(chk.dataset.idx);
     if (!Number.isNaN(idx)) {
