@@ -266,6 +266,42 @@
     tr:hover {
       background: rgba(76, 175, 80, 0.08);
     }
+
+    .floating-check-btn{
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      cursor: pointer;
+      z-index: 9999;
+    }
+
+    .floating-check-btn:hover{
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .floating-check-btn:disabled{
+      background: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .table-dragging,
+    .table-dragging *{
+      user-select: none;
+    }
     
     /* Filas verificadas por administrador - gris intenso */
     tr.verified-admin{
@@ -692,7 +728,7 @@
           </div>
         </div>
 
-        <div style="margin-top:6px;max-height:58vh;overflow:auto;border-radius:6px;width:100%;" tabindex="0" id="table-container"></div>
+        <div style="margin-top:6px;max-height:58vh;overflow:auto;border-radius:6px;width:100%;" tabindex="0" id="table-container">
           <table>
             <thead>
               <tr>
@@ -778,6 +814,8 @@
       </div>
     </div>
   </div>
+
+  <button id="floating-verify-btn" class="floating-check-btn" title="Verificar seleccionados">✓</button>
 
   <!-- Modal de Ajustes Manuales -->
   <div id="manual-adjustments-modal" class="modal hidden">
@@ -944,6 +982,13 @@ let selectedAccountName = "SinNombre";
 let currentConsignsSnapshot = []; 
 let selectedConsignIds = new Set(); // Almacenamiento local de IDs seleccionados (para persistencia en UI)
 let lastAssignedOrden = null;
+
+let isMouseSelecting = false;
+let mouseSelectValue = true;
+let lastDragSelectAt = 0;
+let dragMouseX = 0;
+let dragMouseY = 0;
+let dragAutoScrollRaf = 0;
 
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
@@ -1516,8 +1561,7 @@ function subscribeAccounts(){
         lastAssignedOrden = null;
         
         // LIMPIAR LA SELECCIÓN AL CAMBIAR DE CUENTA
-        selectedConsignIds.clear(); 
-        document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+        clearSelection();
         activeRowIndex = -1; // Limpiar índice activo/ancla
         anchorRowIndex = -1;
         
@@ -1657,6 +1701,8 @@ function renderConsigns(){
 
   if(!selectedAccountId) return;
 
+  updateFloatingVerifyButton();
+
   // Obtener todas las consignaciones y ordenar manualmente para manejar migración
   consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').onSnapshot(async snapshot=>{
     tbody.innerHTML = '';
@@ -1747,14 +1793,14 @@ function renderConsigns(){
       
       // *** MODIFICACIÓN CRUCIAL AQUÍ ***
       tr.addEventListener('click', (e)=>{
+        if (Date.now() - lastDragSelectAt < 300) return;
         if(e.target.type !== 'checkbox') {
             activeRowIndex = index;
             anchorRowIndex = index; // <-- FIX: Establecer el ancla al hacer clic en la fila
             
             // Comportamiento estándar: Un clic simple en la fila limpia la selección previa
             if(!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-                selectedConsignIds.clear();
-                document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+                clearSelection();
             }
 
             highlightRow(index);
@@ -1765,6 +1811,8 @@ function renderConsigns(){
 
       tbody.appendChild(tr);
     });
+
+    updateFloatingVerifyButton();
     
     // Actualizar totales automáticamente (con diagnóstico y protección)
     console.log('🔄 ACTUALIZANDO TOTALES DESPUÉS DE RENDERIZAR');
@@ -1836,6 +1884,94 @@ function renderConsigns(){
 let activeRowIndex = -1;
 let anchorRowIndex = -1;
 function getRows(){ return Array.from(document.querySelectorAll('#consigns-body tr')); }
+
+function updateFloatingVerifyButton(){
+    const btn = document.getElementById('floating-verify-btn');
+    if (!btn) return;
+    btn.disabled = selectedConsignIds.size === 0;
+}
+
+function clearSelection(){
+    selectedConsignIds.clear();
+    document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+    updateFloatingVerifyButton();
+}
+
+function setRowCheckbox(chk, value){
+    if (!chk || !chk.dataset || !chk.dataset.id) return;
+    chk.checked = Boolean(value);
+    if (chk.checked) selectedConsignIds.add(chk.dataset.id);
+    else selectedConsignIds.delete(chk.dataset.id);
+}
+
+function getConsignsScrollContainer(){
+    return document.getElementById('table-container') || document.querySelector('.main') || document.documentElement;
+}
+
+function applyDragSelectionAtPoint(x, y){
+    const container = getConsignsScrollContainer();
+    if (container && container.getBoundingClientRect) {
+        const r = container.getBoundingClientRect();
+        const safeX = Math.min(Math.max(x, r.left + 6), r.right - 24);
+        const safeY = Math.min(Math.max(y, r.top + 6), r.bottom - 6);
+        x = safeX;
+        y = safeY;
+    }
+
+    const el = document.elementFromPoint(x, y);
+    if (!el) return;
+    const row = el.closest ? el.closest('#consigns-body tr') : null;
+    if (!row) return;
+    const chk = row.querySelector('input[type="checkbox"]');
+    if (!chk) return;
+    setRowCheckbox(chk, mouseSelectValue);
+}
+
+function selectEdgeRowInView(direction){
+    const container = getConsignsScrollContainer();
+    if (!container || !container.getBoundingClientRect) return;
+    const contRect = container.getBoundingClientRect();
+    const rows = Array.from(document.querySelectorAll('#consigns-body tr'));
+    if (!rows.length) return;
+
+    const visible = rows
+        .map(r => ({ r, rect: r.getBoundingClientRect() }))
+        .filter(x => x.rect.bottom > contRect.top && x.rect.top < contRect.bottom);
+    if (!visible.length) return;
+
+    const target = direction > 0 ? visible[visible.length - 1].r : visible[0].r;
+    const chk = target.querySelector('input[type="checkbox"]');
+    if (!chk) return;
+    setRowCheckbox(chk, mouseSelectValue);
+}
+
+function dragAutoScrollTick(){
+    if (!isMouseSelecting) {
+        dragAutoScrollRaf = 0;
+        return;
+    }
+
+    const container = getConsignsScrollContainer();
+    if (container && container.getBoundingClientRect) {
+        const r = container.getBoundingClientRect();
+        const threshold = 28;
+        let delta = 0;
+        if (dragMouseY < r.top + threshold) delta = -12;
+        else if (dragMouseY > r.bottom - threshold) delta = 12;
+
+        if (delta !== 0) {
+            container.scrollTop += delta;
+            // Mientras el scroll se mueve, seleccionar continuamente el borde visible
+            selectEdgeRowInView(delta);
+            // y además intentar seleccionar donde apunta el mouse
+            applyDragSelectionAtPoint(dragMouseX, dragMouseY);
+            updateFloatingVerifyButton();
+            lastDragSelectAt = Date.now();
+        }
+    }
+
+    dragAutoScrollRaf = requestAnimationFrame(dragAutoScrollTick);
+}
 function highlightRow(idx){
     const rows = getRows();
     rows.forEach(r => r.classList.remove('keyboard-focus'));
@@ -1859,6 +1995,67 @@ $('consigns-body').addEventListener('change', (e)=>{
         }
         
         if(!lastShiftState) anchorRowIndex = idx; // Se actualiza el ancla si NO se usa Shift
+        updateFloatingVerifyButton();
+    }
+});
+
+$('consigns-body').addEventListener('mousedown', (e)=>{
+    if (e.button !== 0) return;
+    const row = e.target.closest('tr');
+    if (!row) return;
+    const chk = row.querySelector('input[type="checkbox"]');
+    if (!chk) return;
+
+    isMouseSelecting = true;
+    dragMouseX = e.clientX;
+    dragMouseY = e.clientY;
+    mouseSelectValue = !chk.checked;
+    lastDragSelectAt = 0;
+    document.getElementById('table-container')?.classList.add('table-dragging');
+
+    setRowCheckbox(chk, mouseSelectValue);
+    updateFloatingVerifyButton();
+
+    if (!dragAutoScrollRaf) {
+        dragAutoScrollRaf = requestAnimationFrame(dragAutoScrollTick);
+    }
+
+    const idx = parseInt(chk.dataset.idx);
+    if (!Number.isNaN(idx)) {
+        activeRowIndex = idx;
+        anchorRowIndex = idx;
+        highlightRow(idx);
+    }
+    e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e)=>{
+    if (!isMouseSelecting) return;
+    dragMouseX = e.clientX;
+    dragMouseY = e.clientY;
+    if (!dragAutoScrollRaf) {
+        dragAutoScrollRaf = requestAnimationFrame(dragAutoScrollTick);
+    }
+});
+
+$('consigns-body').addEventListener('mouseover', (e)=>{
+    if (!isMouseSelecting) return;
+    const row = e.target.closest('tr');
+    if (!row) return;
+    const chk = row.querySelector('input[type="checkbox"]');
+    if (!chk) return;
+    setRowCheckbox(chk, mouseSelectValue);
+    updateFloatingVerifyButton();
+});
+
+document.addEventListener('mouseup', ()=>{
+    if (!isMouseSelecting) return;
+    isMouseSelecting = false;
+    lastDragSelectAt = Date.now();
+    document.getElementById('table-container')?.classList.remove('table-dragging');
+    if (dragAutoScrollRaf) {
+        cancelAnimationFrame(dragAutoScrollRaf);
+        dragAutoScrollRaf = 0;
     }
 });
 
@@ -1892,7 +2089,7 @@ document.addEventListener('keydown', e => {
             const end = Math.max(anchorRowIndex, newIndex);
             
             // Limpia la selección actual para re-aplicar el nuevo rango
-            selectedConsignIds.clear(); 
+            clearSelection();
             
             rows.forEach((r, i) => {
                 const chk = r.querySelector('input[type="checkbox"]');
@@ -1911,8 +2108,7 @@ document.addEventListener('keydown', e => {
             // Sin Shift: se mueve el cursor y se establece un nuevo ancla
             anchorRowIndex = newIndex;
             // Opcional: limpiar la selección si no se usa Shift (ya manejado en click, pero aquí garantiza que solo se mueva el foco)
-            selectedConsignIds.clear(); 
-            document.querySelectorAll('#consigns-body input[type="checkbox"]').forEach(chk => chk.checked = false);
+            clearSelection();
         }
         
         activeRowIndex = newIndex;
@@ -3503,6 +3699,13 @@ function getSelectedConsignIds(){
     return Array.from(selectedConsignIds); 
 }
 
+// Botón flotante: verifica lo seleccionado (mismo flujo que el botón normal)
+document.getElementById('floating-verify-btn')?.addEventListener('click', ()=>{
+    const ids = getSelectedConsignIds();
+    if(ids.length === 0) return showModal('Atención', 'Seleccione al menos un movimiento para verificar.', false);
+    document.getElementById('btn-verify')?.click();
+});
+
 $('btn-verify').addEventListener('click', async ()=>{
   const ids=getSelectedConsignIds(); 
   if(ids.length===0) return showModal('Atención', 'Seleccione al menos un movimiento para verificar.', false);
@@ -3577,7 +3780,7 @@ $('btn-verify').addEventListener('click', async ()=>{
   }
   
   // Limpia la selección después de la acción
-  selectedConsignIds.clear();
+  clearSelection();
 });
 
 $('btn-unverify').addEventListener('click', async ()=>{
@@ -3606,7 +3809,7 @@ $('btn-unverify').addEventListener('click', async ()=>{
   }, 500);
   
   // Limpia la selección después de la acción
-  selectedConsignIds.clear();
+  clearSelection();
   showModal('Éxito', `${ids.length} movimientos desverificados.`, false);
 });
 
@@ -3701,7 +3904,7 @@ $('btn-delete').addEventListener('click', async ()=>{
             
             await updateBatch.commit();
             // Limpia la selección después de la acción
-            selectedConsignIds.clear();
+            clearSelection();
             
             // Recálculo automático después de eliminar (con cortes)
             console.log('🗑️ Eliminación completada, recalculando separadores automáticamente...');
@@ -3715,7 +3918,7 @@ $('btn-delete').addEventListener('click', async ()=>{
             showModal('¡Atención!', `Eliminación exitosa. Todos los separadores han sido recalculados automáticamente.`, false);
         } else {
             // Limpia la selección después de la acción
-            selectedConsignIds.clear();
+            clearSelection();
             
             // Recálculo automático después de eliminar (sin cortes)
             console.log('🗑️ Eliminación completada, recalculando separadores automáticamente...');
@@ -3915,7 +4118,7 @@ $('btn-cuadrar').addEventListener('click', async () => {
     });
     
     // Limpia la selección después de la acción
-    selectedConsignIds.clear();
+    clearSelection();
     
     // Forzar recarga de la tabla después de un pequeño delay para asegurar sincronización
     setTimeout(async () => {
