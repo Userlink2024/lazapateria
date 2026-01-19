@@ -728,7 +728,7 @@
           </div>
         </div>
 
-        <div style="margin-top:6px;max-height:58vh;overflow:auto;border-radius:6px;width:100%;" tabindex="0" id="table-container"></div>
+        <div style="margin-top:6px;max-height:58vh;overflow:auto;border-radius:6px;width:100%;" tabindex="0" id="table-container">
           <table>
             <thead>
               <tr>
@@ -986,6 +986,9 @@ let lastAssignedOrden = null;
 let isMouseSelecting = false;
 let mouseSelectValue = true;
 let lastDragSelectAt = 0;
+let dragMouseX = 0;
+let dragMouseY = 0;
+let dragAutoScrollRaf = 0;
 
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
@@ -1900,6 +1903,44 @@ function setRowCheckbox(chk, value){
     if (chk.checked) selectedConsignIds.add(chk.dataset.id);
     else selectedConsignIds.delete(chk.dataset.id);
 }
+
+function getConsignsScrollContainer(){
+    return document.getElementById('table-container') || document.querySelector('.main') || document.documentElement;
+}
+
+function applyDragSelectionAtPoint(x, y){
+    const el = document.elementFromPoint(x, y);
+    if (!el) return;
+    const row = el.closest ? el.closest('#consigns-body tr') : null;
+    if (!row) return;
+    const chk = row.querySelector('input[type="checkbox"]');
+    if (!chk) return;
+    setRowCheckbox(chk, mouseSelectValue);
+}
+
+function dragAutoScrollTick(){
+    if (!isMouseSelecting) {
+        dragAutoScrollRaf = 0;
+        return;
+    }
+
+    const container = getConsignsScrollContainer();
+    if (container && container.getBoundingClientRect) {
+        const r = container.getBoundingClientRect();
+        const threshold = 28;
+        let delta = 0;
+        if (dragMouseY < r.top + threshold) delta = -12;
+        else if (dragMouseY > r.bottom - threshold) delta = 12;
+
+        if (delta !== 0) {
+            container.scrollTop += delta;
+            applyDragSelectionAtPoint(dragMouseX, dragMouseY);
+            lastDragSelectAt = Date.now();
+        }
+    }
+
+    dragAutoScrollRaf = requestAnimationFrame(dragAutoScrollTick);
+}
 function highlightRow(idx){
     const rows = getRows();
     rows.forEach(r => r.classList.remove('keyboard-focus'));
@@ -1935,6 +1976,8 @@ $('consigns-body').addEventListener('mousedown', (e)=>{
     if (!chk) return;
 
     isMouseSelecting = true;
+    dragMouseX = e.clientX;
+    dragMouseY = e.clientY;
     mouseSelectValue = !chk.checked;
     lastDragSelectAt = 0;
     document.getElementById('table-container')?.classList.add('table-dragging');
@@ -1949,6 +1992,15 @@ $('consigns-body').addEventListener('mousedown', (e)=>{
         highlightRow(idx);
     }
     e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e)=>{
+    if (!isMouseSelecting) return;
+    dragMouseX = e.clientX;
+    dragMouseY = e.clientY;
+    if (!dragAutoScrollRaf) {
+        dragAutoScrollRaf = requestAnimationFrame(dragAutoScrollTick);
+    }
 });
 
 $('consigns-body').addEventListener('mouseover', (e)=>{
@@ -1966,6 +2018,10 @@ document.addEventListener('mouseup', ()=>{
     isMouseSelecting = false;
     lastDragSelectAt = Date.now();
     document.getElementById('table-container')?.classList.remove('table-dragging');
+    if (dragAutoScrollRaf) {
+        cancelAnimationFrame(dragAutoScrollRaf);
+        dragAutoScrollRaf = 0;
+    }
 });
 
 let lastShiftState = false;
