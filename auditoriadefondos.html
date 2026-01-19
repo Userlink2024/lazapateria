@@ -127,6 +127,11 @@
         <div id="errorBox" class="hint" style="display:none;color:var(--danger);font-weight:900"></div>
         <div id="loadingBox" class="hint" style="display:none">Cargando...</div>
         <div id="results" class="list"></div>
+        <div class="toolbar" id="pager" style="margin-top:12px; justify-content:space-between; align-items:center; gap:10px; display:none">
+          <button class="btn ghost" type="button" id="btnPrevPage"><i class="fas fa-chevron-left"></i> Anterior</button>
+          <div class="hint" id="pageLabel" style="text-align:center; flex:1"></div>
+          <button class="btn ghost" type="button" id="btnNextPage">Siguiente <i class="fas fa-chevron-right"></i></button>
+        </div>
       </div>
     </div>
   </div>
@@ -240,6 +245,9 @@
     let allRegistros = [];
     let consignacionesIndex = [];
 
+    const PAGE_SIZE = 5;
+    let currentPage = 1;
+
     let usedRefsSet = new Set();
 
     let consignacionesLoaded = false;
@@ -289,10 +297,15 @@
       $('searchInput').addEventListener('input', renderResults);
       $('fromDate').addEventListener('change', () => refreshAll(false));
       $('toDate').addEventListener('change', () => refreshAll(false));
-      $('empaqueSelect').addEventListener('change', renderResults);
-      $('bodeguerosSelect').addEventListener('change', renderResults);
-      $('asesorSelect').addEventListener('change', renderResults);
-      $('bloqueadoSelect').addEventListener('change', renderResults);
+      $('empaqueSelect').addEventListener('change', () => { currentPage = 1; renderResults(); });
+      $('bodeguerosSelect').addEventListener('change', () => { currentPage = 1; renderResults(); });
+      $('asesorSelect').addEventListener('change', () => { currentPage = 1; renderResults(); });
+      $('bloqueadoSelect').addEventListener('change', () => { currentPage = 1; renderResults(); });
+
+      const prevBtn = $('btnPrevPage');
+      const nextBtn = $('btnNextPage');
+      if (prevBtn) prevBtn.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderResults(); } });
+      if (nextBtn) nextBtn.addEventListener('click', () => { currentPage++; renderResults(); });
 
       $('btnGoAuditoria').addEventListener('click', async () => {
         setModeAuditoria();
@@ -325,6 +338,7 @@
         if (loadHeavy) preloadAuditoriaData();
         await loadRegistros();
         updateAsesorSelectFromRegistros();
+        currentPage = 1;
         renderResults();
       } catch (e) {
         showError(e && e.message ? e.message : String(e));
@@ -658,12 +672,30 @@
 
       const list = applyFilters();
       if (!list.length) {
+        const pager = $('pager');
+        if (pager) pager.style.display = 'none';
         container.innerHTML = '<div class="hint">No hay pedidos con esos filtros.</div>';
         return;
       }
 
+      const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const start = (currentPage - 1) * PAGE_SIZE;
+      const pageList = list.slice(start, start + PAGE_SIZE);
+
+      const pager = $('pager');
+      const pageLabel = $('pageLabel');
+      const prevBtn = $('btnPrevPage');
+      const nextBtn = $('btnNextPage');
+      if (pager) pager.style.display = totalPages > 1 ? 'flex' : 'none';
+      if (pageLabel) pageLabel.textContent = `Página ${currentPage} de ${totalPages} (${list.length} pedidos)`;
+      if (prevBtn) prevBtn.disabled = currentPage <= 1;
+      if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+
       const frag = document.createDocumentFragment();
-      list.forEach(r => {
+      pageList.forEach(r => {
         const item = document.createElement('div');
         item.className = 'item';
 
@@ -732,7 +764,7 @@
       });
       container.appendChild(frag);
 
-      attachRowHandlers(list);
+      attachRowHandlers(pageList);
     }
 
     function attachRowHandlers(currentList){
