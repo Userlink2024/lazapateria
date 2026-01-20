@@ -358,51 +358,51 @@
             <div class="monthly-limits-grid">
                 <div class="month-limit-item">
                     <label for="limit-1">Enero:</label>
-                    <input type="number" id="limit-1" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-1" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-2">Febrero:</label>
-                    <input type="number" id="limit-2" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-2" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-3">Marzo:</label>
-                    <input type="number" id="limit-3" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-3" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-4">Abril:</label>
-                    <input type="number" id="limit-4" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-4" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-5">Mayo:</label>
-                    <input type="number" id="limit-5" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-5" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-6">Junio:</label>
-                    <input type="number" id="limit-6" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-6" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-7">Julio:</label>
-                    <input type="number" id="limit-7" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-7" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-8">Agosto:</label>
-                    <input type="number" id="limit-8" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-8" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-9">Septiembre:</label>
-                    <input type="number" id="limit-9" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-9" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-10">Octubre:</label>
-                    <input type="number" id="limit-10" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-10" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-11">Noviembre:</label>
-                    <input type="number" id="limit-11" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-11" inputmode="numeric" placeholder="$0">
                 </div>
                 <div class="month-limit-item">
                     <label for="limit-12">Diciembre:</label>
-                    <input type="number" id="limit-12" min="0" step="1000000" placeholder="0">
+                    <input type="text" id="limit-12" inputmode="numeric" placeholder="$0">
                 </div>
             </div>
             <button onclick="saveMonthlyLimits()">Guardar Topes del Año</button>
@@ -421,6 +421,10 @@
                 <div class="summary-title">Mes Mayor Consignación</div>
                 <div class="summary-value" id="highest-month">Cargando...</div>
             </div>
+            <div class="summary-card" id="balance-card">
+                <div class="summary-title">Balance Año (Pagado - Deuda)</div>
+                <div class="summary-value" id="year-balance">Cargando...</div>
+            </div>
         </section>
 
         <section class="charts-section">
@@ -435,6 +439,23 @@
                 <div class="chart-wrapper">
                     <canvas id="monthly-comparison-chart"></canvas>
                 </div>
+            </div>
+        </section>
+
+        <section class="controls" style="margin-top: 10px;">
+            <h2>Conciliación Mensual (Deuda vs Pagos)</h2>
+            <div class="table-wrapper" style="overflow:auto; border: 2px solid var(--border); border-radius: 8px;">
+                <table style="width:100%; border-collapse: collapse; min-width: 760px; background: var(--card);">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; padding:10px; border-bottom: 1px solid var(--border);">Mes</th>
+                            <th style="text-align:right; padding:10px; border-bottom: 1px solid var(--border);">Deuda (Tope)</th>
+                            <th style="text-align:right; padding:10px; border-bottom: 1px solid var(--border);">Pagado</th>
+                            <th style="text-align:right; padding:10px; border-bottom: 1px solid var(--border);">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recon-tbody"></tbody>
+                </table>
             </div>
         </section>
     </div>
@@ -461,11 +482,13 @@
         let currentYear = new Date().getFullYear();
         let monthlyData = {};
         let monthlyLimits = {};
+        let propulsarAccountId = null;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
             try {
                 await initializeApp();
+                initMonthlyLimitFormatting();
             } catch (error) {
                 showError('Error al inicializar la aplicación: ' + error.message);
             }
@@ -528,6 +551,7 @@
                 
                 const accountDoc = accountsSnapshot.docs[0];
                 const accountId = accountDoc.id;
+                propulsarAccountId = accountId;
                 
                 // Load consignations for the current year
                 const startDate = new Date(currentYear, 0, 1);
@@ -549,6 +573,7 @@
                 // Sum consignations by month
                 consignationsSnapshot.forEach(doc => {
                     const data = doc.data();
+                    if (data.isSeparator === true) return;
                     if (data.fecha && data.valor) {
                         const date = data.fecha.toDate();
                         const month = date.getMonth() + 1;
@@ -590,6 +615,7 @@
                     // Recalculate from real-time data
                     snapshot.forEach(doc => {
                         const data = doc.data();
+                        if (data.isSeparator === true) return;
                         if (data.fecha && data.valor) {
                             const date = data.fecha.toDate();
                             const month = date.getMonth() + 1;
@@ -620,13 +646,17 @@
                     for (let month = 1; month <= 12; month++) {
                         const input = document.getElementById(`limit-${month}`);
                         if (input) {
-                            input.value = monthlyLimits[month] || '';
+                            const raw = Number(monthlyLimits[month] || 0);
+                            input.value = raw > 0 ? formatCurrency(raw) : '';
                         }
                     }
                 } else {
                     // Initialize with empty object
                     monthlyLimits = {};
                 }
+
+                updateSummaryCards();
+                updateCharts();
             } catch (error) {
                 showError('Error al cargar topes mensuales: ' + error.message);
             }
@@ -640,7 +670,7 @@
                 
                 for (let month = 1; month <= 12; month++) {
                     const input = document.getElementById(`limit-${month}`);
-                    const value = parseFloat(input.value) || 0;
+                    const value = parseCOPInput((input && input.value) || '');
                     
                     if (value > 0) {
                         newLimits[month] = value;
@@ -669,6 +699,7 @@
                 await db.collection('settings').doc('propulsar_limits').set(monthlyLimits);
                 
                 showSuccess('Topes mensuales guardados exitosamente');
+                updateSummaryCards();
                 updateCharts();
                 
             } catch (error) {
@@ -699,6 +730,51 @@
             const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
             document.getElementById('highest-month').textContent = 
                 highestMonth.month > 0 ? `${monthNames[highestMonth.month - 1]} (${formatCurrency(highestMonth.amount)})` : 'N/A';
+
+            // Conciliación anual (Pagado - Deuda)
+            let totalDebt = 0;
+            for (let month = 1; month <= 12; month++) {
+                const limit = monthlyLimits?.[month] || 0;
+                totalDebt += Number(limit || 0);
+            }
+            const balance = totalYear - totalDebt;
+            const balanceEl = document.getElementById('year-balance');
+            if (balanceEl) balanceEl.textContent = formatCurrency(balance);
+
+            const balanceCard = document.getElementById('balance-card');
+            if (balanceCard) {
+                balanceCard.classList.remove('success', 'warning', 'danger');
+                if (balance >= 0) balanceCard.classList.add('success');
+                else balanceCard.classList.add('danger');
+            }
+
+            renderReconciliationTable();
+        }
+
+        function renderReconciliationTable(){
+            const tbody = document.getElementById('recon-tbody');
+            if (!tbody) return;
+
+            const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+            let rowsHtml = '';
+            for (let month = 1; month <= 12; month++) {
+                const debt = Number(monthlyLimits?.[month] || 0);
+                const paid = Number(monthlyData?.[month] || 0);
+                const bal = paid - debt;
+
+                const color = bal >= 0 ? 'var(--success)' : 'var(--danger)';
+                rowsHtml += `
+                    <tr>
+                        <td style="padding:10px; border-bottom: 1px solid var(--border);">${monthNames[month - 1]}</td>
+                        <td style="padding:10px; border-bottom: 1px solid var(--border); text-align:right;">${formatCurrency(debt)}</td>
+                        <td style="padding:10px; border-bottom: 1px solid var(--border); text-align:right;">${formatCurrency(paid)}</td>
+                        <td style="padding:10px; border-bottom: 1px solid var(--border); text-align:right; font-weight:700; color:${color};">${formatCurrency(bal)}</td>
+                    </tr>
+                `;
+            }
+
+            tbody.innerHTML = rowsHtml;
         }
 
         function updateCharts() {
@@ -714,15 +790,18 @@
             
             const data = [];
             const limits = [];
+            const balances = [];
             const percentages = [];
             
             for (let month = 1; month <= 12; month++) {
                 const amount = monthlyData[month] || 0;
-                const limit = monthlyLimits[currentYear]?.[month] || 0;
+                const limit = monthlyLimits?.[month] || 0;
                 const percentage = limit > 0 ? (amount / limit) * 100 : 0;
+                const balance = amount - limit;
                 
                 data.push(amount);
                 limits.push(limit);
+                balances.push(balance);
                 percentages.push(percentage);
             }
             
@@ -748,6 +827,16 @@
                             type: 'line',
                             borderColor: 'rgba(255, 152, 0, 1)',
                             backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0
+                        },
+                        {
+                            label: 'Balance (Pagado - Deuda)',
+                            data: balances,
+                            type: 'line',
+                            borderColor: 'rgba(244, 67, 54, 1)',
+                            backgroundColor: 'rgba(244, 67, 54, 0.1)',
                             borderWidth: 2,
                             fill: false,
                             tension: 0
@@ -858,6 +947,28 @@
                 currency: 'COP',
                 minimumFractionDigits: 0
             }).format(amount);
+        }
+
+        function parseCOPInput(v) {
+            const n = String(v || '').replace(/[^0-9]/g, '');
+            return Number(n || 0);
+        }
+
+        function initMonthlyLimitFormatting() {
+            for (let month = 1; month <= 12; month++) {
+                const input = document.getElementById(`limit-${month}`);
+                if (!input) continue;
+
+                input.addEventListener('focus', () => {
+                    const raw = parseCOPInput(input.value);
+                    input.value = raw > 0 ? String(raw) : '';
+                });
+
+                input.addEventListener('blur', () => {
+                    const raw = parseCOPInput(input.value);
+                    input.value = raw > 0 ? formatCurrency(raw) : '';
+                });
+            }
         }
 
         function showError(message) {
