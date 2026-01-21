@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eliminar Referencias - La Zapatería</title>
+    <title>Novedades - La Zapatería</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         :root {
-            --primary: #dc3545;
-            --primary-dark: #c82333;
+            --primary: #0d6efd;
+            --primary-dark: #0b5ed7;
             --bg: #f8f9fa;
             --card: #ffffff;
             --border: #dee2e6;
@@ -149,20 +149,6 @@
             background-color: #f8f9fa;
         }
 
-        .checkbox-cell {
-            width: 40px;
-            text-align: center;
-        }
-
-        .date-cell {
-            white-space: nowrap;
-        }
-
-        .ref-cell {
-            font-family: monospace;
-            font-weight: bold;
-        }
-
         .loading {
             text-align: center;
             padding: 40px;
@@ -225,7 +211,7 @@
 </head>
 <body>
     <div class="container">
-        <h2><i class="fas fa-trash"></i> Eliminar Referencias Bancarias</h2>
+        <h2><i class="fas fa-clipboard-list"></i> Novedades reportadas</h2>
         
         <div id="messageContainer"></div>
         
@@ -239,18 +225,20 @@
                 <input type="date" id="fechaHasta">
             </div>
             <div class="filter-group">
-                <label for="cuentaFiltro">Cuenta:</label>
-                <select id="cuentaFiltro">
-                    <option value="">Todas las cuentas</option>
+                <label for="estadoFiltro">Estado:</label>
+                <select id="estadoFiltro">
+                    <option value="">Todas</option>
+                    <option value="pendiente" selected>Pendientes</option>
+                    <option value="resuelta">Resueltas</option>
                 </select>
             </div>
             <div class="filter-group">
-                <label for="refBusqueda">Buscar referencia:</label>
-                <input type="text" id="refBusqueda" placeholder="Escribe para buscar...">
+                <label for="busqueda">Buscar (código/cliente/asesor/texto):</label>
+                <input type="text" id="busqueda" placeholder="Escribe para buscar...">
             </div>
             <div class="filter-group">
                 <label>&nbsp;</label>
-                <button onclick="aplicarFiltros()">Aplicar Filtros</button>
+                <button onclick="cargarNovedades()">Buscar</button>
             </div>
             <div class="filter-group">
                 <label>&nbsp;</label>
@@ -259,36 +247,29 @@
         </div>
 
         <div class="actions">
-            <button onclick="seleccionarTodos()" id="btnSeleccionarTodos">Seleccionar Todos</button>
-            <button onclick="deseleccionarTodos()" id="btnDeseleccionarTodos">Deseleccionar Todos</button>
-            <button onclick="eliminarSeleccionados()" id="btnEliminar" disabled class="btn-danger">
-                <i class="fas fa-trash"></i> Eliminar Seleccionadas (<span id="contadorSeleccion">0</span>)
-            </button>
             <button onclick="exportarExcel()" class="btn-success">
-                <i class="fas fa-file-excel"></i> Exportar Excel
+                <i class="fas fa-file-excel"></i> Exportar Excel (novedades)
             </button>
+            <button onclick="cargarNovedades()" class="btn-secondary">Recargar</button>
         </div>
 
         <div class="table-container">
             <table id="tablaReferencias">
                 <thead>
                     <tr>
-                        <th class="checkbox-cell">
-                            <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
-                        </th>
-                        <th>Referencia</th>
-                        <th>Fecha</th>
-                        <th>Valor</th>
-                        <th>Cuenta</th>
-                        <th>Vinculada a</th>
-                        <th>Fecha Vinculación</th>
-                        <th>Usuario</th>
+                        <th>Estado</th>
+                        <th>Código</th>
+                        <th>Cliente</th>
+                        <th>Asesor</th>
+                        <th>Fecha reporte</th>
+                        <th>Descripción</th>
+                        <th>Acción</th>
                     </tr>
                 </thead>
                 <tbody id="tablaBody">
                     <tr>
-                        <td colspan="8" class="loading">
-                            <i class="fas fa-spinner fa-spin"></i> Cargando referencias...
+                        <td colspan="7" class="loading">
+                            <i class="fas fa-spinner fa-spin"></i> Cargando novedades...
                         </td>
                     </tr>
                 </tbody>
@@ -302,6 +283,19 @@
                 (<span id="totalRegistros">0</span> registros)
             </span>
             <button onclick="paginaSiguiente()" id="btnSiguiente" disabled>Siguiente</button>
+        </div>
+    </div>
+
+    <div id="detalleModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; padding:20px; z-index:9999;">
+        <div style="background:#fff; width:100%; max-width:760px; border-radius:12px; border:1px solid var(--border); box-shadow:0 10px 40px rgba(0,0,0,0.18); overflow:hidden;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border);">
+                <h3 style="margin:0; font-size:16px;">Detalle de novedad</h3>
+                <button type="button" onclick="cerrarDetalle()" style="border:0; background:transparent; font-size:20px; cursor:pointer; padding:4px 10px;">×</button>
+            </div>
+            <div style="padding:14px 16px;" id="detalleBody"></div>
+            <div style="padding:12px 16px; border-top:1px solid var(--border); display:flex; justify-content:flex-end;">
+                <button type="button" onclick="cerrarDetalle()" class="btn-secondary">Cerrar</button>
+            </div>
         </div>
     </div>
 
@@ -327,152 +321,158 @@
         // Variables globales
         let todasLasReferencias = [];
         let referenciasFiltradas = [];
-        let cuentasMap = new Map();
         let paginaActual = 1;
         const registrosPorPagina = 50;
         let seleccionados = new Set();
 
         // Inicialización
         document.addEventListener('DOMContentLoaded', async () => {
-            await cargarCuentas();
-            await cargarReferencias();
-            
-            // Establecer fechas por defecto (hasta 13 de enero 2026)
-            document.getElementById('fechaHasta').value = '2026-01-13';
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const iso = `${yyyy}-${mm}-${dd}`;
+            document.getElementById('fechaHasta').value = iso;
             document.getElementById('fechaDesde').value = '2024-01-01';
-            
-            // Auto-aplicar filtros al cambiar inputs
-            ['fechaDesde', 'fechaHasta', 'cuentaFiltro', 'refBusqueda'].forEach(id => {
-                document.getElementById(id).addEventListener('change', aplicarFiltros);
-                document.getElementById(id).addEventListener('keyup', () => {
-                    if (id === 'refBusqueda') aplicarFiltros();
-                });
+
+            ['fechaDesde', 'fechaHasta', 'estadoFiltro'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', () => { aplicarFiltros(); });
             });
+            const busq = document.getElementById('busqueda');
+            if (busq) busq.addEventListener('input', () => { aplicarFiltros(); });
+
+            await cargarNovedades();
         });
 
-        // Cargar cuentas para mostrar nombres
-        async function cargarCuentas() {
-            try {
-                const snapshot = await db.collection('cuentas').get();
-                const select = document.getElementById('cuentaFiltro');
-                
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    const nombre = data.name || data.nombre || data.nombreCuenta || data.banco || doc.id;
-                    cuentasMap.set(doc.id, nombre);
-                    
-                    const option = document.createElement('option');
-                    option.value = doc.id;
-                    option.textContent = nombre;
-                    select.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Error cargando cuentas:', error);
-                mostrarError('Error cargando cuentas: ' + error.message);
-            }
+        function tsToDate(ts) {
+            if (!ts) return null;
+            if (ts instanceof Date && !Number.isNaN(ts.getTime())) return ts;
+            if (typeof ts.toDate === 'function') return ts.toDate();
+            const d = new Date(ts);
+            return Number.isNaN(d.getTime()) ? null : d;
         }
 
-        // Cargar todas las referencias (usando collectionGroup como en auditoriadefondos.html)
-        async function cargarReferencias() {
+        function formatDateTime(ts) {
+            const d = tsToDate(ts);
+            if (!d) return '';
+            return d.toLocaleString('es-CO', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function escapeHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function cargarNovedades() {
+            const desde = document.getElementById('fechaDesde').value;
+            const hasta = document.getElementById('fechaHasta').value;
+            if (!desde || !hasta) {
+                mostrarError('Selecciona Desde y Hasta.');
+                return;
+            }
+            const from = new Date(desde + 'T00:00:00');
+            const to = new Date(hasta + 'T23:59:59');
+            if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+                mostrarError('Rango de fechas inválido.');
+                return;
+            }
+
             try {
                 mostrarLoading();
-                
                 todasLasReferencias = [];
-                
-                // Cargar cuentas para mostrar nombres
-                const cuentasMap = new Map();
-                try {
-                    const cuentasSnap = await db.collection('cuentas').get();
-                    cuentasSnap.forEach(doc => {
-                        const d = doc.data() || {};
-                        const nombre = d.name || d.nombre || d.nombreCuenta || d.banco || doc.id;
-                        cuentasMap.set(doc.id, nombre || doc.id);
-                    });
-                } catch (e) {
-                    console.error('Error cargando cuentas:', e);
-                }
-                
-                // Cargar desde collectionGroup('consignaciones') como en auditoriadefondos.html
-                const snap = await db.collectionGroup('consignaciones').get();
-                snap.forEach(doc => {
-                    const d = doc.data() || {};
-                    if (d.isSeparator === true) return;
-                    
-                    const ref = normalizeRef(d.referencia);
-                    if (!ref) return;
-                    
-                    const cuentaId = (doc.ref.parent && doc.ref.parent.parent) ? doc.ref.parent.parent.id : '';
-                    const cuentaNombre = cuentasMap.get(cuentaId) || cuentaId || '';
-                    
-                    todasLasReferencias.push({
-                        id: ref, // Usar la referencia como ID único
-                        referencia: ref,
-                        valor: Number(d.valor || 0),
-                        fecha: d.fecha || null,
-                        cuentaId: cuentaId,
-                        cuentaNombre: cuentaNombre,
-                        consignacionId: doc.id,
-                        path: doc.ref.path,
-                        linkedRegistroId: '', // No disponible en consignaciones
-                        linkedCodigoUnico: '',
-                        linkedAsesor: '',
-                        linkedCliente: '',
-                        linkedAt: null,
-                        linkedBy: ''
-                    });
-                });
-                
-                // Ordenar por fecha descendente
-                todasLasReferencias.sort((a, b) => {
-                    if (!a.fecha) return 1;
-                    if (!b.fecha) return -1;
-                    const fechaA = a.fecha.toDate ? a.fecha.toDate() : new Date(a.fecha);
-                    const fechaB = b.fecha.toDate ? b.fecha.toDate() : new Date(b.fecha);
-                    return fechaB - fechaA;
-                });
-                
-                aplicarFiltros();
-                
-            } catch (error) {
-                console.error('Error cargando referencias:', error);
-                mostrarError('Error cargando referencias: ' + error.message);
-            }
-        }
 
-        // Función para normalizar referencias (copiada de auditoriadefondos.html)
-        function normalizeRef(str) {
-            if (!str) return '';
-            return String(str).trim().replace(/\s+/g, '').toUpperCase();
+                const fromTs = firebase.firestore.Timestamp.fromDate(from);
+                const toTs = firebase.firestore.Timestamp.fromDate(to);
+
+                const LIMIT = 600;
+
+                const qCreatedAt = db.collection('novedades')
+                    .orderBy('createdAt', 'desc')
+                    .where('createdAt', '>=', fromTs)
+                    .where('createdAt', '<=', toTs)
+                    .limit(LIMIT);
+
+                const qRegistroFecha = db.collection('novedades')
+                    .orderBy('registroFecha', 'desc')
+                    .where('registroFecha', '>=', fromTs)
+                    .where('registroFecha', '<=', toTs)
+                    .limit(LIMIT);
+
+                const [snap1, snap2] = await Promise.all([
+                    qCreatedAt.get().catch(() => ({ forEach: () => { } })),
+                    qRegistroFecha.get().catch(() => ({ forEach: () => { } }))
+                ]);
+
+                const byId = new Map();
+                snap1.forEach(doc => {
+                    const d = doc.data() || {};
+                    d.id = doc.id;
+                    byId.set(doc.id, d);
+                });
+                snap2.forEach(doc => {
+                    const d = doc.data() || {};
+                    d.id = doc.id;
+                    byId.set(doc.id, d);
+                });
+
+                todasLasReferencias = Array.from(byId.values());
+
+                aplicarFiltros();
+                mostrarExito('Novedades cargadas: ' + todasLasReferencias.length);
+            } catch (error) {
+                console.error('Error cargando novedades:', error);
+                mostrarError('Error cargando novedades: ' + error.message);
+            }
         }
 
         // Aplicar filtros
         function aplicarFiltros() {
             const fechaDesde = document.getElementById('fechaDesde').value;
             const fechaHasta = document.getElementById('fechaHasta').value;
-            const cuentaFiltro = document.getElementById('cuentaFiltro').value;
-            const refBusqueda = document.getElementById('refBusqueda').value.toLowerCase();
-            
-            referenciasFiltradas = todasLasReferencias.filter(ref => {
-                // Filtro por fecha desde
-                if (fechaDesde && ref.fecha) {
-                    const fechaRef = ref.fecha.toDate();
-                    const fechaDesdeObj = new Date(fechaDesde + 'T00:00:00');
-                    if (fechaRef < fechaDesdeObj) return false;
+            const estado = document.getElementById('estadoFiltro').value;
+            const q = String(document.getElementById('busqueda').value || '').trim().toLowerCase();
+
+            referenciasFiltradas = todasLasReferencias.filter(n => {
+                const d = tsToDate(n.createdAt);
+                if (!d) return false;
+                if (fechaDesde) {
+                    const fd = new Date(fechaDesde + 'T00:00:00');
+                    if (d < fd) return false;
                 }
-                
-                // Filtro por fecha hasta
-                if (fechaHasta && ref.fecha) {
-                    const fechaRef = ref.fecha.toDate();
-                    const fechaHastaObj = new Date(fechaHasta + 'T23:59:59');
-                    if (fechaRef > fechaHastaObj) return false;
+                if (fechaHasta) {
+                    const fh = new Date(fechaHasta + 'T23:59:59');
+                    if (d > fh) return false;
                 }
-                
-                // Filtro por cuenta
-                if (cuentaFiltro && ref.cuentaId !== cuentaFiltro) return false;
-                
-                // Filtro por referencia
-                if (refBusqueda && !ref.referencia.toLowerCase().includes(refBusqueda)) return false;
-                
+
+                if (estado === 'pendiente' && n.resuelta === true) return false;
+                if (estado === 'resuelta' && n.resuelta !== true) return false;
+
+                if (q) {
+                    const blob = [
+                        n.codigo_unico,
+                        n.registroId,
+                        n.cliente,
+                        n.asesor,
+                        n.asesorUserId,
+                        n.descripcion,
+                        n.assignedBodegueroNombre,
+                        n.assignedBodegueroUserId,
+                        n.createdByNombre,
+                        n.createdByUserId
+                    ].map(x => String(x || '')).join(' ').toLowerCase();
+                    if (!blob.includes(q)) return false;
+                }
                 return true;
             });
             
@@ -483,10 +483,15 @@
 
         // Limpiar filtros
         function limpiarFiltros() {
-            document.getElementById('fechaDesde').value = '';
-            document.getElementById('fechaHasta').value = '';
-            document.getElementById('cuentaFiltro').value = '';
-            document.getElementById('refBusqueda').value = '';
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const iso = `${yyyy}-${mm}-${dd}`;
+            document.getElementById('fechaHasta').value = iso;
+            document.getElementById('fechaDesde').value = iso;
+            document.getElementById('estadoFiltro').value = 'pendiente';
+            document.getElementById('busqueda').value = '';
             aplicarFiltros();
         }
 
@@ -498,27 +503,32 @@
             const pagina = referenciasFiltradas.slice(inicio, fin);
             
             if (pagina.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No se encontraron referencias con los filtros aplicados.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">No hay novedades con los filtros actuales.</td></tr>';
                 return;
             }
             
-            tbody.innerHTML = pagina.map(ref => `
-                <tr>
-                    <td class="checkbox-cell">
-                        <input type="checkbox" 
-                               value="${ref.id}" 
-                               ${seleccionados.has(ref.id) ? 'checked' : ''}
-                               onchange="toggleSeleccion('${ref.id}')">
-                    </td>
-                    <td class="ref-cell">${ref.referencia}</td>
-                    <td class="date-cell">${formatFecha(ref.fecha)}</td>
-                    <td>${formatValor(ref.valor)}</td>
-                    <td>${ref.cuentaNombre || ref.cuentaId}</td>
-                    <td>${ref.linkedCodigoUnico ? `Código: ${ref.linkedCodigoUnico}<br>Asesor: ${ref.linkedAsesor}<br>Cliente: ${ref.linkedCliente}` : 'No vinculada'}</td>
-                    <td class="date-cell">${formatFecha(ref.linkedAt)}</td>
-                    <td>${ref.linkedBy || ''}</td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = pagina.map(n => {
+                const estado = n.resuelta === true
+                    ? '<span style="display:inline-block; padding:4px 10px; border-radius:999px; font-weight:800; font-size:12px; background:#d4edda; color:#155724; border:1px solid #c3e6cb;">RESUELTA</span>'
+                    : '<span style="display:inline-block; padding:4px 10px; border-radius:999px; font-weight:800; font-size:12px; background:#fff3cd; color:#856404; border:1px solid #ffeeba;">PENDIENTE</span>';
+                const code = escapeHtml(n.codigo_unico || n.registroId || '—');
+                const cliente = escapeHtml(n.cliente || '—');
+                const asesor = escapeHtml(n.asesor || '—');
+                const fecha = escapeHtml(formatDateTime(n.createdAt));
+                const desc = escapeHtml(n.descripcion || '—');
+                const id = escapeHtml(n.id || '');
+                return `
+                    <tr>
+                        <td>${estado}</td>
+                        <td style="font-family: monospace; font-weight: 800;">${code}</td>
+                        <td>${cliente}</td>
+                        <td>${asesor}</td>
+                        <td class="date-cell">${fecha}</td>
+                        <td>${desc}</td>
+                        <td><button type="button" class="btn-secondary" onclick="verDetalle('${id}')">Ver</button></td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         // Actualizar paginación
@@ -644,22 +654,61 @@
                 return;
             }
             
-            const datos = referenciasFiltradas.map(ref => ({
-                'Referencia': ref.referencia,
-                'Fecha': formatFecha(ref.fecha),
-                'Valor': ref.valor,
-                'Cuenta': ref.cuentaNombre || ref.cuentaId,
-                'Vinculada a': ref.linkedCodigoUnico || 'No',
-                'Asesor': ref.linkedAsesor || '',
-                'Cliente': ref.linkedCliente || '',
-                'Fecha Vinculación': formatFecha(ref.linkedAt),
-                'Usuario': ref.linkedBy || ''
+            const datos = referenciasFiltradas.map(n => ({
+                'Estado': n.resuelta === true ? 'RESUELTA' : 'PENDIENTE',
+                'Código': n.codigo_unico || n.registroId || '',
+                'Cliente': n.cliente || '',
+                'Asesor': n.asesor || '',
+                'AsesorUserId': n.asesorUserId || '',
+                'Fecha reporte': formatDateTime(n.createdAt),
+                'Fecha pedido': formatDateTime(n.registroFecha),
+                'Asignado': n.assignedBodegueroNombre || n.assignedBodegueroUserId || '',
+                'Descripción': n.descripcion || '',
+                'Flete valor': Number(n.fleteValor || 0),
+                'Flete pendiente': n.fletePendiente === true ? 'SI' : 'NO',
+                'Flete pagado': n.fletePagado === true ? 'SI' : 'NO',
+                'Creado por': n.createdByNombre || n.createdByUserId || ''
             }));
             
             const ws = XLSX.utils.json_to_sheet(datos);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Referencias');
-            XLSX.writeFile(wb, `referencias_${new Date().toISOString().split('T')[0]}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, 'Novedades');
+            XLSX.writeFile(wb, `novedades_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+
+        function verDetalle(id) {
+            const n = todasLasReferencias.find(x => String(x.id) === String(id));
+            if (!n) {
+                mostrarError('No se encontró el registro.');
+                return;
+            }
+            const el = document.getElementById('detalleBody');
+            const rows = [
+                ['ID', n.id],
+                ['Estado', n.resuelta === true ? 'RESUELTA' : 'PENDIENTE'],
+                ['Código', n.codigo_unico || n.registroId || ''],
+                ['Cliente', n.cliente || ''],
+                ['Asesor', n.asesor || ''],
+                ['AsesorUserId', n.asesorUserId || ''],
+                ['Fecha pedido', formatDateTime(n.registroFecha)],
+                ['Fecha reporte', formatDateTime(n.createdAt)],
+                ['Asignado', n.assignedBodegueroNombre || n.assignedBodegueroUserId || ''],
+                ['Descripción', n.descripcion || ''],
+                ['Flete valor', formatValor(n.fleteValor || 0)],
+                ['Flete pendiente', n.fletePendiente === true ? 'SI' : 'NO'],
+                ['Flete pagado', n.fletePagado === true ? 'SI' : 'NO'],
+                ['Creado por', n.createdByNombre || n.createdByUserId || '']
+            ];
+            el.innerHTML = '<div style="display:grid; grid-template-columns: 180px 1fr; gap:10px 12px;">' + rows.map(r => {
+                return `<div style="color:#6c757d; font-weight:800;">${escapeHtml(r[0])}</div><div style="font-weight:700;">${escapeHtml(r[1])}</div>`;
+            }).join('') + '</div>';
+            const m = document.getElementById('detalleModal');
+            m.style.display = 'flex';
+        }
+
+        function cerrarDetalle() {
+            const m = document.getElementById('detalleModal');
+            m.style.display = 'none';
         }
 
         // Utilidades
@@ -683,7 +732,7 @@
         function mostrarLoading() {
             document.getElementById('tablaBody').innerHTML = `
                 <tr>
-                    <td colspan="8" class="loading">
+                    <td colspan="7" class="loading">
                         <i class="fas fa-spinner fa-spin"></i> Cargando...
                     </td>
                 </tr>
