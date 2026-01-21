@@ -710,6 +710,7 @@
             try {
                 const docRef = await db.collection('novedades').add(docData);
                 console.log('saveNovedad: documento creado con id =', docRef.id);
+                console.log('saveNovedad: createdAt guardado =', docData.createdAt.toDate());
                 // Refrescar lista de novedades para que aparezca la nueva
                 console.log('saveNovedad: recargando novedades...');
                 await loadNovedadesByDateRange();
@@ -932,6 +933,7 @@
 
                 const fromTs = firebase.firestore.Timestamp.fromDate(from);
                 const toTs = firebase.firestore.Timestamp.fromDate(to);
+                console.log('loadNovedadesByDateRange: query desde', fromTs.toDate(), 'hasta', toTs.toDate());
                 q = q.where('createdAt', '>=', fromTs).where('createdAt', '<=', toTs).limit(NOVEDADES_LIMIT);
 
                 const snap = await q.get();
@@ -939,14 +941,20 @@
                     const data = d.data() || {};
                     data.id = d.id;
                     return data;
-                }).sort((a, b) => {
+                });
+                console.log('loadNovedadesByDateRange: novedades crudas traidas =', novedades.length);
+                novedades.forEach((n, i) => {
+                    const ct = n.createdAt && typeof n.createdAt.toDate === 'function' ? n.createdAt.toDate() : null;
+                    console.log(`loadNovedadesByDateRange: novedad ${i}: id=${n.id}, createdAt=${ct}, descripcion=${n.descripcion}`);
+                });
+                const novedadesSorted = novedades.sort((a, b) => {
                     const at = a.createdAt && typeof a.createdAt.toMillis === 'function' ? a.createdAt.toMillis() : 0;
                     const bt = b.createdAt && typeof b.createdAt.toMillis === 'function' ? b.createdAt.toMillis() : 0;
                     return bt - at;
                 });
 
-                console.log('loadNovedadesByDateRange: novedades cargadas =', novedades.length);
-                allNovedades = novedades;
+                console.log('loadNovedadesByDateRange: novedades cargadas =', novedadesSorted.length);
+                allNovedades = novedadesSorted;
                 hasLoadedNovedades = true;
                 rebuildNovedadIndex(allNovedades);
                 renderNovedadesLists(allNovedades);
