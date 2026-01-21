@@ -650,11 +650,18 @@
         });
 
         async function saveNovedad() {
+            console.log('saveNovedad: inicio');
             const p = currentPedidoForNovedad;
-            if (!p || !p.id) throw new Error('Sin pedido');
+            console.log('saveNovedad: currentPedidoForNovedad =', p);
+            if (!p || !p.id) {
+                console.error('saveNovedad: sin pedido o id');
+                throw new Error('Sin pedido');
+            }
 
             const desc = String($('novDesc').value || '').trim();
+            console.log('saveNovedad: descripcion =', desc);
             if (!desc) {
+                console.warn('saveNovedad: descripcion vacía');
                 await modalAlert('Falta información', 'Escribe la novedad antes de guardar.');
                 return;
             }
@@ -670,13 +677,13 @@
             const resuelta = isAdmin ? ($('novResuelta').checked === true) : false;
 
             if (resuelta && requiresPago && !fletePagado) {
+                console.warn('saveNovedad: intento marcar resuelta sin flete pagado');
                 await modalAlert('No permitido', 'Para marcar como resuelta, primero debes marcar el flete como pagado.');
                 return;
             }
 
             const now = firebase.firestore.Timestamp.fromDate(new Date());
-
-            await db.collection('novedades').add({
+            const docData = {
                 registroId: p.id,
                 codigo_unico: p.codigo_unico || '',
                 cliente: p.cliente || '',
@@ -697,14 +704,29 @@
                 resueltaAt: null,
                 createdAt: now,
                 updatedAt: now
-            });
+            };
+            console.log('saveNovedad: datos a guardar =', docData);
+
+            try {
+                const docRef = await db.collection('novedades').add(docData);
+                console.log('saveNovedad: documento creado con id =', docRef.id);
+            } catch (e) {
+                console.error('saveNovedad: error al guardar en Firestore', e);
+                throw e;
+            }
 
             closeNovedadModal();
         }
 
         $('saveNovedad').addEventListener('click', async () => {
-            try { await saveNovedad(); }
-            catch (e) { await modalAlert('Error', 'No se pudo guardar la novedad.'); }
+            console.log('saveNovedad: click en botón Guardar');
+            try {
+                await saveNovedad();
+                console.log('saveNovedad: guardado exitoso');
+            } catch (e) {
+                console.error('saveNovedad: error capturado en el click', e);
+                await modalAlert('Error', 'No se pudo guardar la novedad.');
+            }
         });
 
         let unsubscribeNovedades = null;
