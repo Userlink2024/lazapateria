@@ -251,12 +251,20 @@
                 <i class="fas fa-file-excel"></i> Exportar Excel (novedades)
             </button>
             <button onclick="cargarNovedades()" class="btn-secondary">Recargar</button>
+            <button onclick="seleccionarTodos()" id="btnSeleccionarTodos">Seleccionar Todos</button>
+            <button onclick="deseleccionarTodos()" id="btnDeseleccionarTodos">Deseleccionar Todos</button>
+            <button onclick="eliminarSeleccionados()" id="btnEliminar" disabled>
+                <i class="fas fa-trash"></i> Eliminar seleccionadas (<span id="contadorSeleccion">0</span>)
+            </button>
         </div>
 
         <div class="table-container">
             <table id="tablaReferencias">
                 <thead>
                     <tr>
+                        <th class="checkbox-cell">
+                            <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                        </th>
                         <th>Estado</th>
                         <th>Código</th>
                         <th>Cliente</th>
@@ -268,7 +276,7 @@
                 </thead>
                 <tbody id="tablaBody">
                     <tr>
-                        <td colspan="7" class="loading">
+                        <td colspan="8" class="loading">
                             <i class="fas fa-spinner fa-spin"></i> Cargando novedades...
                         </td>
                     </tr>
@@ -503,7 +511,7 @@
             const pagina = referenciasFiltradas.slice(inicio, fin);
             
             if (pagina.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">No hay novedades con los filtros actuales.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No hay novedades con los filtros actuales.</td></tr>';
                 return;
             }
             
@@ -519,6 +527,9 @@
                 const id = escapeHtml(n.id || '');
                 return `
                     <tr>
+                        <td class="checkbox-cell">
+                            <input type="checkbox" value="${id}" ${seleccionados.has(id) ? 'checked' : ''} onchange="toggleSeleccion('${id}')">
+                        </td>
                         <td>${estado}</td>
                         <td style="font-family: monospace; font-weight: 800;">${code}</td>
                         <td>${cliente}</td>
@@ -529,6 +540,8 @@
                     </tr>
                 `;
             }).join('');
+
+            actualizarContadorSeleccion();
         }
 
         // Actualizar paginación
@@ -563,6 +576,34 @@
 
         // Selección
         function toggleSeleccion(id) {
+            if (!id) return;
+            if (seleccionados.has(id)) {
+                seleccionados.delete(id);
+            } else {
+                seleccionados.add(id);
+            }
+            actualizarContadorSeleccion();
+        }
+
+        function toggleSelectAll() {
+            const checkbox = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('#tablaBody input[type="checkbox"]');
+
+            checkboxes.forEach(cb => {
+                cb.checked = checkbox.checked;
+                const id = cb.value;
+                if (checkbox.checked) {
+                    seleccionados.add(id);
+                } else {
+                    seleccionados.delete(id);
+                }
+            });
+
+            actualizarContadorSeleccion();
+        }
+
+        // Selección
+        function toggleSeleccion(id) {
             if (seleccionados.has(id)) {
                 seleccionados.delete(id);
             } else {
@@ -589,7 +630,9 @@
         }
 
         function seleccionarTodos() {
-            referenciasFiltradas.forEach(ref => seleccionados.add(ref.id));
+            referenciasFiltradas.forEach(n => {
+                if (n && n.id) seleccionados.add(String(n.id));
+            });
             renderTabla();
             actualizarContadorSeleccion();
         }
@@ -606,40 +649,30 @@
             document.getElementById('selectAll').checked = false;
         }
 
-        // Eliminar referencias seleccionadas (desde collectionGroup consignaciones)
+        // Eliminar novedades seleccionadas
         async function eliminarSeleccionados() {
             if (seleccionados.size === 0) return;
             
-            const confirmar = confirm(`¿Estás seguro de eliminar ${seleccionados.size} referencia(s)? Esta acción eliminará las consignaciones y no se puede deshacer.`);
+            const confirmar = confirm(`¿Estás seguro de eliminar ${seleccionados.size} novedad(es)? Esta acción no se puede deshacer.`);
             if (!confirmar) return;
             
             try {
                 mostrarLoading();
                 
-                // Crear un batch para eliminar las consignaciones
                 const batch = db.batch();
-                
-                // Para cada referencia seleccionada, eliminar usando el path guardado
-                for (const refId of seleccionados) {
-                    const refData = todasLasReferencias.find(r => r.id === refId);
-                    if (refData && refData.path) {
-                        // Eliminar directamente usando el path del documento
-                        const docRef = db.doc(refData.path);
-                        batch.delete(docRef);
-                    }
+                let count = 0;
+
+                for (const id of Array.from(seleccionados)) {
+                    if (!id) continue;
+                    batch.delete(db.collection('novedades').doc(String(id)));
+                    count++;
                 }
-                
+
                 await batch.commit();
-                
-                // Actualizar datos locales
-                const eliminadasCount = seleccionados.size;
-                todasLasReferencias = todasLasReferencias.filter(ref => !seleccionados.has(ref.id));
+
                 seleccionados.clear();
-                
-                mostrarExito(`Se eliminaron ${eliminadasCount} consignaciones correctamente.`);
-                
-                // Recargar
-                await cargarReferencias();
+                mostrarExito(`Se eliminaron ${count} novedad(es) correctamente.`);
+                await cargarNovedades();
                 
             } catch (error) {
                 console.error('Error eliminando referencias:', error);
