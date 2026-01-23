@@ -1258,6 +1258,14 @@
                     </select>
                 </div>
                 <div class="form-field">
+                    <label for="modalidad_envio_select">Modalidad:</label>
+                    <select id="modalidad_envio_select" name="modalidad_envio" required>
+                        <option value="">Seleccione una modalidad</option>
+                        <option value="PAGO_EN_CASA">Pago en casa</option>
+                        <option value="ENVIO_NORMAL">Envío normal</option>
+                    </select>
+                </div>
+                <div class="form-field">
                     <label>Productos:</label>
                     <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
                 </div>
@@ -1370,6 +1378,14 @@
                     <label for="modificar_transportadora_select">Transportadora:</label>
                     <select id="modificar_transportadora_select" name="modificar_transportadora" required>
                         <option value="">Seleccione una transportadora</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="modificar_modalidad_envio_select">Modalidad:</label>
+                    <select id="modificar_modalidad_envio_select" name="modificar_modalidad_envio" required>
+                        <option value="">Seleccione una modalidad</option>
+                        <option value="PAGO_EN_CASA">Pago en casa</option>
+                        <option value="ENVIO_NORMAL">Envío normal</option>
                     </select>
                 </div>
                 <div class="form-field">
@@ -1978,6 +1994,85 @@
             document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + Math.round(valorTotal).toLocaleString('es-CO');
         }
 
+        function formatModalidadEnvio(v) {
+            const s = String(v || '').trim().toUpperCase();
+            if (s === 'PAGO_EN_CASA') return 'Pago en casa';
+            if (s === 'ENVIO_NORMAL') return 'Envío normal';
+            return 'N/A';
+        }
+
+        function formatDateYMD(d) {
+            const yyyy = String(d.getFullYear());
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        function normalizeTransportadoraName(v) {
+            return String(v || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        }
+
+        async function ensureAutoGuiaForPagoEnCasa(registro) {
+            try {
+                const modalidad = String(registro && registro.modalidad_envio || '').trim().toUpperCase();
+                if (modalidad !== 'PAGO_EN_CASA') return;
+
+                const t = normalizeTransportadoraName(registro && registro.transportadora);
+                const codigo = String(registro && registro.codigo_unico || '').trim();
+                if (!codigo) return;
+
+                const fecha = formatDateYMD(new Date());
+                const cliente = String(registro && registro.cliente || '').trim();
+                const asesor = String(registro && registro.asesor || '').trim();
+                const valorTotal = Number(registro && registro.valor_total || 0);
+
+                if (t.includes('ENVIA')) {
+                    const ref = db.collection('guias_envia').doc(codigo);
+                    const snap = await ref.get();
+                    if (snap.exists) return;
+                    await ref.set({
+                        usuario: asesor,
+                        fecha: fecha,
+                        nombreCliente: cliente,
+                        valorTotal: Number.isFinite(valorTotal) ? valorTotal : 0,
+                        valorMercancia: Number.isFinite(valorTotal) ? valorTotal : 0,
+                        valorFlete: 0,
+                        valorFletePendiente: true,
+                        numeroGuia: '',
+                        pendiente: true,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        verificado: false,
+                        novedad: false,
+                        anulado: false,
+                        codigoUnico: codigo
+                    }, { merge: false });
+                    return;
+                }
+
+                if (t.includes('INTERRAPIDISIMO') || t.includes('INTER RAPID') || t.includes('INTER')) {
+                    const ref = db.collection('guias_interrapidissimo').doc(codigo);
+                    const snap = await ref.get();
+                    if (snap.exists) return;
+                    await ref.set({
+                        usuario: asesor,
+                        fecha: fecha,
+                        nombreCliente: cliente,
+                        valorMercancia: Number.isFinite(valorTotal) ? valorTotal : 0,
+                        numeroGuia: '',
+                        pendiente: true,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        verificado: false,
+                        novedad: false,
+                        anulado: false,
+                        codigoUnico: codigo
+                    }, { merge: false });
+                    return;
+                }
+            } catch (e) {
+                console.error('Error creando guía automática:', e);
+            }
+        }
+
         async function enviarFormulario(event) {
             event.preventDefault();
 
@@ -1995,8 +2090,15 @@
                 // Get selected bodegueros from checkboxes
                 const selectedBodegueros = Array.from(document.querySelectorAll('#bodeguero_checkbox_container input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
                 const selectedTransportadora = document.getElementById('transportadora_select').value;
+                const selectedModalidadEnvio = document.getElementById('modalidad_envio_select').value;
                 // Get the state of the new "Enviar de inmediato a empaque" checkbox
                 const enviarInmediatoEmpaque = document.getElementById('enviar_inmediato_empaque').checked;
+
+                if (!selectedModalidadEnvio) {
+                    ocultarBarraCargando();
+                    showAlert('Debe seleccionar una modalidad (Pago en casa o Envío normal) antes de guardar.');
+                    return;
+                }
 
 
                 const datos = {
@@ -2005,6 +2107,7 @@
                     cliente: document.querySelector('input[name="cliente"]').value,
                     asesor: datosUsuario.nombreCompleto,
                     transportadora: selectedTransportadora, // CAMPO: TRANSPORTADORA
+                    modalidad_envio: selectedModalidadEnvio,
                     productos,
                     num_pares: parseInt(document.querySelector('input[name="num_pares"]').value) || 0,
                     valor_total: Math.round(valorTotal),
@@ -2024,6 +2127,7 @@
 
                 try {
                     await db.collection('registros').add(datos);
+                    await ensureAutoGuiaForPagoEnCasa(datos);
                     console.log("Datos guardados en Firebase:", datos);
 
                     // --- INICIO DE LA NUEVA LÓGICA PARA GUARDAR EL PROGRESO DIARIO ---
@@ -2414,6 +2518,7 @@
                     <p><strong>Cliente: ${registro.cliente || 'N/A'}</strong></p>
                     <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
                     <p>Transportadora: ${registro.transportadora || 'N/A'}</p> <!-- Mostrar transportadora -->
+                    <p>Modalidad: ${formatModalidadEnvio(registro.modalidad_envio)}</p>
                     <p class="num_pares">Número de Pares: ${registro.num_pares || 0}</p>
                     <p class="valor_total">Valor Total: $${(registro.valor_total || 0).toLocaleString('es-CO')}</p>
                     <span class="valor_total_raw" style="display:none;">${registro.valor_total || 0}</span>
@@ -2430,6 +2535,7 @@
                     <p>Cliente: ${registro.cliente || 'N/A'}</p>
                     <p>Asesor: ${registro.asesor ? registro.asesor : 'N/A'}</p>
                     <p>Transportadora: ${registro.transportadora || 'N/A'}</p> <!-- Mostrar transportadora -->
+                    <p>Modalidad: ${formatModalidadEnvio(registro.modalidad_envio)}</p>
                     ${productosHTMLList}
                     ${abonosHTMLList}
                     <p id="total_abonos_display_${docId}">Total Abonos: <span class="${abonosDisplayClass}">$${totalAbonos.toLocaleString('es-CO')}</span></p>
@@ -2869,6 +2975,7 @@
                     "Cliente": registro.cliente,
                     "Asesor": registro.asesor,
                     "Transportadora": registro.transportadora || 'N/A', // CAMPO: TRANSPORTADORA
+                    "Modalidad": formatModalidadEnvio(registro.modalidad_envio),
                     "Productos": (registro.productos || []).map(p => `${p.referencia || ''} - ${p.color || ''} - ${p.talla || ''} - $${p.precio || 0}`).join('; '),
                     "Num Pares": registro.num_pares,
                     "Valor Total": registro.valor_total,
@@ -2916,6 +3023,7 @@
                 document.getElementById('modificar_saldo_a_favor').value = registro.saldo_a_favor;
                 // Cargar transportadoras para el select de modificar y seleccionar la actual
                 await loadTransportadorasForForm('modificar_transportadora_select', registro.transportadora);
+                document.getElementById('modificar_modalidad_envio_select').value = registro.modalidad_envio || '';
 
                 renderModificarProductos(registro.productos || []);
                 renderModificarAbonos(registro.abonos || []);
@@ -3091,8 +3199,14 @@
             // Get selected bodegueros from checkboxes in modification modal
             const bodeguerosActualizados = Array.from(document.querySelectorAll('#modificar_bodeguero_checkbox_container input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
             const transportadoraActualizada = document.getElementById('modificar_transportadora_select').value;
+            const modalidadEnvioActualizada = document.getElementById('modificar_modalidad_envio_select').value;
             // Get the state of the "Enviar de inmediato a empaque" checkbox in the modification modal
             const modificarEnviarEmpaque = document.getElementById('modificar_enviar_inmediato_empaque').checked;
+
+            if (!modalidadEnvioActualizada) {
+                showAlert('Debe seleccionar una modalidad (Pago en casa o Envío normal) antes de guardar.');
+                return;
+            }
 
             // Get original values from the retrieved document data
             const originalPares = docSnap.data().num_pares || 0;
@@ -3108,6 +3222,7 @@
                 abonos: abonosActualizados,
                 bodegueros_encargados: bodeguerosActualizados, // Save updated bodegueros
                 transportadora: transportadoraActualizada, // Save updated transportadora
+                modalidad_envio: modalidadEnvioActualizada,
                 enviadoAEmpaque: modificarEnviarEmpaque, // Save updated state
                 // Only update timestamp if it was marked as true, and it wasn't already recorded
                 // Ensure docSnap is not null before accessing its data
@@ -3121,6 +3236,14 @@
 
             try {
                 await db.collection('registros').doc(id).update(datosActualizados);
+                await ensureAutoGuiaForPagoEnCasa({
+                    codigo_unico: (docSnap && docSnap.data && docSnap.data().codigo_unico) ? docSnap.data().codigo_unico : '',
+                    cliente: datosActualizados.cliente,
+                    asesor: (docSnap && docSnap.data && docSnap.data().asesor) ? docSnap.data().asesor : (datosUsuario ? datosUsuario.nombreCompleto : ''),
+                    transportadora: datosActualizados.transportadora,
+                    valor_total: datosActualizados.valor_total,
+                    modalidad_envio: datosActualizados.modalidad_envio
+                });
                 showAlert("Pedido modificado exitosamente."); // Reemplazado alert
                 cerrarModal('modal_modificar');
 
