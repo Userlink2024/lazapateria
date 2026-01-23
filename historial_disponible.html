@@ -482,6 +482,7 @@
 
         let allRegistros = [];
         let allNovedades = [];
+        let allPendingNovedades = [];
         let registroIdsConNovedad = new Set();
         let codigosConNovedad = new Set();
         let unsubscribePedidos = null;
@@ -732,14 +733,48 @@
 
         let unsubscribeNovedades = null;
 
+        function startPendingNovedadesRealtime() {
+            if (unsubscribeNovedades) { unsubscribeNovedades(); unsubscribeNovedades = null; }
+
+            $('pendingNovedadesState').textContent = 'Cargando…';
+            $('pendingNovedadesList').innerHTML = '';
+
+            let q = db.collection('novedades').orderBy('updatedAt', 'desc').limit(500);
+            if (isOperador) q = q.where('asesorUserId', '==', String(datosUsuario.usuario)).orderBy('updatedAt', 'desc').limit(500);
+            else if (isBodeguero) q = q.where('assignedBodegueroUserId', '==', String(datosUsuario.usuario)).orderBy('updatedAt', 'desc').limit(500);
+
+            unsubscribeNovedades = q.onSnapshot((snap) => {
+                const list = snap.docs.map(d => {
+                    const data = d.data() || {};
+                    data.id = d.id;
+                    return data;
+                });
+
+                allPendingNovedades = list.filter(n => n.resuelta !== true);
+                renderNovedadesLists(allNovedades);
+            }, (err) => {
+                console.error('Error escuchando novedades pendientes:', err);
+                $('pendingNovedadesState').textContent = 'Error cargando.';
+            });
+        }
+
         function renderNovedadesLists(novedades) {
             const pendingEl = $('pendingNovedadesList');
             const histEl = $('historyNovedadesModalList');
 
             const pending = [];
             const resolved = [];
+
+            const pendingSource = (Array.isArray(allPendingNovedades) && allPendingNovedades.length)
+                ? allPendingNovedades
+                : (Array.isArray(novedades) ? novedades : []);
+
+            pendingSource.forEach(n => {
+                if (n && n.resuelta !== true) pending.push(n);
+            });
+
             (Array.isArray(novedades) ? novedades : []).forEach(n => {
-                if (n.resuelta === true) resolved.push(n); else pending.push(n);
+                if (n && n.resuelta === true) resolved.push(n);
             });
 
             $('pendingNovedadesState').textContent = pending.length ? '' : 'Sin novedades pendientes.';
@@ -1377,10 +1412,12 @@
             startSessionTimer();
             if (isAdmin) startAdminRequestsPanel();
             liveStateEl.textContent = 'Selecciona fechas y pulsa Buscar';
-            $('pendingNovedadesState').textContent = 'Selecciona fechas y pulsa Buscar';
+            $('pendingNovedadesState').textContent = 'Cargando…';
             $('historyNovedadesState').textContent = 'Selecciona fechas y pulsa Buscar';
             render();
             renderNovedadesLists([]);
+
+            startPendingNovedadesRealtime();
         }
 
         async function gateFlowIfNeeded() {
