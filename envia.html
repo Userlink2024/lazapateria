@@ -462,6 +462,7 @@
                 li.style.fontSize = '0.9em';
                 li.innerHTML = `
                     <div><strong>Número de Guía:</strong> ${guia.numeroGuia || 'N/A'}</div>
+                    <div><strong>Código Único:</strong> ${guia.codigoUnico || ''}</div>
                     <div><strong>Nombre del Cliente:</strong> ${guia.nombreCliente || ''}</div>
                     <div><strong>Fecha:</strong> ${guia.fecha || ''}</div>
                     <div><strong>Valor Total:</strong> ${guia.valorTotal ? guia.valorTotal : 'N/A'}</div>
@@ -547,6 +548,7 @@
             const usuario = document.getElementById('usuarioLogueado').value;
             const fecha = document.getElementById('fechaGuia').value;
             const nombreCliente = document.getElementById('nombreCliente').value;
+            const codigoUnico = String(document.getElementById('codigoUnico')?.value || '').trim();
             const valorTotal = document.getElementById('valorTotal').value;
             const valorMercancia = parseFloat(document.getElementById('valorMercancia').value) || 0;
             const valorFlete = parseFloat(document.getElementById('valorFlete').value) || 0;
@@ -574,9 +576,11 @@
                 usuario: usuario,
                 fecha: fecha,
                 nombreCliente: nombreCliente,
+                codigoUnico: codigoUnico,
                 valorTotal: parseFloat(valorTotal),
                 valorMercancia: valorMercancia,
                 valorFlete: valorFlete,
+                valorFletePendiente: false,
                 numeroGuia: pendienteCheck.checked ?
                     '' : numeroGuia, // Guarda vacío si PENDIENTE está marcado
                 pendiente: pendienteCheck.checked, // Guarda el estado del checkbox PENDIENTE
@@ -646,6 +650,7 @@
 
                 if (data.length > 0) {
                     const orderedData = data.map(guia => ({
+                        codigoUnico: guia.codigoUnico,
                         numeroGuia: guia.numeroGuia,
                         nombreCliente: guia.nombreCliente,
                         valorMercancia: guia.valorMercancia,
@@ -653,7 +658,7 @@
                         timestamp: guia.timestamp ? new Date(guia.timestamp.seconds * 1000).toLocaleString() : '',
                         usuario: guia.usuario,
                         valorTotal: guia.valorTotal,
-                        valorFlete: guia.valorFlete,
+                        valorFlete: (guia.valorFletePendiente ? 'PENDIENTE' : guia.valorFlete),
                         verificado: guia.verificado,
                         anulado: guia.anulado,
                         pendiente: guia.pendiente,
@@ -778,10 +783,11 @@
                 listItem.innerHTML = `
                     <div><strong>Número de Guía:</strong> ${guia.numeroGuia ||
                     (guia.pendiente ? 'PENDIENTE' : 'N/A')}</div>
+                    <div><strong>Código Único:</strong> ${guia.codigoUnico || ''}</div>
                     <div><strong>Nombre del Cliente:</strong> ${guia.nombreCliente}</div>
                     <div><strong>Fecha:</strong> ${guia.fecha}</div>
                     <div><strong>Valor Total:</strong> ${guia.valorTotal ?
-                        guia.valorTotal : 'N/A'} (Mercancía: ${guia.valorMercancia ? Math.round(guia.valorMercancia) : 'N/A'}, Flete: ${guia.valorFlete ? Math.round(guia.valorFlete) : 'N/A'})</div>
+                        guia.valorTotal : 'N/A'} (Mercancía: ${guia.valorMercancia ? Math.round(guia.valorMercancia) : 'N/A'}, Flete: ${(guia.valorFletePendiente ? 'PENDIENTE' : (guia.valorFlete ? Math.round(guia.valorFlete) : 'N/A'))})</div>
                     <div><strong>Usuario (Asesor):</strong> ${guia.usuario}</div>
                     <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 5px;">
                         ${guia.pendiente ?
@@ -872,7 +878,7 @@
             }
         }
 
-        function cargarDatosParaEdicion(guiaId) {
+        async function cargarDatosParaEdicion(guiaId) {
             console.log("Cargando datos para edición con ID:", guiaId);
             const guiaParaEditar = guiasEnvia.find(guia => guia.id === guiaId); // Usar guiasEnvia
 
@@ -890,6 +896,7 @@
                 document.getElementById('usuarioLogueado').value = guiaParaEditar.usuario;
                 document.getElementById('fechaGuia').value = guiaParaEditar.fecha;
                 document.getElementById('nombreCliente').value = guiaParaEditar.nombreCliente;
+                document.getElementById('codigoUnico').value = guiaParaEditar.codigoUnico || '';
                 document.getElementById('valorMercancia').value = guiaParaEditar.valorMercancia;
                 document.getElementById('valorFlete').value = guiaParaEditar.valorFlete;
                 document.getElementById('valorTotal').value = guiaParaEditar.valorTotal;
@@ -1072,6 +1079,9 @@
 
             <label for="nombreCliente">Nombre del Cliente:</label>
             <input type="text" id="nombreCliente" required>
+
+            <label for="codigoUnico">Código Único (Pedido):</label>
+            <input type="text" id="codigoUnico">
 
             <label for="valorMercancia">Valor de la Mercancía:</label>
             <input type="number" id="valorMercancia" required>
