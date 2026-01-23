@@ -246,6 +246,14 @@
                         <select id="editTransportadora"></select>
                     </div>
                     <div>
+                        <label for="editModalidadEnvio">Modalidad</label>
+                        <select id="editModalidadEnvio">
+                            <option value="">(sin definir)</option>
+                            <option value="PAGO_EN_CASA">Pago en casa</option>
+                            <option value="ENVIO_NORMAL">Envío normal</option>
+                        </select>
+                    </div>
+                    <div>
                         <label for="editNumPares">Número de pares</label>
                         <input id="editNumPares" type="number" />
                     </div>
@@ -333,6 +341,42 @@
         try { datosUsuario = JSON.parse(localStorage.getItem('datosUsuario')); } catch (e) { datosUsuario = null; }
 
         const $ = (id) => document.getElementById(id);
+
+        // --- Sonidos (igual que generar_pedidos.html) ---
+        let audioContext = null;
+
+        function initAudioContext() {
+            if (!audioContext) {
+                try {
+                    const AC = window.AudioContext || window.webkitAudioContext;
+                    audioContext = AC ? new AC() : null;
+                } catch (e) {
+                    audioContext = null;
+                }
+            }
+        }
+
+        function playTone(frequency, duration, volume, type) {
+            initAudioContext();
+            if (!audioContext) return;
+            try {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.type = type || 'square';
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(volume || 0.7, audioContext.currentTime);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + (duration || 0.05));
+            } catch (e) {
+                // Silencioso
+            }
+        }
+
+        function playConfirmationSound() {
+            playTone(880, 0.05, 0.7, 'square');
+        }
 
         function enforceAdminAccess() {
             const permisos = (datosUsuario && datosUsuario.permisos) ? String(datosUsuario.permisos).toLowerCase() : '';
@@ -460,7 +504,7 @@
             const prodText = productos.map(p => [p.referencia, p.color, p.talla, p.precio].filter(Boolean).join(' ')).join(' | ');
             const abonosText = abonos.map(a => [a.fecha, a.monto].filter(Boolean).join(' ')).join(' | ');
             return normalizeStr([
-                r.codigo_unico, r.cliente, r.asesor, r.transportadora, r.usuario, r.observaciones,
+                r.codigo_unico, r.cliente, r.asesor, r.transportadora, r.modalidad_envio, r.usuario, r.observaciones,
                 prodText, abonosText, bodegueros.join(' ')
             ].join(' '));
         }
@@ -471,6 +515,7 @@
 
         let hasLoaded = false;
         let editMetaLoaded = false;
+        let editMetaLoadingPromise = null;
 
         const usuariosCollection = db.collection('usuarios');
         let cachedAsesores = [];
@@ -488,11 +533,15 @@
 
         async function ensureEditMetaLoaded() {
             if (editMetaLoaded) return;
-            editMetaLoaded = true;
-            await Promise.all([
+            if (editMetaLoadingPromise) return editMetaLoadingPromise;
+            editMetaLoadingPromise = Promise.all([
                 loadUsuariosForEdit().catch(() => {}),
                 loadTransportadorasForEdit().catch(() => {})
-            ]);
+            ]).finally(() => {
+                editMetaLoaded = true;
+                editMetaLoadingPromise = null;
+            });
+            return editMetaLoadingPromise;
         }
 
         function clampPage() {
@@ -827,8 +876,8 @@
             });
         }
 
-        function openEditModal(r) {
-            ensureEditMetaLoaded();
+        async function openEditModal(r) {
+            await ensureEditMetaLoaded();
             editingRecord = r;
             $('editId').textContent = r.id;
             $('editCliente').value = r.cliente || '';
@@ -850,7 +899,9 @@
                 $('editHora').value = '';
             }
             if (cachedAsesores.length) {
-                $('editAsesor').value = r.asesor || cachedAsesores[0] || '';
+                const desired = String(r.asesor || '').trim();
+                const exists = Array.from($('editAsesor').options).some(o => o.value === desired);
+                $('editAsesor').value = exists ? desired : (cachedAsesores[0] || '');
             } else {
                 $('editAsesor').innerHTML = '';
                 const opt = document.createElement('option');
@@ -869,6 +920,8 @@
                 $('editTransportadora').appendChild(opt);
                 $('editTransportadora').value = r.transportadora || '';
             }
+            const modSel = $('editModalidadEnvio');
+            if (modSel) modSel.value = String(r.modalidad_envio || '').trim();
             $('editNumPares').value = r.num_pares != null ? r.num_pares : '';
             $('editValorTotal').value = r.valor_total != null ? r.valor_total : '';
             $('editSaldo').value = r.saldo_a_favor != null ? r.saldo_a_favor : 0;
@@ -916,6 +969,7 @@
                 const ok = await modalConfirm('Confirmar', '¿Estás seguro de que quieres desverificar (quitar despachado) este pedido?', 'Sí', 'Cancelar');
                 if (!ok) return { reverted: true };
                 await db.collection('registros').doc(id).update({ despachado: false, despachadoPor: '' });
+                playConfirmationSound();
                 return { reverted: false };
             }
 
@@ -939,6 +993,7 @@
             }
 
             await docRef.update(updateData);
+            playConfirmationSound();
             return { reverted: false };
         }
 
@@ -949,6 +1004,7 @@
                 cliente: $('editCliente').value.trim(),
                 asesor: String($('editAsesor').value || '').trim(),
                 transportadora: String($('editTransportadora').value || '').trim(),
+                modalidad_envio: String($('editModalidadEnvio') ? $('editModalidadEnvio').value : '').trim(),
                 num_pares: Number($('editNumPares').value || 0),
                 valor_total: Number($('editValorTotal').value || 0),
                 saldo_a_favor: Number($('editSaldo').value || 0),
@@ -1062,10 +1118,14 @@
                 const cliente = r.cliente || 'Sin cliente';
                 const asesor = r.asesor || 'N/A';
                 const transportadora = r.transportadora || 'N/A';
+                const modalidadLabel = (String(r.modalidad_envio || '').toUpperCase() === 'PAGO_EN_CASA') ? 'Pago en casa'
+                    : (String(r.modalidad_envio || '').toUpperCase() === 'ENVIO_NORMAL') ? 'Envío normal'
+                    : 'N/A';
                 const fechaStr = formatDateTime(r.fecha_hora);
                 const bloqueado = r.bloqueado === true;
                 const despachado = r.despachado === true;
                 const bodegueros = Array.isArray(r.bodegueros_encargados) ? r.bodegueros_encargados : [];
+
                 const productos = Array.isArray(r.productos) ? r.productos : [];
 
                 const badges = [
@@ -1089,7 +1149,7 @@
                         <div class="meta">
                             <div><span class="code">${codigo}</span><span class="dt">${fechaStr}</span></div>
                             <div class="cliente">${cliente}</div>
-                            <div class="line">Asesor: <strong>${asesor}</strong> · Transportadora: <strong>${transportadora}</strong></div>
+                            <div class="line">Asesor: <strong>${asesor}</strong> · Transportadora: <strong>${transportadora}</strong> · Modalidad: <strong>${modalidadLabel}</strong></div>
                         </div>
                         <div class="badges">${badges}</div>
                     </div>
@@ -1279,7 +1339,7 @@
             }
         }
 
-        const EXCEL_HEADERS = [
+        const EXCEL_HEADERS_V1 = [
             'Fecha',
             'Hora',
             'Código',
@@ -1298,6 +1358,29 @@
             'Abonos(JSON)',
             'ID'
         ];
+
+        const EXCEL_HEADERS_V2 = [
+            'Fecha',
+            'Hora',
+            'Código',
+            'Cliente',
+            'Asesor',
+            'Usuario',
+            'Transportadora',
+            'Modalidad',
+            'Pares',
+            'Valor total',
+            'Saldo a favor',
+            'Despachado',
+            'Bloqueado',
+            'Bodegueros',
+            'Observaciones',
+            'Productos(JSON)',
+            'Abonos(JSON)',
+            'ID'
+        ];
+
+        const EXCEL_HEADERS = EXCEL_HEADERS_V2;
 
         function normalizeHeader(v) {
             return String(v || '').trim().toLowerCase();
@@ -1333,6 +1416,7 @@
                     String(r.asesor || ''),
                     String(r.usuario || ''),
                     String(r.transportadora || ''),
+                    modalidad,
                     Number(r.num_pares || 0),
                     Number(r.valor_total || 0),
                     Number(r.saldo_a_favor || 0),
@@ -1426,15 +1510,18 @@
                 }
 
                 const header = aoa[0];
-                const expectedNoId = EXCEL_HEADERS.slice(0, EXCEL_HEADERS.length - 1);
-                const okWithId = headersMatch(header, EXCEL_HEADERS);
-                const okNoId = headersMatch(header, expectedNoId);
-                if (!okWithId && !okNoId) {
+                const okV2WithId = headersMatch(header, EXCEL_HEADERS_V2);
+                const okV2NoId = headersMatch(header, EXCEL_HEADERS_V2.slice(0, EXCEL_HEADERS_V2.length - 1));
+                const okV1WithId = headersMatch(header, EXCEL_HEADERS_V1);
+                const okV1NoId = headersMatch(header, EXCEL_HEADERS_V1.slice(0, EXCEL_HEADERS_V1.length - 1));
+                const okAny = okV2WithId || okV2NoId || okV1WithId || okV1NoId;
+                if (!okAny) {
                     await modalAlert('Formato inválido', 'El Excel no tiene el formato esperado. Exporta primero un Excel desde aquí y úsalo como plantilla.');
                     return;
                 }
 
-                const hasId = okWithId;
+                const hasModalidad = okV2WithId || okV2NoId;
+                const hasId = okV2WithId || okV1WithId;
                 const rows = aoa.slice(1).filter(r => Array.isArray(r) && r.some(c => String(c || '').trim() !== ''));
                 if (!rows.length) {
                     await modalAlert('Archivo vacío', 'No hay filas para importar.');
@@ -1456,16 +1543,17 @@
                     const asesor = String(r[4] || '').trim();
                     const usuario = String(r[5] || '').trim();
                     const transportadora = String(r[6] || '').trim();
-                    const pares = Number(r[7] || 0);
-                    const valorTotal = Number(r[8] || 0);
-                    const saldo = Number(r[9] || 0);
-                    const despachado = parseBoolSiNo(r[10]);
-                    const bloqueado = parseBoolSiNo(r[11]);
-                    const bodeguerosTxt = String(r[12] || '').trim();
-                    const observaciones = String(r[13] || '');
-                    const productos = safeParseJson(r[14], []);
-                    const abonos = safeParseJson(r[15], []);
-                    const id = hasId ? String(r[16] || '').trim() : '';
+                    const modalidad = hasModalidad ? String(r[7] || '').trim() : '';
+                    const pares = Number(r[hasModalidad ? 8 : 7] || 0);
+                    const valorTotal = Number(r[hasModalidad ? 9 : 8] || 0);
+                    const saldo = Number(r[hasModalidad ? 10 : 9] || 0);
+                    const despachado = parseBoolSiNo(r[hasModalidad ? 11 : 10]);
+                    const bloqueado = parseBoolSiNo(r[hasModalidad ? 12 : 11]);
+                    const bodeguerosTxt = String(r[hasModalidad ? 13 : 12] || '').trim();
+                    const observaciones = String(r[hasModalidad ? 14 : 13] || '');
+                    const productos = safeParseJson(r[hasModalidad ? 15 : 14], []);
+                    const abonos = safeParseJson(r[hasModalidad ? 16 : 15], []);
+                    const id = hasId ? String(r[hasModalidad ? 17 : 16] || '').trim() : '';
 
                     if (!fecha) {
                         skipped += 1;
@@ -1484,6 +1572,7 @@
                         asesor: asesor,
                         usuario: usuario,
                         transportadora: transportadora,
+                        modalidad_envio: modalidad,
                         num_pares: Number.isFinite(pares) ? pares : 0,
                         valor_total: Number.isFinite(valorTotal) ? valorTotal : 0,
                         saldo_a_favor: Number.isFinite(saldo) ? saldo : 0,
