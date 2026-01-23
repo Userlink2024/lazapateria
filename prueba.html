@@ -626,6 +626,14 @@
       <div class="small" style="background: rgba(76, 175, 80, 0.1); padding: 1px 5px; border-radius: 10px; color: #2e7d32; font-weight: 600;">Gerencia</div>
     </div>
 
+  <div id="findbar" class="findbar" role="dialog" aria-label="Buscar en la tabla">
+    <input id="findbar-input" type="text" placeholder="Buscar en movimientos..." autocomplete="off" />
+    <div class="meta" id="findbar-count">0/0</div>
+    <button class="miniBtn" type="button" id="findbar-prev" title="Anterior">◀</button>
+    <button class="miniBtn" type="button" id="findbar-next" title="Siguiente">▶</button>
+    <button class="closeBtn" type="button" id="findbar-close" title="Cerrar">✕</button>
+  </div>
+
     <div class="top-totals">
       <div class="card small">
         <div class="muted">💵 Total general</div>
@@ -720,6 +728,7 @@
             <button id="btn-export-master" class="btn success" style="display:none; background:linear-gradient(135deg, #7c3aed, #8b5cf6); color:white;">📥 Descargar Maestra (G)</button>
 
             <div style="width:2px; background:var(--border); margin:0 8px; border-radius:1px;"></div>
+            <button id="btn-find" class="btn ghost" type="button">🔎 Buscar</button>
             <button id="btn-verify" class="btn">✅ Verificado</button>
             <button id="btn-unverify" class="btn ghost">❌ Desverificar</button>
             <button id="btn-delete" class="btn danger" style="display:none">🗑️ Eliminar</button>
@@ -993,6 +1002,162 @@ let dragAutoScrollRaf = 0;
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
 function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)); }
+
+/* BUSCADOR TIPO CTRL+F (solo Movimientos) */
+let findState = {
+  open: false,
+  query: '',
+  matches: [],
+  current: -1,
+  lastActiveEl: null
+};
+
+function getFindRows(){
+  return Array.from(document.querySelectorAll('#consigns-body tr'));
+}
+
+function clearFindHighlights(){
+  getFindRows().forEach(r => {
+    r.classList.remove('find-hit');
+    r.classList.remove('find-current');
+  });
+}
+
+function updateFindCount(){
+  const el = $('findbar-count');
+  if (!el) return;
+  const total = findState.matches.length;
+  const cur = total ? (findState.current + 1) : 0;
+  el.textContent = `${cur}/${total}`;
+}
+
+function scrollToFindCurrent(){
+  const rows = getFindRows();
+  const idx = findState.matches[findState.current];
+  if (idx == null) return;
+  const row = rows[idx];
+  if (!row) return;
+
+  rows.forEach(r => r.classList.remove('find-current'));
+  row.classList.add('find-current');
+
+  const container = document.getElementById('table-container');
+  if (container && row.scrollIntoView) {
+    row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    container.focus?.();
+  }
+  updateFindCount();
+}
+
+function runFind(){
+  const input = $('findbar-input');
+  const q = String(input ? input.value : '').trim().toLowerCase();
+  findState.query = q;
+  findState.matches = [];
+  findState.current = -1;
+  clearFindHighlights();
+
+  if (!q) {
+    updateFindCount();
+    return;
+  }
+
+  const rows = getFindRows();
+  rows.forEach((row, idx) => {
+    const text = String(row.innerText || '').toLowerCase();
+    if (text.includes(q)) {
+      row.classList.add('find-hit');
+      findState.matches.push(idx);
+    }
+  });
+
+  if (findState.matches.length) {
+    findState.current = 0;
+    scrollToFindCurrent();
+  } else {
+    updateFindCount();
+  }
+}
+
+function findNext(){
+  if (!findState.matches.length) return;
+  findState.current = (findState.current + 1) % findState.matches.length;
+  scrollToFindCurrent();
+}
+
+function findPrev(){
+  if (!findState.matches.length) return;
+  findState.current = (findState.current - 1 + findState.matches.length) % findState.matches.length;
+  scrollToFindCurrent();
+}
+
+function openFindbar(){
+  const bar = $('findbar');
+  const input = $('findbar-input');
+  if (!bar || !input) return;
+  findState.lastActiveEl = document.activeElement;
+  bar.classList.add('open');
+  findState.open = true;
+  input.focus();
+  input.select();
+  runFind();
+}
+
+function closeFindbar(){
+  const bar = $('findbar');
+  if (!bar) return;
+  bar.classList.remove('open');
+  findState.open = false;
+  clearFindHighlights();
+  const prev = findState.lastActiveEl;
+  findState.lastActiveEl = null;
+  if (prev && typeof prev.focus === 'function') prev.focus();
+}
+
+function refreshFindIfOpen(){
+  if (!findState.open) return;
+  runFind();
+}
+
+// Eventos barra de búsqueda
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = $('btn-find');
+  const input = $('findbar-input');
+  const prev = $('findbar-prev');
+  const next = $('findbar-next');
+  const close = $('findbar-close');
+
+  if (btn) btn.addEventListener('click', () => openFindbar());
+  if (close) close.addEventListener('click', () => closeFindbar());
+  if (next) next.addEventListener('click', () => findNext());
+  if (prev) prev.addEventListener('click', () => findPrev());
+  if (input) {
+    input.addEventListener('input', () => runFind());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) findPrev(); else findNext();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFindbar();
+      }
+    });
+  }
+});
+
+// Atajos globales: Ctrl+F y Escape
+window.addEventListener('keydown', (e) => {
+  const key = String(e.key || '');
+  if ((e.ctrlKey || e.metaKey) && (key === 'f' || key === 'F')) {
+    e.preventDefault();
+    openFindbar();
+    return;
+  }
+  if (key === 'Escape' && findState.open) {
+    e.preventDefault();
+    closeFindbar();
+  }
+});
 
 // Función para verificar si una referencia ya existe en cualquier cuenta
 async function checkReferenciaExists(referencia) {
@@ -1813,6 +1978,7 @@ function renderConsigns(){
     });
 
     updateFloatingVerifyButton();
+    refreshFindIfOpen();
     
     // Actualizar totales automáticamente (con diagnóstico y protección)
     console.log('🔄 ACTUALIZANDO TOTALES DESPUÉS DE RENDERIZAR');
