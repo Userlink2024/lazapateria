@@ -256,6 +256,62 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    // --- Sonido tipo turnador ---
+    let audioContext = null;
+    let audioArmed = false;
+    let isFirstRealtimeSnapshot = true;
+    let lastActiveIds = new Set();
+
+    function initAudioContext() {
+      if (audioContext) return;
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioContext = AC ? new AC() : null;
+      } catch (e) {
+        audioContext = null;
+      }
+    }
+
+    function armAudioOnce() {
+      if (audioArmed) return;
+      audioArmed = true;
+      initAudioContext();
+    }
+
+    document.addEventListener('click', armAudioOnce, { once: true, capture: true });
+    document.addEventListener('keydown', armAudioOnce, { once: true, capture: true });
+
+    function playTurnadorSound() {
+      if (!audioContext) return;
+      try {
+        const now = audioContext.currentTime;
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.55, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+        gain.connect(audioContext.destination);
+
+        // Doble tono corto (estilo turno)
+        const o1 = audioContext.createOscillator();
+        o1.type = 'sawtooth';
+        o1.frequency.setValueAtTime(880, now);
+        o1.frequency.exponentialRampToValueAtTime(740, now + 0.12);
+        o1.connect(gain);
+        o1.start(now);
+        o1.stop(now + 0.14);
+
+        const o2 = audioContext.createOscillator();
+        o2.type = 'square';
+        o2.frequency.setValueAtTime(1320, now + 0.18);
+        o2.frequency.exponentialRampToValueAtTime(990, now + 0.32);
+        o2.connect(gain);
+        o2.start(now + 0.18);
+        o2.stop(now + 0.34);
+      } catch (e) {
+        // silencioso
+      }
+    }
+
     let cacheRegistros = [];
     let modoHistorial = false;
     let bodeguerosDisponibles = [];
@@ -317,6 +373,8 @@
         const conteo = {};
         cacheRegistros = [];
 
+        const activeIds = new Set();
+
         snapshot.forEach(doc => {
           const data = doc.data();
           const d = getRecordDate(data);
@@ -326,6 +384,8 @@
           const despachado = data.despachado === true || data.despachado === "si" || data.despachado === "despachado";
           if (modoHistorial && !despachado) return;
           if (!modoHistorial && despachado) return;
+
+          if (!despachado) activeIds.add(String(doc.id));
 
           if (Array.isArray(data.bodegueros_encargados)) {
             data.bodegueros_encargados.forEach(nombre => {
@@ -340,6 +400,17 @@
             });
           }
         });
+
+        // Sonido cuando entra un nuevo despacho activo (no sonar en la primera carga)
+        if (!modoHistorial) {
+          if (!isFirstRealtimeSnapshot && audioContext) {
+            let hasNew = false;
+            activeIds.forEach(id => { if (!lastActiveIds.has(id)) hasNew = true; });
+            if (hasNew) playTurnadorSound();
+          }
+          lastActiveIds = activeIds;
+          isFirstRealtimeSnapshot = false;
+        }
 
         renderizarPanel(contenedor, conteo);
       });
