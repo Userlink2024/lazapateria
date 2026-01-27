@@ -285,28 +285,40 @@
       if (!audioContext) return;
       try {
         const now = audioContext.currentTime;
-        const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.55, now + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
-        gain.connect(audioContext.destination);
+        const master = audioContext.createGain();
+        master.gain.setValueAtTime(0.0001, now);
+        master.gain.exponentialRampToValueAtTime(0.6, now + 0.03);
+        master.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+        master.connect(audioContext.destination);
 
-        // Doble tono corto (estilo turno)
-        const o1 = audioContext.createOscillator();
-        o1.type = 'sawtooth';
-        o1.frequency.setValueAtTime(880, now);
-        o1.frequency.exponentialRampToValueAtTime(740, now + 0.12);
-        o1.connect(gain);
-        o1.start(now);
-        o1.stop(now + 0.14);
+        function beep(startAt, dur, f1, f2, type) {
+          const g = audioContext.createGain();
+          g.gain.setValueAtTime(0.0001, startAt);
+          g.gain.exponentialRampToValueAtTime(1.0, startAt + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+          g.connect(master);
 
-        const o2 = audioContext.createOscillator();
-        o2.type = 'square';
-        o2.frequency.setValueAtTime(1320, now + 0.18);
-        o2.frequency.exponentialRampToValueAtTime(990, now + 0.32);
-        o2.connect(gain);
-        o2.start(now + 0.18);
-        o2.stop(now + 0.34);
+          const o = audioContext.createOscillator();
+          o.type = type || 'sawtooth';
+          o.frequency.setValueAtTime(f1, startAt);
+          if (f2) o.frequency.exponentialRampToValueAtTime(f2, startAt + dur);
+          o.connect(g);
+          o.start(startAt);
+          o.stop(startAt + dur + 0.01);
+        }
+
+        // Turnador más largo: 3 "llamadas" (beep-beep) con pausas
+        const call1 = now + 0.00;
+        beep(call1, 0.18, 880, 740, 'sawtooth');
+        beep(call1 + 0.22, 0.18, 990, 820, 'square');
+
+        const call2 = now + 0.55;
+        beep(call2, 0.18, 880, 740, 'sawtooth');
+        beep(call2 + 0.22, 0.18, 990, 820, 'square');
+
+        const call3 = now + 1.10;
+        beep(call3, 0.18, 880, 740, 'sawtooth');
+        beep(call3 + 0.22, 0.18, 990, 820, 'square');
       } catch (e) {
         // silencioso
       }
