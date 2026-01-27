@@ -1141,6 +1141,9 @@
             return q;
         }
 
+        const RANGE_FETCH_BATCH_SIZE = 500;
+        const RANGE_FETCH_MAX_ROWS = 20000;
+
         async function loadPedidosByDateRange() {
             const fromStr = String(fromDate.value || '').trim();
             const toStr = String(toDate.value || '').trim();
@@ -1164,32 +1167,48 @@
             paginationEl.style.display = 'none';
 
             try {
-                const MAX_REGISTROS = 200;
                 const fromTs = firebase.firestore.Timestamp.fromDate(from);
                 const toTs = firebase.firestore.Timestamp.fromDate(to);
 
-                let q = db.collection('registros')
-                    .orderBy('fecha_hora', 'desc')
-                    .where('fecha_hora', '>=', fromTs)
-                    .where('fecha_hora', '<=', toTs)
-                    .limit(MAX_REGISTROS);
+                async function fetchPedidosByDateRangePaged() {
+                    const rows = [];
+                    let lastDoc = null;
+                    while (true) {
+                        let q = db.collection('registros')
+                            .orderBy('fecha_hora', 'desc')
+                            .where('fecha_hora', '>=', fromTs)
+                            .where('fecha_hora', '<=', toTs)
+                            .limit(RANGE_FETCH_BATCH_SIZE);
 
-                if (isOperador) {
-                    q = db.collection('registros')
-                        .where('usuario', '==', String(datosUsuario.usuario))
-                        .orderBy('fecha_hora', 'desc')
-                        .where('fecha_hora', '>=', fromTs)
-                        .where('fecha_hora', '<=', toTs)
-                        .limit(MAX_REGISTROS);
+                        if (isOperador) {
+                            q = db.collection('registros')
+                                .where('usuario', '==', String(datosUsuario.usuario))
+                                .orderBy('fecha_hora', 'desc')
+                                .where('fecha_hora', '>=', fromTs)
+                                .where('fecha_hora', '<=', toTs)
+                                .limit(RANGE_FETCH_BATCH_SIZE);
+                        }
+
+                        if (lastDoc) q = q.startAfter(lastDoc);
+
+                        const snap = await q.get();
+                        const docs = snap.docs || [];
+                        docs.forEach(d => {
+                            const data = d.data() || {};
+                            data.id = d.id;
+                            data._searchBlob = null;
+                            rows.push(data);
+                        });
+
+                        if (!docs.length) break;
+                        lastDoc = docs[docs.length - 1];
+                        if (docs.length < RANGE_FETCH_BATCH_SIZE) break;
+                        if (rows.length >= RANGE_FETCH_MAX_ROWS) break;
+                    }
+                    return rows;
                 }
 
-                const snap = await q.get();
-                allRegistros = snap.docs.map(d => {
-                    const data = d.data() || {};
-                    data.id = d.id;
-                    data._searchBlob = null;
-                    return data;
-                }).sort((a, b) => {
+                allRegistros = (await fetchPedidosByDateRangePaged()).sort((a, b) => {
                     const at = a.fecha_hora && typeof a.fecha_hora.toMillis === 'function' ? a.fecha_hora.toMillis() : 0;
                     const bt = b.fecha_hora && typeof b.fecha_hora.toMillis === 'function' ? b.fecha_hora.toMillis() : 0;
                     return bt - at;
