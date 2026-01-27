@@ -531,6 +531,9 @@
         let currentPage = 1;
         let totalPages = 1;
 
+        const RANGE_FETCH_BATCH_SIZE = 500;
+        const RANGE_FETCH_MAX_ROWS = 20000;
+
         async function ensureEditMetaLoaded() {
             if (editMetaLoaded) return;
             if (editMetaLoadingPromise) return editMetaLoadingPromise;
@@ -1280,25 +1283,68 @@
                 const fromTs = firebase.firestore.Timestamp.fromDate(from);
                 const toTs = firebase.firestore.Timestamp.fromDate(to);
 
-                const q = db.collection('registros')
+                async function fetchRegistrosByDateRangePaged() {
+                    const rows = [];
+                    let lastDoc = null;
+                    while (true) {
+                        let q = db.collection('registros')
+                            .orderBy('fecha_hora', 'desc')
+                            .where('fecha_hora', '>=', fromTs)
+                            .where('fecha_hora', '<=', toTs)
+                            .limit(RANGE_FETCH_BATCH_SIZE);
+                        if (lastDoc) q = q.startAfter(lastDoc);
+
+                        const snap = await q.get();
+                        const docs = snap.docs || [];
+                        docs.forEach(d => {
+                            const data = d.data() || {};
+                            data.id = d.id;
+                            data._searchBlob = null;
+                            rows.push(data);
+                        });
+                        if (!docs.length) break;
+                        lastDoc = docs[docs.length - 1];
+                        if (docs.length < RANGE_FETCH_BATCH_SIZE) break;
+                        if (rows.length >= RANGE_FETCH_MAX_ROWS) break;
+                    }
+                    return rows;
+                }
+
+                function mergeSnapshotIntoAllRegistros(snap) {
+                    const byId = new Map();
+                    (Array.isArray(allRegistros) ? allRegistros : []).forEach(r => {
+                        if (r && r.id != null) byId.set(String(r.id), r);
+                    });
+                    (snap && snap.docs ? snap.docs : []).forEach(d => {
+                        const data = d.data() || {};
+                        data.id = d.id;
+                        data._searchBlob = null;
+                        byId.set(String(d.id), data);
+                    });
+                    allRegistros = Array.from(byId.values()).sort((a, b) => {
+                        const at = a.fecha_hora && typeof a.fecha_hora.toMillis === 'function' ? a.fecha_hora.toMillis() : 0;
+                        const bt = b.fecha_hora && typeof b.fecha_hora.toMillis === 'function' ? b.fecha_hora.toMillis() : 0;
+                        return bt - at;
+                    });
+                }
+
+                // 1) Carga completa del rango (sin límite)
+                allRegistros = await fetchRegistrosByDateRangePaged();
+                hasLoaded = true;
+                currentPage = 1;
+                updateAsesorOptions();
+                liveStateEl.textContent = 'Cargado · ' + new Date().toLocaleTimeString('es-CO');
+                render();
+
+                // 2) Listener en vivo (mergea, no reemplaza)
+                const qLive = db.collection('registros')
                     .orderBy('fecha_hora', 'desc')
                     .where('fecha_hora', '>=', fromTs)
                     .where('fecha_hora', '<=', toTs)
                     .limit(REALTIME_LIMIT);
 
-                let firstSnapshot = true;
-                unsubscribe = q.onSnapshot((snap) => {
-                    allRegistros = snap.docs.map(d => {
-                        const data = d.data() || {};
-                        data.id = d.id;
-                        data._searchBlob = null;
-                        return data;
-                    });
-                    hasLoaded = true;
-                    if (firstSnapshot) {
-                        currentPage = 1;
-                        firstSnapshot = false;
-                    }
+                unsubscribe = qLive.onSnapshot((snap) => {
+                    mergeSnapshotIntoAllRegistros(snap);
                     updateAsesorOptions();
                     liveStateEl.textContent = 'En vivo · ' + new Date().toLocaleTimeString('es-CO');
                     render();
