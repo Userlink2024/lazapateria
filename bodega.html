@@ -60,6 +60,11 @@
       box-shadow: 0 8px 18px rgba(0,0,0,0.2);
     }
 
+    #btnEnableSound{
+      display:none;
+      background: linear-gradient(135deg, #1e88e5, #1565c0);
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -272,17 +277,57 @@
       }
     }
 
-    function armAudioOnce() {
-      if (audioArmed) return;
-      audioArmed = true;
-      initAudioContext();
+    function showEnableSoundButton() {
+      const btn = document.getElementById('btnEnableSound');
+      if (!btn) return;
+      btn.style.display = 'inline-block';
     }
 
-    document.addEventListener('click', armAudioOnce, { once: true, capture: true });
-    document.addEventListener('keydown', armAudioOnce, { once: true, capture: true });
+    function hideEnableSoundButton() {
+      const btn = document.getElementById('btnEnableSound');
+      if (!btn) return;
+      btn.style.display = 'none';
+    }
 
-    function playTurnadorSound() {
-      if (!audioContext) return;
+    async function ensureAudioReady() {
+      initAudioContext();
+      if (!audioContext) return false;
+      try {
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+      } catch (e) {
+        // no-op
+      }
+
+      try {
+        const buffer = audioContext.createBuffer(1, 1, 22050);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+      } catch (e) {
+        // no-op
+      }
+
+      return audioContext && audioContext.state === 'running';
+    }
+
+    async function armAudioOnce() {
+      if (audioArmed) return;
+      audioArmed = true;
+      const ok = await ensureAudioReady();
+      if (ok) hideEnableSoundButton();
+      else showEnableSoundButton();
+    }
+
+    ['click','pointerdown','touchstart','keydown'].forEach(evt => {
+      document.addEventListener(evt, armAudioOnce, { once: true, capture: true, passive: true });
+    });
+
+    async function playTurnadorSound() {
+      const ok = await ensureAudioReady();
+      if (!ok) { showEnableSoundButton(); return; }
       try {
         const now = audioContext.currentTime;
         const master = audioContext.createGain();
@@ -623,6 +668,7 @@
   <div class="top-bar">
     <button class="btn" onclick="cambiarModo(false)">📦 Despachos Activos</button>
     <button class="btn" onclick="cambiarModo(true)">🕒 Historial</button>
+    <button class="btn" id="btnEnableSound" type="button">🔊 Activar sonido</button>
   </div>
 
   <div id="panel" class="grid"></div>
@@ -636,5 +682,17 @@
       <div id="modalBody"></div>
     </div>
   </div>
+
+  <script>
+    (function(){
+      const btn = document.getElementById('btnEnableSound');
+      if (!btn) return;
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try { await armAudioOnce(); } catch (err) { /* no-op */ }
+      }, { passive: false });
+    })();
+  </script>
 </body>
 </html>
