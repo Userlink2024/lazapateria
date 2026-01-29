@@ -208,7 +208,7 @@
       <div class="modal-body">
         <div class="toolbar caja-top">
           <div class="toolbar caja-tabs">
-            <button class="btn primary" type="button" id="btnCajaTabTiras"><i class="fas fa-store"></i> Tiras de China</button>
+            <button class="btn primary" type="button" id="btnCajaTabTiras"><i class="fas fa-store"></i> China</button>
             <button class="btn ghost" type="button" id="btnCajaTabLocal"><i class="fas fa-shop"></i> Local La Zapatería</button>
           </div>
           <div class="toolbar caja-filters">
@@ -467,6 +467,22 @@
     const COL_REF_LINKS = db.collection('auditoria_fondos_refs');
     const COL_CAJA = db.collection('caja_menor');
 
+    // Conexión a la segunda base de datos (chinainventario - lazapateria-ce24f)
+    const chinaFirebaseConfig = {
+      apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
+      authDomain: "lazapateria-ce24f.firebaseapp.com",
+      projectId: "lazapateria-ce24f",
+      storageBucket: "lazapateria-ce24f.firebaseapp.com",
+      messagingSenderId: "642571845821",
+      appId: "1:642571845821:web:45858a0abc0df728fd77d4"
+    };
+    const chinaApp = firebase.initializeApp(chinaFirebaseConfig, 'chinaApp');
+    const dbChina = chinaApp.firestore();
+    const COL_FACTURAS_CHINA = dbChina.collection('facturas');
+
+    let facturasChina = [];
+    let facturasLoaded = false;
+
     let currentUser = null;
     let cachedOperadores = [];
     let cachedBodegueros = [];
@@ -500,7 +516,11 @@
 
     function openHistory(){ $('historyModal').classList.add('open'); }
     function closeHistory(){ $('historyModal').classList.remove('open'); }
-    function openCaja(){ $('cajaModal').classList.add('open'); }
+    function openCaja(){ 
+      $('cajaModal').classList.add('open'); 
+      // Cargar facturas de China al abrir
+      if (cajaActiveTab === 'tiras') loadFacturasChina();
+    }
     function closeCaja(){ $('cajaModal').classList.remove('open'); }
 
     function setModeAuditoria(){
@@ -550,9 +570,140 @@
       $('cajaTabLocal').style.display = isT ? 'none' : '';
       $('btnCajaTabTiras').className = isT ? 'btn primary' : 'btn ghost';
       $('btnCajaTabLocal').className = isT ? 'btn ghost' : 'btn primary';
+      // Cargar facturas de China cuando se cambia a esa pestaña
+      if (isT) loadFacturasChina();
     }
 
     let cachedCajaAsesores = [];
+
+    // Función para cargar facturas de China (chinainventario)
+    async function loadFacturasChina(){
+      const fromStr = safeStr($('cajaFrom').value) || todayISO();
+      const toStr = safeStr($('cajaTo').value) || todayISO();
+
+      try {
+        const snap = await COL_FACTURAS_CHINA.orderBy('createdAt', 'desc').limit(500).get();
+        facturasChina = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+        facturasLoaded = true;
+
+        // Filtrar por rango de fechas
+        const filtered = facturasChina.filter(f => {
+          const fechaStr = safeStr(f.fechaHora);
+          if (!fechaStr) return false;
+          const d = new Date(fechaStr + 'T12:00:00');
+          const from = new Date(fromStr + 'T00:00:00');
+          const to = new Date(toStr + 'T23:59:59');
+          return d >= from && d <= to;
+        });
+
+        renderFacturasChina(filtered);
+      } catch (e) {
+        console.error('Error cargando facturas de China:', e);
+        facturasChina = [];
+      }
+    }
+
+    function renderFacturasChina(facturas){
+      const listCompras = $('cajaListTiras');
+      const listPendientes = $('tirasPendientesList');
+      if (listCompras) listCompras.innerHTML = '';
+      if (listPendientes) listPendientes.innerHTML = '';
+
+      // Separar: Contado = Compras pagadas, Crédito = Pendientes
+      const compras = facturas.filter(f => f.tipoPago === 'contado');
+      const pendientes = facturas.filter(f => f.tipoPago === 'credito' && (f.saldoPendiente > 0 || f.verificado !== true));
+
+      let totalCompras = 0;
+      let totalPendientes = 0;
+
+      // Renderizar compras (contado)
+      if (listCompras) {
+        if (!compras.length) {
+          listCompras.innerHTML = '<div class="hint">Sin compras de contado en el rango.</div>';
+        } else {
+          const frag = document.createDocumentFragment();
+          compras.forEach(f => {
+            totalCompras += Number(f.valorTotal || 0);
+            const item = document.createElement('div');
+            item.className = 'item';
+            const metodo = f.metodoPago ? `(${f.metodoPago})` : '';
+            const productos = (f.productos || []).map(p => safeStr(p.referenciaColor)).join(', ') || 'Sin productos';
+            item.innerHTML = `
+              <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+                <div>
+                  <div class="item-title">Factura #${safeStr(f.codigoRegistro)} • ${fmtCOP(f.valorTotal || 0)}</div>
+                  <div class="hint">Cliente: <strong>${safeStr(f.cliente)}</strong> • Fecha: <strong>${safeStr(f.fechaHora)}</strong></div>
+                  <div class="hint">Productos: ${productos}</div>
+                  <div class="hint">Método: <strong>Contado ${metodo}</strong></div>
+                </div>
+                <div class="chips">
+                  <span class="chip ok"><i class="fas fa-check"></i> Pagado</span>
+                </div>
+              </div>
+            `;
+            frag.appendChild(item);
+          });
+          listCompras.appendChild(frag);
+        }
+      }
+
+      // Renderizar pendientes (crédito)
+      if (listPendientes) {
+        if (!pendientes.length) {
+          listPendientes.innerHTML = '<div class="hint">Sin pendientes de crédito en el rango.</div>';
+        } else {
+          const frag = document.createDocumentFragment();
+          pendientes.forEach(f => {
+            const saldo = Number(f.saldoPendiente || f.valorTotal || 0);
+            totalPendientes += saldo;
+            const item = document.createElement('div');
+            item.className = 'item';
+            const productos = (f.productos || []).map(p => safeStr(p.referenciaColor)).join(', ') || 'Sin productos';
+            const verificado = f.verificado === true;
+            item.innerHTML = `
+              <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+                <div>
+                  <div class="item-title">Factura #${safeStr(f.codigoRegistro)} • Saldo: ${fmtCOP(saldo)}</div>
+                  <div class="hint">Cliente: <strong>${safeStr(f.cliente)}</strong> • Fecha: <strong>${safeStr(f.fechaHora)}</strong></div>
+                  <div class="hint">Productos: ${productos}</div>
+                  <div class="hint">Total factura: <strong>${fmtCOP(f.valorTotal || 0)}</strong></div>
+                </div>
+                <div class="toolbar" style="justify-content:flex-end;gap:6px">
+                  ${verificado 
+                    ? '<span class="chip ok"><i class="fas fa-check-double"></i> Verificado</span>' 
+                    : `<button class="btn ghost" type="button" data-verify-fac="${f.id}"><i class="fas fa-clipboard-check"></i> Verificar</button>`
+                  }
+                  <span class="chip danger"><i class="fas fa-clock"></i> Pendiente</span>
+                </div>
+              </div>
+            `;
+            frag.appendChild(item);
+          });
+          listPendientes.appendChild(frag);
+
+          // Agregar event listeners para verificar
+          Array.from(listPendientes.querySelectorAll('button[data-verify-fac]')).forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const facId = btn.getAttribute('data-verify-fac');
+              if (!facId) return;
+              if (!confirm('¿Marcar esta factura como verificada?')) return;
+              try {
+                await COL_FACTURAS_CHINA.doc(facId).update({ verificado: true, verificadoAt: new Date(), verificadoPor: safeStr(currentUser && currentUser.nombreCompleto) });
+                showError(''); // clear
+                await loadFacturasChina();
+              } catch (e) {
+                showError('Error al verificar: ' + (e.message || e));
+              }
+            });
+          });
+        }
+      }
+
+      // Actualizar totales
+      $('tirasTotalIngresos').textContent = `Compras: ${fmtCOP(totalCompras)}`;
+      $('tirasTotalEgresos').textContent = `Pendientes: ${fmtCOP(totalPendientes)}`;
+      $('tirasSaldo').textContent = `Balance: ${fmtCOP(totalCompras - totalPendientes)}`;
+    }
 
     async function loadCajaAsesores(){
       cachedCajaAsesores = [];
@@ -844,13 +995,16 @@
       $('btnReload').addEventListener('click', () => refreshAll(false));
       $('btnOpenHistory').addEventListener('click', openHistory);
       $('btnSearchRef').addEventListener('click', searchByReference);
-      $('btnCajaRecargar').addEventListener('click', cajaCargar);
+      $('btnCajaRecargar').addEventListener('click', () => {
+        cajaCargar();
+        if (cajaActiveTab === 'tiras') loadFacturasChina();
+      });
 
       $('btnCajaTabTiras').addEventListener('click', () => setCajaTab('tiras'));
       $('btnCajaTabLocal').addEventListener('click', () => setCajaTab('local'));
 
-      $('cajaFrom').addEventListener('change', () => { cajaCargar(); });
-      $('cajaTo').addEventListener('change', () => { cajaCargar(); });
+      $('cajaFrom').addEventListener('change', () => { cajaCargar(); if (cajaActiveTab === 'tiras') loadFacturasChina(); });
+      $('cajaTo').addEventListener('change', () => { cajaCargar(); if (cajaActiveTab === 'tiras') loadFacturasChina(); });
 
       $('btnTirasIngresoGuardar').addEventListener('click', cajaGuardarTirasIngreso);
       $('btnTirasCompraGuardar').addEventListener('click', () => cajaGuardarTirasCompra(false));
