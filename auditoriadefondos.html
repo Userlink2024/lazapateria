@@ -269,7 +269,7 @@
   </div>
 
   <!-- Modal Ver Todos los Movimientos -->
-  <div class="modal" id="localMovModal">
+  <div class="modal" id="localMovModal" style="z-index:200">
     <div class="modal-card" style="max-width:900px;width:100%">
       <div class="modal-head">
         <h3><i class="fas fa-list" style="color:var(--primary)"></i> Historial Completo - Local La Zapatería</h3>
@@ -392,7 +392,7 @@
                   </div>
                   <div>
                     <label for="tirasIngresoValor">Valor</label>
-                    <input id="tirasIngresoValor" type="number" min="0" step="1" placeholder="0" />
+                    <input id="tirasIngresoValor" type="text" inputmode="numeric" placeholder="0" class="valor-moneda" />
                   </div>
                 </div>
                 <div style="margin-top:10px">
@@ -415,7 +415,7 @@
                   </div>
                   <div>
                     <label for="tirasSalidaValor">Valor</label>
-                    <input id="tirasSalidaValor" type="number" min="0" step="1" placeholder="0" />
+                    <input id="tirasSalidaValor" type="text" inputmode="numeric" placeholder="0" class="valor-moneda" />
                   </div>
                 </div>
                 <div style="margin-top:10px">
@@ -442,7 +442,7 @@
                   </div>
                   <div>
                     <label for="tirasCierreValor">Total entregado al gerente</label>
-                    <input id="tirasCierreValor" type="number" min="0" step="1" placeholder="0" />
+                    <input id="tirasCierreValor" type="text" inputmode="numeric" placeholder="0" class="valor-moneda" />
                   </div>
                 </div>
                 <div style="margin-top:10px">
@@ -528,7 +528,7 @@
                   </div>
                   <div>
                     <label for="localVentaValor">Valor</label>
-                    <input id="localVentaValor" type="number" min="0" step="1" placeholder="0" />
+                    <input id="localVentaValor" type="text" inputmode="numeric" placeholder="0" class="valor-moneda" />
                   </div>
                   <div>
                     <label for="localVentaCliente">Cliente</label>
@@ -555,7 +555,7 @@
                   </div>
                   <div>
                     <label for="localEgresoValor">Valor</label>
-                    <input id="localEgresoValor" type="number" min="0" step="1" placeholder="0" />
+                    <input id="localEgresoValor" type="text" inputmode="numeric" placeholder="0" class="valor-moneda" />
                   </div>
                 </div>
                 <div style="margin-top:10px">
@@ -582,7 +582,7 @@
                   </div>
                   <div>
                     <label for="localIngresoValor">Valor</label>
-                    <input id="localIngresoValor" type="number" min="0" step="1" placeholder="0" />
+                    <input id="localIngresoValor" type="text" inputmode="numeric" placeholder="0" class="valor-moneda" />
                   </div>
                 </div>
                 <div style="margin-top:10px">
@@ -704,6 +704,41 @@
     function tsToDate(ts){ try { return ts && ts.toDate ? ts.toDate() : null; } catch { return null; } }
     function formatDateTime(ts){ const d = tsToDate(ts); return d ? d.toLocaleString('es-CO') : ''; }
     function sumAbonos(abonos){ return (Array.isArray(abonos) ? abonos : []).reduce((acc,a)=> acc + Number((a && a.monto) || 0), 0); }
+
+    // Formateo de moneda colombiana para campos de valor
+    function formatMonedaCO(valor){
+      // Eliminar todo excepto dígitos
+      const soloNumeros = String(valor).replace(/\D/g, '');
+      if (!soloNumeros) return '';
+      // Formatear con puntos como separador de miles
+      return new Intl.NumberFormat('es-CO').format(Number(soloNumeros));
+    }
+
+    function parseMonedaCO(valorFormateado){
+      // Extraer solo dígitos y convertir a número
+      const soloNumeros = String(valorFormateado).replace(/\D/g, '');
+      return Number(soloNumeros) || 0;
+    }
+
+    function initCamposMoneda(){
+      document.querySelectorAll('.valor-moneda').forEach(input => {
+        input.addEventListener('input', (e) => {
+          const cursorPos = e.target.selectionStart;
+          const valorAnterior = e.target.value;
+          const valorFormateado = formatMonedaCO(e.target.value);
+          e.target.value = valorFormateado;
+          // Ajustar posición del cursor
+          const diff = valorFormateado.length - valorAnterior.length;
+          const newPos = Math.max(0, cursorPos + diff);
+          e.target.setSelectionRange(newPos, newPos);
+        });
+        input.addEventListener('blur', (e) => {
+          if (e.target.value) {
+            e.target.value = formatMonedaCO(e.target.value);
+          }
+        });
+      });
+    }
 
     function buildRegistroRefsFlat(r){
       if (Array.isArray(r.referencias_bancarias_refs)) return r.referencias_bancarias_refs.map(normalizeRef).filter(Boolean);
@@ -990,7 +1025,7 @@
     async function cajaGuardarTirasIngreso(){
       clearError();
       const fechaStr = safeStr($('tirasIngresoFecha').value) || todayISO();
-      const valor = Number($('tirasIngresoValor').value || 0);
+      const valor = parseMonedaCO($('tirasIngresoValor').value);
       const obs = safeStr($('tirasIngresoObs').value);
       if (!valor || valor <= 0) { showError('Caja menor: valor inválido.'); return; }
       const fecha = parseDateToTimestamp(fechaStr);
@@ -1015,7 +1050,7 @@
     async function cajaGuardarTirasCierre(){
       clearError();
       const fechaStr = safeStr($('tirasCierreFecha').value) || todayISO();
-      const valor = Number($('tirasCierreValor').value || 0);
+      const valor = parseMonedaCO($('tirasCierreValor').value);
       const obs = safeStr($('tirasCierreObs').value);
       if (!Number.isFinite(valor) || valor < 0) { showError('Caja menor: valor inválido.'); return; }
       const fecha = parseDateToTimestamp(fechaStr);
@@ -1038,7 +1073,7 @@
     async function cajaGuardarTirasSalida(){
       clearError();
       const fechaStr = safeStr($('tirasSalidaFecha').value) || todayISO();
-      const valor = Number($('tirasSalidaValor').value || 0);
+      const valor = parseMonedaCO($('tirasSalidaValor').value);
       const obs = safeStr($('tirasSalidaObs').value);
       if (!valor || valor <= 0) { showError('Caja menor: valor inválido.'); return; }
       const fecha = parseDateToTimestamp(fechaStr);
@@ -1061,7 +1096,7 @@
     async function cajaGuardarLocalVenta(){
       clearError();
       const fechaStr = safeStr($('localVentaFecha').value) || todayISO();
-      const valor = Number($('localVentaValor').value || 0);
+      const valor = parseMonedaCO($('localVentaValor').value);
       const cliente = safeStr($('localVentaCliente').value);
       const asesor = safeStr($('localVentaAsesor').value);
       if (!valor || valor <= 0) { showError('Caja menor: valor inválido.'); return; }
@@ -1086,7 +1121,7 @@
     async function cajaGuardarLocalEgreso(){
       clearError();
       const fechaStr = safeStr($('localEgresoFecha').value) || todayISO();
-      const valor = Number($('localEgresoValor').value || 0);
+      const valor = parseMonedaCO($('localEgresoValor').value);
       const obs = safeStr($('localEgresoObs').value);
       if (!valor || valor <= 0) { showError('Caja menor: valor inválido.'); return; }
       const fecha = parseDateToTimestamp(fechaStr);
@@ -1109,7 +1144,7 @@
     async function cajaGuardarLocalIngreso(){
       clearError();
       const fechaStr = safeStr($('localIngresoFecha').value) || todayISO();
-      const valor = Number($('localIngresoValor').value || 0);
+      const valor = parseMonedaCO($('localIngresoValor').value);
       const obs = safeStr($('localIngresoObs').value);
       if (!valor || valor <= 0) { showError('Caja menor: valor inválido.'); return; }
       const fecha = parseDateToTimestamp(fechaStr);
@@ -2466,6 +2501,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       loadCurrentUser();
       bindUi();
+      initCamposMoneda();
       $('filtersCard').style.display='none';
       $('resultsCard').style.display='none';
       $('fromDate').value = '';
