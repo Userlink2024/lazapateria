@@ -989,10 +989,16 @@
             const esTransferencia = metodo === 'transferencia';
             const productos = (f.productos || []).map(p => safeStr(p.referenciaColor)).join(', ') || 'Sin productos';
             const recibido = f.recibido === true;
+            const yaIngresado = f.ingresadoACaja === true;
             
             let btnHtml = '';
+            let btnCajaHtml = '';
             if (recibido) {
               btnHtml = `<span class="chip ok"><i class="fas fa-check-circle"></i> ${esTransferencia ? 'Verificado' : 'Recibido'}</span>`;
+              // Botón para ingresar a caja (solo si ya fue recibido/verificado)
+              btnCajaHtml = yaIngresado 
+                ? `<span class="chip" style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:11px"><i class="fas fa-vault"></i> En Caja</span>`
+                : `<button type="button" class="btn primary" style="padding:4px 10px;font-size:11px;background:linear-gradient(135deg,#f59e0b,#d97706)" data-ingresar-caja="${f.id}" data-valor="${f.valorTotal}" data-cliente="${safeStr(f.cliente)}" data-factura="${safeStr(f.codigoRegistro)}"><i class="fas fa-cash-register"></i> Ingresar a Caja</button>`;
             } else {
               if (esTransferencia) {
                 btnHtml = `<button class="btn primary" style="background:linear-gradient(135deg,#3b82f6,#2563eb)" type="button" data-recibir-fac="${f.id}" data-metodo="transferencia"><i class="fas fa-clipboard-check"></i> Verificar</button>`;
@@ -1021,8 +1027,9 @@
                   Método: <strong>${esTransferencia ? '💳 Transferencia' : '💵 Efectivo'}</strong>
                 </div>
               </div>
-              <div class="china-item-actions" style="display:flex;align-items:center;gap:6px">
+              <div class="china-item-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 ${btnHtml}
+                ${btnCajaHtml}
                 ${menuHtml}
               </div>
             `;
@@ -1032,6 +1039,8 @@
 
           // Event listeners para menú de opciones (tuerca)
           attachFacMenuListeners(listCompras);
+          // Event listeners para ingresar a caja
+          attachIngresarCajaListeners(listCompras);
 
           // Event listeners para recibir/verificar
           Array.from(listCompras.querySelectorAll('button[data-recibir-fac]')).forEach(btn => {
@@ -1137,6 +1146,7 @@
             const item = document.createElement('div');
             item.className = 'china-item';
             const productos = (f.productos || []).map(p => safeStr(p.referenciaColor)).join(', ') || 'Sin productos';
+            const yaIngresado = f.ingresadoACaja === true;
             
             const menuHtml = `
               <div class="mov-menu" style="position:relative;display:inline-block;margin-left:8px">
@@ -1151,6 +1161,11 @@
             // Botón ver abonos
             const btnVerAbonos = `<button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px;color:#3b82f6" data-ver-abonos='${JSON.stringify({id:f.id,codigo:f.codigoRegistro,cliente:f.cliente,total:f.valorTotal,saldo:0,abonos:f.abonos||[]})}'><i class="fas fa-list-check"></i> Ver Abonos (${numAbonos})</button>`;
 
+            // Botón ingresar a caja (solo si no ha sido ingresado)
+            const btnIngresarCaja = yaIngresado 
+              ? `<span class="chip" style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:11px"><i class="fas fa-vault"></i> En Caja</span>`
+              : `<button type="button" class="btn primary" style="padding:4px 10px;font-size:11px;background:linear-gradient(135deg,#f59e0b,#d97706)" data-ingresar-caja="${f.id}" data-valor="${f.valorTotal}" data-cliente="${safeStr(f.cliente)}" data-factura="${safeStr(f.codigoRegistro)}"><i class="fas fa-cash-register"></i> Ingresar a Caja</button>`;
+
             item.innerHTML = `
               <div class="china-item-info">
                 <div class="china-item-title">Factura #${safeStr(f.codigoRegistro)} • ${fmtCOP(f.valorTotal || 0)}</div>
@@ -1163,6 +1178,7 @@
               </div>
               <div class="china-item-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 <span class="chip ok"><i class="fas fa-check-double"></i> Pagado</span>
+                ${btnIngresarCaja}
                 ${btnVerAbonos}
                 ${menuHtml}
               </div>
@@ -1175,6 +1191,8 @@
           attachFacMenuListeners(listPagados);
           // Event listeners para ver abonos
           attachVerAbonosListeners(listPagados);
+          // Event listeners para ingresar a caja
+          attachIngresarCajaListeners(listPagados);
         }
       }
 
@@ -1339,6 +1357,54 @@
 
     function closeVerAbonosModal(){
       $('verAbonosModal').classList.remove('open');
+    }
+
+    // Función para manejar botón "Ingresar a Caja" en facturas pagadas de China
+    function attachIngresarCajaListeners(container){
+      container.querySelectorAll('button[data-ingresar-caja]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const facId = btn.getAttribute('data-ingresar-caja');
+          const valor = Number(btn.getAttribute('data-valor') || 0);
+          const cliente = btn.getAttribute('data-cliente') || '';
+          const factura = btn.getAttribute('data-factura') || '';
+          
+          if (!confirm(`¿Ingresar ${fmtCOP(valor)} a Caja Menor China?\n\nFactura #${factura}\nCliente: ${cliente}`)) return;
+          
+          setLoading(true);
+          try {
+            // 1. Crear movimiento de ingreso en caja_menor (colección de tiras/china)
+            const movData = {
+              tipo: 'ingreso',
+              categoria: 'venta_credito',
+              valor: valor,
+              fecha: todayISO(),
+              cliente: cliente,
+              factura: factura,
+              observaciones: `Pago completo factura #${factura} - Cliente: ${cliente}`,
+              createdAt: firebase.firestore.Timestamp.fromDate(new Date()),
+              createdBy: safeStr(currentUser && currentUser.nombreCompleto),
+              origen: 'tiras'
+            };
+            await COL_CAJA.add(movData);
+            
+            // 2. Marcar la factura como ingresada a caja
+            await COL_FACTURAS_CHINA.doc(facId).update({
+              ingresadoACaja: true,
+              ingresadoACajaAt: firebase.firestore.Timestamp.fromDate(new Date()),
+              ingresadoACajaPor: safeStr(currentUser && currentUser.nombreCompleto)
+            });
+            
+            showSuccessMessage(`${fmtCOP(valor)} ingresado a Caja Menor China`);
+            await loadFacturasChina();
+            await cajaCargar();
+          } catch (err) {
+            showError('Error al ingresar a caja: ' + (err.message || err));
+          } finally {
+            setLoading(false);
+          }
+        });
+      });
     }
 
     async function loadCajaAsesores(){
