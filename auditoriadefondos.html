@@ -294,6 +294,33 @@
     </div>
   </div>
 
+  <!-- Modal Ver Abonos de Factura China -->
+  <div class="modal" id="verAbonosModal" style="z-index:250">
+    <div class="modal-card" style="max-width:500px">
+      <div class="modal-head">
+        <h3><i class="fas fa-list-check" style="color:#10b981"></i> Historial de Abonos</h3>
+        <button class="btn ghost" type="button" onclick="closeVerAbonosModal()"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div id="verAbonosInfo" style="background:linear-gradient(135deg,rgba(59,130,246,.1),rgba(37,99,235,.05));padding:12px;border-radius:10px;margin-bottom:16px;border:1px solid rgba(59,130,246,.2)">
+          <div style="font-size:13px;color:#374151"><strong>Factura:</strong> <span id="verAbonosFacCodigo">-</span></div>
+          <div style="font-size:13px;color:#374151"><strong>Cliente:</strong> <span id="verAbonosFacCliente">-</span></div>
+          <div style="display:flex;gap:16px;margin-top:8px">
+            <div style="font-size:13px"><strong>Total:</strong> <span id="verAbonosFacTotal">$0</span></div>
+            <div style="font-size:13px;color:#10b981"><strong>Abonado:</strong> <span id="verAbonosFacAbonado">$0</span></div>
+            <div style="font-size:13px;color:#ef4444"><strong>Saldo:</strong> <span id="verAbonosFacSaldo">$0</span></div>
+          </div>
+        </div>
+        <div id="verAbonosList" style="max-height:300px;overflow-y:auto">
+          <div class="china-empty"><i class="fas fa-inbox"></i> Sin abonos registrados</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" type="button" onclick="closeVerAbonosModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Ver Todos los Movimientos -->
   <div class="modal" id="localMovModal" style="z-index:200">
     <div class="modal-card" style="max-width:900px;width:100%">
@@ -397,11 +424,22 @@
             <!-- Módulo: Ventas a Crédito -->
             <div class="china-module">
               <div class="china-module-header">
-                <h4><i class="fas fa-credit-card"></i> Ventas a Crédito</h4>
+                <h4><i class="fas fa-credit-card"></i> Ventas a Crédito (Pendientes)</h4>
                 <span class="china-module-badge danger" id="chinaPendientesCount">0</span>
               </div>
               <div class="china-module-body" id="chinaPendientesList">
-                <div class="china-empty"><i class="fas fa-inbox"></i> Sin créditos en el rango</div>
+                <div class="china-empty"><i class="fas fa-inbox"></i> Sin créditos pendientes en el rango</div>
+              </div>
+            </div>
+
+            <!-- Módulo: Créditos Pagados -->
+            <div class="china-module">
+              <div class="china-module-header">
+                <h4><i class="fas fa-check-double"></i> Créditos Pagados</h4>
+                <span class="china-module-badge" style="background:linear-gradient(135deg,#10b981,#059669)" id="chinaPagadosCount">0</span>
+              </div>
+              <div class="china-module-body" id="chinaPagadosList">
+                <div class="china-empty"><i class="fas fa-inbox"></i> Sin créditos pagados en el rango</div>
               </div>
             </div>
           </div>
@@ -881,9 +919,10 @@
     function renderFacturasChina(facturas){
       const listCompras = $('chinaComprasList');
       const listPendientes = $('chinaPendientesList');
+      const listPagados = $('chinaPagadosList');
 
       console.log('[China] Facturas recibidas para render:', facturas.length);
-      facturas.forEach(f => console.log('[China] Factura:', f.codigoRegistro, 'tipoPago:', f.tipoPago, 'recibido:', f.recibido));
+      facturas.forEach(f => console.log('[China] Factura:', f.codigoRegistro, 'tipoPago:', f.tipoPago, 'recibido:', f.recibido, 'saldoPendiente:', f.saldoPendiente));
 
       // Separar: Contado = necesita recibido/verificado, Crédito = Pendientes de pago
       // Contado sin recibir = pendiente de recibir dinero
@@ -901,11 +940,20 @@
         return raw;
       };
 
+      // Función para calcular total abonado de una factura
+      const getTotalAbonado = (f) => {
+        const abonos = f.abonos || [];
+        return abonos.reduce((sum, a) => sum + Number(a.montoAbono || a.monto || 0), 0);
+      };
+
       const contadoPendiente = facturas.filter(f => getTipoPagoNorm(f) === 'contado' && f.recibido !== true);
       const contadoRecibido = facturas.filter(f => getTipoPagoNorm(f) === 'contado' && f.recibido === true);
-      const creditoPendiente = facturas.filter(f => getTipoPagoNorm(f) === 'credito' && (Number(f.saldoPendiente || 0) > 0 || f.recibido !== true));
+      // Crédito pendiente: saldo > 0
+      const creditoPendiente = facturas.filter(f => getTipoPagoNorm(f) === 'credito' && Number(f.saldoPendiente || f.valorTotal || 0) > 0);
+      // Crédito pagado: saldo = 0 (completamente abonado)
+      const creditoPagado = facturas.filter(f => getTipoPagoNorm(f) === 'credito' && Number(f.saldoPendiente || 0) <= 0 && Number(f.valorTotal || 0) > 0);
       
-      console.log('[China] Contado pendiente:', contadoPendiente.length, 'Contado recibido:', contadoRecibido.length, 'Crédito pendiente:', creditoPendiente.length);
+      console.log('[China] Contado pendiente:', contadoPendiente.length, 'Contado recibido:', contadoRecibido.length, 'Crédito pendiente:', creditoPendiente.length, 'Crédito pagado:', creditoPagado.length);
 
       let totalRecibido = 0;
       let totalPorRecibir = 0;
@@ -1011,6 +1059,8 @@
           const frag = document.createDocumentFragment();
           creditoPendiente.forEach(f => {
             const saldo = Number(f.saldoPendiente || f.valorTotal || 0);
+            const totalAbonado = getTotalAbonado(f);
+            const numAbonos = (f.abonos || []).length;
             const item = document.createElement('div');
             item.className = 'china-item';
             const productos = (f.productos || []).map(p => safeStr(p.referenciaColor)).join(', ') || 'Sin productos';
@@ -1025,6 +1075,17 @@
               </div>
             `;
 
+            // Info de abonos
+            const abonosInfo = totalAbonado > 0 
+              ? `<div style="margin-top:6px;padding:6px 10px;background:linear-gradient(135deg,rgba(16,185,129,.1),rgba(5,150,105,.05));border-radius:6px;border:1px solid rgba(16,185,129,.2)">
+                   <span style="color:#10b981;font-weight:600;font-size:12px"><i class="fas fa-coins"></i> Abonado: ${fmtCOP(totalAbonado)}</span>
+                   <span style="color:#6b7280;font-size:11px;margin-left:8px">(${numAbonos} abono${numAbonos > 1 ? 's' : ''})</span>
+                 </div>`
+              : '';
+
+            // Botón ver abonos
+            const btnVerAbonos = `<button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px;color:#3b82f6" data-ver-abonos='${JSON.stringify({id:f.id,codigo:f.codigoRegistro,cliente:f.cliente,total:f.valorTotal,saldo:saldo,abonos:f.abonos||[]})}'><i class="fas fa-list-check"></i> Ver Abonos</button>`;
+
             item.innerHTML = `
               <div class="china-item-info">
                 <div class="china-item-title">Factura #${safeStr(f.codigoRegistro)} • Saldo: ${fmtCOP(saldo)}</div>
@@ -1033,10 +1094,12 @@
                   Fecha: <strong>${safeStr(f.fechaHora)}</strong><br>
                   Productos: ${productos}<br>
                   Total factura: <strong>${fmtCOP(f.valorTotal || 0)}</strong>
+                  ${abonosInfo}
                 </div>
               </div>
-              <div class="china-item-actions" style="display:flex;align-items:center;gap:6px">
-                <span class="chip danger"><i class="fas fa-clock"></i> Crédito Pendiente</span>
+              <div class="china-item-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span class="chip danger"><i class="fas fa-clock"></i> Pendiente</span>
+                ${btnVerAbonos}
                 ${menuHtml}
               </div>
             `;
@@ -1046,6 +1109,62 @@
           
           // Event listeners para menú de opciones (tuerca)
           attachFacMenuListeners(listPendientes);
+          // Event listeners para ver abonos
+          attachVerAbonosListeners(listPendientes);
+        }
+      }
+
+      // Renderizar Créditos Pagados (saldo = 0)
+      if (listPagados) {
+        if (!creditoPagado.length) {
+          listPagados.innerHTML = '<div class="china-empty"><i class="fas fa-inbox"></i> Sin créditos pagados en el rango</div>';
+        } else {
+          listPagados.innerHTML = '';
+          const frag = document.createDocumentFragment();
+          creditoPagado.forEach(f => {
+            const totalAbonado = getTotalAbonado(f);
+            const numAbonos = (f.abonos || []).length;
+            const item = document.createElement('div');
+            item.className = 'china-item';
+            const productos = (f.productos || []).map(p => safeStr(p.referenciaColor)).join(', ') || 'Sin productos';
+            
+            const menuHtml = `
+              <div class="mov-menu" style="position:relative;display:inline-block;margin-left:8px">
+                <button type="button" class="btn ghost mov-menu-btn" style="padding:4px 8px;font-size:12px" data-fac-menu="${f.id}"><i class="fas fa-cog"></i></button>
+                <div class="mov-menu-dropdown" id="facMenu_${f.id}" style="display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;min-width:120px">
+                  <button type="button" class="mov-menu-item" data-edit-fac="${f.id}" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:#374151"><i class="fas fa-edit" style="margin-right:6px;color:#3b82f6"></i>Editar</button>
+                  <button type="button" class="mov-menu-item" data-delete-fac="${f.id}" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:#ef4444"><i class="fas fa-trash" style="margin-right:6px"></i>Eliminar</button>
+                </div>
+              </div>
+            `;
+
+            // Botón ver abonos
+            const btnVerAbonos = `<button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px;color:#3b82f6" data-ver-abonos='${JSON.stringify({id:f.id,codigo:f.codigoRegistro,cliente:f.cliente,total:f.valorTotal,saldo:0,abonos:f.abonos||[]})}'><i class="fas fa-list-check"></i> Ver Abonos (${numAbonos})</button>`;
+
+            item.innerHTML = `
+              <div class="china-item-info">
+                <div class="china-item-title">Factura #${safeStr(f.codigoRegistro)} • ${fmtCOP(f.valorTotal || 0)}</div>
+                <div class="china-item-meta">
+                  Cliente: <strong>${safeStr(f.cliente)}</strong><br>
+                  Fecha: <strong>${safeStr(f.fechaHora)}</strong><br>
+                  Productos: ${productos}<br>
+                  <span style="color:#10b981;font-weight:600"><i class="fas fa-check-circle"></i> Pagado en ${numAbonos} abono${numAbonos > 1 ? 's' : ''}</span>
+                </div>
+              </div>
+              <div class="china-item-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span class="chip ok"><i class="fas fa-check-double"></i> Pagado</span>
+                ${btnVerAbonos}
+                ${menuHtml}
+              </div>
+            `;
+            frag.appendChild(item);
+          });
+          listPagados.appendChild(frag);
+          
+          // Event listeners para menú de opciones (tuerca)
+          attachFacMenuListeners(listPagados);
+          // Event listeners para ver abonos
+          attachVerAbonosListeners(listPagados);
         }
       }
 
@@ -1058,6 +1177,7 @@
       // Actualizar contadores
       if ($('chinaComprasCount')) $('chinaComprasCount').textContent = contadoPendiente.length + contadoRecibido.length;
       if ($('chinaPendientesCount')) $('chinaPendientesCount').textContent = creditoPendiente.length;
+      if ($('chinaPagadosCount')) $('chinaPagadosCount').textContent = creditoPagado.length;
     }
 
     // Variables para edición de facturas China
@@ -1152,6 +1272,63 @@
       } finally {
         setLoading(false);
       }
+    }
+
+    // Funciones para modal de Ver Abonos
+    function attachVerAbonosListeners(container){
+      container.querySelectorAll('button[data-ver-abonos]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          try {
+            const data = JSON.parse(btn.getAttribute('data-ver-abonos'));
+            openVerAbonosModal(data);
+          } catch (err) {
+            console.error('Error parsing abonos data:', err);
+          }
+        });
+      });
+    }
+
+    function openVerAbonosModal(data){
+      $('verAbonosFacCodigo').textContent = safeStr(data.codigo);
+      $('verAbonosFacCliente').textContent = safeStr(data.cliente);
+      $('verAbonosFacTotal').textContent = fmtCOP(data.total || 0);
+      
+      const abonos = data.abonos || [];
+      const totalAbonado = abonos.reduce((sum, a) => sum + Number(a.montoAbono || a.monto || 0), 0);
+      $('verAbonosFacAbonado').textContent = fmtCOP(totalAbonado);
+      $('verAbonosFacSaldo').textContent = fmtCOP(data.saldo || 0);
+      
+      const listEl = $('verAbonosList');
+      if (!abonos.length) {
+        listEl.innerHTML = '<div class="china-empty" style="padding:20px"><i class="fas fa-inbox"></i> Sin abonos registrados</div>';
+      } else {
+        // Ordenar por fecha
+        abonos.sort((a, b) => new Date(a.fechaAbono || a.fecha || 0) - new Date(b.fechaAbono || b.fecha || 0));
+        
+        let html = '<div style="display:flex;flex-direction:column;gap:8px">';
+        abonos.forEach((a, i) => {
+          const fecha = safeStr(a.fechaAbono || a.fecha);
+          const monto = Number(a.montoAbono || a.monto || 0);
+          html += `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb">
+              <div>
+                <span style="font-weight:600;color:#374151">Abono #${i + 1}</span>
+                <span style="color:#6b7280;font-size:12px;margin-left:8px">${fecha}</span>
+              </div>
+              <span style="font-weight:700;color:#10b981">${fmtCOP(monto)}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+        listEl.innerHTML = html;
+      }
+      
+      $('verAbonosModal').classList.add('open');
+    }
+
+    function closeVerAbonosModal(){
+      $('verAbonosModal').classList.remove('open');
     }
 
     async function loadCajaAsesores(){
