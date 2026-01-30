@@ -968,11 +968,34 @@
       let totalRecibido = 0;
       let totalPorRecibir = 0;
       let totalCredito = 0;
+      let totalIngresadoCaja = 0;
 
       // Calcular totales
-      contadoRecibido.forEach(f => totalRecibido += Number(f.valorTotal || 0));
+      // Contado recibido pero NO ingresado a caja aún (pendiente de ingresar)
+      contadoRecibido.forEach(f => {
+        if (f.ingresadoACaja === true) {
+          totalIngresadoCaja += Number(f.valorTotal || 0);
+        }
+      });
+      // Contado pendiente de recibir
       contadoPendiente.forEach(f => totalPorRecibir += Number(f.valorTotal || 0));
+      // Crédito pendiente (saldo por cobrar)
       creditoPendiente.forEach(f => totalCredito += getSaldoPendiente(f));
+      // Créditos pagados que fueron ingresados a caja
+      creditoPagado.forEach(f => {
+        if (f.ingresadoACaja === true) {
+          totalIngresadoCaja += Number(f.valorTotal || 0);
+        }
+      });
+      // Sumar abonos individuales ingresados a caja (de facturas pendientes)
+      creditoPendiente.forEach(f => {
+        const abonos = f.abonos || [];
+        abonos.forEach(a => {
+          if (a.ingresadoACaja === true) {
+            totalIngresadoCaja += Number(a.montoAbono || a.monto || 0);
+          }
+        });
+      });
 
       // Renderizar Contado (por recibir + recibidos)
       if (listCompras) {
@@ -1197,10 +1220,10 @@
       }
 
       // Actualizar estadísticas del dashboard
-      if ($('chinaStatCompras')) $('chinaStatCompras').textContent = fmtCOP(totalRecibido);
-      if ($('chinaStatPendientes')) $('chinaStatPendientes').textContent = fmtCOP(totalPorRecibir + totalCredito);
-      if ($('chinaStatBalance')) $('chinaStatBalance').textContent = fmtCOP(totalRecibido);
-      if ($('chinaStatIngresos')) $('chinaStatIngresos').textContent = fmtCOP(totalRecibido + totalPorRecibir);
+      if ($('chinaStatCompras')) $('chinaStatCompras').textContent = fmtCOP(totalIngresadoCaja); // DINERO RECIBIDO (en caja)
+      if ($('chinaStatPendientes')) $('chinaStatPendientes').textContent = fmtCOP(totalPorRecibir + totalCredito); // POR RECIBIR / CRÉDITOS
+      if ($('chinaStatBalance')) $('chinaStatBalance').textContent = fmtCOP(totalIngresadoCaja); // TOTAL RECIBIDO
+      if ($('chinaStatIngresos')) $('chinaStatIngresos').textContent = fmtCOP(totalIngresadoCaja + totalPorRecibir + totalCredito); // TOTAL VENTAS
       
       // Actualizar contadores
       if ($('chinaComprasCount')) $('chinaComprasCount').textContent = contadoPendiente.length + contadoRecibido.length;
