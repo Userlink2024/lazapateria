@@ -268,6 +268,32 @@
     </div>
   </div>
 
+  <!-- Modal Editar Factura China -->
+  <div class="modal" id="editFacModal" style="z-index:250">
+    <div class="modal-card" style="max-width:400px">
+      <div class="modal-head">
+        <h3><i class="fas fa-edit" style="color:var(--primary)"></i> Editar Factura</h3>
+        <button class="btn ghost" type="button" onclick="closeEditFacModal()"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="grid" style="gap:12px">
+          <div>
+            <label for="editFacValor">Valor Total</label>
+            <input id="editFacValor" type="text" inputmode="numeric" placeholder="0" class="valor-moneda" />
+          </div>
+          <div>
+            <label for="editFacCliente">Cliente</label>
+            <input id="editFacCliente" type="text" placeholder="Nombre del cliente" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn primary" type="button" onclick="saveEditFac()"><i class="fas fa-save"></i> Guardar</button>
+        <button class="btn ghost" type="button" onclick="closeEditFacModal()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Ver Todos los Movimientos -->
   <div class="modal" id="localMovModal" style="z-index:200">
     <div class="modal-card" style="max-width:900px;width:100%">
@@ -856,12 +882,17 @@
       const listCompras = $('chinaComprasList');
       const listPendientes = $('chinaPendientesList');
 
+      console.log('[China] Facturas recibidas para render:', facturas.length);
+      facturas.forEach(f => console.log('[China] Factura:', f.codigoRegistro, 'tipoPago:', f.tipoPago, 'recibido:', f.recibido));
+
       // Separar: Contado = necesita recibido/verificado, Crédito = Pendientes de pago
       // Contado sin recibir = pendiente de recibir dinero
       // Contado recibido = ya recibido
       const contadoPendiente = facturas.filter(f => f.tipoPago === 'contado' && f.recibido !== true);
       const contadoRecibido = facturas.filter(f => f.tipoPago === 'contado' && f.recibido === true);
       const creditoPendiente = facturas.filter(f => f.tipoPago === 'credito' && (f.saldoPendiente > 0 || f.recibido !== true));
+      
+      console.log('[China] Contado pendiente:', contadoPendiente.length, 'Contado recibido:', contadoRecibido.length, 'Crédito pendiente:', creditoPendiente.length);
 
       let totalRecibido = 0;
       let totalPorRecibir = 0;
@@ -899,6 +930,16 @@
               }
             }
             
+            const menuHtml = `
+              <div class="mov-menu" style="position:relative;display:inline-block;margin-left:8px">
+                <button type="button" class="btn ghost mov-menu-btn" style="padding:4px 8px;font-size:12px" data-fac-menu="${f.id}"><i class="fas fa-cog"></i></button>
+                <div class="mov-menu-dropdown" id="facMenu_${f.id}" style="display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;min-width:120px">
+                  <button type="button" class="mov-menu-item" data-edit-fac="${f.id}" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:#374151"><i class="fas fa-edit" style="margin-right:6px;color:#3b82f6"></i>Editar</button>
+                  <button type="button" class="mov-menu-item" data-delete-fac="${f.id}" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:#ef4444"><i class="fas fa-trash" style="margin-right:6px"></i>Eliminar</button>
+                </div>
+              </div>
+            `;
+
             item.innerHTML = `
               <div class="china-item-info">
                 <div class="china-item-title">Factura #${safeStr(f.codigoRegistro)} • ${fmtCOP(f.valorTotal || 0)}</div>
@@ -909,13 +950,17 @@
                   Método: <strong>${esTransferencia ? '💳 Transferencia' : '💵 Efectivo'}</strong>
                 </div>
               </div>
-              <div class="china-item-actions">
+              <div class="china-item-actions" style="display:flex;align-items:center;gap:6px">
                 ${btnHtml}
+                ${menuHtml}
               </div>
             `;
             frag.appendChild(item);
           });
           listCompras.appendChild(frag);
+
+          // Event listeners para menú de opciones (tuerca)
+          attachFacMenuListeners(listCompras);
 
           // Event listeners para recibir/verificar
           Array.from(listCompras.querySelectorAll('button[data-recibir-fac]')).forEach(btn => {
@@ -956,6 +1001,17 @@
             const item = document.createElement('div');
             item.className = 'china-item';
             const productos = (f.productos || []).map(p => safeStr(p.referenciaColor)).join(', ') || 'Sin productos';
+            
+            const menuHtml = `
+              <div class="mov-menu" style="position:relative;display:inline-block;margin-left:8px">
+                <button type="button" class="btn ghost mov-menu-btn" style="padding:4px 8px;font-size:12px" data-fac-menu="${f.id}"><i class="fas fa-cog"></i></button>
+                <div class="mov-menu-dropdown" id="facMenu_${f.id}" style="display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;min-width:120px">
+                  <button type="button" class="mov-menu-item" data-edit-fac="${f.id}" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:#374151"><i class="fas fa-edit" style="margin-right:6px;color:#3b82f6"></i>Editar</button>
+                  <button type="button" class="mov-menu-item" data-delete-fac="${f.id}" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:#ef4444"><i class="fas fa-trash" style="margin-right:6px"></i>Eliminar</button>
+                </div>
+              </div>
+            `;
+
             item.innerHTML = `
               <div class="china-item-info">
                 <div class="china-item-title">Factura #${safeStr(f.codigoRegistro)} • Saldo: ${fmtCOP(saldo)}</div>
@@ -966,13 +1022,17 @@
                   Total factura: <strong>${fmtCOP(f.valorTotal || 0)}</strong>
                 </div>
               </div>
-              <div class="china-item-actions">
+              <div class="china-item-actions" style="display:flex;align-items:center;gap:6px">
                 <span class="chip danger"><i class="fas fa-clock"></i> Crédito Pendiente</span>
+                ${menuHtml}
               </div>
             `;
             frag.appendChild(item);
           });
           listPendientes.appendChild(frag);
+          
+          // Event listeners para menú de opciones (tuerca)
+          attachFacMenuListeners(listPendientes);
         }
       }
 
@@ -985,6 +1045,100 @@
       // Actualizar contadores
       if ($('chinaComprasCount')) $('chinaComprasCount').textContent = contadoPendiente.length + contadoRecibido.length;
       if ($('chinaPendientesCount')) $('chinaPendientesCount').textContent = creditoPendiente.length;
+    }
+
+    // Variables para edición de facturas China
+    let editingFacId = null;
+    let editingFacData = null;
+
+    function attachFacMenuListeners(container){
+      // Toggle menú dropdown
+      container.querySelectorAll('button[data-fac-menu]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const facId = btn.getAttribute('data-fac-menu');
+          const menu = document.getElementById('facMenu_' + facId);
+          if (!menu) return;
+          // Cerrar otros menús
+          document.querySelectorAll('.mov-menu-dropdown').forEach(m => {
+            if (m.id !== 'facMenu_' + facId) m.style.display = 'none';
+          });
+          menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+      });
+
+      // Editar factura
+      container.querySelectorAll('button[data-edit-fac]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const facId = btn.getAttribute('data-edit-fac');
+          const fac = facturasChina.find(f => f.id === facId);
+          if (fac) openEditFacModal(fac);
+        });
+      });
+
+      // Eliminar factura
+      container.querySelectorAll('button[data-delete-fac]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const facId = btn.getAttribute('data-delete-fac');
+          if (!confirm('¿Eliminar esta factura? Esta acción no se puede deshacer.')) return;
+          setLoading(true);
+          try {
+            await COL_FACTURAS_CHINA.doc(facId).delete();
+            showSuccessMessage('Factura eliminada correctamente');
+            await loadFacturasChina();
+          } catch (err) {
+            showError('Error al eliminar: ' + (err.message || err));
+          } finally {
+            setLoading(false);
+          }
+        });
+      });
+    }
+
+    function openEditFacModal(fac){
+      editingFacId = fac.id;
+      editingFacData = fac;
+      $('editFacValor').value = formatMonedaCO(fac.valorTotal || 0);
+      $('editFacCliente').value = fac.cliente || '';
+      $('editFacModal').classList.add('open');
+    }
+
+    function closeEditFacModal(){
+      editingFacId = null;
+      editingFacData = null;
+      $('editFacModal').classList.remove('open');
+    }
+
+    async function saveEditFac(){
+      if (!editingFacId) return;
+      const nuevoValor = parseMonedaCO($('editFacValor').value);
+      const nuevoCliente = safeStr($('editFacCliente').value);
+      if (nuevoValor <= 0) { showError('El valor debe ser mayor a 0'); return; }
+      if (!nuevoCliente) { showError('El cliente es requerido'); return; }
+      setLoading(true);
+      try {
+        const updateData = {
+          valorTotal: nuevoValor,
+          cliente: nuevoCliente,
+          updatedAt: firebase.firestore.Timestamp.fromDate(new Date()),
+          updatedBy: safeStr(currentUser && currentUser.nombreCompleto)
+        };
+        // Si era crédito, actualizar saldo pendiente también
+        if (editingFacData && editingFacData.tipoPago === 'credito') {
+          const abonosTotal = (editingFacData.abonos || []).reduce((acc, a) => acc + Number(a.monto || 0), 0);
+          updateData.saldoPendiente = Math.max(0, nuevoValor - abonosTotal);
+        }
+        await COL_FACTURAS_CHINA.doc(editingFacId).update(updateData);
+        closeEditFacModal();
+        showSuccessMessage('Factura actualizada correctamente');
+        await loadFacturasChina();
+      } catch (e) {
+        showError('Error al guardar: ' + (e.message || e));
+      } finally {
+        setLoading(false);
+      }
     }
 
     async function loadCajaAsesores(){
