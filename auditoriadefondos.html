@@ -946,12 +946,22 @@
         return abonos.reduce((sum, a) => sum + Number(a.montoAbono || a.monto || 0), 0);
       };
 
+      // Función para obtener saldo pendiente (maneja el caso de saldoPendiente = 0 correctamente)
+      const getSaldoPendiente = (f) => {
+        // Si saldoPendiente existe (incluso si es 0), usarlo
+        if (f.saldoPendiente !== undefined && f.saldoPendiente !== null) {
+          return Number(f.saldoPendiente);
+        }
+        // Si no existe, usar valorTotal como fallback (factura nueva sin abonos)
+        return Number(f.valorTotal || 0);
+      };
+
       const contadoPendiente = facturas.filter(f => getTipoPagoNorm(f) === 'contado' && f.recibido !== true);
       const contadoRecibido = facturas.filter(f => getTipoPagoNorm(f) === 'contado' && f.recibido === true);
       // Crédito pendiente: saldo > 0
-      const creditoPendiente = facturas.filter(f => getTipoPagoNorm(f) === 'credito' && Number(f.saldoPendiente || f.valorTotal || 0) > 0);
+      const creditoPendiente = facturas.filter(f => getTipoPagoNorm(f) === 'credito' && getSaldoPendiente(f) > 0);
       // Crédito pagado: saldo = 0 (completamente abonado)
-      const creditoPagado = facturas.filter(f => getTipoPagoNorm(f) === 'credito' && Number(f.saldoPendiente || 0) <= 0 && Number(f.valorTotal || 0) > 0);
+      const creditoPagado = facturas.filter(f => getTipoPagoNorm(f) === 'credito' && getSaldoPendiente(f) <= 0 && Number(f.valorTotal || 0) > 0);
       
       console.log('[China] Contado pendiente:', contadoPendiente.length, 'Contado recibido:', contadoRecibido.length, 'Crédito pendiente:', creditoPendiente.length, 'Crédito pagado:', creditoPagado.length);
 
@@ -962,7 +972,7 @@
       // Calcular totales
       contadoRecibido.forEach(f => totalRecibido += Number(f.valorTotal || 0));
       contadoPendiente.forEach(f => totalPorRecibir += Number(f.valorTotal || 0));
-      creditoPendiente.forEach(f => totalCredito += Number(f.saldoPendiente || f.valorTotal || 0));
+      creditoPendiente.forEach(f => totalCredito += getSaldoPendiente(f));
 
       // Renderizar Contado (por recibir + recibidos)
       if (listCompras) {
@@ -1058,7 +1068,7 @@
           listPendientes.innerHTML = '';
           const frag = document.createDocumentFragment();
           creditoPendiente.forEach(f => {
-            const saldo = Number(f.saldoPendiente || f.valorTotal || 0);
+            const saldo = getSaldoPendiente(f);
             const totalAbonado = getTotalAbonado(f);
             const numAbonos = (f.abonos || []).length;
             const item = document.createElement('div');
