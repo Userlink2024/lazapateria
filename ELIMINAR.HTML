@@ -307,6 +307,57 @@
         </div>
     </div>
 
+    <div id="editModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; padding:20px; z-index:10000;">
+        <div style="background:#fff; width:100%; max-width:760px; border-radius:12px; border:1px solid var(--border); box-shadow:0 10px 40px rgba(0,0,0,0.18); overflow:hidden;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border);">
+                <h3 style="margin:0; font-size:16px;">Editar novedad</h3>
+                <button type="button" onclick="cerrarEditar()" style="border:0; background:transparent; font-size:20px; cursor:pointer; padding:4px 10px;">×</button>
+            </div>
+            <div style="padding:14px 16px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                    <div>
+                        <label style="font-weight:800; color:#495057;">Código</label>
+                        <input id="editCodigo" type="text" style="width:100%; padding:8px 12px; border:1px solid #ced4da; border-radius:4px;" />
+                    </div>
+                    <div>
+                        <label style="font-weight:800; color:#495057;">Asesor</label>
+                        <input id="editAsesor" type="text" style="width:100%; padding:8px 12px; border:1px solid #ced4da; border-radius:4px;" />
+                    </div>
+                    <div style="grid-column:1 / -1;">
+                        <label style="font-weight:800; color:#495057;">Cliente</label>
+                        <input id="editCliente" type="text" style="width:100%; padding:8px 12px; border:1px solid #ced4da; border-radius:4px;" />
+                    </div>
+                    <div style="grid-column:1 / -1;">
+                        <label style="font-weight:800; color:#495057;">Descripción</label>
+                        <textarea id="editDesc" rows="4" style="width:100%; padding:8px 12px; border:1px solid #ced4da; border-radius:4px;"></textarea>
+                    </div>
+                    <div>
+                        <label style="font-weight:800; color:#495057;">Valor flete</label>
+                        <input id="editFleteValor" type="number" min="0" step="1" style="width:100%; padding:8px 12px; border:1px solid #ced4da; border-radius:4px;" />
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:10px; padding-top:22px;">
+                        <label style="display:flex; align-items:center; gap:10px; font-weight:800; color:#495057;">
+                            <input id="editFletePendiente" type="checkbox" />
+                            Flete pendiente (valor por definir)
+                        </label>
+                        <label style="display:flex; align-items:center; gap:10px; font-weight:800; color:#495057;">
+                            <input id="editFletePagado" type="checkbox" />
+                            Flete pagado
+                        </label>
+                        <label style="display:flex; align-items:center; gap:10px; font-weight:800; color:#495057;">
+                            <input id="editResuelta" type="checkbox" />
+                            Resuelta
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div style="padding:12px 16px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" onclick="cerrarEditar()" class="btn-secondary">Cancelar</button>
+                <button type="button" onclick="guardarEdicion()" class="btn-success"><i class="fas fa-save"></i> Guardar cambios</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
@@ -536,7 +587,12 @@
                         <td>${asesor}</td>
                         <td class="date-cell">${fecha}</td>
                         <td>${desc}</td>
-                        <td><button type="button" class="btn-secondary" onclick="verDetalle('${id}')">Ver</button></td>
+                        <td>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;">
+                                <button type="button" class="btn-secondary" onclick="verDetalle('${id}')">Ver</button>
+                                <button type="button" class="btn-success" onclick="abrirEditar('${id}')"><i class="fas fa-pen"></i> Editar</button>
+                            </div>
+                        </td>
                     </tr>
                 `;
             }).join('');
@@ -714,6 +770,126 @@
         function cerrarDetalle() {
             const m = document.getElementById('detalleModal');
             m.style.display = 'none';
+        }
+
+        let editingId = null;
+
+        function abrirEditar(id) {
+            const n = todasLasReferencias.find(x => String(x.id) === String(id));
+            if (!n) {
+                mostrarError('No se encontró el registro para editar.');
+                return;
+            }
+            editingId = String(id);
+            document.getElementById('editCodigo').value = String(n.codigo_unico || n.registroId || '');
+            document.getElementById('editAsesor').value = String(n.asesor || '');
+            document.getElementById('editCliente').value = String(n.cliente || '');
+            document.getElementById('editDesc').value = String(n.descripcion || '');
+
+            const fletePendiente = n.fletePendiente === true;
+            const fleteValor = Number(n.fleteValor || 0);
+            const fletePagado = n.fletePagado === true;
+            const resuelta = n.resuelta === true;
+
+            document.getElementById('editFletePendiente').checked = fletePendiente;
+            document.getElementById('editFleteValor').value = fletePendiente ? '' : (Number.isFinite(fleteValor) && fleteValor > 0 ? String(fleteValor) : '0');
+            document.getElementById('editFletePagado').checked = (!fletePendiente && fletePagado);
+            document.getElementById('editResuelta').checked = resuelta;
+
+            syncEditFleteControls();
+            const m = document.getElementById('editModal');
+            m.style.display = 'flex';
+        }
+
+        function cerrarEditar() {
+            const m = document.getElementById('editModal');
+            m.style.display = 'none';
+            editingId = null;
+        }
+
+        function syncEditFleteControls() {
+            const pend = document.getElementById('editFletePendiente').checked === true;
+            const fleteEl = document.getElementById('editFleteValor');
+            const pagadoEl = document.getElementById('editFletePagado');
+            const resueltaEl = document.getElementById('editResuelta');
+
+            if (pend) {
+                fleteEl.value = '';
+                fleteEl.disabled = true;
+                pagadoEl.checked = false;
+                pagadoEl.disabled = true;
+            } else {
+                fleteEl.disabled = false;
+                pagadoEl.disabled = false;
+            }
+
+            const flete = pend ? 0 : Number(fleteEl.value || 0);
+            const requiresPago = Number.isFinite(flete) && flete > 0;
+            if (requiresPago && pagadoEl.checked !== true) {
+                resueltaEl.checked = false;
+                resueltaEl.disabled = true;
+            } else {
+                resueltaEl.disabled = false;
+            }
+        }
+
+        document.getElementById('editFletePendiente').addEventListener('change', syncEditFleteControls);
+        document.getElementById('editFletePagado').addEventListener('change', syncEditFleteControls);
+        document.getElementById('editFleteValor').addEventListener('input', syncEditFleteControls);
+
+        async function guardarEdicion() {
+            if (!editingId) return;
+
+            const codigo = String(document.getElementById('editCodigo').value || '').trim();
+            const asesor = String(document.getElementById('editAsesor').value || '').trim();
+            const cliente = String(document.getElementById('editCliente').value || '').trim();
+            const descripcion = String(document.getElementById('editDesc').value || '').trim();
+
+            const fletePendiente = document.getElementById('editFletePendiente').checked === true;
+            const fleteRaw = fletePendiente ? 0 : Number(document.getElementById('editFleteValor').value || 0);
+            if (!Number.isFinite(fleteRaw) || fleteRaw < 0) {
+                mostrarError('Valor de flete inválido.');
+                return;
+            }
+            const fleteValor = fletePendiente ? 0 : fleteRaw;
+
+            const requiresPago = !fletePendiente && Number.isFinite(fleteValor) && fleteValor > 0;
+            const fletePagado = requiresPago ? (document.getElementById('editFletePagado').checked === true) : false;
+            const resuelta = document.getElementById('editResuelta').checked === true;
+
+            if (resuelta && requiresPago && !fletePagado) {
+                mostrarError('Para marcar como resuelta, primero debes marcar el flete como pagado.');
+                return;
+            }
+
+            try {
+                const now = firebase.firestore.Timestamp.fromDate(new Date());
+                const update = {
+                    codigo_unico: codigo,
+                    asesor: asesor,
+                    cliente: cliente,
+                    descripcion: descripcion,
+                    fletePendiente: fletePendiente,
+                    fleteValor: fleteValor,
+                    fletePagado: fletePagado,
+                    resuelta: resuelta,
+                    updatedAt: now
+                };
+
+                await db.collection('novedades').doc(editingId).update(update);
+
+                const idx = todasLasReferencias.findIndex(x => String(x.id) === String(editingId));
+                if (idx >= 0) {
+                    todasLasReferencias[idx] = Object.assign({}, todasLasReferencias[idx], update);
+                }
+
+                cerrarEditar();
+                aplicarFiltros();
+                mostrarExito('Novedad actualizada correctamente.');
+            } catch (e) {
+                console.error('Error actualizando novedad:', e);
+                mostrarError('Error actualizando novedad: ' + (e && e.message ? e.message : String(e)));
+            }
         }
 
         // Utilidades
