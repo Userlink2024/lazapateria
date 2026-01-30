@@ -276,19 +276,6 @@
         </div>
     </div>
 
-    <div class="modal" id="appModal">
-        <div class="modal-card" style="width:min(560px,100%);">
-            <div class="modal-head">
-                <h3 id="appModalTitle">Mensaje</h3>
-                <button class="x" type="button" id="appModalClose">×</button>
-            </div>
-            <div class="modal-body" style="padding-top:12px;">
-                <div id="appModalMessage" style="color:var(--text);font-weight:700;line-height:1.35;"></div>
-            </div>
-            <div class="modal-actions" id="appModalActions"></div>
-        </div>
-    </div>
-
     <div class="modal" id="historyNovedadesModal">
         <div class="modal-card">
             <div class="modal-head">
@@ -301,6 +288,39 @@
             </div>
             <div class="modal-actions">
                 <button class="btn" type="button" id="historyNovedadesClose2">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="appModal">
+        <div class="modal-card" style="width:min(560px,100%);">
+            <div class="modal-head">
+                <h3 id="appModalTitle">Mensaje</h3>
+                <button class="btn" type="button" id="appModalClose">Cerrar</button>
+            </div>
+            <div class="modal-body">
+                <div id="appModalMessage" style="white-space:pre-wrap;"></div>
+            </div>
+            <div class="modal-foot" id="appModalActions"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="conciliarFleteModal">
+        <div class="modal-card" style="width:min(460px,100%);">
+            <div class="modal-head">
+                <h3>Conciliar flete</h3>
+                <button class="btn" type="button" id="conciliarFleteClose">Cerrar</button>
+            </div>
+            <div class="modal-body">
+                <div class="mini" style="margin-bottom:10px;">Ingresa el valor del flete para continuar.</div>
+                <div>
+                    <label for="conciliarFleteValor" style="display:block; font-weight:900; margin-bottom:6px;">Valor del flete</label>
+                    <input id="conciliarFleteValor" type="number" step="1" min="0" placeholder="0" style="width:100%;" />
+                </div>
+            </div>
+            <div class="modal-foot" style="display:flex; gap:10px; justify-content:flex-end;">
+                <button class="btn" type="button" id="conciliarFleteCancelar">Cancelar</button>
+                <button class="btn primary" type="button" id="conciliarFleteGuardar">Guardar</button>
             </div>
         </div>
     </div>
@@ -417,6 +437,51 @@
 
         $('appModalClose').addEventListener('click', () => closeAppModal(null));
         $('appModal').addEventListener('click', (e) => { if (e.target === $('appModal')) closeAppModal(null); });
+
+        let conciliarNovedadId = null;
+
+        function openConciliarFleteModal(novedadId, currentValue) {
+            conciliarNovedadId = String(novedadId || '');
+            $('conciliarFleteValor').value = Number.isFinite(Number(currentValue)) && Number(currentValue) > 0 ? Number(currentValue) : '';
+            $('conciliarFleteModal').classList.add('open');
+            setTimeout(() => { try { $('conciliarFleteValor').focus(); } catch(e){} }, 60);
+        }
+
+        function closeConciliarFleteModal() {
+            $('conciliarFleteClose').blur();
+            document.body.focus();
+            $('conciliarFleteModal').classList.remove('open');
+            conciliarNovedadId = null;
+            $('conciliarFleteValor').value = '';
+        }
+
+        async function saveConciliarFleteModal() {
+            const id = String(conciliarNovedadId || '');
+            if (!id) return;
+            const raw = String($('conciliarFleteValor').value || '').trim();
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                await modalAlert('Valor inválido', 'Ingresa un número válido para el flete.');
+                return;
+            }
+
+            try {
+                await db.collection('novedades').doc(id).update({
+                    fleteValor: parsed,
+                    fletePendiente: false,
+                    updatedAt: firebase.firestore.Timestamp.fromDate(new Date())
+                });
+                closeConciliarFleteModal();
+                await modalAlert('Listo', 'Flete conciliado. Ahora puedes marcarlo como pagado y luego marcar la novedad como resuelta.', 'Entendido');
+            } catch (e) {
+                await modalAlert('Error', 'No se pudo guardar el valor del flete.');
+            }
+        }
+
+        $('conciliarFleteClose').addEventListener('click', closeConciliarFleteModal);
+        $('conciliarFleteCancelar').addEventListener('click', closeConciliarFleteModal);
+        $('conciliarFleteGuardar').addEventListener('click', saveConciliarFleteModal);
+        $('conciliarFleteModal').addEventListener('click', (e) => { if (e.target === $('conciliarFleteModal')) closeConciliarFleteModal(); });
 
         function openHistoryNovedadesModal() {
             $('historyNovedadesModal').classList.add('open');
@@ -839,6 +904,14 @@
                     if (btnConciliar && conciliarBox) {
                         btnConciliar.addEventListener('click', (e) => {
                             e.stopPropagation();
+                            const fletePendiente = n.fletePendiente === true;
+                            const fleteValor = Number(n.fleteValor || 0);
+                            const hasFleteValor = Number.isFinite(fleteValor) && fleteValor > 0;
+                            // Si el flete está pendiente o sin valor, pedir valor en modal primero
+                            if (fletePendiente || !hasFleteValor) {
+                                openConciliarFleteModal(n.id, hasFleteValor ? fleteValor : '');
+                                return;
+                            }
                             conciliarBox.style.display = conciliarBox.style.display === 'none' ? 'flex' : 'none';
                         });
                     }
@@ -869,34 +942,8 @@
                                 const pendiente = n.fletePendiente === true;
 
                                 if (nuevo && (pendiente || !(Number.isFinite(v) && v > 0))) {
-                                    const raw = window.prompt('Ingresa el valor del flete para resolver esta novedad:', '');
-                                    if (raw == null) return;
-                                    const parsed = Number(String(raw).replace(/[^0-9.-]/g, ''));
-                                    if (!Number.isFinite(parsed) || parsed < 0) {
-                                        await modalAlert('Valor inválido', 'Ingresa un número válido para el flete.');
-                                        return;
-                                    }
-                                    v = parsed;
-
-                                    const baseUpdate = {
-                                        fleteValor: v,
-                                        fletePendiente: false,
-                                        updatedAt: now
-                                    };
-
-                                    const needsPagoAfter = Number.isFinite(v) && v > 0;
-                                    if (needsPagoAfter && n.fletePagado !== true) {
-                                        await db.collection('novedades').doc(n.id).update(baseUpdate);
-                                        await modalAlert('No permitido', 'Primero marca el flete como pagado para poder marcar la novedad como resuelta.');
-                                        return;
-                                    }
-
-                                    await db.collection('novedades').doc(n.id).update({
-                                        ...baseUpdate,
-                                        resuelta: true,
-                                        resueltaPor: String(datosUsuario.nombreCompleto || ''),
-                                        resueltaAt: now
-                                    });
+                                    await modalAlert('Conciliar primero', 'Primero debes conciliar el valor del flete usando el botón <strong>Conciliar</strong>.');
+                                    openConciliarFleteModal(n.id, '');
                                     return;
                                 }
 
