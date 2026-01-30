@@ -888,9 +888,22 @@
       // Separar: Contado = necesita recibido/verificado, Crédito = Pendientes de pago
       // Contado sin recibir = pendiente de recibir dinero
       // Contado recibido = ya recibido
-      const contadoPendiente = facturas.filter(f => f.tipoPago === 'contado' && f.recibido !== true);
-      const contadoRecibido = facturas.filter(f => f.tipoPago === 'contado' && f.recibido === true);
-      const creditoPendiente = facturas.filter(f => f.tipoPago === 'credito' && (f.saldoPendiente > 0 || f.recibido !== true));
+      const getTipoPagoNorm = (f) => {
+        const raw = safeStr((f && (f.tipoPago ?? f.tipo_pago ?? f.tipo)) || '').toLowerCase();
+        if (raw.includes('cont')) return 'contado';
+        if (raw.includes('cred')) return 'credito';
+        return raw;
+      };
+      const getMetodoPagoNorm = (f) => {
+        const raw = safeStr((f && (f.metodoPago ?? f.metodo_pago ?? f.metodo)) || '').toLowerCase();
+        if (raw.includes('trans')) return 'transferencia';
+        if (raw.includes('efec')) return 'efectivo';
+        return raw;
+      };
+
+      const contadoPendiente = facturas.filter(f => getTipoPagoNorm(f) === 'contado' && f.recibido !== true);
+      const contadoRecibido = facturas.filter(f => getTipoPagoNorm(f) === 'contado' && f.recibido === true);
+      const creditoPendiente = facturas.filter(f => getTipoPagoNorm(f) === 'credito' && (Number(f.saldoPendiente || 0) > 0 || f.recibido !== true));
       
       console.log('[China] Contado pendiente:', contadoPendiente.length, 'Contado recibido:', contadoRecibido.length, 'Crédito pendiente:', creditoPendiente.length);
 
@@ -914,7 +927,7 @@
           allContado.forEach(f => {
             const item = document.createElement('div');
             item.className = 'china-item';
-            const metodo = f.metodoPago || 'efectivo';
+            const metodo = getMetodoPagoNorm(f) || 'efectivo';
             const esTransferencia = metodo === 'transferencia';
             const productos = (f.productos || []).map(p => safeStr(p.referenciaColor)).join(', ') || 'Sin productos';
             const recibido = f.recibido === true;
