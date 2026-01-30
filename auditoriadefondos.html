@@ -242,6 +242,32 @@
     </div>
   </div>
 
+  <!-- Modal Editar Movimiento -->
+  <div class="modal" id="editMovModal">
+    <div class="modal-card" style="max-width:400px">
+      <div class="modal-head">
+        <h3><i class="fas fa-edit" style="color:var(--primary)"></i> Editar Movimiento</h3>
+        <button class="btn ghost" type="button" onclick="closeEditMovModal()"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="grid" style="gap:12px">
+          <div>
+            <label for="editMovValor">Valor</label>
+            <input id="editMovValor" type="number" min="0" step="1" placeholder="0" />
+          </div>
+          <div>
+            <label for="editMovObs">Observaciones</label>
+            <textarea id="editMovObs" rows="3" placeholder="Observaciones..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn primary" type="button" onclick="saveEditMov()"><i class="fas fa-save"></i> Guardar</button>
+        <button class="btn ghost" type="button" onclick="closeEditMovModal()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="cajaModal">
     <div class="modal-card caja-modal-card">
       <div class="modal-head">
@@ -1015,6 +1041,95 @@
       }
     }
 
+    // Variables para edición de movimientos
+    let editingMovId = null;
+    let editingMovData = null;
+
+    function attachMovMenuListeners(listEl, items){
+      // Toggle menú
+      listEl.querySelectorAll('button[data-mov-menu]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = btn.getAttribute('data-mov-menu');
+          const menu = $('movMenu_' + id);
+          if (!menu) return;
+          // Cerrar otros menús
+          document.querySelectorAll('.mov-menu-dropdown').forEach(m => { if (m !== menu) m.style.display = 'none'; });
+          menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+      });
+
+      // Eliminar
+      listEl.querySelectorAll('button[data-delete-mov]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-delete-mov');
+          if (!confirm('¿Estás seguro de eliminar este movimiento?')) return;
+          setLoading(true);
+          try {
+            await COL_CAJA.doc(id).delete();
+            showSuccessMessage('✅ Movimiento eliminado');
+            await cajaCargar();
+          } catch (e) {
+            showError('Error al eliminar: ' + (e.message || e));
+          } finally {
+            setLoading(false);
+          }
+        });
+      });
+
+      // Editar
+      listEl.querySelectorAll('button[data-edit-mov]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-edit-mov');
+          const mov = items.find(m => String(m.id) === String(id));
+          if (!mov) return;
+          openEditMovModal(mov);
+        });
+      });
+
+      // Cerrar menús al hacer click fuera
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.mov-menu-dropdown').forEach(m => m.style.display = 'none');
+      });
+    }
+
+    function openEditMovModal(mov){
+      editingMovId = mov.id;
+      editingMovData = mov;
+      $('editMovValor').value = mov.valor || 0;
+      $('editMovObs').value = mov.observaciones || '';
+      $('editMovModal').classList.add('open');
+    }
+
+    function closeEditMovModal(){
+      editingMovId = null;
+      editingMovData = null;
+      $('editMovModal').classList.remove('open');
+    }
+
+    async function saveEditMov(){
+      if (!editingMovId) return;
+      const nuevoValor = Number($('editMovValor').value || 0);
+      const nuevaObs = safeStr($('editMovObs').value);
+      if (nuevoValor <= 0) { showError('El valor debe ser mayor a 0'); return; }
+      setLoading(true);
+      try {
+        await COL_CAJA.doc(editingMovId).update({
+          valor: nuevoValor,
+          observaciones: nuevaObs,
+          updatedAt: firebase.firestore.Timestamp.fromDate(new Date()),
+          updatedBy: safeStr(currentUser && currentUser.nombreCompleto)
+        });
+        closeEditMovModal();
+        showSuccessMessage('✅ Movimiento actualizado');
+        await cajaCargar();
+      } catch (e) {
+        showError('Error al actualizar: ' + (e.message || e));
+      } finally {
+        setLoading(false);
+      }
+    }
+
     async function loadPendingFletes(){
       const listEl = $('localFletesList');
       if (!listEl) return;
@@ -1028,13 +1143,27 @@
         novedades = [];
       }
 
+      // Obtener IDs de novedades ya agregadas a caja
+      let novedadesEnCaja = new Set();
+      try {
+        const cajaSnap = await COL_CAJA.where('categoria', '==', 'flete').limit(500).get();
+        cajaSnap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data && data.novedadId) novedadesEnCaja.add(String(data.novedadId));
+        });
+      } catch (e) { /* ignore */ }
+
       const pending = (novedades || []).filter(n => {
         if (!n) return false;
+        // Si ya está en caja, no mostrar
+        if (novedadesEnCaja.has(String(n.id))) return false;
         const val = Number(n.fleteValor || 0);
         const pendiente = n.fletePendiente === true;
         const pagado = n.fletePagado === true;
+        const resuelta = n.resuelta === true;
+        // Mostrar si: tiene flete pendiente, o tiene flete > 0 (pagado o no), o está resuelta con flete
         if (pendiente) return true;
-        if (val > 0 && !pagado) return true;
+        if (val > 0) return true; // Incluir aunque esté pagado si no está en caja
         return false;
       }).slice(0, 120);
 
@@ -1063,10 +1192,10 @@
               <div class="item-title">${code} • ${cliente}</div>
               <div class="hint">Asesor: <strong>${asesor}</strong></div>
               <div class="hint">${desc || '—'}</div>
-              <div class="hint">Valor: <strong>${fmtCOP(val)}</strong> • Pendiente: <strong>${pend ? 'SI' : 'NO'}</strong></div>
+              <div class="hint">Valor: <strong>${fmtCOP(val)}</strong> • ${pend ? '<span style="color:#f59e0b">⏳ Flete Pendiente</span>' : (n.fletePagado ? '<span style="color:#10b981">✓ Flete Pagado</span>' : '<span style="color:#6b7280">Sin pagar</span>')}${n.resuelta ? ' • <span style="color:#8b5cf6">Resuelta</span>' : ''}</div>
             </div>
             <div class="toolbar" style="justify-content:flex-end">
-              <button class="btn ghost" type="button" data-add-flete="${n.id}"><i class="fas fa-plus"></i> Agregar</button>
+              <button class="btn primary" type="button" data-add-flete="${n.id}" style="background:linear-gradient(135deg,#3b82f6,#2563eb)"><i class="fas fa-plus"></i> Agregar a Caja</button>
             </div>
           </div>
         `;
@@ -1097,6 +1226,7 @@
               asesor: safeStr(n.asesor || ''),
               fletePendiente: n.fletePendiente === true
             });
+            showSuccessMessage('✅ Flete agregado a caja');
             await cajaCargar();
           } catch (e) {
             showError(e && e.message ? e.message : String(e));
@@ -2049,9 +2179,10 @@
           return safeStr(m.tipo) || 'Movimiento';
         }
 
-        function renderMovementCard(m){
+        function renderMovementCard(m, isLocal){
           const item = document.createElement('div');
           item.className = 'item';
+          item.style.position = 'relative';
           const fechaTxt = safeStr(m.fechaStr) || (tsToDate(m.fecha || m.createdAt) ? tsToDate(m.fecha || m.createdAt).toLocaleDateString('es-CO') : '');
           const proveedor = safeStr(m.proveedor);
           const factura = safeStr(m.factura);
@@ -2072,15 +2203,26 @@
           const tipo = safeStr(m.tipo);
           const val = Number(m.valor || 0);
 
+          const menuHtml = isLocal ? `
+            <div class="mov-menu" style="position:relative;display:inline-block">
+              <button type="button" class="btn ghost mov-menu-btn" style="padding:4px 8px;font-size:12px" data-mov-menu="${m.id}"><i class="fas fa-cog"></i></button>
+              <div class="mov-menu-dropdown" id="movMenu_${m.id}" style="display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;min-width:120px">
+                <button type="button" class="mov-menu-item" data-edit-mov="${m.id}" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:#374151"><i class="fas fa-edit" style="margin-right:6px;color:#3b82f6"></i>Editar</button>
+                <button type="button" class="mov-menu-item" data-delete-mov="${m.id}" style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:13px;color:#ef4444"><i class="fas fa-trash" style="margin-right:6px"></i>Eliminar</button>
+              </div>
+            </div>
+          ` : '';
+
           item.innerHTML = `
             <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
-              <div>
+              <div style="flex:1">
                 <div class="item-title">${moveTitle(m)} • ${fmtCOP(val)}</div>
                 <div class="hint">${metaParts || ''}</div>
                 <div class="hint">Usuario: <strong>${safeStr(m.usuario) || 'N/A'}</strong></div>
               </div>
-              <div class="chips">
+              <div style="display:flex;align-items:center;gap:8px">
                 <span class="chip ${tipo === 'egreso' ? 'danger' : (tipo === 'pendiente' ? 'danger' : 'ok')}"><i class="fas fa-circle"></i> ${tipo || '—'}</span>
+                ${menuHtml}
               </div>
             </div>
             ${obs ? `<div class="hint" style="margin-top:10px">${obs}</div>` : ''}
@@ -2102,7 +2244,7 @@
         tirasItems.forEach(m => {
           if (safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor') return;
           accumulate(m, false);
-          tirasFrag.appendChild(renderMovementCard(m));
+          tirasFrag.appendChild(renderMovementCard(m, false));
         });
         if (tirasList) {
           if (!tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor')).length) {
@@ -2115,11 +2257,15 @@
         const localFrag = document.createDocumentFragment();
         localItems.forEach(m => {
           accumulate(m, true);
-          localFrag.appendChild(renderMovementCard(m));
+          localFrag.appendChild(renderMovementCard(m, true));
         });
         if (localList) {
           if (!localItems.length) localList.innerHTML = '<div class="hint">Sin movimientos en el rango.</div>';
-          else localList.appendChild(localFrag);
+          else {
+            localList.appendChild(localFrag);
+            // Agregar event listeners para menú de opciones
+            attachMovMenuListeners(localList, localItems);
+          }
         }
 
         // Actualizar resumen de movimientos de China
