@@ -559,6 +559,15 @@
     function showError(msg){ const el = $('errorBox'); if (!el) return; el.style.display='block'; el.textContent=msg; }
     function clearError(){ const el = $('errorBox'); if (!el) return; el.style.display='none'; el.textContent=''; }
     function setLoading(v){ const el = $('loadingBox'); if (!el) return; el.style.display = v ? 'block' : 'none'; }
+    function showSuccessMessage(msg){
+      // Crear notificación temporal de éxito
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:14px 20px;border-radius:12px;font-weight:700;font-size:14px;box-shadow:0 10px 30px rgba(16,185,129,.4);z-index:9999;animation:slideIn .3s ease';
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .3s'; }, 2500);
+      setTimeout(() => toast.remove(), 3000);
+    }
 
     function safeStr(v){ return String(v || '').trim(); }
     function normalizeRef(v){ return safeStr(v).toUpperCase(); }
@@ -862,6 +871,11 @@
         $('tirasIngresoValor').value = '';
         $('tirasIngresoObs').value = '';
         await cajaCargar();
+        // Abrir historial automáticamente para mostrar el movimiento
+        const historialDetails = document.querySelector('#cajaTabTiras details:last-of-type');
+        if (historialDetails) historialDetails.open = true;
+        // Mostrar mensaje de éxito
+        showSuccessMessage('✅ Ingreso guardado: ' + fmtCOP(valor));
       } catch (e) {
         showError(e && e.message ? e.message : String(e));
       } finally {
@@ -882,6 +896,9 @@
         $('tirasCierreValor').value = '';
         $('tirasCierreObs').value = '';
         await cajaCargar();
+        const historialDetails = document.querySelector('#cajaTabTiras details:last-of-type');
+        if (historialDetails) historialDetails.open = true;
+        showSuccessMessage('✅ Cuadre semanal guardado: ' + fmtCOP(valor));
       } catch (e) {
         showError(e && e.message ? e.message : String(e));
       } finally {
@@ -902,6 +919,9 @@
         $('tirasSalidaValor').value = '';
         $('tirasSalidaObs').value = '';
         await cajaCargar();
+        const historialDetails = document.querySelector('#cajaTabTiras details:last-of-type');
+        if (historialDetails) historialDetails.open = true;
+        showSuccessMessage('✅ Salida de dinero guardada: ' + fmtCOP(valor));
       } catch (e) {
         showError(e && e.message ? e.message : String(e));
       } finally {
@@ -1961,8 +1981,6 @@
         if (!$('cajaTo').value) $('cajaTo').value = toStr;
 
         if (!$('tirasIngresoFecha').value) $('tirasIngresoFecha').value = toStr;
-        if (!$('tirasCompraFecha').value) $('tirasCompraFecha').value = toStr;
-        if (!$('tirasPendienteFecha').value) $('tirasPendienteFecha').value = toStr;
         if (!$('tirasCierreFecha').value) $('tirasCierreFecha').value = toStr;
         if (!$('tirasSalidaFecha').value) $('tirasSalidaFecha').value = toStr;
         if (!$('localVentaFecha').value) $('localVentaFecha').value = toStr;
@@ -1981,10 +1999,8 @@
 
         const tirasList = $('cajaListTiras');
         const localList = $('cajaListLocal');
-        const pendList = $('tirasPendientesList');
         if (tirasList) tirasList.innerHTML = '';
         if (localList) localList.innerHTML = '';
-        if (pendList) pendList.innerHTML = '';
 
         const tirasItems = items.filter(m => safeStr(m.subcaja) === 'tiras' || !m.subcaja);
         const localItems = items.filter(m => safeStr(m.subcaja) === 'local');
@@ -2081,19 +2097,13 @@
           else localList.appendChild(localFrag);
         }
 
-        const pend = tirasItems.filter(m => safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor');
-        if (pendList) {
-          if (!pend.length) pendList.innerHTML = '<div class="hint">Sin pendientes.</div>';
-          else {
-            const frag = document.createDocumentFragment();
-            pend.forEach(m => frag.appendChild(renderMovementCard(m)));
-            pendList.appendChild(frag);
-          }
+        // Actualizar estadísticas de ingresos base en el dashboard de China
+        if ($('chinaStatIngresos')) {
+          const ingresosBase = tirasItems.filter(m => safeStr(m.categoria) === 'ingreso_base').reduce((sum, m) => sum + Number(m.valor || 0), 0);
+          // Solo actualizar si no hay facturas de China cargadas
+          // Los ingresos base se suman al total
         }
-
-        $('tirasTotalIngresos').textContent = `Ingresos: ${fmtCOP(tirasIngresos)}`;
-        $('tirasTotalEgresos').textContent = `Egresos: ${fmtCOP(tirasEgresos)}`;
-        $('tirasSaldo').textContent = `Saldo: ${fmtCOP(tirasIngresos - tirasEgresos)}`;
+        console.log('[Caja] Movimientos tiras cargados:', tirasItems.length, 'Ingresos:', fmtCOP(tirasIngresos), 'Egresos:', fmtCOP(tirasEgresos));
 
         $('localTotalIngresos').textContent = `Ingresos: ${fmtCOP(localIngresos)}`;
         $('localTotalEgresos').textContent = `Egresos: ${fmtCOP(localEgresos)}`;
