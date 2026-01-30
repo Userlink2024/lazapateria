@@ -1317,7 +1317,11 @@
       });
     }
 
+    // Variable para guardar datos del modal de abonos actual
+    let currentAbonosModalData = null;
+
     function openVerAbonosModal(data){
+      currentAbonosModalData = data;
       $('verAbonosFacCodigo').textContent = safeStr(data.codigo);
       $('verAbonosFacCliente').textContent = safeStr(data.cliente);
       $('verAbonosFacTotal').textContent = fmtCOP(data.total || 0);
@@ -1338,21 +1342,90 @@
         abonos.forEach((a, i) => {
           const fecha = safeStr(a.fechaAbono || a.fecha);
           const monto = Number(a.montoAbono || a.monto || 0);
+          const yaIngresado = a.ingresadoACaja === true;
+          
+          const btnCaja = yaIngresado
+            ? `<span style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:10px;padding:3px 8px;border-radius:12px"><i class="fas fa-vault"></i> En Caja</span>`
+            : `<button type="button" class="btn-ingresar-abono" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer" data-abono-index="${i}" data-abono-monto="${monto}" data-abono-fecha="${fecha}"><i class="fas fa-cash-register"></i> A Caja</button>`;
+          
           html += `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb">
               <div>
                 <span style="font-weight:600;color:#374151">Abono #${i + 1}</span>
                 <span style="color:#6b7280;font-size:12px;margin-left:8px">${fecha}</span>
               </div>
-              <span style="font-weight:700;color:#10b981">${fmtCOP(monto)}</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-weight:700;color:#10b981">${fmtCOP(monto)}</span>
+                ${btnCaja}
+              </div>
             </div>
           `;
         });
         html += '</div>';
         listEl.innerHTML = html;
+        
+        // Attach listeners para botones de ingresar abono a caja
+        listEl.querySelectorAll('.btn-ingresar-abono').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const idx = parseInt(btn.getAttribute('data-abono-index'));
+            const monto = Number(btn.getAttribute('data-abono-monto') || 0);
+            const fecha = btn.getAttribute('data-abono-fecha') || '';
+            await ingresarAbonoACaja(idx, monto, fecha);
+          });
+        });
       }
       
       $('verAbonosModal').classList.add('open');
+    }
+
+    async function ingresarAbonoACaja(abonoIndex, monto, fecha){
+      if (!currentAbonosModalData) return;
+      const facId = currentAbonosModalData.id;
+      const cliente = currentAbonosModalData.cliente;
+      const factura = currentAbonosModalData.codigo;
+      
+      if (!confirm(`¿Ingresar abono de ${fmtCOP(monto)} a Caja Menor China?\n\nFactura #${factura}\nCliente: ${cliente}\nFecha abono: ${fecha}`)) return;
+      
+      setLoading(true);
+      try {
+        // 1. Crear movimiento de ingreso en caja_menor
+        const movData = {
+          tipo: 'ingreso',
+          categoria: 'abono_credito',
+          valor: monto,
+          fecha: todayISO(),
+          cliente: cliente,
+          factura: factura,
+          observaciones: `Abono factura #${factura} - Cliente: ${cliente} - Fecha abono: ${fecha}`,
+          createdAt: firebase.firestore.Timestamp.fromDate(new Date()),
+          createdBy: safeStr(currentUser && currentUser.nombreCompleto),
+          origen: 'tiras'
+        };
+        await COL_CAJA.add(movData);
+        
+        // 2. Marcar el abono específico como ingresado en la factura
+        const facDoc = await COL_FACTURAS_CHINA.doc(facId).get();
+        if (facDoc.exists) {
+          const facData = facDoc.data();
+          const abonos = facData.abonos || [];
+          if (abonos[abonoIndex]) {
+            abonos[abonoIndex].ingresadoACaja = true;
+            abonos[abonoIndex].ingresadoACajaAt = new Date().toISOString();
+            abonos[abonoIndex].ingresadoACajaPor = safeStr(currentUser && currentUser.nombreCompleto);
+            await COL_FACTURAS_CHINA.doc(facId).update({ abonos: abonos });
+          }
+        }
+        
+        showSuccessMessage(`Abono de ${fmtCOP(monto)} ingresado a Caja Menor China`);
+        closeVerAbonosModal();
+        await loadFacturasChina();
+        await cajaCargar();
+      } catch (err) {
+        showError('Error al ingresar abono a caja: ' + (err.message || err));
+      } finally {
+        setLoading(false);
+      }
     }
 
     function closeVerAbonosModal(){
