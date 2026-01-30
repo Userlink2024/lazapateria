@@ -471,6 +471,22 @@
                     fletePendiente: false,
                     updatedAt: firebase.firestore.Timestamp.fromDate(new Date())
                 });
+                try {
+                    const doc = await db.collection('novedades').doc(id).get();
+                    if (doc && doc.exists) {
+                        const data = doc.data() || {};
+                        const updated = Object.assign({ id: doc.id }, data);
+                        if (Array.isArray(allPendingNovedades)) {
+                            const i = allPendingNovedades.findIndex(x => String(x && x.id) === String(id));
+                            if (i >= 0) allPendingNovedades[i] = updated;
+                        }
+                        if (Array.isArray(allNovedades)) {
+                            const j = allNovedades.findIndex(x => String(x && x.id) === String(id));
+                            if (j >= 0) allNovedades[j] = updated;
+                        }
+                        try { renderNovedadesLists(allNovedades); } catch (e) { /* ignore */ }
+                    }
+                } catch (e) { /* ignore */ }
                 closeConciliarFleteModal();
                 await modalAlert('Listo', 'Flete conciliado. Ahora puedes marcarlo como pagado y luego marcar la novedad como resuelta.', 'Entendido');
             } catch (e) {
@@ -881,9 +897,9 @@
                     <div class="actions" style="margin-top:10px;">
                         <div class="mini">Código: ${code}</div>
                         <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-                            ${isAdmin ? '<button class="btn primary" type="button" data-action="conciliar">Conciliar</button>' : ''}
-                            ${isAdmin ? `
-                              <div class="conciliar-box" style="display:none; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                            ${isAdmin && fletePendiente ? '<button class="btn primary" type="button" data-action="conciliar">Conciliar</button>' : ''}
+                            ${isAdmin && !fletePendiente ? `
+                              <div class="conciliar-box" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
                                 ${isAdmin && hasFlete ? (fletePagado
                                   ? '<button class="btn" type="button" data-action="toggleFlete">Marcar flete pendiente</button>'
                                   : '<button class="btn" type="button" data-action="toggleFlete">Marcar flete pagado</button>')
@@ -901,18 +917,12 @@
                 if (isAdmin) {
                     const btnConciliar = card.querySelector('[data-action="conciliar"]');
                     const conciliarBox = card.querySelector('.conciliar-box');
-                    if (btnConciliar && conciliarBox) {
+                    if (btnConciliar) {
                         btnConciliar.addEventListener('click', (e) => {
                             e.stopPropagation();
-                            const fletePendiente = n.fletePendiente === true;
                             const fleteValor = Number(n.fleteValor || 0);
                             const hasFleteValor = Number.isFinite(fleteValor) && fleteValor > 0;
-                            // Si el flete está pendiente o sin valor, pedir valor en modal primero
-                            if (fletePendiente || !hasFleteValor) {
-                                openConciliarFleteModal(n.id, hasFleteValor ? fleteValor : '');
-                                return;
-                            }
-                            conciliarBox.style.display = conciliarBox.style.display === 'none' ? 'flex' : 'none';
+                            openConciliarFleteModal(n.id, hasFleteValor ? fleteValor : '');
                         });
                     }
                     const btnFlete = card.querySelector('[data-action="toggleFlete"]');
@@ -941,7 +951,7 @@
                                 let v = Number(n.fleteValor || 0);
                                 const pendiente = n.fletePendiente === true;
 
-                                if (nuevo && (pendiente || !(Number.isFinite(v) && v > 0))) {
+                                if (nuevo && pendiente) {
                                     await modalAlert('Conciliar primero', 'Primero debes conciliar el valor del flete usando el botón <strong>Conciliar</strong>.');
                                     openConciliarFleteModal(n.id, '');
                                     return;
