@@ -817,7 +817,19 @@
       // Cargar facturas de China al abrir
       if (cajaActiveTab === 'tiras') loadFacturasChina();
     }
-    function closeCaja(){ $('cajaModal').classList.remove('open'); }
+    function closeCaja(){ 
+      $('cajaModal').classList.remove('open');
+      // Cancelar listeners en tiempo real al cerrar
+      if (unsubscribeFacturasChina) {
+        unsubscribeFacturasChina();
+        unsubscribeFacturasChina = null;
+      }
+      if (unsubscribeCajaMovimientos) {
+        unsubscribeCajaMovimientos();
+        unsubscribeCajaMovimientos = null;
+      }
+      console.log('[RT] Listeners cancelados al cerrar modal');
+    }
 
     function setModeAuditoria(){
       $('modeModal').classList.remove('open');
@@ -870,48 +882,65 @@
 
     let cachedCajaAsesores = [];
 
-    // Función para cargar facturas de China (chinainventario)
+    // Variables para listeners en tiempo real
+    let unsubscribeFacturasChina = null;
+    let unsubscribeCajaMovimientos = null;
+
+    // Función para filtrar facturas por rango de fechas
+    function filterFacturasByDate(facturas, fromStr, toStr) {
+      return facturas.filter(f => {
+        let fechaStr = safeStr(f.fechaHora) || safeStr(f.fecha) || '';
+        if (fechaStr.includes('T')) fechaStr = fechaStr.split('T')[0];
+        if (fechaStr.includes(' ')) fechaStr = fechaStr.split(' ')[0];
+        if (!fechaStr) {
+          if (f.createdAt && f.createdAt.toDate) {
+            const d = f.createdAt.toDate();
+            fechaStr = d.toISOString().split('T')[0];
+          }
+        }
+        if (!fechaStr) return false;
+        const d = new Date(fechaStr + 'T12:00:00');
+        const from = new Date(fromStr + 'T00:00:00');
+        const to = new Date(toStr + 'T23:59:59');
+        return d >= from && d <= to;
+      });
+    }
+
+    // Función para iniciar listener en tiempo real de facturas China
+    function startFacturasChinaListener(){
+      const fromStr = safeStr($('cajaFrom').value) || todayISO();
+      const toStr = safeStr($('cajaTo').value) || todayISO();
+      console.log('[China RT] Iniciando listener tiempo real, rango:', fromStr, '-', toStr);
+
+      // Cancelar listener anterior si existe
+      if (unsubscribeFacturasChina) {
+        unsubscribeFacturasChina();
+        unsubscribeFacturasChina = null;
+      }
+
+      // Crear nuevo listener en tiempo real
+      unsubscribeFacturasChina = COL_FACTURAS_CHINA.orderBy('createdAt', 'desc').limit(500)
+        .onSnapshot(snap => {
+          facturasChina = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+          facturasLoaded = true;
+          console.log('[China RT] Actualización en tiempo real, total:', facturasChina.length);
+          
+          const filtered = filterFacturasByDate(facturasChina, fromStr, toStr);
+          console.log('[China RT] Facturas filtradas:', filtered.length);
+          renderFacturasChina(filtered);
+        }, err => {
+          console.error('[China RT] Error en listener:', err);
+        });
+    }
+
+    // Función para cargar facturas de China (compatible con código existente)
     async function loadFacturasChina(){
       const fromStr = safeStr($('cajaFrom').value) || todayISO();
       const toStr = safeStr($('cajaTo').value) || todayISO();
       console.log('[China] Cargando facturas, rango:', fromStr, '-', toStr);
 
-      try {
-        const snap = await COL_FACTURAS_CHINA.orderBy('createdAt', 'desc').limit(500).get();
-        facturasChina = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
-        facturasLoaded = true;
-        console.log('[China] Total facturas cargadas:', facturasChina.length);
-        if (facturasChina.length > 0) {
-          console.log('[China] Ejemplo de factura:', facturasChina[0]);
-        }
-
-        // Filtrar por rango de fechas
-        const filtered = facturasChina.filter(f => {
-          // Intentar obtener fecha de múltiples campos
-          let fechaStr = safeStr(f.fechaHora) || safeStr(f.fecha) || '';
-          // Si viene con formato datetime, extraer solo la fecha
-          if (fechaStr.includes('T')) fechaStr = fechaStr.split('T')[0];
-          if (fechaStr.includes(' ')) fechaStr = fechaStr.split(' ')[0];
-          if (!fechaStr) {
-            // Intentar desde createdAt
-            if (f.createdAt && f.createdAt.toDate) {
-              const d = f.createdAt.toDate();
-              fechaStr = d.toISOString().split('T')[0];
-            }
-          }
-          if (!fechaStr) return false;
-          const d = new Date(fechaStr + 'T12:00:00');
-          const from = new Date(fromStr + 'T00:00:00');
-          const to = new Date(toStr + 'T23:59:59');
-          return d >= from && d <= to;
-        });
-        console.log('[China] Facturas filtradas por fecha:', filtered.length);
-
-        renderFacturasChina(filtered);
-      } catch (e) {
-        console.error('[China] Error cargando facturas:', e);
-        facturasChina = [];
-      }
+      // Iniciar listener en tiempo real
+      startFacturasChinaListener();
     }
 
     function renderFacturasChina(facturas){
@@ -2909,6 +2938,106 @@
       return item;
     }
 
+    // Función para renderizar movimientos de caja (separada para reutilizar)
+    function renderCajaMovimientos(itemsAll, fromStr, toStr) {
+      const items = itemsAll.filter(m => {
+        const dt = m.fecha || m.createdAt;
+        return dateInRange(dt, fromStr, toStr);
+      });
+
+      const tirasList = $('cajaListTiras');
+      const localList = $('cajaListLocal');
+      if (tirasList) tirasList.innerHTML = '';
+      if (localList) localList.innerHTML = '';
+
+      const tirasItems = items.filter(m => safeStr(m.subcaja) === 'tiras' || !m.subcaja);
+      const localItems = items.filter(m => safeStr(m.subcaja) === 'local');
+
+      let tirasIngresos = 0;
+      let tirasEgresos = 0;
+      let localIngresos = 0;
+      let localEgresos = 0;
+
+      function accumulate(m, isLocal){
+        const tipo = safeStr(m.tipo);
+        const val = Number(m.valor || 0);
+        if (tipo === 'ingreso') {
+          if (isLocal) localIngresos += val; else tirasIngresos += val;
+        } else if (tipo === 'egreso') {
+          if (isLocal) localEgresos += val; else tirasEgresos += val;
+        }
+      }
+
+      const tirasFrag = document.createDocumentFragment();
+      const tirasFiltered = tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor'));
+      tirasFiltered.forEach(m => {
+        accumulate(m, false);
+        tirasFrag.appendChild(renderMovementCard(m, true));
+      });
+      if (tirasList) {
+        if (!tirasFiltered.length) {
+          tirasList.innerHTML = '<div class="hint">Sin movimientos en el rango.</div>';
+        } else {
+          tirasList.appendChild(tirasFrag);
+          attachMovMenuListeners(tirasList, tirasFiltered);
+        }
+      }
+
+      const localFrag = document.createDocumentFragment();
+      localItems.forEach(m => {
+        accumulate(m, true);
+        localFrag.appendChild(renderMovementCard(m, true));
+      });
+      if (localList) {
+        if (!localItems.length) localList.innerHTML = '<div class="hint">Sin movimientos en el rango.</div>';
+        else {
+          localList.appendChild(localFrag);
+          attachMovMenuListeners(localList, localItems);
+        }
+      }
+
+      // Actualizar resumen de movimientos de China
+      if ($('tirasResumenIngresos')) $('tirasResumenIngresos').textContent = fmtCOP(tirasIngresos);
+      if ($('tirasResumenEgresos')) $('tirasResumenEgresos').textContent = fmtCOP(tirasEgresos);
+      if ($('tirasResumenSaldo')) $('tirasResumenSaldo').textContent = fmtCOP(tirasIngresos - tirasEgresos);
+      if ($('tirasMovCount')) $('tirasMovCount').textContent = tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor')).length;
+      console.log('[Caja RT] Movimientos tiras:', tirasItems.length, 'Ingresos:', fmtCOP(tirasIngresos), 'Egresos:', fmtCOP(tirasEgresos));
+
+      $('localTotalIngresos').textContent = `Ingresos: ${fmtCOP(localIngresos)}`;
+      $('localTotalEgresos').textContent = `Egresos: ${fmtCOP(localEgresos)}`;
+      $('localSaldo').textContent = `Saldo: ${fmtCOP(localIngresos - localEgresos)}`;
+
+      // Actualizar dashboard resumen de Local
+      if ($('localResumenIngresos')) $('localResumenIngresos').textContent = fmtCOP(localIngresos);
+      if ($('localResumenEgresos')) $('localResumenEgresos').textContent = fmtCOP(localEgresos);
+      if ($('localResumenSaldo')) $('localResumenSaldo').textContent = fmtCOP(localIngresos - localEgresos);
+      if ($('localMovCount')) $('localMovCount').textContent = localItems.length;
+      console.log('[Caja RT] Movimientos local:', localItems.length, 'Ingresos:', fmtCOP(localIngresos), 'Egresos:', fmtCOP(localEgresos));
+    }
+
+    // Función para iniciar listener en tiempo real de movimientos de caja
+    function startCajaMovimientosListener() {
+      const fromStr = safeStr($('cajaFrom').value) || todayISO();
+      const toStr = safeStr($('cajaTo').value) || todayISO();
+      console.log('[Caja RT] Iniciando listener tiempo real, rango:', fromStr, '-', toStr);
+
+      // Cancelar listener anterior si existe
+      if (unsubscribeCajaMovimientos) {
+        unsubscribeCajaMovimientos();
+        unsubscribeCajaMovimientos = null;
+      }
+
+      // Crear nuevo listener en tiempo real
+      unsubscribeCajaMovimientos = COL_CAJA.orderBy('createdAt', 'desc').limit(800)
+        .onSnapshot(snap => {
+          const itemsAll = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+          console.log('[Caja RT] Actualización en tiempo real, total:', itemsAll.length);
+          renderCajaMovimientos(itemsAll, fromStr, toStr);
+        }, err => {
+          console.error('[Caja RT] Error en listener:', err);
+        });
+    }
+
     async function cajaCargar(){
       clearError();
       setLoading(true);
@@ -2927,84 +3056,8 @@
 
         await loadCajaAsesores();
 
-        const snap = await COL_CAJA.orderBy('createdAt', 'desc').limit(800).get();
-        const itemsAll = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
-
-        const items = itemsAll.filter(m => {
-          const dt = m.fecha || m.createdAt;
-          return dateInRange(dt, fromStr, toStr);
-        });
-
-        const tirasList = $('cajaListTiras');
-        const localList = $('cajaListLocal');
-        if (tirasList) tirasList.innerHTML = '';
-        if (localList) localList.innerHTML = '';
-
-        const tirasItems = items.filter(m => safeStr(m.subcaja) === 'tiras' || !m.subcaja);
-        const localItems = items.filter(m => safeStr(m.subcaja) === 'local');
-
-        let tirasIngresos = 0;
-        let tirasEgresos = 0;
-        let localIngresos = 0;
-        let localEgresos = 0;
-
-        function accumulate(m, isLocal){
-          const tipo = safeStr(m.tipo);
-          const val = Number(m.valor || 0);
-          if (tipo === 'ingreso') {
-            if (isLocal) localIngresos += val; else tirasIngresos += val;
-          } else if (tipo === 'egreso') {
-            if (isLocal) localEgresos += val; else tirasEgresos += val;
-          }
-        }
-
-        const tirasFrag = document.createDocumentFragment();
-        const tirasFiltered = tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor'));
-        tirasFiltered.forEach(m => {
-          accumulate(m, false);
-          tirasFrag.appendChild(renderMovementCard(m, true)); // true para mostrar menú de opciones
-        });
-        if (tirasList) {
-          if (!tirasFiltered.length) {
-            tirasList.innerHTML = '<div class="hint">Sin movimientos en el rango.</div>';
-          } else {
-            tirasList.appendChild(tirasFrag);
-            // Agregar event listeners para menú de opciones en movimientos de China
-            attachMovMenuListeners(tirasList, tirasFiltered);
-          }
-        }
-
-        const localFrag = document.createDocumentFragment();
-        localItems.forEach(m => {
-          accumulate(m, true);
-          localFrag.appendChild(renderMovementCard(m, true));
-        });
-        if (localList) {
-          if (!localItems.length) localList.innerHTML = '<div class="hint">Sin movimientos en el rango.</div>';
-          else {
-            localList.appendChild(localFrag);
-            // Agregar event listeners para menú de opciones
-            attachMovMenuListeners(localList, localItems);
-          }
-        }
-
-        // Actualizar resumen de movimientos de China
-        if ($('tirasResumenIngresos')) $('tirasResumenIngresos').textContent = fmtCOP(tirasIngresos);
-        if ($('tirasResumenEgresos')) $('tirasResumenEgresos').textContent = fmtCOP(tirasEgresos);
-        if ($('tirasResumenSaldo')) $('tirasResumenSaldo').textContent = fmtCOP(tirasIngresos - tirasEgresos);
-        if ($('tirasMovCount')) $('tirasMovCount').textContent = tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor')).length;
-        console.log('[Caja] Movimientos tiras cargados:', tirasItems.length, 'Ingresos:', fmtCOP(tirasIngresos), 'Egresos:', fmtCOP(tirasEgresos));
-
-        $('localTotalIngresos').textContent = `Ingresos: ${fmtCOP(localIngresos)}`;
-        $('localTotalEgresos').textContent = `Egresos: ${fmtCOP(localEgresos)}`;
-        $('localSaldo').textContent = `Saldo: ${fmtCOP(localIngresos - localEgresos)}`;
-
-        // Actualizar dashboard resumen de Local
-        if ($('localResumenIngresos')) $('localResumenIngresos').textContent = fmtCOP(localIngresos);
-        if ($('localResumenEgresos')) $('localResumenEgresos').textContent = fmtCOP(localEgresos);
-        if ($('localResumenSaldo')) $('localResumenSaldo').textContent = fmtCOP(localIngresos - localEgresos);
-        if ($('localMovCount')) $('localMovCount').textContent = localItems.length;
-        console.log('[Caja] Movimientos local cargados:', localItems.length, 'Ingresos:', fmtCOP(localIngresos), 'Egresos:', fmtCOP(localEgresos));
+        // Iniciar listener en tiempo real
+        startCajaMovimientosListener();
 
         await loadPendingFletes();
       }catch(e){
