@@ -222,7 +222,10 @@
   <div class="modal" id="accesoRestringidoModal">
     <div class="modal-card" style="max-width:360px">
       <div class="modal-head" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border-radius:12px 12px 0 0">
-        <h3 style="display:flex;align-items:center;gap:8px"><i class="fas fa-lock"></i> Acceso Restringido</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%">
+          <h3 style="display:flex;align-items:center;gap:8px"><i class="fas fa-lock"></i> Acceso Restringido</h3>
+          <button class="btn ghost" type="button" id="btnConfigClaveCaja" style="color:#fff;border:1px solid rgba(255,255,255,.35)"><i class="fas fa-cog"></i></button>
+        </div>
       </div>
       <div class="modal-body" style="padding:24px">
         <p style="text-align:center;color:#374151;margin-bottom:16px">Por favor, ingrese la clave para acceder a Caja Menor:</p>
@@ -232,6 +235,38 @@
       <div class="modal-actions" style="display:flex;gap:10px;justify-content:center;padding:16px">
         <button class="btn primary" type="button" id="btnAceptarClave" style="background:linear-gradient(135deg,#2563eb,#1d4ed8)"><i class="fas fa-check"></i> Aceptar</button>
         <button class="btn ghost" type="button" id="btnCancelarClave"><i class="fas fa-xmark"></i> Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="cambiarClaveCajaModal">
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-head" style="background:linear-gradient(135deg,#0f172a,#111827);color:#fff;border-radius:12px 12px 0 0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%">
+          <h3 style="display:flex;align-items:center;gap:8px"><i class="fas fa-key"></i> Cambiar contraseña</h3>
+          <button class="btn ghost" type="button" id="btnCerrarCambiarClaveCaja" style="color:#fff;border:1px solid rgba(255,255,255,.22)"><i class="fas fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="modal-body" style="padding:20px">
+        <div class="grid" style="grid-template-columns:1fr;gap:12px">
+          <div>
+            <label for="claveCajaAnterior">Contraseña anterior</label>
+            <input type="password" id="claveCajaAnterior" placeholder="Anterior" style="width:100%">
+          </div>
+          <div>
+            <label for="claveCajaNueva">Nueva contraseña</label>
+            <input type="password" id="claveCajaNueva" placeholder="Nueva" style="width:100%">
+          </div>
+          <div>
+            <label for="claveCajaNueva2">Repetir nueva contraseña</label>
+            <input type="password" id="claveCajaNueva2" placeholder="Repetir" style="width:100%">
+          </div>
+          <div id="cambiarClaveCajaMsg" style="display:none;font-size:12px;text-align:center"></div>
+        </div>
+      </div>
+      <div class="modal-actions" style="display:flex;gap:10px;justify-content:center;padding:16px">
+        <button class="btn primary" type="button" id="btnGuardarClaveCaja" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fas fa-floppy-disk"></i> Guardar</button>
+        <button class="btn ghost" type="button" id="btnCancelarCambiarClaveCaja"><i class="fas fa-xmark"></i> Cancelar</button>
       </div>
     </div>
   </div>
@@ -2058,13 +2093,75 @@
         $('errorClave').style.display = 'none';
         $('claveAccesoCaja').focus();
       });
-      
-      // Validar clave de acceso a Caja Menor
-      const CLAVE_CAJA_MENOR = 'caja2026'; // Clave de acceso
+
+      function getCajaPass(){
+        const saved = localStorage.getItem('claveCajaMenor');
+        return safeStr(saved) || 'caja2026';
+      }
+
+      function setCajaPass(newPass){
+        localStorage.setItem('claveCajaMenor', String(newPass || ''));
+      }
+
+      function showCambiarClaveCajaMsg(msg, isError){
+        const el = $('cambiarClaveCajaMsg');
+        if (!el) return;
+        el.style.display = msg ? '' : 'none';
+        el.style.color = isError ? '#dc2626' : '#059669';
+        el.textContent = msg || '';
+      }
+
+      $('btnConfigClaveCaja').addEventListener('click', (e) => {
+        e.preventDefault();
+        $('cambiarClaveCajaModal').classList.add('open');
+        $('claveCajaAnterior').value = '';
+        $('claveCajaNueva').value = '';
+        $('claveCajaNueva2').value = '';
+        showCambiarClaveCajaMsg('', false);
+        $('claveCajaAnterior').focus();
+      });
+
+      $('btnCerrarCambiarClaveCaja').addEventListener('click', () => {
+        $('cambiarClaveCajaModal').classList.remove('open');
+      });
+
+      $('btnCancelarCambiarClaveCaja').addEventListener('click', () => {
+        $('cambiarClaveCajaModal').classList.remove('open');
+      });
+
+      $('btnGuardarClaveCaja').addEventListener('click', () => {
+        const anterior = safeStr($('claveCajaAnterior').value);
+        const nueva = safeStr($('claveCajaNueva').value);
+        const repetir = safeStr($('claveCajaNueva2').value);
+        const actual = getCajaPass();
+
+        if (!anterior || !nueva || !repetir) {
+          showCambiarClaveCajaMsg('Completa todos los campos.', true);
+          return;
+        }
+        if (anterior !== actual) {
+          showCambiarClaveCajaMsg('La contraseña anterior no coincide.', true);
+          return;
+        }
+        if (nueva.length < 4) {
+          showCambiarClaveCajaMsg('La nueva contraseña debe tener al menos 4 caracteres.', true);
+          return;
+        }
+        if (nueva !== repetir) {
+          showCambiarClaveCajaMsg('La nueva contraseña no coincide en ambos campos.', true);
+          return;
+        }
+
+        setCajaPass(nueva);
+        showCambiarClaveCajaMsg('Contraseña actualizada.', false);
+        setTimeout(() => {
+          $('cambiarClaveCajaModal').classList.remove('open');
+        }, 600);
+      });
       
       $('btnAceptarClave').addEventListener('click', async () => {
         const claveIngresada = $('claveAccesoCaja').value.trim();
-        if (claveIngresada === CLAVE_CAJA_MENOR) {
+        if (claveIngresada === getCajaPass()) {
           $('accesoRestringidoModal').classList.remove('open');
           setModeCaja();
           setCajaTab('tiras');
