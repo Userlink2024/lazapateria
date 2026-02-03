@@ -217,6 +217,12 @@
             opacity: 1;
             visibility: visible;
         }
+
+        #confirmModal.modal-overlay,
+        #messageModal.modal-overlay {
+            z-index: 10001;
+        }
+
         .modal-content {
             background-color: #fff;
             padding: 30px;
@@ -1064,6 +1070,16 @@
             }
         }
 
+        function parseCOP(value) {
+            const digits = String(value || '').replace(/[^0-9]/g, '');
+            return digits ? parseInt(digits, 10) : 0;
+        }
+
+        function formatCOP(value) {
+            const num = typeof value === 'number' ? value : parseCOP(value);
+            return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(num);
+        }
+
         // ==================== FUNCIONES DE CONSIGNACIONES ====================
         function abrirConsignacionesModal() {
             document.getElementById('consignacionesModal').classList.add('active');
@@ -1075,7 +1091,7 @@
         }
 
         function cargarConsignacionesInter() {
-            collectionConsignacionesInter.orderBy('fecha', 'desc').onSnapshot(snapshot => {
+            collectionConsignacionesInter.orderBy('timestamp', 'asc').onSnapshot(snapshot => {
                 consignacionesInter = [];
                 snapshot.forEach(doc => {
                     const consignacion = doc.data();
@@ -1117,7 +1133,8 @@
                             ${consignacion.verificado ? 'disabled' : ''}>
                     </td>
                     <td>
-                        <input type="number" value="${consignacion.valor || ''}" 
+                        <input type="text" value="${formatCOP(consignacion.valor || 0)}" 
+                            oninput="this.value=this.value.replace(/[^0-9]/g,''); this.value=formatCOP(this.value);"
                             onchange="actualizarConsignacionInter('${consignacion.id}', 'valor', this.value)"
                             ${consignacion.verificado ? 'disabled' : ''}>
                     </td>
@@ -1162,7 +1179,7 @@
         async function actualizarConsignacionInter(id, campo, valor) {
             try {
                 const updateData = {};
-                updateData[campo] = campo === 'valor' ? parseFloat(valor) || 0 : valor;
+                updateData[campo] = campo === 'valor' ? parseCOP(valor) : valor;
                 await collectionConsignacionesInter.doc(id).update(updateData);
             } catch (error) {
                 console.error("Error al actualizar consignación: ", error);
