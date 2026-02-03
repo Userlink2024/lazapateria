@@ -311,6 +311,119 @@
             width: auto;
             margin-bottom: 0; /* Override default input margin-bottom */
         }
+
+        /* Estilos para tabla de consignaciones */
+        .consignaciones-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .consignaciones-table th,
+        .consignaciones-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .consignaciones-table th {
+            background-color: var(--inter-primary);
+            color: white;
+        }
+        .consignaciones-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .consignaciones-table tr:hover {
+            background-color: #f1f1f1;
+        }
+        .consignaciones-table input[type="date"],
+        .consignaciones-table input[type="number"],
+        .consignaciones-table input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-bottom: 0;
+        }
+        .consignaciones-table .verificado-check {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+        .consignaciones-table tr.verificado-row {
+            background-color: #d4edda !important;
+        }
+        .guias-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            align-items: center;
+            min-width: 200px;
+        }
+        .guia-tag {
+            background-color: #e9ecef;
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.85em;
+        }
+        .guia-tag .remove-guia {
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            font-weight: bold;
+            padding: 0 3px;
+            font-size: 1em;
+            width: auto;
+        }
+        .guia-tag .remove-guia:hover {
+            color: #a71d2a;
+        }
+        .add-guia-input {
+            width: 80px !important;
+        }
+        .btn-add-guia {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            width: auto !important;
+        }
+        .btn-add-guia:hover {
+            background-color: #218838;
+        }
+        .btn-add-row {
+            background-color: #28a745;
+            margin-top: 15px;
+        }
+        .btn-add-row:hover {
+            background-color: #218838;
+        }
+        .btn-remove-row {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            width: auto;
+        }
+        .btn-remove-row:hover {
+            background-color: #c82333;
+        }
+        #ingresarDatosBtn {
+            background-color: #17a2b8;
+            margin-top: 8px;
+        }
+        #ingresarDatosBtn:hover {
+            background-color: #138496;
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
@@ -329,7 +442,9 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const collectionGuias = db.collection('guias_interrapidissimo'); // Referencia a la colección de guías
+        const collectionConsignacionesInter = db.collection('consignaciones_inter'); // Colección de consignaciones
         let guiasInterrapidissimo = [];
+        let consignacionesInter = [];
         let guiaAEditarId = null;
         let datosUsuario = null; // Variable global para almacenar los datos del usuario
 
@@ -339,6 +454,7 @@
         window.onload = () => {
             cargarUsuarioLogueado();
             verificarRolParaExportar();
+            verificarRolParaIngresarDatos();
             setupPendienteCheckListener(); // Configura el listener para el checkbox PENDIENTE
             setupFilterModalListeners(); // NUEVO: Configura los listeners para los filtros del modal
             cargarGuias(); // Carga las guías al iniciar
@@ -947,11 +1063,187 @@
                 showMessageModal('Error', 'Error al eliminar las guías. Inténtalo de nuevo.', 'error');
             }
         }
+
+        // ==================== FUNCIONES DE CONSIGNACIONES ====================
+        function abrirConsignacionesModal() {
+            document.getElementById('consignacionesModal').classList.add('active');
+            cargarConsignacionesInter();
+        }
+
+        function cerrarConsignacionesModal() {
+            document.getElementById('consignacionesModal').classList.remove('active');
+        }
+
+        function cargarConsignacionesInter() {
+            collectionConsignacionesInter.orderBy('fecha', 'desc').onSnapshot(snapshot => {
+                consignacionesInter = [];
+                snapshot.forEach(doc => {
+                    const consignacion = doc.data();
+                    consignacion.id = doc.id;
+                    consignacionesInter.push(consignacion);
+                });
+                renderTablaConsignacionesInter();
+            }, error => {
+                console.error("Error al cargar consignaciones: ", error);
+            });
+        }
+
+        function renderTablaConsignacionesInter() {
+            const tbody = document.getElementById('consignacionesTableBody');
+            tbody.innerHTML = '';
+
+            consignacionesInter.forEach((consignacion, index) => {
+                const tr = document.createElement('tr');
+                if (consignacion.verificado) {
+                    tr.classList.add('verificado-row');
+                }
+                
+                // Renderizar las guías como tags
+                const guias = consignacion.guias || [];
+                let guiasHtml = '';
+                guias.forEach((guia, guiaIndex) => {
+                    guiasHtml += `
+                        <span class="guia-tag">
+                            ${guia}
+                            ${!consignacion.verificado ? `<button class="remove-guia" onclick="eliminarGuiaDeConsignacion('${consignacion.id}', ${guiaIndex})">&times;</button>` : ''}
+                        </span>
+                    `;
+                });
+
+                tr.innerHTML = `
+                    <td>
+                        <input type="date" value="${consignacion.fecha || ''}" 
+                            onchange="actualizarConsignacionInter('${consignacion.id}', 'fecha', this.value)" 
+                            ${consignacion.verificado ? 'disabled' : ''}>
+                    </td>
+                    <td>
+                        <input type="number" value="${consignacion.valor || ''}" 
+                            onchange="actualizarConsignacionInter('${consignacion.id}', 'valor', this.value)"
+                            ${consignacion.verificado ? 'disabled' : ''}>
+                    </td>
+                    <td>
+                        <div class="guias-container">
+                            ${guiasHtml}
+                            ${!consignacion.verificado ? `
+                                <input type="number" class="add-guia-input" id="newGuia-${consignacion.id}" placeholder="Guía" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
+                                <button class="btn-add-guia" onclick="agregarGuiaAConsignacion('${consignacion.id}')">+</button>
+                            ` : ''}
+                        </div>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="verificado-check" 
+                            ${consignacion.verificado ? 'checked' : ''}
+                            onchange="toggleConsignacionVerificadoInter('${consignacion.id}', this.checked)">
+                    </td>
+                    <td>
+                        <button class="btn-remove-row" onclick="eliminarConsignacionInter('${consignacion.id}')" 
+                            ${consignacion.verificado ? 'disabled' : ''}>X</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function agregarFilaConsignacionInter() {
+            try {
+                await collectionConsignacionesInter.add({
+                    fecha: '',
+                    valor: 0,
+                    guias: [],
+                    verificado: false,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (error) {
+                console.error("Error al agregar consignación: ", error);
+                showMessageModal('Error', 'Error al agregar la fila.', 'error');
+            }
+        }
+
+        async function actualizarConsignacionInter(id, campo, valor) {
+            try {
+                const updateData = {};
+                updateData[campo] = campo === 'valor' ? parseFloat(valor) || 0 : valor;
+                await collectionConsignacionesInter.doc(id).update(updateData);
+            } catch (error) {
+                console.error("Error al actualizar consignación: ", error);
+                showMessageModal('Error', 'Error al actualizar la consignación.', 'error');
+            }
+        }
+
+        async function agregarGuiaAConsignacion(consignacionId) {
+            const input = document.getElementById(`newGuia-${consignacionId}`);
+            const guiaNumero = input.value.trim();
+            
+            if (!guiaNumero) {
+                showMessageModal('Advertencia', 'Por favor ingresa un número de guía.', 'info');
+                return;
+            }
+
+            try {
+                const consignacion = consignacionesInter.find(c => c.id === consignacionId);
+                const guiasActuales = consignacion.guias || [];
+                guiasActuales.push(guiaNumero);
+                
+                await collectionConsignacionesInter.doc(consignacionId).update({
+                    guias: guiasActuales
+                });
+                input.value = '';
+            } catch (error) {
+                console.error("Error al agregar guía: ", error);
+                showMessageModal('Error', 'Error al agregar la guía.', 'error');
+            }
+        }
+
+        async function eliminarGuiaDeConsignacion(consignacionId, guiaIndex) {
+            try {
+                const consignacion = consignacionesInter.find(c => c.id === consignacionId);
+                const guiasActuales = consignacion.guias || [];
+                guiasActuales.splice(guiaIndex, 1);
+                
+                await collectionConsignacionesInter.doc(consignacionId).update({
+                    guias: guiasActuales
+                });
+            } catch (error) {
+                console.error("Error al eliminar guía: ", error);
+                showMessageModal('Error', 'Error al eliminar la guía.', 'error');
+            }
+        }
+
+        async function toggleConsignacionVerificadoInter(id, isChecked) {
+            try {
+                await collectionConsignacionesInter.doc(id).update({ verificado: isChecked });
+            } catch (error) {
+                console.error("Error al verificar consignación: ", error);
+                showMessageModal('Error', 'Error al verificar la consignación.', 'error');
+            }
+        }
+
+        async function eliminarConsignacionInter(id) {
+            showConfirmModal('Confirmar Eliminación', '¿Estás seguro de que deseas eliminar esta consignación?', async () => {
+                try {
+                    await collectionConsignacionesInter.doc(id).delete();
+                } catch (error) {
+                    console.error("Error al eliminar consignación: ", error);
+                    showMessageModal('Error', 'Error al eliminar la consignación.', 'error');
+                }
+            });
+        }
+
+        function verificarRolParaIngresarDatos() {
+            const ingresarDatosBtn = document.getElementById('ingresarDatosBtn');
+            if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
+                ingresarDatosBtn.style.display = 'block';
+            } else {
+                ingresarDatosBtn.style.display = 'none';
+            }
+        }
     </script>
 </head>
 <body>
     <div class="container">
-        <h2>Generar guía de Inter Rapidisimo</h2>
+        <h2>Generar guía de Inter Rapidisimo
+            <button type="button" id="ingresarDatosBtn" onclick="abrirConsignacionesModal()" style="display:none; width: auto; padding: 8px 15px; font-size: 0.7em; margin-left: 10px;">Ingresar Datos</button>
+        </h2>
         <form id="generarGuiaForm" onsubmit="event.preventDefault(); guardarGuia();">
             <label for="usuarioLogueado">Usuario (Asesor):</label>
             <input type="text" id="usuarioLogueado" readonly draggable="true" ondragstart="event.dataTransfer.setData('text', this.value)">
@@ -1129,6 +1421,32 @@
             <div class="modal-actions">
                 <button class="confirm-btn" onclick="const deleteSelectedFilter = document.querySelector('input[name=deleteFilter]:checked').value; eliminarGuiasPorEstado(deleteSelectedFilter); closeDeleteModal();">Eliminar</button>
                 <button class="cancel-btn" onclick="closeDeleteModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+    <!-- Modal de Consignaciones para Inter -->
+    <div id="consignacionesModal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 900px;">
+            <button class="modal-close-btn" onclick="cerrarConsignacionesModal()">&times;</button>
+            <h3>Registro de Consignaciones - Inter Rapidisimo</h3>
+            <div style="overflow-x: auto;">
+                <table class="consignaciones-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Valor</th>
+                            <th>Guías</th>
+                            <th>Verificado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="consignacionesTableBody">
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="btn-add-row" onclick="agregarFilaConsignacionInter()">+ Agregar Fila</button>
+            <div class="modal-actions">
+                <button class="cancel-btn" onclick="cerrarConsignacionesModal()">Cerrar</button>
             </div>
         </div>
     </div>
