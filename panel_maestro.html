@@ -126,6 +126,10 @@
         </div>
       </div>
       <div class="actions">
+        <select id="dbSelector" style="padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0;font-weight:700;font-size:13px;cursor:pointer;background:#fff">
+          <option value="principal">🏢 Principal (Pedidos)</option>
+          <option value="china">🇨🇳 China (Inventario)</option>
+        </select>
         <button class="btn" type="button" id="btnRefresh"><i class="fa-solid fa-rotate"></i> Recargar</button>
       </div>
     </div>
@@ -135,6 +139,7 @@
         <div class="card">
           <div class="card-h">
             <h2><i class="fa-solid fa-folder-tree"></i> Colecciones</h2>
+            <span class="pill gray" id="dbLabel">Principal</span>
           </div>
           <div class="card-b">
             <div class="collection-list" id="collectionList">
@@ -229,7 +234,18 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, addDoc, query, orderBy, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    const firebaseConfig = {
+    // ========== DOS FIREBASE ==========
+    // Firebase PRINCIPAL (Sistema general: registros, usuarios, transportadoras, guías)
+    const firebaseConfigPrincipal = {
+      apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+      authDomain: "lazapateria-c4157.firebaseapp.com",
+      projectId: "lazapateria-c4157",
+      storageBucket: "lazapateria-c4157.firebasestorage.app",
+      measurementId: "G-HVG7615JEE"
+    };
+
+    // Firebase CHINA (Inventario China, facturas, caja menor)
+    const firebaseConfigChina = {
       apiKey: "AIzaSyCwGpyvoUfbXE4rpPfLmHSdOK_VI4mT24M",
       authDomain: "lazapateria-ce24f.firebaseapp.com",
       projectId: "lazapateria-ce24f",
@@ -239,27 +255,38 @@
       measurementId: "G-6JCF33H0K1"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    // Inicializar ambos Firebase
+    const appPrincipal = initializeApp(firebaseConfigPrincipal, 'principal');
+    const appChina = initializeApp(firebaseConfigChina, 'china');
+    const dbPrincipal = getFirestore(appPrincipal);
+    const dbChina = getFirestore(appChina);
+
+    // Base de datos activa
+    let currentDbName = 'principal';
+    let db = dbPrincipal;
 
     const $ = id => document.getElementById(id);
     const safeStr = v => (v === undefined || v === null) ? '' : String(v);
     const escapeHtml = s => safeStr(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-    const COLLECTIONS = [
-      { id: 'facturas', name: 'Facturas', icon: 'fa-file-invoice-dollar' },
-      { id: 'inventario', name: 'Inventario', icon: 'fa-boxes-stacked' },
-      { id: 'caja_menor', name: 'Caja Menor', icon: 'fa-cash-register' },
+    // Colecciones por base de datos
+    const COLLECTIONS_PRINCIPAL = [
+      { id: 'registros', name: 'Registros (Pedidos)', icon: 'fa-clipboard-list' },
       { id: 'usuarios', name: 'Usuarios', icon: 'fa-users' },
-      { id: 'registros', name: 'Registros', icon: 'fa-clipboard-list' },
-      { id: 'novedades', name: 'Novedades', icon: 'fa-triangle-exclamation' },
-      { id: 'asistencia', name: 'Asistencia', icon: 'fa-calendar-check' },
-      { id: 'pedidos', name: 'Pedidos', icon: 'fa-cart-shopping' },
-      { id: 'bancos', name: 'Bancos', icon: 'fa-building-columns' },
-      { id: 'fabricantes', name: 'Fabricantes', icon: 'fa-industry' },
       { id: 'transportadoras', name: 'Transportadoras', icon: 'fa-truck' },
-      { id: 'config', name: 'Configuración', icon: 'fa-gear' }
+      { id: 'guias_envia', name: 'Guías Envía', icon: 'fa-barcode' },
+      { id: 'guias_interrapidissimo', name: 'Guías Inter', icon: 'fa-barcode' },
+      { id: 'settings', name: 'Configuración', icon: 'fa-gear' },
+      { id: 'users', name: 'Users (ventas)', icon: 'fa-chart-line' }
     ];
+
+    const COLLECTIONS_CHINA = [
+      { id: 'facturas', name: 'Facturas China', icon: 'fa-file-invoice-dollar' },
+      { id: 'inventario', name: 'Inventario China', icon: 'fa-boxes-stacked' },
+      { id: 'caja_menor', name: 'Caja Menor', icon: 'fa-cash-register' }
+    ];
+
+    let COLLECTIONS = COLLECTIONS_PRINCIPAL;
 
     const PAGE_SIZE = 30;
     let currentCollection = null;
@@ -579,6 +606,38 @@
         $('editModal').classList.remove('open');
         $('addModal').classList.remove('open');
       }
+    });
+
+    // Cambiar base de datos
+    function switchDatabase(dbName) {
+      currentDbName = dbName;
+      if (dbName === 'china') {
+        db = dbChina;
+        COLLECTIONS = COLLECTIONS_CHINA;
+        $('dbLabel').textContent = 'China';
+        $('dbLabel').style.background = 'rgba(239,68,68,.1)';
+        $('dbLabel').style.color = '#dc2626';
+      } else {
+        db = dbPrincipal;
+        COLLECTIONS = COLLECTIONS_PRINCIPAL;
+        $('dbLabel').textContent = 'Principal';
+        $('dbLabel').style.background = '#f1f5f9';
+        $('dbLabel').style.color = '#64748b';
+      }
+      currentCollection = null;
+      allDocs = [];
+      filteredDocs = [];
+      currentPage = 1;
+      $('mainTitle').innerHTML = '<i class="fa-solid fa-table"></i> Selecciona una colección';
+      $('btnAdd').style.display = 'none';
+      $('filtersBox').style.display = 'none';
+      $('footerBox').style.display = 'none';
+      $('tableContainer').innerHTML = '<div class="empty"><i class="fa-solid fa-hand-pointer"></i><div>Selecciona una colección de la izquierda para ver sus documentos</div></div>';
+      loadCollectionCounts();
+    }
+
+    $('dbSelector').addEventListener('change', (e) => {
+      switchDatabase(e.target.value);
     });
 
     // Init
