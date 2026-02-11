@@ -481,6 +481,23 @@
             return datePart + ', ' + timePart;
         }
 
+        function formatDateTimeBogota(ts) {
+            if (!ts) return '';
+            const d = (typeof ts.toDate === 'function') ? ts.toDate() : (ts instanceof Date ? ts : null);
+            if (!d || Number.isNaN(d.getTime())) return '';
+            const fmt = new Intl.DateTimeFormat('es-CO', {
+                timeZone: 'America/Bogota',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+            return fmt.format(d);
+        }
+
         function formatDateYMD(d) {
             const yyyy = String(d.getFullYear());
             const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -971,7 +988,7 @@
             if (!nuevoEstado) {
                 const ok = await modalConfirm('Confirmar', '¿Estás seguro de que quieres desverificar (quitar despachado) este pedido?', 'Sí', 'Cancelar');
                 if (!ok) return { reverted: true };
-                await db.collection('registros').doc(id).update({ despachado: false, despachadoPor: '' });
+                await db.collection('registros').doc(id).update({ despachado: false, despachadoPor: '', despachadoTimestamp: null });
                 playConfirmationSound();
                 return { reverted: false };
             }
@@ -984,6 +1001,8 @@
                     ? ((datosUsuario && datosUsuario.nombreCompleto && cachedAdmins.includes(datosUsuario.nombreCompleto)) ? datosUsuario.nombreCompleto : cachedAdmins[0])
                     : ((datosUsuario && datosUsuario.nombreCompleto) ? datosUsuario.nombreCompleto : 'Administrador')
             };
+
+            updateData.despachadoTimestamp = firebase.firestore.FieldValue.serverTimestamp();
 
             if (snap.exists) {
                 const d = snap.data();
@@ -1162,7 +1181,10 @@
                         <div class="badges">${badges}</div>
                     </div>
 
-                    <div class="grid">
+                    <div class="grid">align-items:center;gap:8px;flex-wrap:wrap;color:#64748b;font-size:12px;font-weight:800;">
+                            ${despachado && r.despachadoTimestamp ? ('Despachado: ' + formatDateTimeBogota(r.despachadoTimestamp)) : ''}
+                        </div>
+                        <div style="display:flex;
                         <div class="box">
                             <div class="lbl">Productos</div>
                             ${productsHtml}
