@@ -232,7 +232,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, addDoc, query, orderBy, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, addDoc, query, orderBy, limit, startAfter, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     // ========== DOS FIREBASE ==========
     // Firebase PRINCIPAL (Sistema general: registros, usuarios, transportadoras, guías)
@@ -308,6 +308,20 @@
       $('toastMsg').textContent = msg || '';
       $('toast').classList.add('show');
       setTimeout(() => $('toast').classList.remove('show'), 2500);
+    }
+
+    function formatDateTimeBogota(d) {
+      if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+      return new Intl.DateTimeFormat('es-CO', {
+        timeZone: 'America/Bogota',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      }).format(d);
     }
 
     async function loadCollectionCounts() {
@@ -417,7 +431,11 @@
             html += `<td class="cell-id" title="${escapeHtml(val)}">${escapeHtml(val)}</td>`;
           } else if (val && typeof val === 'object') {
             if (val.toDate) {
-              html += `<td>${val.toDate().toLocaleString('es-CO')}</td>`;
+              if (k === 'despachadoTimestamp') {
+                html += `<td>${escapeHtml(formatDateTimeBogota(val.toDate()))}</td>`;
+              } else {
+                html += `<td>${val.toDate().toLocaleString('es-CO')}</td>`;
+              }
             } else if (Array.isArray(val)) {
               html += `<td><span class="pill blue">${val.length} items</span></td>`;
             } else {
@@ -526,6 +544,17 @@
         updates[key] = val;
       });
 
+      // Si el documento tiene el campo 'despachado', mantener despachadoTimestamp coherente
+      if (Object.prototype.hasOwnProperty.call(updates, 'despachado')) {
+        const prev = editingDoc && editingDoc.data ? (editingDoc.data.despachado === true) : false;
+        const next = updates.despachado === true;
+        if (next && !prev) {
+          updates.despachadoTimestamp = serverTimestamp();
+        } else if (!next && prev) {
+          updates.despachadoTimestamp = null;
+        }
+      }
+
       try {
         await updateDoc(doc(db, currentCollection, editingDoc.id), updates);
         toast('Guardado', 'Documento actualizado correctamente');
@@ -563,6 +592,9 @@
       }
 
       try {
+        if (data && data.despachado === true && !('despachadoTimestamp' in data)) {
+          data.despachadoTimestamp = serverTimestamp();
+        }
         await addDoc(collection(db, currentCollection), data);
         toast('Creado', 'Documento agregado correctamente');
         $('addModal').classList.remove('open');
