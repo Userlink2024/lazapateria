@@ -1,1 +1,573 @@
-none
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Topes de Cuentas</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--muted:#86868b;--border:rgba(0,0,0,.08);
+  --blue:#007aff;--green:#34c759;--orange:#ff9500;--red:#ff3b30;--purple:#af52de;
+  --shadow:0 2px 12px rgba(0,0,0,.08);--shadow-lg:0 8px 30px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit}
+
+.topbar{
+  position:sticky;top:0;z-index:50;
+  background:rgba(245,245,247,.85);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--border);padding:12px 20px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px
+}
+.topbar h1{font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px}
+.topbar h1 i{color:var(--blue)}
+.topbar .actions{display:flex;gap:8px;align-items:center}
+
+.btn{
+  border:none;border-radius:10px;padding:9px 16px;font-weight:700;font-size:13px;
+  display:inline-flex;align-items:center;gap:7px;transition:all .15s;
+  background:rgba(0,0,0,.05);color:var(--text)
+}
+.btn:hover{background:rgba(0,0,0,.1)}
+.btn.primary{background:var(--blue);color:#fff}
+.btn.primary:hover{opacity:.88}
+.btn.danger{background:var(--red);color:#fff}
+.btn.sm{padding:6px 12px;font-size:12px;border-radius:8px}
+
+.container{max-width:1200px;margin:0 auto;padding:16px 20px}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;background:rgba(0,0,0,.06);border-radius:10px;padding:3px;margin-bottom:20px;width:fit-content}
+.tab-btn{padding:8px 20px;border-radius:8px;border:none;background:transparent;font-weight:700;font-size:13px;color:var(--muted);transition:all .2s}
+.tab-btn.active{background:#fff;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.1)}
+
+/* Cards */
+.card{background:var(--card);border-radius:14px;border:1px solid var(--border);box-shadow:var(--shadow);overflow:hidden}
+.card-h{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card-h h2{font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px}
+.card-b{padding:18px}
+
+/* Date bar */
+.date-bar{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.date-bar input[type="date"]{padding:9px 14px;border:1px solid var(--border);border-radius:10px;font-size:13px;font-weight:600;background:#fff}
+
+/* Account grid */
+.accounts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+@media(max-width:600px){.accounts-grid{grid-template-columns:1fr}}
+
+/* Account card (dashboard) */
+.acc-card{background:var(--card);border-radius:14px;border:1px solid var(--border);box-shadow:var(--shadow);padding:18px;transition:all .2s}
+.acc-card .acc-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.acc-card .acc-name{font-weight:800;font-size:14px}
+.acc-card .acc-num{font-size:12px;color:var(--muted);margin-top:2px}
+.acc-card .acc-amount{text-align:right}
+.acc-card .acc-current{font-size:22px;font-weight:900}
+.acc-card .acc-tope{font-size:12px;color:var(--muted);font-weight:700}
+
+/* Progress bar */
+.progress-wrap{height:10px;background:rgba(0,0,0,.06);border-radius:99px;overflow:hidden;margin-bottom:10px}
+.progress-bar{height:100%;border-radius:99px;transition:width .5s ease,background .3s}
+.progress-bar.green{background:linear-gradient(90deg,#34c759,#30d158)}
+.progress-bar.orange{background:linear-gradient(90deg,#ff9500,#ffb340)}
+.progress-bar.red{background:linear-gradient(90deg,#ff3b30,#ff6961)}
+
+.acc-card .acc-pct{font-size:11px;font-weight:800;text-align:right;margin-bottom:6px}
+.acc-card .acc-actions{display:flex;gap:8px;margin-top:12px}
+
+/* Config list */
+.config-list{display:flex;flex-direction:column;gap:10px}
+.config-row{display:grid;grid-template-columns:1fr 160px 60px;gap:12px;align-items:center;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:#fafafa;transition:all .15s}
+.config-row:hover{background:#f0f0f5}
+.config-row .cfg-name{font-weight:700;font-size:13px}
+.config-row .cfg-num{font-size:11px;color:var(--muted)}
+.config-row input[type="text"]{padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:700;text-align:right;width:100%}
+@media(max-width:600px){.config-row{grid-template-columns:1fr 120px 50px}}
+
+/* Toggle switch */
+.toggle{position:relative;width:44px;height:26px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle .slider{position:absolute;inset:0;background:#e5e5ea;border-radius:99px;transition:.3s;cursor:pointer}
+.toggle .slider::before{content:'';position:absolute;width:22px;height:22px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle input:checked+.slider{background:var(--green)}
+.toggle input:checked+.slider::before{transform:translateX(18px)}
+
+/* History table */
+.hist-table{width:100%;border-collapse:collapse;font-size:13px}
+.hist-table th{text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800;border-bottom:2px solid var(--border);background:#fafafa}
+.hist-table td{padding:12px;border-bottom:1px solid rgba(0,0,0,.04)}
+.hist-table tr:hover td{background:rgba(0,122,255,.03)}
+.hist-table .mono{font-family:monospace;font-size:12px}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:20px;z-index:200;backdrop-filter:blur(4px)}
+.modal.open{display:flex}
+.modal-card{background:#fff;border-radius:16px;width:min(420px,100%);box-shadow:var(--shadow-lg);overflow:hidden}
+.modal-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-head h3{font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
+.modal-body{padding:20px}
+.modal-body label{display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 6px}
+.modal-body input,.modal-body textarea,.modal-body select{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:14px}
+.modal-body input:focus,.modal-body select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,122,255,.12)}
+.modal-actions{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end}
+
+/* Empty state */
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty i{font-size:36px;margin-bottom:12px;opacity:.4;display:block}
+.empty p{font-size:13px;font-weight:600}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;z-index:300;display:none}
+.toast.show{display:block;animation:slideUp .3s ease}
+.toast-card{background:#1d1d1f;color:#fff;border-radius:12px;padding:14px 20px;box-shadow:var(--shadow-lg);font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px}
+@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+.hint{font-size:12px;color:var(--muted);font-weight:600}
+
+.pill{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:800}
+.pill.green{background:rgba(52,199,89,.12);color:#28a745}
+.pill.red{background:rgba(255,59,48,.12);color:#ff3b30}
+.pill.blue{background:rgba(0,122,255,.1);color:#007aff}
+
+/* Summary stats */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{padding:16px;border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow)}
+.stat-card .stat-label{font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.stat-card .stat-val{font-size:22px;font-weight:900}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1><i class="fas fa-gauge-high"></i> Topes de Cuentas</h1>
+  <div class="actions">
+    <span class="hint" id="userLabel"></span>
+    <button class="btn" onclick="location.href='auditoriadefondos.html'"><i class="fas fa-arrow-left"></i> Volver</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="hoy"><i class="fas fa-chart-bar"></i> Hoy</button>
+    <button class="tab-btn" data-tab="config"><i class="fas fa-sliders"></i> Configurar</button>
+    <button class="tab-btn" data-tab="historial"><i class="fas fa-clock-rotate-left"></i> Historial</button>
+  </div>
+
+  <!-- TAB: HOY -->
+  <div class="tab-content" id="tabHoy">
+    <div class="date-bar">
+      <label style="font-size:12px;font-weight:800;color:var(--muted);margin:0">FECHA:</label>
+      <input type="date" id="todayDate"/>
+      <button class="btn sm" onclick="setToday()"><i class="fas fa-calendar-day"></i> Hoy</button>
+    </div>
+    <div class="stats-row" id="statsRow">
+      <div class="stat-card"><div class="stat-label">Cuentas Activas</div><div class="stat-val" id="statActivas">0</div></div>
+      <div class="stat-card"><div class="stat-label">Total Ingresado Hoy</div><div class="stat-val" id="statIngresado">$0</div></div>
+      <div class="stat-card"><div class="stat-label">Tope Total</div><div class="stat-val" id="statTope">$0</div></div>
+    </div>
+    <div id="dashboardGrid" class="accounts-grid"></div>
+  </div>
+
+  <!-- TAB: CONFIGURAR -->
+  <div class="tab-content" id="tabConfig" style="display:none">
+    <div class="card">
+      <div class="card-h">
+        <h2><i class="fas fa-building-columns" style="color:var(--blue)"></i> Cuentas Bancarias</h2>
+        <span class="hint" id="configCount">0 cuentas</span>
+      </div>
+      <div class="card-b">
+        <p class="hint" style="margin-bottom:14px">Activa las cuentas que vas a usar hoy y establece el tope (limite) de cada una.</p>
+        <div class="config-list" id="configList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: HISTORIAL -->
+  <div class="tab-content" id="tabHistorial" style="display:none">
+    <div class="card">
+      <div class="card-h">
+        <h2><i class="fas fa-clock-rotate-left" style="color:var(--purple)"></i> Historial de Movimientos</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="histFrom" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:600"/>
+          <input type="date" id="histTo" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:600"/>
+          <button class="btn sm primary" onclick="loadHistory()"><i class="fas fa-search"></i> Filtrar</button>
+        </div>
+      </div>
+      <div class="card-b" style="overflow-x:auto">
+        <div id="histBody"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Agregar Ingreso -->
+<div class="modal" id="addModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3><i class="fas fa-plus-circle" style="color:var(--blue)"></i> Agregar Ingreso</h3>
+      <button class="btn sm" onclick="closeAddModal()"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="addAccountId"/>
+      <p style="font-weight:700;margin-bottom:14px" id="addAccountLabel"></p>
+      <label>Monto ($)</label>
+      <input type="text" id="addMonto" placeholder="0" inputmode="numeric"/>
+      <label>Descripcion (opcional)</label>
+      <textarea id="addDesc" rows="2" placeholder="Ej: Consignacion cliente X"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAddModal()">Cancelar</button>
+      <button class="btn primary" onclick="saveIngreso()"><i class="fas fa-check"></i> Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><div class="toast-card" id="toastMsg"></div></div>
+
+<script>
+/* ===== FIREBASE ===== */
+const firebaseConfig = {
+  apiKey:"AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+  authDomain:"lazapateria-c4157.firebaseapp.com",
+  projectId:"lazapateria-c4157",
+  storageBucket:"lazapateria-c4157.firebasestorage.app",
+  messagingSenderId:"300241769138",
+  appId:"1:300241769138:web:8ca1847de3c4fb5042afab"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const $ = id => document.getElementById(id);
+const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
+if (usuario) $('userLabel').textContent = usuario.nombreCompleto || usuario.usuario || '';
+
+const COL_CUENTAS = db.collection('cuentas');
+const COL_TOPES_CFG = db.collection('topes_config');
+const COL_TOPES_MOV = db.collection('topes_movimientos');
+
+/* ===== STATE ===== */
+let allAccounts = []; // {id, name, number}
+let topesConfig = {}; // accountId -> {tope, activo}
+let todayMovs = [];   // movements for selected date
+let currentDate = todayISO();
+
+/* ===== UTILS ===== */
+function todayISO(){
+  return new Date().toLocaleString('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'});
+}
+function fmtCOP(n){ return '$' + (Number(n)||0).toLocaleString('es-CO') }
+function parseMoneda(v){ return Number(String(v).replace(/[^0-9]/g,'')) || 0 }
+function toast(msg){
+  $('toastMsg').innerHTML = '<i class="fas fa-check-circle"></i> ' + msg;
+  $('toast').classList.add('show');
+  setTimeout(()=>$('toast').classList.remove('show'),2500);
+}
+function setToday(){ $('todayDate').value = todayISO(); currentDate = todayISO(); loadDayData(); }
+
+/* ===== TABS ===== */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(c=>c.style.display='none');
+    const tab = btn.dataset.tab;
+    if(tab==='hoy') $('tabHoy').style.display='';
+    else if(tab==='config'){ $('tabConfig').style.display=''; renderConfig(); }
+    else if(tab==='historial'){ $('tabHistorial').style.display=''; loadHistory(); }
+  });
+});
+
+/* ===== DATE CHANGE ===== */
+$('todayDate').value = currentDate;
+$('todayDate').addEventListener('change', ()=>{
+  currentDate = $('todayDate').value;
+  loadDayData();
+});
+
+/* ===== LOAD ACCOUNTS ===== */
+function subscribeAccounts(){
+  COL_CUENTAS.orderBy('name').onSnapshot(snap=>{
+    allAccounts = snap.docs.map(d=>({ id:d.id, name:d.data().name||'', number:d.data().number||'' }));
+    loadDayData();
+    renderConfig();
+  });
+}
+
+/* ===== LOAD TOPES CONFIG ===== */
+function subscribeConfig(){
+  COL_TOPES_CFG.onSnapshot(snap=>{
+    topesConfig = {};
+    snap.forEach(d=>{
+      topesConfig[d.id] = d.data();
+    });
+    renderDashboard();
+    renderConfig();
+  });
+}
+
+/* ===== LOAD DAY MOVEMENTS ===== */
+async function loadDayData(){
+  try {
+    const snap = await COL_TOPES_MOV.where('fecha','==',currentDate).orderBy('createdAt','desc').get();
+    todayMovs = snap.docs.map(d=>({id:d.id,...d.data()}));
+  } catch(e){ todayMovs = []; }
+  renderDashboard();
+}
+
+/* ===== RENDER DASHBOARD (HOY) ===== */
+function renderDashboard(){
+  const grid = $('dashboardGrid');
+  const activeAccounts = allAccounts.filter(a=>{
+    const cfg = topesConfig[a.id];
+    return cfg && cfg.activo === true;
+  });
+
+  if(!activeAccounts.length){
+    grid.innerHTML = '<div class="empty"><i class="fas fa-toggle-off"></i><p>No hay cuentas activas para hoy.<br>Ve a <strong>Configurar</strong> para activar cuentas.</p></div>';
+    $('statActivas').textContent = '0';
+    $('statIngresado').textContent = '$0';
+    $('statTope').textContent = '$0';
+    return;
+  }
+
+  let totalIngresado = 0, totalTope = 0;
+  let html = '';
+
+  activeAccounts.forEach(acc=>{
+    const cfg = topesConfig[acc.id] || {};
+    const tope = Number(cfg.tope) || 0;
+    const movs = todayMovs.filter(m=>m.accountId===acc.id);
+    const ingresado = movs.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+    const pct = tope > 0 ? Math.min((ingresado/tope)*100, 100) : 0;
+    const colorClass = pct >= 85 ? 'red' : pct >= 60 ? 'orange' : 'green';
+    const colorText = pct >= 85 ? 'var(--red)' : pct >= 60 ? 'var(--orange)' : 'var(--green)';
+
+    totalIngresado += ingresado;
+    totalTope += tope;
+
+    html += `
+      <div class="acc-card" style="${pct>=100?'border-color:var(--red);box-shadow:0 0 0 2px rgba(255,59,48,.2)':''}">
+        <div class="acc-head">
+          <div>
+            <div class="acc-name">${acc.name}</div>
+            <div class="acc-num">${acc.number}</div>
+          </div>
+          <div class="acc-amount">
+            <div class="acc-current" style="color:${colorText}">${fmtCOP(ingresado)}</div>
+            <div class="acc-tope">de ${fmtCOP(tope)}</div>
+          </div>
+        </div>
+        <div class="acc-pct" style="color:${colorText}">${pct.toFixed(1)}%${pct>=100?' — TOPE ALCANZADO':''}</div>
+        <div class="progress-wrap">
+          <div class="progress-bar ${colorClass}" style="width:${pct}%"></div>
+        </div>
+        ${movs.length ? '<div style="margin-bottom:8px;max-height:100px;overflow:auto;font-size:11px;color:var(--muted)">' +
+          movs.map(m=>'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(0,0,0,.04)"><span>'+(m.descripcion||'Ingreso')+'</span><strong>'+fmtCOP(m.monto)+'</strong></div>').join('') +
+          '</div>' : ''}
+        <div class="acc-actions">
+          <button class="btn sm primary" onclick="openAddModal('${acc.id}','${acc.name} — ${acc.number}')"><i class="fas fa-plus"></i> Agregar</button>
+          ${movs.length ? '<button class="btn sm danger" onclick="undoLast(\''+acc.id+'\',\''+movs[0].id+'\')"><i class="fas fa-undo"></i> Deshacer</button>' : ''}
+        </div>
+      </div>`;
+  });
+
+  grid.innerHTML = html;
+  $('statActivas').textContent = activeAccounts.length;
+  $('statIngresado').textContent = fmtCOP(totalIngresado);
+  $('statTope').textContent = fmtCOP(totalTope);
+}
+
+/* ===== RENDER CONFIG ===== */
+function renderConfig(){
+  const list = $('configList');
+  if(!list) return;
+  if(!allAccounts.length){
+    list.innerHTML = '<div class="empty"><i class="fas fa-inbox"></i><p>No hay cuentas bancarias registradas.</p></div>';
+    $('configCount').textContent = '0 cuentas';
+    return;
+  }
+  $('configCount').textContent = allAccounts.length + ' cuentas';
+
+  list.innerHTML = allAccounts.map(acc=>{
+    const cfg = topesConfig[acc.id] || {};
+    const tope = cfg.tope || '';
+    const activo = cfg.activo === true;
+    return `
+      <div class="config-row">
+        <div>
+          <div class="cfg-name">${acc.name}</div>
+          <div class="cfg-num">${acc.number}</div>
+        </div>
+        <input type="text" placeholder="Tope $" value="${tope ? Number(tope).toLocaleString('es-CO') : ''}" data-id="${acc.id}" class="tope-input" inputmode="numeric"/>
+        <label class="toggle" title="${activo?'Desactivar':'Activar'} para hoy">
+          <input type="checkbox" data-id="${acc.id}" class="activo-toggle" ${activo?'checked':''}/>
+          <span class="slider"></span>
+        </label>
+      </div>`;
+  }).join('');
+
+  // Tope input: format and save on blur
+  list.querySelectorAll('.tope-input').forEach(input=>{
+    input.addEventListener('input',()=>{
+      const raw = input.value.replace(/[^0-9]/g,'');
+      input.value = raw ? Number(raw).toLocaleString('es-CO') : '';
+    });
+    input.addEventListener('change',async()=>{
+      const id = input.dataset.id;
+      const val = parseMoneda(input.value);
+      await COL_TOPES_CFG.doc(id).set({ tope: val, activo: (topesConfig[id]||{}).activo || false },{ merge:true });
+      toast('Tope actualizado');
+    });
+  });
+
+  // Active toggle
+  list.querySelectorAll('.activo-toggle').forEach(toggle=>{
+    toggle.addEventListener('change',async()=>{
+      const id = toggle.dataset.id;
+      const val = toggle.checked;
+      await COL_TOPES_CFG.doc(id).set({ activo: val, tope: (topesConfig[id]||{}).tope || 0 },{ merge:true });
+      toast(val ? 'Cuenta activada' : 'Cuenta desactivada');
+    });
+  });
+}
+
+/* ===== ADD INGRESO MODAL ===== */
+function openAddModal(accountId, label){
+  $('addAccountId').value = accountId;
+  $('addAccountLabel').textContent = label;
+  $('addMonto').value = '';
+  $('addDesc').value = '';
+  $('addModal').classList.add('open');
+  setTimeout(()=>$('addMonto').focus(),100);
+}
+function closeAddModal(){ $('addModal').classList.remove('open'); }
+
+$('addMonto').addEventListener('input',()=>{
+  const raw = $('addMonto').value.replace(/[^0-9]/g,'');
+  $('addMonto').value = raw ? Number(raw).toLocaleString('es-CO') : '';
+});
+
+async function saveIngreso(){
+  const accountId = $('addAccountId').value;
+  const monto = parseMoneda($('addMonto').value);
+  const desc = ($('addDesc').value||'').trim();
+  if(!monto || monto <= 0){ toast('Ingresa un monto valido'); return; }
+
+  const acc = allAccounts.find(a=>a.id===accountId);
+  try {
+    await COL_TOPES_MOV.add({
+      accountId,
+      accountName: acc ? acc.name : '',
+      accountNumber: acc ? acc.number : '',
+      monto,
+      descripcion: desc,
+      fecha: currentDate,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdBy: usuario ? (usuario.nombreCompleto||usuario.usuario||'') : ''
+    });
+    toast('Ingreso registrado');
+    closeAddModal();
+    await loadDayData();
+  } catch(e){
+    toast('Error al guardar');
+    console.error(e);
+  }
+}
+
+/* ===== UNDO LAST ===== */
+async function undoLast(accountId, movId){
+  if(!confirm('¿Deshacer el ultimo ingreso de esta cuenta?')) return;
+  try {
+    await COL_TOPES_MOV.doc(movId).delete();
+    toast('Ingreso eliminado');
+    await loadDayData();
+  } catch(e){
+    toast('Error al eliminar');
+    console.error(e);
+  }
+}
+
+/* ===== HISTORY ===== */
+async function loadHistory(){
+  const from = $('histFrom').value;
+  const to = $('histTo').value;
+  const body = $('histBody');
+  body.innerHTML = '<div class="hint" style="padding:20px;text-align:center"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>';
+
+  try {
+    let q = COL_TOPES_MOV.orderBy('fecha','desc');
+    if(from) q = q.where('fecha','>=',from);
+    if(to) q = q.where('fecha','<=',to);
+    const snap = await q.limit(500).get();
+    const movs = snap.docs.map(d=>({id:d.id,...d.data()}));
+
+    if(!movs.length){
+      body.innerHTML = '<div class="empty"><i class="fas fa-inbox"></i><p>No hay movimientos en este rango.</p></div>';
+      return;
+    }
+
+    // Group by date
+    const byDate = {};
+    movs.forEach(m=>{
+      if(!byDate[m.fecha]) byDate[m.fecha] = [];
+      byDate[m.fecha].push(m);
+    });
+
+    let html = '';
+    Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(fecha=>{
+      const dayMovs = byDate[fecha];
+      const dayTotal = dayMovs.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+      html += `<div style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-weight:800;font-size:14px"><i class="fas fa-calendar-day" style="color:var(--blue);margin-right:6px"></i>${fecha}</span>
+          <span class="pill blue">${fmtCOP(dayTotal)}</span>
+        </div>
+        <table class="hist-table">
+          <thead><tr><th>Cuenta</th><th>Monto</th><th>Descripcion</th><th>Por</th><th></th></tr></thead>
+          <tbody>`;
+      dayMovs.forEach(m=>{
+        html += `<tr>
+          <td><strong>${m.accountName||''}</strong><br><span class="mono">${m.accountNumber||''}</span></td>
+          <td style="font-weight:800">${fmtCOP(m.monto)}</td>
+          <td>${m.descripcion||'—'}</td>
+          <td class="hint">${m.createdBy||''}</td>
+          <td><button class="btn sm danger" onclick="deleteMov('${m.id}')"><i class="fas fa-trash"></i></button></td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    });
+
+    body.innerHTML = html;
+  } catch(e){
+    body.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error al cargar historial.</p></div>';
+    console.error(e);
+  }
+}
+
+async function deleteMov(id){
+  if(!confirm('¿Eliminar este movimiento?')) return;
+  try {
+    await COL_TOPES_MOV.doc(id).delete();
+    toast('Eliminado');
+    loadHistory();
+    loadDayData();
+  } catch(e){ toast('Error'); }
+}
+
+/* ===== INIT ===== */
+subscribeAccounts();
+subscribeConfig();
+
+// Default history dates: last 7 days
+const now = new Date();
+const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate()-7);
+$('histFrom').value = weekAgo.toISOString().slice(0,10);
+$('histTo').value = now.toISOString().slice(0,10);
+</script>
+</body>
+</html>
