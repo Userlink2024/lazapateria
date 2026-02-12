@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
   <style>
     :root{
       --bg:#f8fafc;
@@ -155,6 +156,8 @@
             <h2 id="mainTitle"><i class="fa-solid fa-table"></i> Selecciona una colección</h2>
             <div style="display:flex;gap:8px">
               <button class="btn ok" type="button" id="btnAdd" style="display:none"><i class="fa-solid fa-plus"></i> Agregar</button>
+              <button class="btn primary" type="button" id="btnExport" style="display:none"><i class="fa-solid fa-file-excel"></i> Exportar Excel</button>
+              <button class="btn warning" type="button" id="btnImport" style="display:none"><i class="fa-solid fa-upload"></i> Importar Excel</button>
             </div>
           </div>
           <div class="card-b">
@@ -219,6 +222,26 @@
       <div class="modal-actions">
         <button class="btn" type="button" id="btnCancelAdd">Cancelar</button>
         <button class="btn ok" type="button" id="btnConfirmAdd"><i class="fa-solid fa-plus"></i> Crear documento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Importar Excel -->
+  <div class="modal" id="importModal">
+    <div class="modal-card" style="max-width:520px">
+      <div class="modal-head">
+        <h3 id="importModalTitle"><i class="fa-solid fa-upload"></i> Importar Excel</h3>
+        <button class="btn" type="button" id="btnCloseImport"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="hint" style="margin-bottom:14px">Selecciona un archivo <strong>.xlsx</strong> para importar documentos a la coleccion actual. Cada fila sera un documento nuevo. La primera fila debe ser el encabezado con los nombres de los campos.</div>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls" style="margin-bottom:14px"/>
+        <div id="importPreview" style="max-height:200px;overflow:auto;font-size:12px;margin-bottom:10px"></div>
+        <div id="importStatus" class="hint"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" type="button" id="btnCancelImport">Cancelar</button>
+        <button class="btn ok" type="button" id="btnConfirmImport" disabled><i class="fa-solid fa-check"></i> Importar</button>
       </div>
     </div>
   </div>
@@ -365,6 +388,8 @@
       const colInfo = COLLECTIONS.find(c => c.id === colId);
       $('mainTitle').innerHTML = `<i class="fa-solid ${colInfo?.icon || 'fa-table'}"></i> ${escapeHtml(colInfo?.name || colId)}`;
       $('btnAdd').style.display = '';
+      $('btnExport').style.display = '';
+      $('btnImport').style.display = '';
       $('filtersBox').style.display = '';
       $('footerBox').style.display = '';
 
@@ -621,6 +646,120 @@
       if (currentPage < totalPages) { currentPage++; renderTable(); }
     });
 
+    // ===== EXPORT EXCEL =====
+    async function exportCollectionToExcel() {
+      if (!currentCollection || !allDocs.length) { toast('Error', 'No hay datos para exportar'); return; }
+      try {
+        const rows = allDocs.map(doc => {
+          const flat = {};
+          Object.entries(doc).forEach(([k, v]) => {
+            if (v && typeof v === 'object' && typeof v.toDate === 'function') {
+              flat[k] = v.toDate().toLocaleString('es-CO');
+            } else if (Array.isArray(v)) {
+              flat[k] = JSON.stringify(v);
+            } else if (v && typeof v === 'object') {
+              flat[k] = JSON.stringify(v);
+            } else {
+              flat[k] = v;
+            }
+          });
+          return flat;
+        });
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, currentCollection);
+        const colName = COLLECTIONS.find(c => c.id === currentCollection)?.name || currentCollection;
+        XLSX.writeFile(wb, `${colName}_${new Date().toISOString().slice(0,10)}.xlsx`);
+        toast('Exportado', `${allDocs.length} documentos exportados a Excel`);
+      } catch (e) {
+        toast('Error', 'No se pudo exportar: ' + e.message);
+      }
+    }
+
+    // ===== IMPORT EXCEL =====
+    let pendingImportRows = [];
+
+    function openImportModal() {
+      if (!currentCollection) { toast('Error', 'Selecciona una coleccion primero'); return; }
+      const colName = COLLECTIONS.find(c => c.id === currentCollection)?.name || currentCollection;
+      $('importModalTitle').innerHTML = `<i class="fa-solid fa-upload"></i> Importar a ${escapeHtml(colName)}`;
+      $('importFileInput').value = '';
+      $('importPreview').innerHTML = '';
+      $('importStatus').textContent = '';
+      $('btnConfirmImport').disabled = true;
+      pendingImportRows = [];
+      $('importModal').classList.add('open');
+    }
+
+    $('importFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data);
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws);
+        pendingImportRows = rows;
+        $('importStatus').textContent = `${rows.length} filas encontradas en el archivo.`;
+        $('btnConfirmImport').disabled = rows.length === 0;
+        // Preview first 5 rows
+        if (rows.length) {
+          const keys = Object.keys(rows[0]).slice(0, 6);
+          let html = '<table style="width:100%;font-size:11px;border-collapse:collapse"><thead><tr>';
+          keys.forEach(k => html += `<th style="padding:4px 6px;background:#f1f5f9;border:1px solid #e2e8f0;font-size:10px">${escapeHtml(k)}</th>`);
+          html += '</tr></thead><tbody>';
+          rows.slice(0, 5).forEach(r => {
+            html += '<tr>';
+            keys.forEach(k => html += `<td style="padding:4px 6px;border:1px solid #f1f5f9;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r[k])}</td>`);
+            html += '</tr>';
+          });
+          html += '</tbody></table>';
+          if (rows.length > 5) html += `<div class="hint" style="margin-top:6px">... y ${rows.length - 5} filas mas</div>`;
+          $('importPreview').innerHTML = html;
+        }
+      } catch (err) {
+        $('importStatus').textContent = 'Error al leer el archivo: ' + err.message;
+        pendingImportRows = [];
+        $('btnConfirmImport').disabled = true;
+      }
+    });
+
+    async function confirmImport() {
+      if (!currentCollection || !pendingImportRows.length) return;
+      if (!confirm(`¿Importar ${pendingImportRows.length} documentos a "${currentCollection}"? Esta accion agregara documentos nuevos (no sobreescribe existentes).`)) return;
+      $('btnConfirmImport').disabled = true;
+      $('importStatus').textContent = 'Importando...';
+      let ok = 0, fail = 0;
+      const col = collection(db, currentCollection);
+      for (const row of pendingImportRows) {
+        try {
+          // Clean up: try to parse JSON strings back to objects/arrays
+          const cleaned = {};
+          Object.entries(row).forEach(([k, v]) => {
+            if (k === 'id') return; // skip id field
+            if (typeof v === 'string' && ((v.startsWith('[') && v.endsWith(']')) || (v.startsWith('{') && v.endsWith('}')))) {
+              try { cleaned[k] = JSON.parse(v); return; } catch {}
+            }
+            cleaned[k] = v;
+          });
+          await addDoc(col, cleaned);
+          ok++;
+        } catch (e) { fail++; }
+      }
+      $('importStatus').textContent = `Importacion completa: ${ok} exitosos, ${fail} errores.`;
+      toast('Importado', `${ok} documentos importados`);
+      pendingImportRows = [];
+      $('btnConfirmImport').disabled = true;
+      await selectCollection(currentCollection);
+      loadCollectionCounts();
+    }
+
+    $('btnExport').addEventListener('click', exportCollectionToExcel);
+    $('btnImport').addEventListener('click', openImportModal);
+    $('btnCloseImport').addEventListener('click', () => $('importModal').classList.remove('open'));
+    $('btnCancelImport').addEventListener('click', () => $('importModal').classList.remove('open'));
+    $('btnConfirmImport').addEventListener('click', confirmImport);
+
     $('btnAdd').addEventListener('click', () => {
       $('addModalTitle').innerHTML = `<i class="fa-solid fa-plus"></i> Agregar a ${escapeHtml(COLLECTIONS.find(c => c.id === currentCollection)?.name || currentCollection)}`;
       $('addJsonInput').value = '{\n  \n}';
@@ -645,6 +784,7 @@
       if (e.key === 'Escape') {
         $('editModal').classList.remove('open');
         $('addModal').classList.remove('open');
+        $('importModal').classList.remove('open');
       }
     });
 
@@ -670,6 +810,8 @@
       currentPage = 1;
       $('mainTitle').innerHTML = '<i class="fa-solid fa-table"></i> Selecciona una colección';
       $('btnAdd').style.display = 'none';
+      $('btnExport').style.display = 'none';
+      $('btnImport').style.display = 'none';
       $('filtersBox').style.display = 'none';
       $('footerBox').style.display = 'none';
       $('tableContainer').innerHTML = '<div class="empty"><i class="fa-solid fa-hand-pointer"></i><div>Selecciona una colección de la izquierda para ver sus documentos</div></div>';
