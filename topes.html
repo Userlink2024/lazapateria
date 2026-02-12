@@ -150,6 +150,15 @@ input,select,textarea{font-family:inherit}
 .stat-card{padding:16px;border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow)}
 .stat-card .stat-label{font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
 .stat-card .stat-val{font-size:22px;font-weight:900}
+
+/* Hist account selector */
+.hist-accounts{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.hist-acc-chip{padding:14px 18px;border-radius:12px;border:2px solid var(--border);background:#fff;cursor:pointer;transition:all .2s;text-align:left;min-width:200px;flex:1;max-width:320px}
+.hist-acc-chip:hover{border-color:var(--blue);background:rgba(0,122,255,.03)}
+.hist-acc-chip.selected{border-color:var(--blue);background:rgba(0,122,255,.06);box-shadow:0 0 0 3px rgba(0,122,255,.12)}
+.hist-acc-chip .chip-name{font-weight:800;font-size:13px;margin-bottom:2px}
+.hist-acc-chip .chip-num{font-size:11px;color:var(--muted)}
+.hist-acc-chip .chip-badge{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;background:rgba(0,122,255,.1);color:var(--blue)}
 </style>
 </head>
 <body>
@@ -200,17 +209,23 @@ input,select,textarea{font-family:inherit}
 
   <!-- TAB: HISTORIAL -->
   <div class="tab-content" id="tabHistorial" style="display:none">
-    <div class="card">
-      <div class="card-h">
-        <h2><i class="fas fa-clock-rotate-left" style="color:var(--purple)"></i> Historial de Movimientos</h2>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input type="date" id="histFrom" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:600"/>
-          <input type="date" id="histTo" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:600"/>
-          <button class="btn sm primary" onclick="loadHistory()"><i class="fas fa-search"></i> Filtrar</button>
+    <p class="hint" style="margin-bottom:12px"><i class="fas fa-hand-pointer"></i> Selecciona una cuenta para ver su historial</p>
+    <div class="hist-accounts" id="histAccountList"></div>
+
+    <div id="histDetailPanel" style="display:none">
+      <div class="card">
+        <div class="card-h">
+          <h2 id="histDetailTitle"><i class="fas fa-clock-rotate-left" style="color:var(--purple)"></i> Historial</h2>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="date" id="histFrom" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:600"/>
+            <input type="date" id="histTo" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:600"/>
+            <button class="btn sm primary" onclick="loadHistory()"><i class="fas fa-search"></i> Filtrar</button>
+            <button class="btn sm" onclick="clearHistSelection()"><i class="fas fa-arrow-left"></i> Volver</button>
+          </div>
         </div>
-      </div>
-      <div class="card-b" style="overflow-x:auto">
-        <div id="histBody"></div>
+        <div class="card-b" style="overflow-x:auto">
+          <div id="histBody"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -289,7 +304,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     const tab = btn.dataset.tab;
     if(tab==='hoy') $('tabHoy').style.display='';
     else if(tab==='config'){ $('tabConfig').style.display=''; renderConfig(); }
-    else if(tab==='historial'){ $('tabHistorial').style.display=''; loadHistory(); }
+    else if(tab==='historial'){ $('tabHistorial').style.display=''; renderHistAccounts(); }
   });
 });
 
@@ -563,21 +578,57 @@ async function undoLast(accountId, movId){
 }
 
 /* ===== HISTORY ===== */
+let selectedHistAccount = null;
+
+function renderHistAccounts(){
+  const list = $('histAccountList');
+  if(!allAccounts.length){
+    list.innerHTML = '<div class="empty"><i class="fas fa-inbox"></i><p>No hay cuentas registradas.</p></div>';
+    return;
+  }
+  list.innerHTML = allAccounts.map(acc=>{
+    const cfg = topesConfig[acc.id] || {};
+    const tope = Number(cfg.tope) || 0;
+    const isSelected = selectedHistAccount === acc.id;
+    return `<button class="hist-acc-chip${isSelected?' selected':''}" onclick="selectHistAccount('${acc.id}')">
+      <div class="chip-name"><i class="fas fa-building-columns" style="color:var(--blue);margin-right:6px"></i>${acc.name}</div>
+      <div class="chip-num">${acc.number}</div>
+      ${tope ? '<div class="chip-badge">Tope: '+fmtCOP(tope)+'</div>' : ''}
+    </button>`;
+  }).join('');
+}
+
+function selectHistAccount(accountId){
+  selectedHistAccount = accountId;
+  renderHistAccounts();
+  const acc = allAccounts.find(a=>a.id===accountId);
+  $('histDetailTitle').innerHTML = `<i class="fas fa-clock-rotate-left" style="color:var(--purple)"></i> ${acc ? acc.name : 'Cuenta'} <span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:6px">${acc ? acc.number : ''}</span>`;
+  $('histDetailPanel').style.display = '';
+  loadHistory();
+}
+
+function clearHistSelection(){
+  selectedHistAccount = null;
+  renderHistAccounts();
+  $('histDetailPanel').style.display = 'none';
+}
+
 async function loadHistory(){
+  if(!selectedHistAccount) return;
   const from = $('histFrom').value;
   const to = $('histTo').value;
   const body = $('histBody');
   body.innerHTML = '<div class="hint" style="padding:20px;text-align:center"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>';
 
   try {
-    let q = COL_TOPES_MOV;
+    let q = COL_TOPES_MOV.where('accountId','==',selectedHistAccount);
     if(from) q = q.where('fecha','>=',from);
     if(to) q = q.where('fecha','<=',to);
     const snap = await q.limit(500).get();
     const movs = snap.docs.map(d=>({id:d.id,...d.data()}));
 
     if(!movs.length){
-      body.innerHTML = '<div class="empty"><i class="fas fa-inbox"></i><p>No hay movimientos en este rango.</p></div>';
+      body.innerHTML = '<div class="empty"><i class="fas fa-inbox"></i><p>No hay movimientos para esta cuenta en este rango.</p></div>';
       return;
     }
 
@@ -588,21 +639,22 @@ async function loadHistory(){
       byDate[m.fecha].push(m);
     });
 
+    let grandTotal = 0;
     let html = '';
     Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(fecha=>{
       const dayMovs = byDate[fecha];
       const dayTotal = dayMovs.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+      grandTotal += dayTotal;
       html += `<div style="margin-bottom:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <span style="font-weight:800;font-size:14px"><i class="fas fa-calendar-day" style="color:var(--blue);margin-right:6px"></i>${fecha}</span>
           <span class="pill blue">${fmtCOP(dayTotal)}</span>
         </div>
         <table class="hist-table">
-          <thead><tr><th>Cuenta</th><th>Monto</th><th>Descripcion</th><th>Por</th><th></th></tr></thead>
+          <thead><tr><th>Monto</th><th>Descripcion</th><th>Registrado por</th><th></th></tr></thead>
           <tbody>`;
       dayMovs.forEach(m=>{
         html += `<tr>
-          <td><strong>${m.accountName||''}</strong><br><span class="mono">${m.accountNumber||''}</span></td>
           <td style="font-weight:800">${fmtCOP(m.monto)}</td>
           <td>${m.descripcion||'—'}</td>
           <td class="hint">${m.createdBy||''}</td>
@@ -611,6 +663,14 @@ async function loadHistory(){
       });
       html += '</tbody></table></div>';
     });
+
+    // Summary at top
+    const numDays = Object.keys(byDate).length;
+    html = `<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="stat-card" style="flex:1;min-width:140px"><div class="stat-label">Total Periodo</div><div class="stat-val">${fmtCOP(grandTotal)}</div></div>
+      <div class="stat-card" style="flex:1;min-width:140px"><div class="stat-label">Movimientos</div><div class="stat-val">${movs.length}</div></div>
+      <div class="stat-card" style="flex:1;min-width:140px"><div class="stat-label">Dias con actividad</div><div class="stat-val">${numDays}</div></div>
+    </div>` + html;
 
     body.innerHTML = html;
   } catch(e){
