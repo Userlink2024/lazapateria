@@ -129,6 +129,17 @@ input,select,textarea{font-family:inherit}
 
 .hint{font-size:12px;color:var(--muted);font-weight:600}
 
+/* Alert overlay */
+.tope-alert-overlay{position:fixed;inset:0;background:rgba(255,59,48,.15);display:flex;align-items:center;justify-content:center;z-index:999;backdrop-filter:blur(6px);animation:alertPulse .4s ease}
+.tope-alert-box{background:#fff;border:3px solid var(--red);border-radius:20px;padding:32px 40px;text-align:center;box-shadow:0 12px 50px rgba(255,59,48,.35);animation:shakeHard .5s ease}
+.tope-alert-box .alert-icon{font-size:64px;color:var(--red);animation:shakeHard .5s ease .1s both}
+.tope-alert-box h2{font-size:20px;color:var(--red);margin:12px 0 6px;font-weight:900}
+.tope-alert-box p{font-size:14px;color:var(--text);font-weight:600;margin-bottom:6px}
+.tope-alert-box .alert-detail{font-size:12px;color:var(--muted);margin-bottom:18px}
+.tope-alert-box button{margin-top:8px}
+@keyframes shakeHard{0%,100%{transform:translateX(0)}10%,30%,50%,70%,90%{transform:translateX(-8px)}20%,40%,60%,80%{transform:translateX(8px)}}
+@keyframes alertPulse{0%{opacity:0}100%{opacity:1}}
+
 .pill{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:800}
 .pill.green{background:rgba(52,199,89,.12);color:#28a745}
 .pill.red{background:rgba(255,59,48,.12);color:#ff3b30}
@@ -457,6 +468,50 @@ $('addMonto').addEventListener('input',()=>{
   $('addMonto').value = raw ? Number(raw).toLocaleString('es-CO') : '';
 });
 
+function playAlertSound(){
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Beep 1
+    const o1 = ctx.createOscillator(); const g1 = ctx.createGain();
+    o1.type = 'square'; o1.frequency.value = 880; g1.gain.value = 0.5;
+    o1.connect(g1); g1.connect(ctx.destination);
+    o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.15);
+    // Beep 2
+    const o2 = ctx.createOscillator(); const g2 = ctx.createGain();
+    o2.type = 'square'; o2.frequency.value = 660; g2.gain.value = 0.5;
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.start(ctx.currentTime + 0.2); o2.stop(ctx.currentTime + 0.35);
+    // Beep 3 (longer)
+    const o3 = ctx.createOscillator(); const g3 = ctx.createGain();
+    o3.type = 'square'; o3.frequency.value = 440; g3.gain.value = 0.6;
+    o3.connect(g3); g3.connect(ctx.destination);
+    o3.start(ctx.currentTime + 0.4); o3.stop(ctx.currentTime + 0.7);
+  } catch(e){}
+}
+
+function showTopeAlert(acc, monto, ingresado, tope){
+  const disponible = Math.max(0, tope - ingresado);
+  const overlay = document.createElement('div');
+  overlay.className = 'tope-alert-overlay';
+  overlay.innerHTML = `
+    <div class="tope-alert-box">
+      <div class="alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
+      <h2>TOPE EXCEDIDO</h2>
+      <p>No se puede registrar este ingreso</p>
+      <div class="alert-detail">
+        <strong>${acc.name}</strong><br>
+        Intentas ingresar: <strong style="color:var(--red)">${fmtCOP(monto)}</strong><br>
+        Ya ingresado hoy: <strong>${fmtCOP(ingresado)}</strong><br>
+        Tope: <strong>${fmtCOP(tope)}</strong><br>
+        Disponible: <strong style="color:${disponible>0?'var(--green)':'var(--red)'}">${fmtCOP(disponible)}</strong>
+      </div>
+      <button class="btn danger" onclick="this.closest('.tope-alert-overlay').remove()"><i class="fas fa-xmark"></i> Entendido</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  playAlertSound();
+  overlay.addEventListener('click',(e)=>{ if(e.target === overlay) overlay.remove(); });
+}
+
 async function saveIngreso(){
   const accountId = $('addAccountId').value;
   const monto = parseMoneda($('addMonto').value);
@@ -464,6 +519,16 @@ async function saveIngreso(){
   if(!monto || monto <= 0){ toast('Ingresa un monto valido'); return; }
 
   const acc = allAccounts.find(a=>a.id===accountId);
+  const cfg = topesConfig[accountId] || {};
+  const tope = Number(cfg.tope) || 0;
+  const movsHoy = todayMovs.filter(m=>m.accountId===accountId);
+  const ingresado = movsHoy.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+
+  if(tope > 0 && (ingresado + monto) > tope){
+    showTopeAlert(acc || {name:'Cuenta',number:''}, monto, ingresado, tope);
+    return;
+  }
+
   try {
     await COL_TOPES_MOV.add({
       accountId,
