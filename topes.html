@@ -313,9 +313,14 @@ function subscribeConfig(){
 /* ===== LOAD DAY MOVEMENTS ===== */
 async function loadDayData(){
   try {
-    const snap = await COL_TOPES_MOV.where('fecha','==',currentDate).orderBy('createdAt','desc').get();
+    const snap = await COL_TOPES_MOV.where('fecha','==',currentDate).get();
     todayMovs = snap.docs.map(d=>({id:d.id,...d.data()}));
-  } catch(e){ todayMovs = []; }
+    todayMovs.sort((a,b)=>{
+      const ta = a.createdAt ? a.createdAt.toMillis() : 0;
+      const tb = b.createdAt ? b.createdAt.toMillis() : 0;
+      return tb - ta;
+    });
+  } catch(e){ console.error('loadDayData error:', e); todayMovs = []; }
   renderDashboard();
 }
 
@@ -500,7 +505,7 @@ async function loadHistory(){
   body.innerHTML = '<div class="hint" style="padding:20px;text-align:center"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>';
 
   try {
-    let q = COL_TOPES_MOV.orderBy('fecha','desc');
+    let q = COL_TOPES_MOV;
     if(from) q = q.where('fecha','>=',from);
     if(to) q = q.where('fecha','<=',to);
     const snap = await q.limit(500).get();
