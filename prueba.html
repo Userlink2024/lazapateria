@@ -1719,10 +1719,8 @@
                  if (navigator.vibrate) {
                      navigator.vibrate(200);
                  }
-                 // Notificación del sistema si la app está en segundo plano
-                 if (document.hidden) {
-                     showBrowserNotification(msg.name, msg.text || '📎 Archivo');
-                 }
+                 // Notificación del sistema (siempre intentar)
+                 showBrowserNotification(msg.name, msg.text || '📎 Archivo');
              }
 
              // Añadir listener de clic: menú de acciones para todos los mensajes
@@ -1824,24 +1822,34 @@
             }
         }
 
-        // Mostrar notificación del sistema cuando la app está en segundo plano
+        // Mostrar notificación del sistema (usa Service Worker para compatibilidad con WebView)
         function showBrowserNotification(senderName, messageText) {
             if (!('Notification' in window) || Notification.permission !== 'granted') return;
-            try {
-                const notif = new Notification('FACBA Chat', {
-                    body: `${senderName}: ${messageText}`,
-                    icon: './icon-192.png',
-                    tag: 'facba-chat-msg',
-                    renotify: true,
-                    vibrate: [200]
-                });
-                notif.onclick = () => {
-                    window.focus();
-                    notif.close();
-                };
-                setTimeout(() => notif.close(), 5000);
-            } catch (e) {
-                console.log('Notification error:', e);
+            // Intentar vía Service Worker (funciona en WebView/APK)
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(reg => {
+                    reg.showNotification('FACBA Chat', {
+                        body: `${senderName}: ${messageText}`,
+                        icon: './icon-192.png',
+                        tag: 'facba-chat-msg',
+                        renotify: true,
+                        vibrate: [200, 100, 200]
+                    });
+                }).catch(e => console.log('SW notification error:', e));
+            } else {
+                // Fallback: Notification API directa
+                try {
+                    const notif = new Notification('FACBA Chat', {
+                        body: `${senderName}: ${messageText}`,
+                        icon: './icon-192.png',
+                        tag: 'facba-chat-msg',
+                        renotify: true
+                    });
+                    notif.onclick = () => { window.focus(); notif.close(); };
+                    setTimeout(() => notif.close(), 5000);
+                } catch (e) {
+                    console.log('Notification fallback error:', e);
+                }
             }
         }
 
