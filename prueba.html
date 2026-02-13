@@ -887,6 +887,65 @@
              cursor: pointer;
              margin: 4px 0;
          }
+         .image-wrapper {
+             position: relative;
+             display: inline-block;
+             max-width: 100%;
+         }
+         .image-expiry-badge {
+             position: absolute;
+             top: 6px;
+             left: 6px;
+             background: rgba(0,0,0,0.65);
+             color: #ffd60a;
+             font-size: 0.65em;
+             padding: 2px 7px;
+             border-radius: 8px;
+             pointer-events: none;
+         }
+         .image-download-btn {
+             position: absolute;
+             bottom: 8px;
+             right: 8px;
+             background: rgba(0,0,0,0.55);
+             color: white;
+             border: none;
+             border-radius: 50%;
+             width: 32px;
+             height: 32px;
+             font-size: 1em;
+             cursor: pointer;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+         }
+         .image-expired-placeholder {
+             background: #e5e5ea;
+             border-radius: 10px;
+             padding: 20px;
+             text-align: center;
+             color: #8e8e93;
+             font-size: 0.85em;
+             margin: 4px 0;
+         }
+         .toast-notification {
+             position: fixed;
+             bottom: 80px;
+             left: 50%;
+             transform: translateX(-50%);
+             background: rgba(0,0,0,0.8);
+             color: white;
+             padding: 10px 20px;
+             border-radius: 20px;
+             font-size: 0.85em;
+             z-index: 9999;
+             opacity: 0;
+             transition: opacity 0.3s;
+             pointer-events: none;
+             text-align: center;
+             max-width: 90%;
+         }
+         .toast-notification.show { opacity: 1; }
 
          /* Audio en mensajes */
          .message-audio {
@@ -1291,6 +1350,7 @@
              setupPresence(); // Configurar la presencia del usuario
              setupChatLockListener(); // Escuchar estado de bloqueo global
              requestNotificationPermission(); // Solicitar permiso de notificaciones
+             setTimeout(cleanupExpiredImages, 3000); // Limpiar imágenes expiradas al iniciar
         }
 
 
@@ -1737,16 +1797,52 @@
             /* --- Fin de mostrar contenido de respuesta --- */
 
             // --- Renderizar según tipo de mensaje ---
-            if (msg.type === 'image' && msg.imageData) {
-                const img = document.createElement('img');
-                img.classList.add('message-image');
-                img.src = msg.imageData;
-                img.alt = 'Imagen';
-                img.onclick = () => {
-                    const w = window.open('');
-                    w.document.write(`<img src="${msg.imageData}" style="max-width:100%;height:auto;">`);
-                };
-                messageElement.appendChild(img);
+            if (msg.type === 'image') {
+                const age = Date.now() - (msg.timestamp || 0);
+                const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+                if (!msg.imageData || age >= TWENTY_FOUR_H) {
+                    // Imagen expirada
+                    const placeholder = document.createElement('div');
+                    placeholder.classList.add('image-expired-placeholder');
+                    placeholder.textContent = '📷 Imagen expirada (24h)';
+                    messageElement.appendChild(placeholder);
+                } else {
+                    const wrapper = document.createElement('div');
+                    wrapper.classList.add('image-wrapper');
+
+                    const img = document.createElement('img');
+                    img.classList.add('message-image');
+                    img.src = msg.imageData;
+                    img.alt = 'Imagen';
+                    img.onclick = () => {
+                        const w = window.open('');
+                        w.document.write(`<img src="${msg.imageData}" style="max-width:100%;height:auto;">`);
+                    };
+                    wrapper.appendChild(img);
+
+                    // Badge con tiempo restante
+                    const badge = document.createElement('div');
+                    badge.classList.add('image-expiry-badge');
+                    const hoursLeft = Math.max(0, Math.ceil((TWENTY_FOUR_H - age) / (60 * 60 * 1000)));
+                    badge.textContent = `⏳ ${hoursLeft}h restantes`;
+                    wrapper.appendChild(badge);
+
+                    // Botón descargar
+                    const dlBtn = document.createElement('button');
+                    dlBtn.classList.add('image-download-btn');
+                    dlBtn.textContent = '💾';
+                    dlBtn.title = 'Guardar imagen';
+                    dlBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const a = document.createElement('a');
+                        a.href = msg.imageData;
+                        a.download = `chat_img_${messageId}.jpg`;
+                        a.click();
+                    };
+                    wrapper.appendChild(dlBtn);
+
+                    messageElement.appendChild(wrapper);
+                }
             } else if (msg.type === 'audio' && msg.audioData) {
                 const audio = document.createElement('audio');
                 audio.classList.add('message-audio');
@@ -2511,10 +2607,48 @@
 
         imageButton.addEventListener('click', () => imageInput.click());
 
+        // Toast de notificación
+        function showToast(message, duration = 3500) {
+            let toast = document.querySelector('.toast-notification');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.classList.add('toast-notification');
+                document.body.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), duration);
+        }
+
+        // Limpieza automática de imágenes expiradas (>24h)
+        function cleanupExpiredImages() {
+            if (!messagesRef) return;
+            const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+            messagesRef.orderByChild('timestamp').endAt(cutoff).once('value', (snap) => {
+                const updates = {};
+                snap.forEach(child => {
+                    const msg = child.val();
+                    if (msg.type === 'image' && msg.imageData) {
+                        // Borrar solo el imageData, mantener el mensaje como placeholder
+                        updates[`${child.key}/imageData`] = null;
+                    }
+                });
+                if (Object.keys(updates).length > 0) {
+                    messagesRef.update(updates).then(() => {
+                        console.log(`Cleaned ${Object.keys(updates).length} expired images`);
+                    });
+                }
+            });
+        }
+        // Ejecutar limpieza cada 5 minutos y al iniciar
+        setInterval(cleanupExpiredImages, 5 * 60 * 1000);
+
         imageInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
             imageInput.value = ''; // Reset para permitir re-selección
+
+            showToast('⏳ Las imágenes se borran después de 24 horas. Guárdala con 💾 si la necesitas.');
 
             try {
                 const base64 = await compressAndEncode(file, 800, 0.6);
