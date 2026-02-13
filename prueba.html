@@ -231,20 +231,13 @@
          }
 
          .msg-actions-menu {
-             position: absolute;
+             position: fixed;
              background: #fff;
-             border-radius: 10px;
-             box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-             z-index: 200;
+             border-radius: 12px;
+             box-shadow: 0 4px 20px rgba(0,0,0,0.22);
+             z-index: 9999;
              overflow: hidden;
-             min-width: 150px;
-             bottom: 100%;
-             right: 0;
-             margin-bottom: 4px;
-         }
-         .message.received .msg-actions-menu {
-             right: auto;
-             left: 0;
+             min-width: 160px;
          }
          .msg-actions-menu button {
              display: block;
@@ -1627,62 +1620,81 @@
                  playNotificationSound();
              }
 
-             // Añadir listener de clic: mensajes propios → menú acciones, ajenos → responder
+             // Añadir listener de clic: menú de acciones para todos los mensajes
              messageElement.addEventListener('click', (e) => {
                  e.stopPropagation();
-                 if (msg.name === userName) {
-                     showMessageActions(messageId, msg, messageElement);
-                 } else {
-                     startReply({ id: messageId, name: msg.name, text: msg.text || '' });
-                 }
+                 showMessageActions(messageId, msg, messageElement);
              });
         }
 
-        // --- Menú de acciones para mensajes propios ---
+        // --- Menú de acciones para mensajes ---
         function showMessageActions(messageId, msg, element) {
             // Cerrar menú previo
             const existing = document.querySelector('.msg-actions-menu');
-            if (existing) { existing.remove(); return; } // toggle: si ya estaba abierto, solo cerrar
+            if (existing) { existing.remove(); return; }
 
             const menu = document.createElement('div');
             menu.classList.add('msg-actions-menu');
 
-            // Responder
+            // Responder (para todos)
             const replyBtn = document.createElement('button');
             replyBtn.textContent = '↩️ Responder';
             replyBtn.onclick = (e) => { e.stopPropagation(); menu.remove(); startReply({ id: messageId, name: msg.name, text: msg.text || '' }); };
             menu.appendChild(replyBtn);
 
-            // Editar
-            const editBtn = document.createElement('button');
-            editBtn.textContent = '✏️ Editar';
-            editBtn.onclick = async (e) => {
-                e.stopPropagation(); menu.remove();
-                const currentText = element.querySelector('.text') ? element.querySelector('.text').textContent : msg.text;
-                const newText = await showPromptModal('Editar mensaje', currentText);
-                if (newText && newText !== currentText) {
-                    messagesRef.child(messageId).update({ text: newText, edited: true });
-                }
-            };
-            menu.appendChild(editBtn);
+            // Editar y Eliminar solo para mensajes propios
+            if (msg.name === userName) {
+                const editBtn = document.createElement('button');
+                editBtn.textContent = '✏️ Editar';
+                editBtn.onclick = async (e) => {
+                    e.stopPropagation(); menu.remove();
+                    const currentText = element.querySelector('.text') ? element.querySelector('.text').textContent : msg.text;
+                    const newText = await showPromptModal('Editar mensaje', currentText);
+                    if (newText && newText !== currentText) {
+                        messagesRef.child(messageId).update({ text: newText, edited: true });
+                    }
+                };
+                menu.appendChild(editBtn);
 
-            // Eliminar
-            const deleteBtn = document.createElement('button');
-            deleteBtn.classList.add('delete-action');
-            deleteBtn.textContent = '🗑️ Eliminar';
-            deleteBtn.onclick = (e) => { e.stopPropagation(); menu.remove(); messagesRef.child(messageId).remove(); };
-            menu.appendChild(deleteBtn);
+                const deleteBtn = document.createElement('button');
+                deleteBtn.classList.add('delete-action');
+                deleteBtn.textContent = '🗑️ Eliminar';
+                deleteBtn.onclick = (e) => { e.stopPropagation(); menu.remove(); messagesRef.child(messageId).remove(); };
+                menu.appendChild(deleteBtn);
+            }
 
-            element.appendChild(menu);
+            // Posicionar con fixed en base a la posición del mensaje en pantalla
+            document.body.appendChild(menu);
+            const rect = element.getBoundingClientRect();
+            const menuH = menu.offsetHeight;
+            const isSent = msg.name === userName;
+
+            // Vertical: si hay espacio arriba, mostrar arriba; si no, abajo
+            if (rect.top - menuH - 4 > 0) {
+                menu.style.top = (rect.top - menuH - 4) + 'px';
+            } else {
+                menu.style.top = (rect.bottom + 4) + 'px';
+            }
+
+            // Horizontal: alinear al lado del mensaje
+            if (isSent) {
+                menu.style.right = (window.innerWidth - rect.right) + 'px';
+            } else {
+                menu.style.left = rect.left + 'px';
+            }
 
             // Cerrar al tocar fuera
             const closeMenu = (ev) => {
-                if (!menu.contains(ev.target) && !element.contains(ev.target)) {
+                if (!menu.contains(ev.target)) {
                     menu.remove();
                     document.removeEventListener('click', closeMenu, true);
+                    document.removeEventListener('touchstart', closeMenu, true);
                 }
             };
-            setTimeout(() => document.addEventListener('click', closeMenu, true), 10);
+            setTimeout(() => {
+                document.addEventListener('click', closeMenu, true);
+                document.addEventListener('touchstart', closeMenu, true);
+            }, 10);
         }
 
         // Función para reproducir el sonido de notificación
