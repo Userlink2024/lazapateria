@@ -222,6 +222,51 @@
              flex-shrink: 0; /* Evitar que se encoja */
          }
 
+         .edited-label {
+             font-size: 0.65em;
+             color: #8e8e93;
+             font-style: italic;
+             margin-right: 4px;
+             flex-shrink: 0;
+         }
+
+         .msg-actions-menu {
+             position: absolute;
+             background: #fff;
+             border-radius: 10px;
+             box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+             z-index: 200;
+             overflow: hidden;
+             min-width: 150px;
+             bottom: 100%;
+             right: 0;
+             margin-bottom: 4px;
+         }
+         .message.received .msg-actions-menu {
+             right: auto;
+             left: 0;
+         }
+         .msg-actions-menu button {
+             display: block;
+             width: 100%;
+             padding: 11px 16px;
+             border: none;
+             background: none;
+             text-align: left;
+             font-size: 0.9em;
+             cursor: pointer;
+             font-family: inherit;
+         }
+         .msg-actions-menu button:hover {
+             background: #f2f2f7;
+         }
+         .msg-actions-menu button:not(:last-child) {
+             border-bottom: 1px solid #e5e5ea;
+         }
+         .msg-actions-menu .delete-action {
+             color: #ff3b30;
+         }
+
 
         /* Estilos para mensajes recibidos */
         .message.received {
@@ -1252,36 +1297,54 @@
                  console.error(`[${userName}] Error in realtime listener for messages (child_added):`, error); // Debugging log con nombre de usuario
              });
 
-             // Listener para actualizar el estado de los mensajes (para doble check)
+             // Listener para actualizar el estado de los mensajes (doble check + ediciones)
              messagesRef.on('child_changed', (data) => {
                  const changedMessage = data.val();
                  const messageId = data.key;
-                 console.log(`[${userName}] child_changed event: Message ${messageId} changed to:`, changedMessage); // Debugging log con nombre de usuario
+                 console.log(`[${userName}] child_changed event: Message ${messageId} changed to:`, changedMessage);
 
-                 // Si el mensaje cambiado es del usuario actual y su estado es 'read', actualizar la UI
-                 if (changedMessage.name === userName && changedMessage.status === 'read') {
-                     const messageElement = chatBox.querySelector(`[data-message-id="${messageId}"]`);
-                     if (messageElement) {
-                         // Encontrar el message-footer dentro del mensaje
-                         const messageFooter = messageElement.querySelector('.message-footer');
-                         if (messageFooter) {
-                             // Eliminar checkmarks existentes si los hay
-                             const existingCheckmarks = messageFooter.querySelector('.checkmarks');
-                             if (existingCheckmarks) {
-                                 existingCheckmarks.remove();
-                             }
+                 const messageElement = chatBox.querySelector(`[data-message-id="${messageId}"]`);
+                 if (!messageElement) return;
 
-                             const checkmarksSpan = document.createElement('span');
-                             checkmarksSpan.classList.add('checkmarks');
-                             checkmarksSpan.textContent = '✓✓'; // Doble checkmark Unicode
-                             // Añadir los checkmarks al final del message-footer
-                             messageFooter.appendChild(checkmarksSpan);
-                             console.log(`[${userName}] Updated message ${messageId} to double check.`); // Debugging log con nombre de usuario
-                         }
+                 const messageFooter = messageElement.querySelector('.message-footer');
+
+                 // Actualizar doble check si el mensaje fue leído
+                 if (changedMessage.name === userName && changedMessage.status === 'read' && messageFooter) {
+                     const existingCheckmarks = messageFooter.querySelector('.checkmarks');
+                     if (existingCheckmarks) existingCheckmarks.remove();
+                     const checkmarksSpan = document.createElement('span');
+                     checkmarksSpan.classList.add('checkmarks');
+                     checkmarksSpan.textContent = '✓✓';
+                     messageFooter.appendChild(checkmarksSpan);
+                 }
+
+                 // Actualizar texto si fue editado
+                 if (changedMessage.edited) {
+                     const textSpan = messageElement.querySelector('.text');
+                     if (textSpan) {
+                         const urlRegex = /(https?:\/\/[^\s]+)/g;
+                         textSpan.innerHTML = changedMessage.text.replace(urlRegex, '<a href="$1" target="_blank">$1</a>');
+                     }
+                     // Agregar etiqueta "editado" si no existe
+                     if (messageFooter && !messageFooter.querySelector('.edited-label')) {
+                         const editedSpan = document.createElement('span');
+                         editedSpan.classList.add('edited-label');
+                         editedSpan.textContent = 'editado';
+                         messageFooter.insertBefore(editedSpan, messageFooter.firstChild);
                      }
                  }
              }, (error) => {
-                 console.error(`[${userName}] Error in realtime listener for message changes (child_changed):`, error); // Debugging log con nombre de usuario
+                 console.error(`[${userName}] Error in realtime listener for message changes (child_changed):`, error);
+             });
+
+             // Listener para eliminar mensajes individuales del DOM en tiempo real
+             messagesRef.on('child_removed', (data) => {
+                 const messageId = data.key;
+                 const messageElement = chatBox.querySelector(`[data-message-id="${messageId}"]`);
+                 if (messageElement) {
+                     messageElement.remove();
+                     console.log(`[${userName}] Message ${messageId} removed from DOM.`);
+                 }
              });
 
              // Listener para reflejar borrados masivos del nodo 'messages' (por ejemplo, al limpiar el chat)
@@ -1503,6 +1566,14 @@
 
 
             // --- Añadir hora y checkmarks al footer ---
+            // Mostrar etiqueta (editado) si aplica
+            if (msg.edited) {
+                const editedSpan = document.createElement('span');
+                editedSpan.classList.add('edited-label');
+                editedSpan.textContent = 'editado';
+                messageFooter.appendChild(editedSpan);
+            }
+
             messageFooter.appendChild(timestampSpan); // Añadir la hora
 
             // Añadir checkmarks si es un mensaje enviado por el usuario actual
@@ -1556,17 +1627,62 @@
                  playNotificationSound();
              }
 
-             // Añadir listener de clic para responder
-             messageElement.addEventListener('click', () => {
-                 // Crear un objeto con los datos necesarios para la respuesta
-                 const messageDataForReply = {
-                     id: messageId,
-                     name: msg.name,
-                     text: msg.text || '', // Usar texto si existe, vacío si es archivo
-                     // Puedes añadir más propiedades si quieres referenciar archivos en el futuro
-                 };
-                 startReply(messageDataForReply);
+             // Añadir listener de clic: mensajes propios → menú acciones, ajenos → responder
+             messageElement.addEventListener('click', (e) => {
+                 e.stopPropagation();
+                 if (msg.name === userName) {
+                     showMessageActions(messageId, msg, messageElement);
+                 } else {
+                     startReply({ id: messageId, name: msg.name, text: msg.text || '' });
+                 }
              });
+        }
+
+        // --- Menú de acciones para mensajes propios ---
+        function showMessageActions(messageId, msg, element) {
+            // Cerrar menú previo
+            const existing = document.querySelector('.msg-actions-menu');
+            if (existing) { existing.remove(); return; } // toggle: si ya estaba abierto, solo cerrar
+
+            const menu = document.createElement('div');
+            menu.classList.add('msg-actions-menu');
+
+            // Responder
+            const replyBtn = document.createElement('button');
+            replyBtn.textContent = '↩️ Responder';
+            replyBtn.onclick = (e) => { e.stopPropagation(); menu.remove(); startReply({ id: messageId, name: msg.name, text: msg.text || '' }); };
+            menu.appendChild(replyBtn);
+
+            // Editar
+            const editBtn = document.createElement('button');
+            editBtn.textContent = '✏️ Editar';
+            editBtn.onclick = async (e) => {
+                e.stopPropagation(); menu.remove();
+                const currentText = element.querySelector('.text') ? element.querySelector('.text').textContent : msg.text;
+                const newText = await showPromptModal('Editar mensaje', currentText);
+                if (newText && newText !== currentText) {
+                    messagesRef.child(messageId).update({ text: newText, edited: true });
+                }
+            };
+            menu.appendChild(editBtn);
+
+            // Eliminar
+            const deleteBtn = document.createElement('button');
+            deleteBtn.classList.add('delete-action');
+            deleteBtn.textContent = '🗑️ Eliminar';
+            deleteBtn.onclick = (e) => { e.stopPropagation(); menu.remove(); messagesRef.child(messageId).remove(); };
+            menu.appendChild(deleteBtn);
+
+            element.appendChild(menu);
+
+            // Cerrar al tocar fuera
+            const closeMenu = (ev) => {
+                if (!menu.contains(ev.target) && !element.contains(ev.target)) {
+                    menu.remove();
+                    document.removeEventListener('click', closeMenu, true);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closeMenu, true), 10);
         }
 
         // Función para reproducir el sonido de notificación
@@ -1939,26 +2055,25 @@
              if (!userName) return;
 
              const userPresenceRef = presenceRef.child(userName);
+             const connectedRef = database.ref('.info/connected');
 
-             // Establecer la presencia a true cuando el usuario se conecta
-             userPresenceRef.set(true);
-             console.log(`[${userName}] Presence set to true.`);
-
-             // Eliminar la presencia cuando el usuario se desconecta inesperadamente
-             userPresenceRef.onDisconnect().remove()
-                 .then(() => console.log(`[${userName}] onDisconnect configured to remove presence.`))
-                 .catch(error => console.error(`[${userName}] Error configuring onDisconnect:`, error));
-
-
-             // Establecer la presencia a false cuando el usuario abandona la página (cierra pestaña, navega)
-             window.addEventListener('beforeunload', () => {
-                 console.log(`[${userName}] beforeunload event detected. Setting presence to false.`);
-                 userPresenceRef.set(false); // Establecer a false explícitamente
+             // Patrón oficial de Firebase: escuchar estado de conexión
+             connectedRef.on('value', (snap) => {
+                 if (snap.val() === true) {
+                     // Cada vez que Firebase reconecta, re-registrar onDisconnect
+                     userPresenceRef.onDisconnect().remove()
+                         .then(() => {
+                             // Solo marcar presencia DESPUÉS de que onDisconnect esté listo
+                             userPresenceRef.set(true);
+                             console.log(`[${userName}] Conectado. Presencia activada.`);
+                         })
+                         .catch(error => console.error(`[${userName}] Error configuring onDisconnect:`, error));
+                 }
              });
 
-             window.addEventListener('unload', () => {
-                 console.log(`[${userName}] unload event detected. Setting presence to false.`);
-                 userPresenceRef.set(false); // Establecer a false explícitamente
+             // Limpieza al cerrar pestaña (respaldo)
+             window.addEventListener('beforeunload', () => {
+                 userPresenceRef.remove();
              });
 
 
@@ -1969,14 +2084,12 @@
 
                  if (onlineUsers) {
                      for (const name in onlineUsers) {
-                         // Solo considerar usuarios cuya presencia es explícitamente true y no el usuario actual
                          if (onlineUsers[name] === true && name !== userName) {
                              usersOnline.push(name);
                          }
                      }
                  }
 
-                 // Actualizar el elemento en la interfaz
                  if (usersOnline.length > 0) {
                      onlineUsersDiv.textContent = `En línea: ${usersOnline.join(', ')}`;
                  } else {
