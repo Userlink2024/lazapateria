@@ -827,7 +827,7 @@
             border-radius: 0;
             height: 100vh;
             max-height: 100vh;
-            padding-top: env(safe-area-inset-top, 30px);
+            padding-top: env(safe-area-inset-top, 0px);
         }
         .app-mode body {
             padding: 0;
@@ -835,12 +835,12 @@
         .app-mode #bottom-fixed-area {
             padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
         }
-        @media (display-mode: standalone) {
+        @media (display-mode: standalone), (display-mode: minimal-ui) {
             #chat-container {
                 border-radius: 0;
                 height: 100vh;
                 max-height: 100vh;
-                padding-top: env(safe-area-inset-top, 30px);
+                padding-top: env(safe-area-inset-top, 0px);
             }
             body { padding: 0; }
         }
@@ -1137,7 +1137,7 @@
              setupTypingIndicator(); // Configurar el indicador de escribiendo
              setupPresence(); // Configurar la presencia del usuario
              setupChatLockListener(); // Escuchar estado de bloqueo global
-             // El desbloqueo de audio ahora se maneja en la primera interacción del usuario (enviar mensaje)
+             requestNotificationPermission(); // Solicitar permiso de notificaciones
         }
 
 
@@ -1716,9 +1716,17 @@
             }, 500); // Retraso aumentado a 500ms
 
 
-             // Reproducir sonido solo para mensajes entrantes que no sean del usuario actual
+             // Sonido, vibración y notificación para mensajes entrantes
              if (initialLoadComplete && msg.name !== userName) {
                  playNotificationSound();
+                 // Vibrar el dispositivo (200ms)
+                 if (navigator.vibrate) {
+                     navigator.vibrate(200);
+                 }
+                 // Notificación del sistema si la app está en segundo plano
+                 if (document.hidden) {
+                     showBrowserNotification(msg.name, msg.text || '📎 Archivo');
+                 }
              }
 
              // Añadir listener de clic: menú de acciones para todos los mensajes
@@ -1809,6 +1817,36 @@
              } else if (!audioUnlocked) {
                  console.log("Audio not unlocked yet. Cannot play sound.");
              }
+        }
+
+        // Solicitar permiso de notificaciones al entrar al chat
+        function requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission().then(perm => {
+                    console.log('Notification permission:', perm);
+                });
+            }
+        }
+
+        // Mostrar notificación del sistema cuando la app está en segundo plano
+        function showBrowserNotification(senderName, messageText) {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            try {
+                const notif = new Notification('FACBA Chat', {
+                    body: `${senderName}: ${messageText}`,
+                    icon: './icon-192.png',
+                    tag: 'facba-chat-msg',
+                    renotify: true,
+                    vibrate: [200]
+                });
+                notif.onclick = () => {
+                    window.focus();
+                    notif.close();
+                };
+                setTimeout(() => notif.close(), 5000);
+            } catch (e) {
+                console.log('Notification error:', e);
+            }
         }
 
         // Función para intentar desbloquear el audio con una interacción del usuario
