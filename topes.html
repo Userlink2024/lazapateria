@@ -151,14 +151,28 @@ input,select,textarea{font-family:inherit}
 .stat-card .stat-label{font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
 .stat-card .stat-val{font-size:22px;font-weight:900}
 
-/* Hist account selector */
-.hist-accounts{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
-.hist-acc-chip{padding:14px 18px;border-radius:12px;border:2px solid var(--border);background:#fff;cursor:pointer;transition:all .2s;text-align:left;min-width:200px;flex:1;max-width:320px}
-.hist-acc-chip:hover{border-color:var(--blue);background:rgba(0,122,255,.03)}
-.hist-acc-chip.selected{border-color:var(--blue);background:rgba(0,122,255,.06);box-shadow:0 0 0 3px rgba(0,122,255,.12)}
-.hist-acc-chip .chip-name{font-weight:800;font-size:13px;margin-bottom:2px}
-.hist-acc-chip .chip-num{font-size:11px;color:var(--muted)}
-.hist-acc-chip .chip-badge{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;background:rgba(0,122,255,.1);color:var(--blue)}
+/* Hist account cards */
+.hist-accounts{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.hist-acc-card{padding:18px;border-radius:14px;border:1px solid var(--border);background:#fff;cursor:pointer;transition:all .2s;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hist-acc-card:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.1)}
+.hist-acc-card:active{transform:scale(.98)}
+.hist-acc-card .ha-name{font-weight:800;font-size:14px;margin-bottom:2px}
+.hist-acc-card .ha-num{font-size:11px;color:var(--muted);margin-bottom:10px}
+.hist-acc-card .ha-stats{display:flex;gap:16px}
+.hist-acc-card .ha-stat{flex:1}
+.hist-acc-card .ha-stat-label{font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.hist-acc-card .ha-stat-val{font-size:16px;font-weight:900}
+.hist-acc-card .ha-hint{font-size:10px;color:var(--muted);margin-top:10px;font-weight:600;display:flex;align-items:center;gap:4px}
+.hist-acc-card .ha-bar{position:absolute;bottom:0;left:0;height:3px;background:var(--blue);border-radius:0 99px 0 0;transition:width .4s}
+
+/* Hist detail modal (wide) */
+.modal-card.wide{width:min(720px,95vw)}
+
+/* Confirm modal */
+.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:250;backdrop-filter:blur(4px);animation:alertPulse .2s ease}
+.confirm-box{background:#fff;border-radius:16px;padding:28px 32px;text-align:center;box-shadow:var(--shadow-lg);max-width:360px;width:90%}
+.confirm-box p{font-size:14px;font-weight:700;margin-bottom:18px;color:var(--text)}
+.confirm-box .confirm-actions{display:flex;gap:10px;justify-content:center}
 </style>
 </head>
 <body>
@@ -209,25 +223,23 @@ input,select,textarea{font-family:inherit}
 
   <!-- TAB: HISTORIAL -->
   <div class="tab-content" id="tabHistorial" style="display:none">
-    <p class="hint" style="margin-bottom:12px"><i class="fas fa-hand-pointer"></i> Selecciona una cuenta para ver su historial</p>
-    <div class="hist-accounts" id="histAccountList"></div>
-
-    <div id="histDetailPanel" style="display:none">
-      <div class="card">
-        <div class="card-h">
-          <h2 id="histDetailTitle"><i class="fas fa-clock-rotate-left" style="color:var(--purple)"></i> Historial</h2>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <input type="date" id="histFrom" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:600"/>
-            <input type="date" id="histTo" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:600"/>
-            <button class="btn sm primary" onclick="loadHistory()"><i class="fas fa-search"></i> Filtrar</button>
-            <button class="btn sm" onclick="clearHistSelection()"><i class="fas fa-arrow-left"></i> Volver</button>
-          </div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-h">
+        <h2><i class="fas fa-calendar-range" style="color:var(--purple)"></i> Filtrar por Fecha</h2>
+      </div>
+      <div class="card-b" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+        <div>
+          <label style="font-size:11px;font-weight:800;color:var(--muted);display:block;margin-bottom:4px">DESDE</label>
+          <input type="date" id="histFrom" style="padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:13px;font-weight:600;background:#fff"/>
         </div>
-        <div class="card-b" style="overflow-x:auto">
-          <div id="histBody"></div>
+        <div>
+          <label style="font-size:11px;font-weight:800;color:var(--muted);display:block;margin-bottom:4px">HASTA</label>
+          <input type="date" id="histTo" style="padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:13px;font-weight:600;background:#fff"/>
         </div>
+        <button class="btn primary" onclick="loadHistorySummary()"><i class="fas fa-search"></i> Consultar</button>
       </div>
     </div>
+    <div id="histSummaryArea"></div>
   </div>
 </div>
 
@@ -249,6 +261,22 @@ input,select,textarea{font-family:inherit}
     <div class="modal-actions">
       <button class="btn" onclick="closeAddModal()">Cancelar</button>
       <button class="btn primary" onclick="saveIngreso()"><i class="fas fa-check"></i> Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Detalle Historial Cuenta -->
+<div class="modal" id="histDetailModal">
+  <div class="modal-card wide">
+    <div class="modal-head">
+      <h3 id="histDetailTitle"><i class="fas fa-clock-rotate-left" style="color:var(--purple)"></i> Detalle</h3>
+      <button class="btn sm" onclick="$('histDetailModal').classList.remove('open')"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="max-height:65vh;overflow-y:auto;padding:16px 20px">
+      <div id="histDetailBody"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="$('histDetailModal').classList.remove('open')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -304,7 +332,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     const tab = btn.dataset.tab;
     if(tab==='hoy') $('tabHoy').style.display='';
     else if(tab==='config'){ $('tabConfig').style.display=''; renderConfig(); }
-    else if(tab==='historial'){ $('tabHistorial').style.display=''; renderHistAccounts(); }
+    else if(tab==='historial'){ $('tabHistorial').style.display=''; }
   });
 });
 
@@ -566,7 +594,8 @@ async function saveIngreso(){
 
 /* ===== UNDO LAST ===== */
 async function undoLast(accountId, movId){
-  if(!confirm('¿Deshacer el ultimo ingreso de esta cuenta?')) return;
+  const ok = await customConfirm('\u00bfDeshacer el ultimo ingreso de esta cuenta?');
+  if(!ok) return;
   try {
     await COL_TOPES_MOV.doc(movId).delete();
     toast('Ingreso eliminado');
@@ -577,116 +606,163 @@ async function undoLast(accountId, movId){
   }
 }
 
+/* ===== CUSTOM CONFIRM MODAL ===== */
+function customConfirm(msg){
+  return new Promise(resolve=>{
+    const ov = document.createElement('div');
+    ov.className = 'confirm-overlay';
+    ov.innerHTML = `<div class="confirm-box">
+      <p>${msg}</p>
+      <div class="confirm-actions">
+        <button class="btn" id="_cfCancel">Cancelar</button>
+        <button class="btn danger" id="_cfOk"><i class="fas fa-check"></i> Confirmar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#_cfCancel').onclick = ()=>{ ov.remove(); resolve(false); };
+    ov.querySelector('#_cfOk').onclick = ()=>{ ov.remove(); resolve(true); };
+    ov.addEventListener('click',e=>{ if(e.target===ov){ ov.remove(); resolve(false); } });
+  });
+}
+
 /* ===== HISTORY ===== */
-let selectedHistAccount = null;
+let histMovsCache = []; // all movements from last query
 
-function renderHistAccounts(){
-  const list = $('histAccountList');
-  if(!allAccounts.length){
-    list.innerHTML = '<div class="empty"><i class="fas fa-inbox"></i><p>No hay cuentas registradas.</p></div>';
-    return;
-  }
-  list.innerHTML = allAccounts.map(acc=>{
-    const cfg = topesConfig[acc.id] || {};
-    const tope = Number(cfg.tope) || 0;
-    const isSelected = selectedHistAccount === acc.id;
-    return `<button class="hist-acc-chip${isSelected?' selected':''}" onclick="selectHistAccount('${acc.id}')">
-      <div class="chip-name"><i class="fas fa-building-columns" style="color:var(--blue);margin-right:6px"></i>${acc.name}</div>
-      <div class="chip-num">${acc.number}</div>
-      ${tope ? '<div class="chip-badge">Tope: '+fmtCOP(tope)+'</div>' : ''}
-    </button>`;
-  }).join('');
-}
-
-function selectHistAccount(accountId){
-  selectedHistAccount = accountId;
-  renderHistAccounts();
-  const acc = allAccounts.find(a=>a.id===accountId);
-  $('histDetailTitle').innerHTML = `<i class="fas fa-clock-rotate-left" style="color:var(--purple)"></i> ${acc ? acc.name : 'Cuenta'} <span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:6px">${acc ? acc.number : ''}</span>`;
-  $('histDetailPanel').style.display = '';
-  loadHistory();
-}
-
-function clearHistSelection(){
-  selectedHistAccount = null;
-  renderHistAccounts();
-  $('histDetailPanel').style.display = 'none';
-}
-
-async function loadHistory(){
-  if(!selectedHistAccount) return;
+async function loadHistorySummary(){
   const from = $('histFrom').value;
   const to = $('histTo').value;
-  const body = $('histBody');
-  body.innerHTML = '<div class="hint" style="padding:20px;text-align:center"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>';
+  const area = $('histSummaryArea');
+  if(!from || !to){ toast('Selecciona ambas fechas'); return; }
+  area.innerHTML = '<div class="hint" style="padding:30px;text-align:center"><i class="fas fa-spinner fa-spin"></i> Consultando...</div>';
 
   try {
-    let q = COL_TOPES_MOV.where('accountId','==',selectedHistAccount);
-    if(from) q = q.where('fecha','>=',from);
-    if(to) q = q.where('fecha','<=',to);
-    const snap = await q.limit(500).get();
-    const movs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    let q = COL_TOPES_MOV.where('fecha','>=',from).where('fecha','<=',to);
+    const snap = await q.limit(1000).get();
+    histMovsCache = snap.docs.map(d=>({id:d.id,...d.data()}));
 
-    if(!movs.length){
-      body.innerHTML = '<div class="empty"><i class="fas fa-inbox"></i><p>No hay movimientos para esta cuenta en este rango.</p></div>';
+    if(!histMovsCache.length){
+      area.innerHTML = '<div class="empty"><i class="fas fa-inbox"></i><p>No hay movimientos en este rango de fechas.</p></div>';
       return;
     }
 
-    // Group by date
-    const byDate = {};
-    movs.forEach(m=>{
-      if(!byDate[m.fecha]) byDate[m.fecha] = [];
-      byDate[m.fecha].push(m);
+    // Group by account
+    const byAcc = {};
+    histMovsCache.forEach(m=>{
+      const key = m.accountId || 'sin_cuenta';
+      if(!byAcc[key]) byAcc[key] = { name: m.accountName||'', number: m.accountNumber||'', movs: [] };
+      byAcc[key].movs.push(m);
     });
 
-    let grandTotal = 0;
-    let html = '';
-    Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(fecha=>{
-      const dayMovs = byDate[fecha];
-      const dayTotal = dayMovs.reduce((s,m)=>s + (Number(m.monto)||0), 0);
-      grandTotal += dayTotal;
-      html += `<div style="margin-bottom:20px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-weight:800;font-size:14px"><i class="fas fa-calendar-day" style="color:var(--blue);margin-right:6px"></i>${fecha}</span>
-          <span class="pill blue">${fmtCOP(dayTotal)}</span>
+    // Grand total
+    const grandTotal = histMovsCache.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+
+    let html = `<div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap">
+      <div class="stat-card" style="flex:1;min-width:160px"><div class="stat-label">Total General</div><div class="stat-val">${fmtCOP(grandTotal)}</div></div>
+      <div class="stat-card" style="flex:1;min-width:160px"><div class="stat-label">Movimientos</div><div class="stat-val">${histMovsCache.length}</div></div>
+      <div class="stat-card" style="flex:1;min-width:160px"><div class="stat-label">Cuentas</div><div class="stat-val">${Object.keys(byAcc).length}</div></div>
+    </div>`;
+
+    html += '<div class="hist-accounts">';
+    Object.keys(byAcc).forEach(accId=>{
+      const info = byAcc[accId];
+      const total = info.movs.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+      const numDays = new Set(info.movs.map(m=>m.fecha)).size;
+      const pctOfGrand = grandTotal > 0 ? ((total/grandTotal)*100) : 0;
+      const cfg = topesConfig[accId] || {};
+      const tope = Number(cfg.tope) || 0;
+
+      html += `<div class="hist-acc-card" ondblclick="openHistDetail('${accId}')">
+        <div class="ha-name"><i class="fas fa-building-columns" style="color:var(--blue);margin-right:6px"></i>${info.name || 'Sin nombre'}</div>
+        <div class="ha-num">${info.number || ''}</div>
+        <div class="ha-stats">
+          <div class="ha-stat"><div class="ha-stat-label">Total</div><div class="ha-stat-val" style="color:var(--blue)">${fmtCOP(total)}</div></div>
+          <div class="ha-stat"><div class="ha-stat-label">Movimientos</div><div class="ha-stat-val">${info.movs.length}</div></div>
+          <div class="ha-stat"><div class="ha-stat-label">Dias</div><div class="ha-stat-val">${numDays}</div></div>
+          ${tope ? '<div class="ha-stat"><div class="ha-stat-label">Tope</div><div class="ha-stat-val" style="font-size:13px">' + fmtCOP(tope) + '</div></div>' : ''}
         </div>
-        <table class="hist-table">
-          <thead><tr><th>Monto</th><th>Descripcion</th><th>Registrado por</th><th></th></tr></thead>
-          <tbody>`;
-      dayMovs.forEach(m=>{
-        html += `<tr>
-          <td style="font-weight:800">${fmtCOP(m.monto)}</td>
-          <td>${m.descripcion||'—'}</td>
-          <td class="hint">${m.createdBy||''}</td>
-          <td><button class="btn sm danger" onclick="deleteMov('${m.id}')"><i class="fas fa-trash"></i></button></td>
-        </tr>`;
-      });
-      html += '</tbody></table></div>';
+        <div class="ha-hint"><i class="fas fa-hand-pointer"></i> Doble clic para ver detalle</div>
+        <div class="ha-bar" style="width:${Math.min(pctOfGrand,100)}%"></div>
+      </div>`;
     });
+    html += '</div>';
 
-    // Summary at top
-    const numDays = Object.keys(byDate).length;
-    html = `<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-      <div class="stat-card" style="flex:1;min-width:140px"><div class="stat-label">Total Periodo</div><div class="stat-val">${fmtCOP(grandTotal)}</div></div>
-      <div class="stat-card" style="flex:1;min-width:140px"><div class="stat-label">Movimientos</div><div class="stat-val">${movs.length}</div></div>
-      <div class="stat-card" style="flex:1;min-width:140px"><div class="stat-label">Dias con actividad</div><div class="stat-val">${numDays}</div></div>
-    </div>` + html;
-
-    body.innerHTML = html;
+    area.innerHTML = html;
   } catch(e){
-    body.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error al cargar historial.</p></div>';
+    area.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error al consultar.</p></div>';
     console.error(e);
   }
 }
 
+function openHistDetail(accountId){
+  const movs = histMovsCache.filter(m=>m.accountId===accountId);
+  if(!movs.length) return;
+  const acc = allAccounts.find(a=>a.id===accountId);
+  $('histDetailTitle').innerHTML = `<i class="fas fa-clock-rotate-left" style="color:var(--purple)"></i> ${acc ? acc.name : movs[0].accountName||'Cuenta'} <span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:8px">${acc ? acc.number : movs[0].accountNumber||''}</span>`;
+
+  // Group by date
+  const byDate = {};
+  movs.forEach(m=>{
+    if(!byDate[m.fecha]) byDate[m.fecha] = [];
+    byDate[m.fecha].push(m);
+  });
+
+  let grandTotal = 0;
+  let html = '';
+  Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(fecha=>{
+    const dayMovs = byDate[fecha];
+    const dayTotal = dayMovs.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+    grandTotal += dayTotal;
+    html += `<div style="margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:800;font-size:13px"><i class="fas fa-calendar-day" style="color:var(--blue);margin-right:6px"></i>${fecha}</span>
+        <span class="pill blue">${fmtCOP(dayTotal)}</span>
+      </div>
+      <table class="hist-table">
+        <thead><tr><th>Monto</th><th>Descripcion</th><th>Por</th><th></th></tr></thead>
+        <tbody>`;
+    dayMovs.forEach(m=>{
+      html += `<tr>
+        <td style="font-weight:800">${fmtCOP(m.monto)}</td>
+        <td>${m.descripcion||'\u2014'}</td>
+        <td class="hint">${m.createdBy||''}</td>
+        <td><button class="btn sm danger" onclick="deleteMov('${m.id}')"><i class="fas fa-trash"></i></button></td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+  });
+
+  const numDays = Object.keys(byDate).length;
+  html = `<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+    <div class="stat-card" style="flex:1;min-width:120px"><div class="stat-label">Total</div><div class="stat-val">${fmtCOP(grandTotal)}</div></div>
+    <div class="stat-card" style="flex:1;min-width:120px"><div class="stat-label">Movimientos</div><div class="stat-val">${movs.length}</div></div>
+    <div class="stat-card" style="flex:1;min-width:120px"><div class="stat-label">Dias</div><div class="stat-val">${numDays}</div></div>
+  </div>` + html;
+
+  $('histDetailBody').innerHTML = html;
+  $('histDetailModal').classList.add('open');
+}
+
 async function deleteMov(id){
-  if(!confirm('¿Eliminar este movimiento?')) return;
+  const ok = await customConfirm('\u00bfEliminar este movimiento?');
+  if(!ok) return;
   try {
     await COL_TOPES_MOV.doc(id).delete();
     toast('Eliminado');
-    loadHistory();
+    // Refresh: remove from cache & re-render
+    histMovsCache = histMovsCache.filter(m=>m.id!==id);
+    const accId = $('histDetailModal').classList.contains('open') ? null : null;
+    // Re-render detail if open
+    if($('histDetailModal').classList.contains('open')){
+      const detailBody = $('histDetailBody');
+      const currentAccMovs = histMovsCache.length ? histMovsCache : [];
+      // Just reload the summary + close detail
+      $('histDetailModal').classList.remove('open');
+      loadHistorySummary();
+    } else {
+      loadHistorySummary();
+    }
     loadDayData();
-  } catch(e){ toast('Error'); }
+  } catch(e){ toast('Error al eliminar'); }
 }
 
 /* ===== INIT ===== */
