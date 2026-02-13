@@ -1,6 +1,6 @@
 const CACHE_NAME = 'facba-chat-v2';
 const URLS_TO_CACHE = [
-  './chat.html',
+  './prueba.html',
   './manifest.json',
   'https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap',
   'https://www.gstatic.com/firebasejs/9.1.1/firebase-app-compat.js',
