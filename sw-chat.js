@@ -82,6 +82,25 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
+// Al tocar una notificación, abrir/enfocar la app
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      // Si ya hay una ventana abierta, enfocarla
+      for (const client of clientList) {
+        if (client.url.includes('prueba.html') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Si no, abrir una nueva
+      if (clients.openWindow) {
+        return clients.openWindow('./prueba.html');
+      }
+    })
+  );
+});
+
 // Fetch: interceptar iconos + network first con fallback a cache
 self.addEventListener('fetch', event => {
   const url = event.request.url;
