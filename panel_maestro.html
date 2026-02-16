@@ -472,9 +472,16 @@
             html += `<td class="cell-value" title="${escapeHtml(val)}">${escapeHtml(val)}</td>`;
           }
         });
+        // Add uncheck verification button for caja_menor if movement is verified
+        let extraAction = '';
+        if (currentCollection === 'caja_menor' && doc.verificado && doc.verificado.estado === true) {
+          extraAction = `<button class="btn warning" type="button" data-unverify="${escapeHtml(doc.id)}" title="Desmarcar verificación"><i class="fa-solid fa-xmark"></i></button>`;
+        }
+        
         html += `<td class="cell-actions">
           <button class="btn" type="button" data-edit="${escapeHtml(doc.id)}"><i class="fa-solid fa-pen"></i></button>
           <button class="btn danger" type="button" data-delete="${escapeHtml(doc.id)}"><i class="fa-solid fa-trash"></i></button>
+          ${extraAction}
         </td>`;
         html += '</tr>';
       });
@@ -488,6 +495,9 @@
       });
       document.querySelectorAll('[data-delete]').forEach(btn => {
         btn.addEventListener('click', () => deleteDocument(btn.dataset.delete));
+      });
+      document.querySelectorAll('[data-unverify]').forEach(btn => {
+        btn.addEventListener('click', () => unverifyMovement(btn.dataset.unverify));
       });
     }
 
@@ -599,6 +609,25 @@
         toast('Eliminado', 'Documento eliminado');
         await selectCollection(currentCollection);
         loadCollectionCounts();
+      } catch (e) {
+        toast('Error', e.message);
+      }
+    }
+
+    async function unverifyMovement(docId) {
+      if (!currentCollection || currentCollection !== 'caja_menor') return;
+      if (!confirm(`¿Desmarcar verificación del movimiento ${docId}? Esta acción permitirá que el movimiento sea verificado nuevamente.`)) return;
+
+      try {
+        await updateDoc(doc(db, currentCollection, docId), {
+          verificado: {
+            estado: false,
+            desmarcadoPor: 'Panel Maestro',
+            desmarcadoEn: new Date().toISOString()
+          }
+        });
+        toast('Verificación desmarcada', 'La verificación del movimiento ha sido eliminada');
+        await selectCollection(currentCollection);
       } catch (e) {
         toast('Error', e.message);
       }
