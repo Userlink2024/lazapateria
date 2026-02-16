@@ -148,6 +148,7 @@
     @media(max-width:520px){.china-form-grid{grid-template-columns:1fr}}
     .cuadre-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
     @media(max-width:768px){.cuadre-grid{grid-template-columns:1fr}}
+    .filter-tipo-btn.active{background:linear-gradient(135deg,#2563eb,#1d4ed8)!important;color:#fff!important;border-color:#2563eb!important;font-weight:700}
   </style>
 </head>
 <body>
@@ -414,7 +415,35 @@
     </div>
   </div>
 
-  <!-- Modal Ver Todos los Movimientos -->
+  <!-- Modal Ver Todos los Movimientos - China -->
+  <div class="modal" id="tirasMovModal" style="z-index:200">
+    <div class="modal-card" style="max-width:900px;width:100%">
+      <div class="modal-head">
+        <h3><i class="fas fa-list" style="color:var(--primary)"></i> Historial Completo - China</h3>
+        <button class="btn ghost" type="button" onclick="closeTirasMovModal()"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="max-height:70vh;overflow:auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <div class="chips">
+            <span class="chip ok" id="tirasMovModalIngresos">Ingresos: $0</span>
+            <span class="chip danger" id="tirasMovModalEgresos">Egresos: $0</span>
+            <span class="chip" id="tirasMovModalSaldo">Saldo: $0</span>
+          </div>
+          <div class="hint" id="tirasMovModalPaginacion">Página 1 de 1</div>
+        </div>
+        <div id="tirasMovModalList" class="list"></div>
+        <div style="display:flex;justify-content:center;gap:12px;margin-top:16px" id="tirasMovModalPagBtns">
+          <button class="btn ghost" type="button" id="tirasMovModalPrev"><i class="fas fa-chevron-left"></i> Anterior</button>
+          <button class="btn ghost" type="button" id="tirasMovModalNext">Siguiente <i class="fas fa-chevron-right"></i></button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" type="button" onclick="closeTirasMovModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Ver Todos los Movimientos - Local -->
   <div class="modal" id="localMovModal" style="z-index:200">
     <div class="modal-card" style="max-width:900px;width:100%">
       <div class="modal-head">
@@ -645,6 +674,19 @@
           <details class="china-form-section" style="margin-top:16px" open>
             <summary><i class="fas fa-list"></i> Historial de Movimientos Manuales (<span id="tirasMovCount">0</span>)</summary>
             <div class="china-form-content">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+                <div class="chips">
+                  <span class="chip ok" id="tirasTotalIngresos">Ingresos: $0</span>
+                  <span class="chip danger" id="tirasTotalEgresos">Egresos: $0</span>
+                  <span class="chip" id="tirasSaldo">Saldo: $0</span>
+                </div>
+                <button class="btn ghost" type="button" id="btnTirasVerTodos"><i class="fas fa-expand"></i> Ver todos</button>
+              </div>
+              <div style="display:flex;gap:6px;margin-bottom:12px">
+                <button class="btn ghost filter-tipo-btn active" type="button" data-filter-tiras="todos" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-list-ul"></i> Todos</button>
+                <button class="btn ghost filter-tipo-btn" type="button" data-filter-tiras="ingreso" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-arrow-down"></i> Ingresos</button>
+                <button class="btn ghost filter-tipo-btn" type="button" data-filter-tiras="egreso" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-arrow-up"></i> Egresos</button>
+              </div>
               <div id="cajaListTiras" class="list"></div>
             </div>
           </details>
@@ -807,6 +849,11 @@
                   <span class="chip" id="localSaldo">Saldo: $0</span>
                 </div>
                 <button class="btn ghost" type="button" id="btnLocalVerTodos"><i class="fas fa-expand"></i> Ver todos</button>
+              </div>
+              <div style="display:flex;gap:6px;margin-bottom:12px">
+                <button class="btn ghost filter-tipo-btn active" type="button" data-filter-local="todos" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-list-ul"></i> Todos</button>
+                <button class="btn ghost filter-tipo-btn" type="button" data-filter-local="ingreso" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-arrow-down"></i> Ingresos</button>
+                <button class="btn ghost filter-tipo-btn" type="button" data-filter-local="egreso" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-arrow-up"></i> Egresos</button>
               </div>
               <div id="cajaListLocal" class="list"></div>
             </div>
@@ -1988,6 +2035,112 @@
       attachMovMenuListeners(listEl, pageItems);
     }
 
+    // Variables para modal de ver todos los movimientos de China (Tiras)
+    let tirasMovModalItems = [];
+    let tirasMovModalPage = 1;
+    const tirasMovModalPerPage = 15;
+
+    function openTirasMovModal(){
+      const fromStr = safeStr($('cajaFrom').value) || todayISO();
+      const toStr = safeStr($('cajaTo').value) || todayISO();
+
+      COL_CAJA.orderBy('createdAt', 'desc').limit(800).get().then(snap => {
+        const all = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() || {}) }));
+        tirasMovModalItems = all.filter(m => {
+          if (safeStr(m.subcaja) !== 'tiras' && m.subcaja) return false;
+          if (safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor') return false;
+          const dt = m.fecha || m.createdAt;
+          return dateInRange(dt, fromStr, toStr);
+        });
+        tirasMovModalPage = 1;
+        renderTirasMovModal();
+        $('tirasMovModal').classList.add('open');
+      }).catch(e => {
+        showError('Error cargando movimientos: ' + (e.message || e));
+      });
+    }
+
+    function closeTirasMovModal(){
+      $('tirasMovModal').classList.remove('open');
+    }
+
+    function tirasMovModalPaginar(dir){
+      const totalPages = Math.max(1, Math.ceil(tirasMovModalItems.length / tirasMovModalPerPage));
+      tirasMovModalPage = Math.max(1, Math.min(totalPages, tirasMovModalPage + dir));
+      renderTirasMovModal();
+    }
+
+    function renderTirasMovModal(){
+      const listEl = $('tirasMovModalList');
+      const totalPages = Math.max(1, Math.ceil(tirasMovModalItems.length / tirasMovModalPerPage));
+      const start = (tirasMovModalPage - 1) * tirasMovModalPerPage;
+      const end = start + tirasMovModalPerPage;
+      const pageItems = tirasMovModalItems.slice(start, end);
+
+      let ingresos = 0, egresos = 0;
+      tirasMovModalItems.forEach(m => {
+        const val = Number(m.valor || 0);
+        if (safeStr(m.tipo) === 'ingreso') ingresos += val;
+        else if (safeStr(m.tipo) === 'egreso') egresos += val;
+      });
+
+      $('tirasMovModalIngresos').textContent = `Ingresos: ${fmtCOP(ingresos)}`;
+      $('tirasMovModalEgresos').textContent = `Egresos: ${fmtCOP(egresos)}`;
+      $('tirasMovModalSaldo').textContent = `Saldo: ${fmtCOP(ingresos - egresos)}`;
+      $('tirasMovModalPaginacion').textContent = `Página ${tirasMovModalPage} de ${totalPages} (${tirasMovModalItems.length} movimientos)`;
+
+      $('tirasMovModalPrev').disabled = tirasMovModalPage <= 1;
+      $('tirasMovModalNext').disabled = tirasMovModalPage >= totalPages;
+
+      if (!pageItems.length) {
+        listEl.innerHTML = '<div class="hint" style="text-align:center;padding:30px">Sin movimientos en el rango seleccionado.</div>';
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+      pageItems.forEach(m => {
+        frag.appendChild(renderMovementCard(m, true));
+      });
+      listEl.innerHTML = '';
+      listEl.appendChild(frag);
+
+      attachMovMenuListeners(listEl, pageItems);
+    }
+
+    // Filtros de tipo para historial de movimientos
+    let cajaFilterTiras = 'todos';
+    let cajaFilterLocal = 'todos';
+
+    function aplicarFiltroTiras(){
+      const listEl = $('cajaListTiras');
+      if (!listEl || !window._lastTirasFiltered) return;
+      const filtered = cajaFilterTiras === 'todos' ? window._lastTirasFiltered : window._lastTirasFiltered.filter(m => safeStr(m.tipo) === cajaFilterTiras);
+      listEl.innerHTML = '';
+      if (!filtered.length) {
+        listEl.innerHTML = '<div class="hint">Sin movimientos de este tipo.</div>';
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      filtered.forEach(m => frag.appendChild(renderMovementCard(m, true)));
+      listEl.appendChild(frag);
+      attachMovMenuListeners(listEl, filtered);
+    }
+
+    function aplicarFiltroLocal(){
+      const listEl = $('cajaListLocal');
+      if (!listEl || !window._lastLocalItems) return;
+      const filtered = cajaFilterLocal === 'todos' ? window._lastLocalItems : window._lastLocalItems.filter(m => safeStr(m.tipo) === cajaFilterLocal);
+      listEl.innerHTML = '';
+      if (!filtered.length) {
+        listEl.innerHTML = '<div class="hint">Sin movimientos de este tipo.</div>';
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      filtered.forEach(m => frag.appendChild(renderMovementCard(m, true)));
+      listEl.appendChild(frag);
+      attachMovMenuListeners(listEl, filtered);
+    }
+
     // Variables para edición de movimientos
     let editingMovId = null;
     let editingMovData = null;
@@ -2209,10 +2362,35 @@
       $('btnLocalEgresoGuardar').addEventListener('click', cajaGuardarLocalEgreso);
       $('btnLocalIngresoGuardar').addEventListener('click', cajaGuardarLocalIngreso);
 
+      // Botón ver todos los movimientos de China
+      $('btnTirasVerTodos').addEventListener('click', openTirasMovModal);
+      $('tirasMovModalPrev').addEventListener('click', () => tirasMovModalPaginar(-1));
+      $('tirasMovModalNext').addEventListener('click', () => tirasMovModalPaginar(1));
+
       // Botón ver todos los movimientos de Local
       $('btnLocalVerTodos').addEventListener('click', openLocalMovModal);
       $('localMovModalPrev').addEventListener('click', () => localMovModalPaginar(-1));
       $('localMovModalNext').addEventListener('click', () => localMovModalPaginar(1));
+
+      // Filtros de tipo para China
+      document.querySelectorAll('[data-filter-tiras]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          cajaFilterTiras = btn.getAttribute('data-filter-tiras');
+          document.querySelectorAll('[data-filter-tiras]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          aplicarFiltroTiras();
+        });
+      });
+
+      // Filtros de tipo para Local
+      document.querySelectorAll('[data-filter-local]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          cajaFilterLocal = btn.getAttribute('data-filter-local');
+          document.querySelectorAll('[data-filter-local]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          aplicarFiltroLocal();
+        });
+      });
 
       $('searchInput').addEventListener('input', renderResults);
       $('fromDate').addEventListener('change', () => refreshAll(false));
@@ -3316,29 +3494,38 @@
         }
       }
 
-      const tirasFrag = document.createDocumentFragment();
       const tirasFiltered = tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor'));
-      tirasFiltered.forEach(m => {
-        accumulate(m, false);
-        tirasFrag.appendChild(renderMovementCard(m, true));
-      });
+      tirasFiltered.forEach(m => accumulate(m, false));
+      localItems.forEach(m => accumulate(m, true));
+
+      // Guardar items para filtros
+      window._lastTirasFiltered = tirasFiltered;
+      window._lastLocalItems = localItems;
+
+      // Resetear filtros a "todos"
+      cajaFilterTiras = 'todos';
+      cajaFilterLocal = 'todos';
+      document.querySelectorAll('[data-filter-tiras]').forEach(b => b.classList.toggle('active', b.getAttribute('data-filter-tiras') === 'todos'));
+      document.querySelectorAll('[data-filter-local]').forEach(b => b.classList.toggle('active', b.getAttribute('data-filter-local') === 'todos'));
+
+      // Renderizar China
       if (tirasList) {
         if (!tirasFiltered.length) {
           tirasList.innerHTML = '<div class="hint">Sin movimientos en el rango.</div>';
         } else {
+          const tirasFrag = document.createDocumentFragment();
+          tirasFiltered.forEach(m => tirasFrag.appendChild(renderMovementCard(m, true)));
           tirasList.appendChild(tirasFrag);
           attachMovMenuListeners(tirasList, tirasFiltered);
         }
       }
 
-      const localFrag = document.createDocumentFragment();
-      localItems.forEach(m => {
-        accumulate(m, true);
-        localFrag.appendChild(renderMovementCard(m, true));
-      });
+      // Renderizar Local
       if (localList) {
         if (!localItems.length) localList.innerHTML = '<div class="hint">Sin movimientos en el rango.</div>';
         else {
+          const localFrag = document.createDocumentFragment();
+          localItems.forEach(m => localFrag.appendChild(renderMovementCard(m, true)));
           localList.appendChild(localFrag);
           attachMovMenuListeners(localList, localItems);
         }
@@ -3348,9 +3535,15 @@
       if ($('tirasResumenIngresos')) $('tirasResumenIngresos').textContent = fmtCOP(tirasIngresos);
       if ($('tirasResumenEgresos')) $('tirasResumenEgresos').textContent = fmtCOP(tirasEgresos);
       if ($('tirasResumenSaldo')) $('tirasResumenSaldo').textContent = fmtCOP(tirasIngresos - tirasEgresos);
-      if ($('tirasMovCount')) $('tirasMovCount').textContent = tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor')).length;
+      if ($('tirasMovCount')) $('tirasMovCount').textContent = tirasFiltered.length;
       console.log('[Caja RT] Movimientos tiras:', tirasItems.length, 'Ingresos:', fmtCOP(tirasIngresos), 'Egresos:', fmtCOP(tirasEgresos));
 
+      // Actualizar chips de China
+      if ($('tirasTotalIngresos')) $('tirasTotalIngresos').textContent = `Ingresos: ${fmtCOP(tirasIngresos)}`;
+      if ($('tirasTotalEgresos')) $('tirasTotalEgresos').textContent = `Egresos: ${fmtCOP(tirasEgresos)}`;
+      if ($('tirasSaldo')) $('tirasSaldo').textContent = `Saldo: ${fmtCOP(tirasIngresos - tirasEgresos)}`;
+
+      // Actualizar chips de Local
       $('localTotalIngresos').textContent = `Ingresos: ${fmtCOP(localIngresos)}`;
       $('localTotalEgresos').textContent = `Egresos: ${fmtCOP(localEgresos)}`;
       $('localSaldo').textContent = `Saldo: ${fmtCOP(localIngresos - localEgresos)}`;
