@@ -114,6 +114,19 @@
     .toast-card{background:#1e293b;color:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 10px 30px rgba(0,0,0,.2);min-width:240px}
     .toast-title{font-weight:700;font-size:13px}
     .toast-msg{margin-top:4px;font-size:12px;opacity:.8}
+
+    #confirmModalPM{z-index:9000}
+    #confirmModalPM .modal-card{max-width:400px;animation:confirmPopPM .25s cubic-bezier(.34,1.56,.64,1)}
+    @keyframes confirmPopPM{from{opacity:0;transform:scale(.88) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
+    #confirmModalPM .confirm-icon{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px}
+    #confirmModalPM .confirm-icon.warn{background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(234,88,12,.1));color:#d97706}
+    #confirmModalPM .confirm-icon.danger{background:linear-gradient(135deg,rgba(239,68,68,.15),rgba(220,38,38,.1));color:#dc2626}
+    #confirmModalPM .confirm-icon.ok{background:linear-gradient(135deg,rgba(16,185,129,.15),rgba(5,150,105,.1));color:#059669}
+    #confirmModalPM .confirm-icon.info{background:linear-gradient(135deg,rgba(59,130,246,.15),rgba(37,99,235,.1));color:#2563eb}
+    #confirmModalPM .confirm-title{font-size:16px;font-weight:900;text-align:center;margin-bottom:8px;color:#1e293b}
+    #confirmModalPM .confirm-msg{font-size:13px;text-align:center;color:#64748b;line-height:1.5;margin-bottom:20px}
+    #confirmModalPM .confirm-actions{display:flex;gap:10px;justify-content:center}
+    #confirmModalPM .confirm-actions .btn{min-width:110px;justify-content:center;padding:10px 16px;font-size:13px;border-radius:10px}
   </style>
 </head>
 <body>
@@ -262,6 +275,21 @@
     </div>
   </div>
 
+  <!-- Modal de confirmación moderno -->
+  <div class="modal" id="confirmModalPM">
+    <div class="modal-card" style="max-width:400px">
+      <div class="modal-body" style="padding:28px 24px 20px">
+        <div class="confirm-icon warn" id="confirmPMIcon"><i class="fa-solid fa-question"></i></div>
+        <div class="confirm-title" id="confirmPMTitle">¿Estás seguro?</div>
+        <div class="confirm-msg" id="confirmPMMsg"></div>
+        <div class="confirm-actions">
+          <button class="btn" type="button" id="confirmPMCancel"><i class="fa-solid fa-xmark"></i> Cancelar</button>
+          <button class="btn primary" type="button" id="confirmPMOk"><i class="fa-solid fa-check"></i> Confirmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast">
     <div class="toast-card">
       <div class="toast-title" id="toastTitle">Listo</div>
@@ -324,13 +352,13 @@
       { id: 'asistencia_settings', name: 'Asistencia Config', icon: 'fa-sliders' },
       { id: 'dashboard_settings', name: 'Dashboard Config', icon: 'fa-chart-pie' },
       { id: 'settings', name: 'Configuración General', icon: 'fa-gear' },
-      { id: 'users', name: 'Users (ventas diarias)', icon: 'fa-chart-line' }
+      { id: 'users', name: 'Users (ventas diarias)', icon: 'fa-chart-line' },
+      { id: 'caja_menor', name: 'Caja Menor', icon: 'fa-cash-register' }
     ];
 
     const COLLECTIONS_CHINA = [
       { id: 'facturas', name: 'Facturas China', icon: 'fa-file-invoice-dollar' },
-      { id: 'inventario', name: 'Inventario China', icon: 'fa-boxes-stacked' },
-      { id: 'caja_menor', name: 'Caja Menor', icon: 'fa-cash-register' }
+      { id: 'inventario', name: 'Inventario China', icon: 'fa-boxes-stacked' }
     ];
 
     let COLLECTIONS = COLLECTIONS_PRINCIPAL;
@@ -347,6 +375,42 @@
       $('toastMsg').textContent = msg || '';
       $('toast').classList.add('show');
       setTimeout(() => $('toast').classList.remove('show'), 2500);
+    }
+
+    function showConfirmModal(opts = {}) {
+      return new Promise((resolve) => {
+        const modal = $('confirmModalPM');
+        const iconEl = $('confirmPMIcon');
+        const titleEl = $('confirmPMTitle');
+        const msgEl = $('confirmPMMsg');
+        const okBtn = $('confirmPMOk');
+        const cancelBtn = $('confirmPMCancel');
+
+        const iconType = opts.icon || 'warn';
+        const iconMap = { warn: 'fa-triangle-exclamation', danger: 'fa-trash', ok: 'fa-clipboard-check', info: 'fa-circle-info' };
+        const styleMap = { warn: 'background:linear-gradient(135deg,#f59e0b,#d97706)', danger: 'background:linear-gradient(135deg,#ef4444,#dc2626)', ok: 'background:linear-gradient(135deg,#10b981,#059669)', info: 'background:linear-gradient(135deg,#3b82f6,#2563eb)' };
+
+        iconEl.className = 'confirm-icon ' + iconType;
+        iconEl.innerHTML = `<i class="fa-solid ${opts.iconClass || iconMap[iconType]}"></i>`;
+        titleEl.textContent = opts.title || '¿Estás seguro?';
+        msgEl.innerHTML = opts.message || '';
+        okBtn.innerHTML = `<i class="fa-solid fa-check"></i> ${opts.confirmText || 'Confirmar'}`;
+        okBtn.style.cssText = (styleMap[iconType] || styleMap.warn) + ';border:none;color:#fff';
+        cancelBtn.innerHTML = `<i class="fa-solid fa-xmark"></i> ${opts.cancelText || 'Cancelar'}`;
+
+        function cleanup(result) {
+          modal.classList.remove('open');
+          okBtn.removeEventListener('click', onOk);
+          cancelBtn.removeEventListener('click', onCancel);
+          resolve(result);
+        }
+        function onOk() { cleanup(true); }
+        function onCancel() { cleanup(false); }
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        modal.classList.add('open');
+      });
     }
 
     function formatDateTimeBogota(d) {
@@ -690,7 +754,8 @@
 
     async function deleteDocument(docId) {
       if (!currentCollection) return;
-      if (!confirm(`¿Eliminar documento ${docId}? Esta acción no se puede deshacer.`)) return;
+      const okDel = await showConfirmModal({ title: 'Eliminar documento', message: `Se eliminará el documento <strong>${escapeHtml(docId.substring(0,25))}</strong>.<br><strong>Esta acción no se puede deshacer.</strong>`, icon: 'danger', confirmText: 'Sí, eliminar' });
+      if (!okDel) return;
 
       try {
         await deleteDoc(doc(db, currentCollection, docId));
@@ -704,7 +769,8 @@
 
     async function unverifyMovement(docId) {
       if (!currentCollection || currentCollection !== 'caja_menor') return;
-      if (!confirm(`¿Desmarcar verificación del movimiento ${docId}? Esta acción permitirá que el movimiento sea verificado nuevamente.`)) return;
+      const okUnver = await showConfirmModal({ title: 'Desmarcar verificación', message: `Se quitará la verificación del movimiento.<br>Esto permitirá que sea <strong>verificado nuevamente</strong> desde Auditoría de Fondos.`, icon: 'warn', iconClass: 'fa-shield-halved', confirmText: 'Sí, desmarcar' });
+      if (!okUnver) return;
 
       try {
         await updateDoc(doc(db, currentCollection, docId), {
@@ -843,7 +909,8 @@
 
     async function confirmImport() {
       if (!currentCollection || !pendingImportRows.length) return;
-      if (!confirm(`¿Importar ${pendingImportRows.length} documentos a "${currentCollection}"? Esta accion agregara documentos nuevos (no sobreescribe existentes).`)) return;
+      const okImp = await showConfirmModal({ title: 'Importar documentos', message: `Se importarán <strong>${pendingImportRows.length} documentos</strong> a la colección <strong>${escapeHtml(currentCollection)}</strong>.<br><br>Se agregarán como documentos nuevos (no sobreescribe existentes).`, icon: 'info', iconClass: 'fa-file-import', confirmText: 'Sí, importar' });
+      if (!okImp) return;
       $('btnConfirmImport').disabled = true;
       $('importStatus').textContent = 'Importando...';
       let ok = 0, fail = 0;
