@@ -151,6 +151,22 @@
       </div>
 
       <div class="main">
+        <!-- Panel Verificaciones Caja Menor (solo visible en caja_menor) -->
+        <div id="verificacionesCajaPanel" style="display:none;margin-bottom:16px">
+          <div class="card">
+            <div class="card-h" style="background:linear-gradient(135deg,rgba(16,185,129,.06),rgba(37,99,235,.04))">
+              <h2 style="gap:8px"><i class="fa-solid fa-clipboard-check" style="color:#10b981"></i> Verificaciones de Movimientos</h2>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span class="pill green" id="verCountOk" style="font-size:11px">✓ Verificados: 0</span>
+                <span class="pill gray" id="verCountPending" style="font-size:11px">⏳ Pendientes: 0</span>
+              </div>
+            </div>
+            <div class="card-b" style="max-height:420px;overflow:auto">
+              <div id="verificacionesList" style="display:grid;gap:8px"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-h">
             <h2 id="mainTitle"><i class="fa-solid fa-table"></i> Selecciona una colección</h2>
@@ -400,9 +416,81 @@
         allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         filteredDocs = [...allDocs];
         renderTable();
+
+        // Mostrar/ocultar panel de verificaciones para caja_menor
+        if (colId === 'caja_menor') {
+          $('verificacionesCajaPanel').style.display = '';
+          renderVerificacionesPanel(allDocs);
+        } else {
+          $('verificacionesCajaPanel').style.display = 'none';
+        }
       } catch (e) {
         $('tableContainer').innerHTML = `<div class="empty"><i class="fa-solid fa-circle-exclamation"></i><div>Error: ${escapeHtml(e.message)}</div></div>`;
+        $('verificacionesCajaPanel').style.display = 'none';
       }
+    }
+
+    function renderVerificacionesPanel(docs) {
+      const verificados = docs.filter(d => d.verificado && d.verificado.estado === true);
+      const pendientes = docs.filter(d => !d.verificado || d.verificado.estado !== true);
+
+      $('verCountOk').textContent = `✓ Verificados: ${verificados.length}`;
+      $('verCountPending').textContent = `⏳ Pendientes: ${pendientes.length}`;
+
+      const listEl = $('verificacionesList');
+      if (!listEl) return;
+
+      if (!verificados.length && !pendientes.length) {
+        listEl.innerHTML = '<div style="text-align:center;color:#64748b;padding:20px;font-size:13px">Sin movimientos en caja menor</div>';
+        return;
+      }
+
+      let html = '';
+
+      // Mostrar verificados primero (con opción de desmarcar)
+      if (verificados.length) {
+        html += '<div style="font-weight:800;font-size:12px;color:#10b981;padding:4px 0;border-bottom:1px solid #e2e8f0;margin-bottom:4px"><i class="fa-solid fa-check-circle"></i> Verificados</div>';
+        verificados.forEach(d => {
+          const v = d.verificado;
+          const tipo = safeStr(d.tipo);
+          const valor = d.valor ? Number(d.valor).toLocaleString('es-CO', {style:'currency',currency:'COP',minimumFractionDigits:0}) : '$0';
+          const obs = safeStr(d.observaciones);
+          const fechaStr = safeStr(d.fechaStr);
+          const verDate = v.fecha ? new Date(v.fecha).toLocaleDateString('es-CO') : '';
+          html += `
+            <div style="border:1px solid rgba(16,185,129,.2);background:rgba(16,185,129,.04);border-radius:10px;padding:10px 12px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:800;font-size:13px">${escapeHtml(tipo)} • ${valor}</div>
+                <div style="font-size:11px;color:#64748b;margin-top:2px">${fechaStr ? 'Fecha: ' + fechaStr + ' • ' : ''}${obs ? escapeHtml(obs.substring(0,60)) : ''}</div>
+                <div style="font-size:11px;color:#10b981;margin-top:4px"><i class="fa-solid fa-user-check"></i> ${escapeHtml(safeStr(v.usuario))} • ${verDate} ${safeStr(v.hora)}</div>
+              </div>
+              <button class="btn danger" type="button" style="font-size:11px;padding:6px 10px;white-space:nowrap" data-unverify-panel="${escapeHtml(d.id)}"><i class="fa-solid fa-xmark"></i> Desmarcar</button>
+            </div>`;
+        });
+      }
+
+      // Mostrar pendientes (informativos)
+      if (pendientes.length) {
+        html += '<div style="font-weight:800;font-size:12px;color:#64748b;padding:4px 0;border-bottom:1px solid #e2e8f0;margin:8px 0 4px 0"><i class="fa-solid fa-clock"></i> Pendientes de verificación</div>';
+        pendientes.forEach(d => {
+          const tipo = safeStr(d.tipo);
+          const valor = d.valor ? Number(d.valor).toLocaleString('es-CO', {style:'currency',currency:'COP',minimumFractionDigits:0}) : '$0';
+          const fechaStr = safeStr(d.fechaStr);
+          const usuario = safeStr(d.usuario);
+          html += `
+            <div style="border:1px solid #e2e8f0;background:#fafafa;border-radius:10px;padding:10px 12px">
+              <div style="font-weight:800;font-size:13px">${escapeHtml(tipo)} • ${valor}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px">${fechaStr ? 'Fecha: ' + fechaStr + ' • ' : ''}Usuario: ${escapeHtml(usuario) || 'N/A'}</div>
+            </div>`;
+        });
+      }
+
+      listEl.innerHTML = html;
+
+      // Attach unverify listeners
+      listEl.querySelectorAll('[data-unverify-panel]').forEach(btn => {
+        btn.addEventListener('click', () => unverifyMovement(btn.dataset.unverifyPanel));
+      });
     }
 
     function applyFilter() {
@@ -844,6 +932,7 @@
       $('filtersBox').style.display = 'none';
       $('footerBox').style.display = 'none';
       $('tableContainer').innerHTML = '<div class="empty"><i class="fa-solid fa-hand-pointer"></i><div>Selecciona una colección de la izquierda para ver sus documentos</div></div>';
+      $('verificacionesCajaPanel').style.display = 'none';
       loadCollectionCounts();
     }
 
