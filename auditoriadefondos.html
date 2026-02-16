@@ -63,6 +63,29 @@
     .modal-body{padding:14px 16px}
     .modal-actions{padding:14px 16px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border)}
 
+    /* Modal confirmación moderno */
+    #confirmModalGlobal{z-index:9000}
+    #confirmModalGlobal .modal-card{max-width:400px;animation:confirmPop .25s cubic-bezier(.34,1.56,.64,1)}
+    @keyframes confirmPop{from{opacity:0;transform:scale(.88) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
+    #confirmModalGlobal .confirm-icon{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:24px}
+    #confirmModalGlobal .confirm-icon.warn{background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(234,88,12,.1));color:#d97706}
+    #confirmModalGlobal .confirm-icon.danger{background:linear-gradient(135deg,rgba(239,68,68,.15),rgba(220,38,38,.1));color:#dc2626}
+    #confirmModalGlobal .confirm-icon.ok{background:linear-gradient(135deg,rgba(16,185,129,.15),rgba(5,150,105,.1));color:#059669}
+    #confirmModalGlobal .confirm-icon.info{background:linear-gradient(135deg,rgba(59,130,246,.15),rgba(37,99,235,.1));color:#2563eb}
+    #confirmModalGlobal .confirm-title{font-size:16px;font-weight:900;text-align:center;margin-bottom:8px;color:#1e293b}
+    #confirmModalGlobal .confirm-msg{font-size:13px;text-align:center;color:#64748b;line-height:1.5;margin-bottom:20px}
+    #confirmModalGlobal .confirm-actions{display:flex;gap:10px;justify-content:center}
+    #confirmModalGlobal .confirm-actions .btn{min-width:110px;justify-content:center;padding:10px 16px;font-size:13px;border-radius:10px}
+
+    /* Botón verificar moderno */
+    .verify-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1.5px dashed rgba(37,99,235,.3);background:rgba(37,99,235,.04);color:#3b82f6;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s}
+    .verify-btn:hover{background:rgba(37,99,235,.1);border-color:rgba(37,99,235,.5);transform:translateY(-1px)}
+    .verify-btn i{font-size:13px}
+    .verified-badge{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(5,150,105,.04));border:1px solid rgba(16,185,129,.2);margin-top:8px}
+    .verified-badge .verified-icon{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+    .verified-badge .verified-info{font-size:11px;color:#6b7280;line-height:1.4}
+    .verified-badge .verified-info strong{color:#059669}
+
     #cajaModal .modal-card.caja-modal-card{width:min(1120px,100%)}
     #cajaModal .modal-body{max-height:82vh;overflow:auto}
     #cajaModal .btn{padding:9px 11px;border-radius:12px}
@@ -267,6 +290,21 @@
       <div class="modal-actions" style="display:flex;gap:10px;justify-content:center;padding:16px">
         <button class="btn primary" type="button" id="btnGuardarClaveCaja" style="background:linear-gradient(135deg,#10b981,#059669)"><i class="fas fa-floppy-disk"></i> Guardar</button>
         <button class="btn ghost" type="button" id="btnCancelarCambiarClaveCaja"><i class="fas fa-xmark"></i> Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de confirmación global moderno -->
+  <div class="modal" id="confirmModalGlobal">
+    <div class="modal-card" style="max-width:400px">
+      <div class="modal-body" style="padding:28px 24px 20px">
+        <div class="confirm-icon warn" id="confirmModalIcon"><i class="fas fa-question"></i></div>
+        <div class="confirm-title" id="confirmModalTitle">¿Estás seguro?</div>
+        <div class="confirm-msg" id="confirmModalMsg">Esta acción no se puede deshacer.</div>
+        <div class="confirm-actions">
+          <button class="btn ghost" type="button" id="confirmModalCancel"><i class="fas fa-xmark"></i> Cancelar</button>
+          <button class="btn primary" type="button" id="confirmModalOk"><i class="fas fa-check"></i> Confirmar</button>
+        </div>
       </div>
     </div>
   </div>
@@ -811,7 +849,45 @@
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
     }
-    
+
+    // Modal de confirmación moderno (reemplaza confirm() nativo)
+    // Opciones: { title, message, icon: 'warn'|'danger'|'ok'|'info', iconClass, confirmText, cancelText, confirmStyle }
+    function showConfirmModal(opts = {}) {
+      return new Promise((resolve) => {
+        const modal = $('confirmModalGlobal');
+        const iconEl = $('confirmModalIcon');
+        const titleEl = $('confirmModalTitle');
+        const msgEl = $('confirmModalMsg');
+        const okBtn = $('confirmModalOk');
+        const cancelBtn = $('confirmModalCancel');
+
+        const iconType = opts.icon || 'warn';
+        const iconMap = { warn: 'fa-triangle-exclamation', danger: 'fa-trash', ok: 'fa-clipboard-check', info: 'fa-circle-info' };
+        const styleMap = { warn: 'background:linear-gradient(135deg,#f59e0b,#d97706)', danger: 'background:linear-gradient(135deg,#ef4444,#dc2626)', ok: 'background:linear-gradient(135deg,#10b981,#059669)', info: 'background:linear-gradient(135deg,#3b82f6,#2563eb)' };
+
+        iconEl.className = 'confirm-icon ' + iconType;
+        iconEl.innerHTML = `<i class="fas ${opts.iconClass || iconMap[iconType]}"></i>`;
+        titleEl.textContent = opts.title || '¿Estás seguro?';
+        msgEl.innerHTML = opts.message || '';
+        okBtn.innerHTML = `<i class="fas fa-check"></i> ${opts.confirmText || 'Confirmar'}`;
+        okBtn.style.cssText = (styleMap[iconType] || styleMap.warn) + ';border:none;color:#fff';
+        cancelBtn.innerHTML = `<i class="fas fa-xmark"></i> ${opts.cancelText || 'Cancelar'}`;
+
+        function cleanup(result) {
+          modal.classList.remove('open');
+          okBtn.removeEventListener('click', onOk);
+          cancelBtn.removeEventListener('click', onCancel);
+          resolve(result);
+        }
+        function onOk() { cleanup(true); }
+        function onCancel() { cleanup(false); }
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        modal.classList.add('open');
+      });
+    }
+
     function showSuccessMessage(msg){
       // Crear notificación temporal de éxito
       const toast = document.createElement('div');
@@ -1163,9 +1239,10 @@
               const metodo = btn.getAttribute('data-metodo');
               if (!facId) return;
               const msgConfirm = metodo === 'transferencia' 
-                ? '¿Confirmas que verificaste el comprobante de transferencia?' 
-                : '¿Confirmas que recibiste el dinero en efectivo?';
-              if (!confirm(msgConfirm)) return;
+                ? 'Estás confirmando que <strong>verificaste el comprobante</strong> de la transferencia bancaria.' 
+                : 'Estás confirmando que <strong>recibiste el dinero</strong> en efectivo.';
+              const ok = await showConfirmModal({ title: metodo === 'transferencia' ? 'Verificar transferencia' : 'Confirmar recepción', message: msgConfirm, icon: 'ok', iconClass: metodo === 'transferencia' ? 'fa-credit-card' : 'fa-money-bill-wave', confirmText: 'Sí, confirmar' });
+              if (!ok) return;
               try {
                 await COL_FACTURAS_CHINA.doc(facId).update({ 
                   recibido: true, 
@@ -1362,7 +1439,8 @@
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
           const facId = btn.getAttribute('data-delete-fac');
-          if (!confirm('¿Eliminar esta factura? Esta acción no se puede deshacer.')) return;
+          const okDel = await showConfirmModal({ title: 'Eliminar factura', message: 'Esta factura será eliminada permanentemente.<br><strong>Esta acción no se puede deshacer.</strong>', icon: 'danger', confirmText: 'Sí, eliminar' });
+          if (!okDel) return;
           setLoading(true);
           try {
             await COL_FACTURAS_CHINA.doc(facId).delete();
@@ -1508,7 +1586,8 @@
       const cliente = currentAbonosModalData.cliente;
       const factura = currentAbonosModalData.codigo;
       
-      if (!confirm(`¿Ingresar abono de ${fmtCOP(monto)} a Caja Menor China?\n\nFactura #${factura}\nCliente: ${cliente}\nFecha abono: ${fecha}`)) return;
+      const okAbono = await showConfirmModal({ title: 'Ingresar abono a Caja', message: `Se ingresará <strong>${fmtCOP(monto)}</strong> a Caja Menor.<br><br>Factura: <strong>#${factura}</strong><br>Cliente: <strong>${cliente}</strong><br>Fecha: <strong>${fecha}</strong>`, icon: 'info', iconClass: 'fa-money-bill-transfer', confirmText: 'Sí, ingresar' });
+      if (!okAbono) return;
       
       setLoading(true);
       try {
@@ -1565,7 +1644,8 @@
           const cliente = btn.getAttribute('data-cliente') || '';
           const factura = btn.getAttribute('data-factura') || '';
           
-          if (!confirm(`¿Ingresar ${fmtCOP(valor)} a Caja Menor China?\n\nFactura #${factura}\nCliente: ${cliente}`)) return;
+          const okIng = await showConfirmModal({ title: 'Ingresar a Caja Menor', message: `Se ingresará <strong>${fmtCOP(valor)}</strong> a Caja Menor.<br><br>Factura: <strong>#${factura}</strong><br>Cliente: <strong>${cliente}</strong>`, icon: 'info', iconClass: 'fa-vault', confirmText: 'Sí, ingresar' });
+          if (!okIng) return;
           
           setLoading(true);
           try {
@@ -1877,7 +1957,8 @@
       listEl.querySelectorAll('button[data-delete-mov]').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-delete-mov');
-          if (!confirm('¿Estás seguro de eliminar este movimiento?')) return;
+          const okDelMov = await showConfirmModal({ title: 'Eliminar movimiento', message: 'Este movimiento será eliminado permanentemente.<br><strong>Esta acción no se puede deshacer.</strong>', icon: 'danger', confirmText: 'Sí, eliminar' });
+          if (!okDelMov) return;
           setLoading(true);
           try {
             await COL_CAJA.doc(id).delete();
@@ -3045,8 +3126,8 @@
       delBtns.forEach(btn => {
         btn.addEventListener('click', async () => {
           const registroId = btn.getAttribute('data-hist-del');
-          const ok = confirm('¿Eliminar esta referencia del historial? Esto la desvincula del pedido y borra el registro de auditoría.');
-          if (!ok) return;
+          const okRef = await showConfirmModal({ title: 'Eliminar referencia', message: 'Esta referencia será desvinculada del pedido y se borrará el registro de auditoría.<br><strong>Esta acción no se puede deshacer.</strong>', icon: 'danger', confirmText: 'Sí, eliminar' });
+          if (!okRef) return;
 
           setLoading(true);
           clearError();
@@ -3118,23 +3199,18 @@
       const verificado = m.verificado || {};
       const esVerificado = verificado.estado === true;
       const verificacionHtml = esVerificado ? `
-        <div style="margin-top:8px;padding:8px;background:linear-gradient(135deg,rgba(34,197,94,.08),rgba(22,163,74,.04));border:1px solid rgba(34,197,94,.2);border-radius:8px;font-size:12px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <i class="fas fa-check-circle" style="color:#16a34a"></i>
-            <strong style="color:#16a34a">Verificado</strong>
-          </div>
-          <div style="color:#6b7280;font-size:11px">
-            Por: <strong>${safeStr(verificado.usuario) || 'N/A'}</strong> • 
-            ${verificado.fecha ? new Date(verificado.fecha).toLocaleDateString('es-CO') : ''} 
-            ${verificado.hora || ''}
+        <div class="verified-badge">
+          <div class="verified-icon"><i class="fas fa-check"></i></div>
+          <div class="verified-info">
+            <strong>Verificado</strong><br>
+            Por: <strong>${safeStr(verificado.usuario) || 'N/A'}</strong> • ${verificado.fecha ? new Date(verificado.fecha).toLocaleDateString('es-CO') : ''} ${verificado.hora || ''}
           </div>
         </div>
       ` : `
-        <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#6b7280">
-            <input type="checkbox" id="verificar_${m.id}" style="cursor:pointer" onchange="verificarMovimiento('${m.id}', this.checked)">
-            <span>Marcar como verificado</span>
-          </label>
+        <div style="margin-top:8px">
+          <button type="button" class="verify-btn" onclick="verificarMovimiento('${m.id}')">
+            <i class="fas fa-shield-halved"></i> Verificar
+          </button>
         </div>
       `;
 
@@ -3234,21 +3310,21 @@
     }
 
     // Función para verificar movimiento (usa currentUser cargado de datosUsuario)
-    async function verificarMovimiento(movId, isChecked) {
-      if (!isChecked) return; // No permitir desmarcar desde esta página
-      
+    async function verificarMovimiento(movId) {
       const quien = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario)) || 'Usuario';
       if (!quien || quien === 'Usuario') {
         showError('No se pudo detectar el usuario del sistema.');
         return;
       }
 
-      if (!confirm(`¿Marcar este movimiento como verificado por "${quien}"? Esta acción no se puede deshacer desde aquí.`)) {
-        // Desmarcar el checkbox visualmente si cancela
-        const cb = document.getElementById('verificar_' + movId);
-        if (cb) cb.checked = false;
-        return;
-      }
+      const okVer = await showConfirmModal({ 
+        title: 'Verificar movimiento', 
+        message: `Este movimiento será marcado como <strong>verificado</strong> por <strong>${quien}</strong>.<br><br>Una vez verificado, solo podrá desmarcarse desde el <strong>Panel Maestro</strong>.`, 
+        icon: 'ok', 
+        iconClass: 'fa-clipboard-check', 
+        confirmText: 'Verificar' 
+      });
+      if (!okVer) return;
       
       try {
         const now = new Date();
@@ -3268,8 +3344,6 @@
       } catch (error) {
         console.error('Error al verificar movimiento:', error);
         showError('Error al verificar movimiento');
-        const cb = document.getElementById('verificar_' + movId);
-        if (cb) cb.checked = false;
       }
     }
 
