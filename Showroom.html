@@ -54,9 +54,40 @@
         select.form-input{text-align:left;appearance:auto;padding-right:12px}
         select.form-input:disabled{background:var(--bg);color:var(--muted)}
         select option:disabled{color:#ccc}
+        /* === MODAL === */
+        .sm-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;opacity:0;transition:opacity .2s}
+        .sm-overlay.sm-in{opacity:1}
+        .sm-box{background:#fff;border-radius:20px;box-shadow:0 24px 60px rgba(0,0,0,.18);width:100%;max-width:380px;overflow:hidden;transform:scale(.92) translateY(12px);transition:transform .22s cubic-bezier(.34,1.56,.64,1),opacity .2s;opacity:0}
+        .sm-overlay.sm-in .sm-box{transform:scale(1) translateY(0);opacity:1}
+        .sm-icon{width:56px;height:56px;border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:12px}
+        .sm-icon.err{background:linear-gradient(135deg,#fee2e2,#fecaca);color:#dc2626}
+        .sm-icon.warn{background:linear-gradient(135deg,#fef9c3,#fde68a);color:#d97706}
+        .sm-icon.ok{background:linear-gradient(135deg,#dcfce7,#bbf7d0);color:#16a34a}
+        .sm-icon.info{background:linear-gradient(135deg,#e0f2fe,#bae6fd);color:#0284c7}
+        .sm-head{text-align:center;padding:28px 24px 0}
+        .sm-head h3{font-size:17px;font-weight:800;margin:0 0 6px;color:#0f172a}
+        .sm-head p{font-size:13px;color:#64748b;line-height:1.55;margin:0}
+        .sm-foot{padding:20px 24px 24px;display:flex;gap:10px;justify-content:center}
+        .sm-btn{flex:1;padding:12px;border:none;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s}
+        .sm-btn.primary{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;box-shadow:0 4px 12px rgba(22,163,74,.3)}
+        .sm-btn.primary:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(22,163,74,.4)}
+        .sm-btn.ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+        .sm-btn.ghost:hover{background:#e2e8f0}
     </style>
 </head>
 <body>
+<!-- MODAL -->
+<div class="sm-overlay" id="smOverlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="sm-box" id="smBox">
+        <div class="sm-head">
+            <div id="smIcon" class="sm-icon"></div>
+            <h3 id="smTitle"></h3>
+            <p id="smMsg"></p>
+        </div>
+        <div class="sm-foot" id="smFoot"></div>
+    </div>
+</div>
+
 <div class="container">
 
     <!-- STEP 1: Enter Cedula -->
@@ -240,6 +271,38 @@
     function getHorariosParaDia() { return [...todosLosHorarios.morning,...todosLosHorarios.afternoon]; }
     function showStep(id) { document.querySelectorAll('.step').forEach(s => s.classList.remove('active')); $(id).classList.add('active'); }
 
+    // === MODAL UTILITY ===
+    const ICONS = { err: '✕', warn: '⚠', ok: '✓', info: 'ℹ' };
+    function showModal({ title, msg, type = 'info', buttons }) {
+        return new Promise(resolve => {
+            const ov = $('smOverlay');
+            const ic = $('smIcon');
+            const ti = $('smTitle');
+            const ms = $('smMsg');
+            const ft = $('smFoot');
+            ic.className = `sm-icon ${type}`;
+            ic.textContent = ICONS[type] || 'ℹ';
+            ti.textContent = title || '';
+            ms.innerHTML = msg || '';
+            ft.innerHTML = '';
+            (buttons || [{ label: 'Aceptar', cls: 'primary', val: true }]).forEach(b => {
+                const btn = document.createElement('button');
+                btn.className = `sm-btn ${b.cls || 'primary'}`;
+                btn.textContent = b.label;
+                btn.onclick = () => { closeModal(); resolve(b.val); };
+                ft.appendChild(btn);
+            });
+            ov.style.display = 'flex';
+            requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.add('sm-in')));
+        });
+    }
+    function closeModal() {
+        const ov = $('smOverlay');
+        ov.classList.remove('sm-in');
+        setTimeout(() => { ov.style.display = 'none'; }, 220);
+    }
+    $('smOverlay').addEventListener('click', e => { if (e.target === $('smOverlay')) closeModal(); });
+
     // === STATE ===
     let currentFabricante = null;
     let lastCita = null;
@@ -394,7 +457,7 @@
             if ($('grupoNombre').style.display !== 'none') {
                 const nombreIngresado = $('inputNombreFab').value.trim();
                 if (!nombreIngresado) {
-                    alert('Por favor ingrese el nombre de su fábrica / empresa.');
+                    await showModal({ title: 'Nombre requerido', msg: 'Por favor ingrese el nombre de su fábrica / empresa.', type: 'warn' });
                     $('agendarTexto').textContent = 'Confirmar Cita';
                     $('agendarSpinner').style.display = 'none';
                     $('btnAgendar').disabled = false;
@@ -454,13 +517,13 @@
         } catch (err) {
             console.error(err);
             if (err && err.message === 'SLOT_OCUPADO') {
-                alert('Lo sentimos, este horario acaba de ser ocupado por otro fabricante. Por favor seleccione otro.');
+                await showModal({ title: 'Horario ocupado', msg: 'Lo sentimos, este horario acaba de ser ocupado por otro fabricante. Por favor seleccione otro.', type: 'warn' });
                 $('selectDia').dispatchEvent(new Event('change'));
             } else if (err && err.message === 'CEDULA_DUPLICADA') {
-                alert('Ya tienes una cita agendada. No se permite agendar más de una.');
+                await showModal({ title: 'Ya tienes cita', msg: 'Ya tienes una cita agendada. No se permite agendar más de una.', type: 'info' });
                 showStep('step1');
             } else {
-                alert('Error al agendar la cita. Inténtelo de nuevo.');
+                await showModal({ title: 'Error', msg: 'No se pudo agendar la cita. Por favor inténtelo de nuevo.', type: 'err' });
             }
         } finally {
             $('agendarTexto').textContent = 'Confirmar Cita';
