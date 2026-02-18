@@ -515,7 +515,7 @@
         // Handle login form submission
         async function handleLogin(event) {
             event.preventDefault();
-            const email = document.getElementById('auth_email').value;
+            const userId = document.getElementById('auth_userid').value.trim();
             const password = document.getElementById('auth_password').value;
             const errorDiv = document.getElementById('auth_error');
             const loadingDiv = document.getElementById('auth_loading');
@@ -532,35 +532,39 @@
             submitBtn.disabled = true;
 
             try {
-                // Authenticate with Firebase
-                const userCredential = await auth.signInWithEmailAndPassword(email, password);
-                const user = userCredential.user;
-                console.log("Usuario autenticado:", user.email);
+                // Query Firestore for user with matching ID
+                const usersQuery = await db.collection('usuarios')
+                    .where('usuario', '==', userId)
+                    .limit(1)
+                    .get();
 
-                // Fetch user data from Firestore (assuming you have a 'usuarios' collection)
-                const userDoc = await db.collection('usuarios').doc(user.uid).get();
-                
-                if (userDoc.exists) {
-                    const userData = userDoc.data();
-                    datosUsuario = {
-                        usuario: user.uid,
-                        nombreCompleto: userData.nombreCompleto || user.email,
-                        permisos: userData.permisos || 'operador',
-                        email: user.email
-                    };
-                } else {
-                    // If no user document exists, create a basic one
-                    datosUsuario = {
-                        usuario: user.uid,
-                        nombreCompleto: user.email.split('@')[0],
-                        permisos: 'operador',
-                        email: user.email
-                    };
+                if (usersQuery.empty) {
+                    throw new Error('USER_NOT_FOUND');
                 }
+
+                const userDoc = usersQuery.docs[0];
+                const userData = userDoc.data();
+
+                // Validate password (assuming password is stored in Firestore)
+                // Note: In production, passwords should be hashed
+                if (userData.password !== password) {
+                    throw new Error('WRONG_PASSWORD');
+                }
+
+                // User authenticated successfully
+                datosUsuario = {
+                    usuario: userData.usuario || userId,
+                    nombreCompleto: userData.nombreCompleto || userId,
+                    permisos: userData.permisos || 'operador',
+                    docId: userDoc.id
+                };
 
                 // Save to localStorage
                 localStorage.setItem('datosUsuario', JSON.stringify(datosUsuario));
-                console.log("Datos de usuario guardados:", datosUsuario);
+                console.log("Usuario autenticado exitosamente:", datosUsuario);
+
+                // Sign in anonymously to Firebase Auth for database access
+                await auth.signInAnonymously();
 
                 // Hide modal and show main content
                 document.getElementById('auth_modal').classList.remove('show');
@@ -573,24 +577,12 @@
                 console.error("Error de autenticación:", error);
                 let errorMessage = 'Error al iniciar sesión. ';
                 
-                switch (error.code) {
-                    case 'auth/user-not-found':
-                        errorMessage += 'Usuario no encontrado.';
-                        break;
-                    case 'auth/wrong-password':
-                        errorMessage += 'Contraseña incorrecta.';
-                        break;
-                    case 'auth/invalid-email':
-                        errorMessage += 'Correo electrónico inválido.';
-                        break;
-                    case 'auth/user-disabled':
-                        errorMessage += 'Esta cuenta ha sido deshabilitada.';
-                        break;
-                    case 'auth/too-many-requests':
-                        errorMessage += 'Demasiados intentos fallidos. Intenta más tarde.';
-                        break;
-                    default:
-                        errorMessage += error.message;
+                if (error.message === 'USER_NOT_FOUND') {
+                    errorMessage += 'ID de usuario no encontrado.';
+                } else if (error.message === 'WRONG_PASSWORD') {
+                    errorMessage += 'Contraseña incorrecta.';
+                } else {
+                    errorMessage += 'Verifique sus credenciales e intente nuevamente.';
                 }
 
                 errorDiv.textContent = errorMessage;
@@ -1486,8 +1478,8 @@
                 <div id="auth_error" class="auth-error"></div>
                 <form id="auth_form" onsubmit="handleLogin(event)">
                     <div class="auth-form-field">
-                        <label for="auth_email">Correo Electrónico</label>
-                        <input type="email" id="auth_email" placeholder="usuario@ejemplo.com" required autocomplete="email">
+                        <label for="auth_userid">ID de Usuario</label>
+                        <input type="text" id="auth_userid" placeholder="Ingrese su ID de usuario" required autocomplete="username">
                     </div>
                     <div class="auth-form-field">
                         <label for="auth_password">Contraseña</label>
