@@ -101,15 +101,11 @@
         <div class="card">
             <div class="card-title"><i class="fas fa-user-plus" style="color:var(--primary)"></i> Registrar Fabricante</div>
             <form id="formNuevoFabricante" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-                <div class="form-group" style="flex:1;min-width:120px">
+                <div class="form-group" style="flex:1;min-width:160px">
                     <label class="form-label">Cédula / NIT</label>
                     <input type="text" id="nuevaCedula" class="form-input" placeholder="Ej: 1234567890" required>
                 </div>
-                <div class="form-group" style="flex:2;min-width:160px">
-                    <label class="form-label">Nombre Fábrica</label>
-                    <input type="text" id="nuevoNombre" class="form-input" placeholder="Nombre del fabricante" required>
-                </div>
-                <div class="form-group" style="flex:2;min-width:160px">
+                <div class="form-group" style="flex:2;min-width:200px">
                     <label class="form-label">Observación (opcional)</label>
                     <input type="text" id="nuevaObservacion" class="form-input" placeholder="Ej: Excelente proveedor">
                 </div>
@@ -117,6 +113,7 @@
                     <button type="submit" class="btn btn-primary"><i class="fas fa-plus"></i> Registrar</button>
                 </div>
             </form>
+            <div class="mini" style="margin-top:8px;color:var(--muted)"><i class="fas fa-info-circle"></i> Solo se necesita la cédula. El nombre lo ingresará el fabricante al registrarse en el Show Room.</div>
         </div>
         <div class="card">
             <div class="card-title"><i class="fas fa-list" style="color:var(--info)"></i> Lista de Fabricantes</div>
@@ -353,7 +350,7 @@
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td><strong>${f.cedula}</strong></td>
-                <td>${f.nombre || ''}</td>
+                <td>${f.nombre || '<span style="color:var(--warning);font-style:italic">Pendiente</span>'}</td>
                 <td>${estadoChip}</td>
                 <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${(f.observacion||'').replace(/"/g,'&quot;')}">${f.observacion || '<span style="color:var(--muted)">—</span>'}</td>
                 <td>${citaDisplay}</td>
@@ -372,14 +369,13 @@
     $('formNuevoFabricante').addEventListener('submit', async (e) => {
         e.preventDefault();
         const cedula = $('nuevaCedula').value.trim();
-        const nombre = $('nuevoNombre').value.trim();
         const obs = $('nuevaObservacion').value.trim();
-        if (!cedula || !nombre) { toast('Cédula y nombre son obligatorios.', 'error'); return; }
+        if (!cedula) { toast('La cédula es obligatoria.', 'error'); return; }
         // Check duplicate cedula
         const exists = await fabricantesCol.where('cedula', '==', cedula).get();
         if (!exists.empty) { toast('Ya existe un fabricante con esa cédula.', 'error'); return; }
         try {
-            await fabricantesCol.add({ cedula, nombre, observacion: obs, habilitado: true, creadoEn: new Date() });
+            await fabricantesCol.add({ cedula, nombre: '', observacion: obs, habilitado: true, creadoEn: new Date() });
             toast('Fabricante registrado exitosamente.');
             $('formNuevoFabricante').reset();
         } catch (err) { toast('Error al registrar.', 'error'); }
@@ -588,13 +584,26 @@
                 // Check if this cedula already has an appointment
                 const existingCita = allCitas.find(c => c.cedula === cedula);
                 if (existingCita) { toast('Este fabricante ya tiene cita agendada. Solo se permite una cita.', 'error'); return; }
-                const conflict = await citasCol.where('fecha','==',fecha).where('hora','==',hora).get();
-                if (!conflict.empty) { toast('Ese horario ya está ocupado.', 'error'); return; }
-                await citasCol.add({ cedula, fabricante, fecha, hora, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+                // TRANSACCIÓN ATÓMICA: doc ID = fecha_hora para evitar duplicados concurrentes
+                const slotDocId = `${fecha}_${hora}`;
+                const slotRef = citasCol.doc(slotDocId);
+                await db.runTransaction(async (transaction) => {
+                    const slotSnap = await transaction.get(slotRef);
+                    if (slotSnap.exists) {
+                        throw new Error('SLOT_OCUPADO');
+                    }
+                    transaction.set(slotRef, { cedula, fabricante, fecha, hora, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+                });
                 toast('Cita creada.');
             }
             cerrarModal('modalCita');
-        } catch (err) { toast('Error al guardar cita.', 'error'); }
+        } catch (err) {
+            if (err && err.message === 'SLOT_OCUPADO') {
+                toast('Ese horario acaba de ser ocupado. Seleccione otro.', 'error');
+            } else {
+                toast('Error al guardar cita.', 'error');
+            }
+        }
     });
 
     window.editarCita = function(id) { openCitaModal(id); };
