@@ -286,141 +286,6 @@
 
 
         /* Responsive adjustments */
-        /* Auth Modal Styles */
-        #auth_modal {
-            display: none;
-            position: fixed;
-            z-index: 10001;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            justify-content: center;
-            align-items: center;
-        }
-        #auth_modal.show {
-            display: flex;
-        }
-        .auth-modal-content {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 0;
-            border-radius: 16px;
-            width: 90%;
-            max-width: 420px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-            overflow: hidden;
-            animation: slideIn 0.3s ease-out;
-        }
-        @keyframes slideIn {
-            from {
-                transform: translateY(-50px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-        .auth-header {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 30px 25px;
-            text-align: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        .auth-header h2 {
-            color: white;
-            margin: 0 0 8px 0;
-            font-size: 1.8em;
-            font-weight: 700;
-        }
-        .auth-header p {
-            color: rgba(255, 255, 255, 0.9);
-            margin: 0;
-            font-size: 0.95em;
-        }
-        .auth-body {
-            padding: 35px 30px;
-            background: white;
-        }
-        .auth-form-field {
-            margin-bottom: 20px;
-        }
-        .auth-form-field label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 600;
-            font-size: 0.9em;
-        }
-        .auth-form-field input {
-            width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1em;
-            transition: all 0.3s ease;
-            box-sizing: border-box;
-        }
-        .auth-form-field input:focus {
-            border-color: #667eea;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        .auth-error {
-            background: #fee;
-            color: #c33;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 0.9em;
-            display: none;
-            border-left: 4px solid #c33;
-        }
-        .auth-error.show {
-            display: block;
-        }
-        .auth-submit-btn {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.05em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-        .auth-submit-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-        }
-        .auth-submit-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-        .auth-loading {
-            display: none;
-            text-align: center;
-            margin-top: 15px;
-        }
-        .auth-loading.show {
-            display: block;
-        }
-        .auth-spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto;
-        }
-
         @media (max-width: 600px) {
             .container {
                 margin: 10px auto;
@@ -460,16 +325,6 @@
                 min-width: unset;
                 width: 100%;
             }
-            .auth-modal-content {
-                width: 95%;
-                max-width: 95%;
-            }
-            .auth-header {
-                padding: 25px 20px;
-            }
-            .auth-body {
-                padding: 25px 20px;
-            }
         }
     </style>
     <!-- Firebase SDKs -->
@@ -501,92 +356,12 @@
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
         console.log("Datos del usuario al inicio:", datosUsuario);
 
-        // Check if user data is missing and show auth modal
-        function checkUserAuthentication() {
-            if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto || !datosUsuario.usuario) {
-                console.log("Usuario no autenticado, mostrando modal de login");
-                document.getElementById('auth_modal').classList.add('show');
-                document.querySelector('.container').style.display = 'none';
-                return false;
-            }
-            return true;
-        }
-
-        // Handle login form submission
-        async function handleLogin(event) {
-            event.preventDefault();
-            const userId = document.getElementById('auth_userid').value.trim();
-            const password = document.getElementById('auth_password').value;
-            const errorDiv = document.getElementById('auth_error');
-            const loadingDiv = document.getElementById('auth_loading');
-            const submitBtn = document.getElementById('auth_submit_btn');
-            const authForm = document.getElementById('auth_form');
-
-            // Clear previous errors
-            errorDiv.classList.remove('show');
-            errorDiv.textContent = '';
-
-            // Show loading state
-            authForm.style.display = 'none';
-            loadingDiv.classList.add('show');
-            submitBtn.disabled = true;
-
-            try {
-                // Query Firestore for user with matching ID
-                const usersQuery = await db.collection('usuarios')
-                    .where('usuario', '==', userId)
-                    .limit(1)
-                    .get();
-
-                if (usersQuery.empty) {
-                    throw new Error('USER_NOT_FOUND');
-                }
-
-                const userDoc = usersQuery.docs[0];
-                const userData = userDoc.data();
-
-                // Validate password (field name is 'contraseña' with tilde)
-                if (userData.contraseña !== password) {
-                    throw new Error('WRONG_PASSWORD');
-                }
-
-                // User authenticated successfully
-                datosUsuario = {
-                    usuario: userData.usuario || userId,
-                    nombreCompleto: userData.nombreCompleto || userId,
-                    permisos: userData.permisos || 'operador',
-                    docId: userDoc.id
-                };
-
-                // Save to localStorage
-                localStorage.setItem('datosUsuario', JSON.stringify(datosUsuario));
-                console.log("Usuario autenticado exitosamente:", datosUsuario);
-
-                // Hide modal and show main content
-                document.getElementById('auth_modal').classList.remove('show');
-                document.querySelector('.container').style.display = 'block';
-
-                // Initialize the app
-                initializeApp();
-
-            } catch (error) {
-                console.error("Error de autenticación:", error);
-                let errorMessage = 'Error al iniciar sesión. ';
-                
-                if (error.message === 'USER_NOT_FOUND') {
-                    errorMessage += 'ID de usuario no encontrado.';
-                } else if (error.message === 'WRONG_PASSWORD') {
-                    errorMessage += 'Contraseña incorrecta.';
-                } else {
-                    errorMessage += 'Verifique sus credenciales e intente nuevamente.';
-                }
-
-                errorDiv.textContent = errorMessage;
-                errorDiv.classList.add('show');
-                authForm.style.display = 'block';
-                loadingDiv.classList.remove('show');
-                submitBtn.disabled = false;
-            }
+        // Fallback if user data is missing - CRITICAL FOR PRODUCTION: This should be handled by a proper login system.
+        if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto || !datosUsuario.usuario) {
+            alert("Error: No se pudieron cargar los datos del usuario o los permisos. Por favor, asegúrese de que el usuario esté autenticado correctamente.");
+            // Display a critical error message or redirect to login page
+            document.body.innerHTML = "<h1 style='text-align:center; color:red; margin-top:50px;'>Error Crítico: Datos de usuario no cargados.</h1><p style='text-align:center;'>Por favor, asegúrese de que ha iniciado sesión y que sus permisos están configurados.</p>";
+            throw new Error("Datos de usuario no disponibles."); // Stop script execution
         }
 
         // Global state for permits and filters
@@ -600,9 +375,19 @@
             endDate: ''
         };
 
-        // Initialize app after successful authentication
-        function initializeApp() {
-            console.log("Inicializando aplicación para:", datosUsuario.nombreCompleto);
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Simulate user authentication based on __initial_auth_token or anonymous
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await auth.signInWithCustomToken(__initial_auth_token);
+                    console.log("Signed in with custom token.");
+                } else {
+                    await auth.signInAnonymously();
+                    console.log("Signed in anonymously.");
+                }
+            } catch (error) {
+                console.error("Error during Firebase authentication:", error);
+            }
 
             // Populate form fields for the current user
             document.getElementById('worker_name').value = datosUsuario.nombreCompleto;
@@ -640,15 +425,6 @@
             startPermitsRealtimeListener();
 
             hideLoadingBar(); // Ensure the loading spinner is hidden after page load
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            // Check if user is authenticated
-            if (checkUserAuthentication()) {
-                // User is authenticated, initialize app
-                initializeApp();
-            }
-            // If not authenticated, modal will be shown by checkUserAuthentication()
         });
 
         // --- Utility Functions ---
@@ -1452,34 +1228,6 @@
     </script>
 </head>
 <body>
-    <!-- Auth Modal -->
-    <div id="auth_modal">
-        <div class="auth-modal-content">
-            <div class="auth-header">
-                <h2>🔐 Iniciar Sesión</h2>
-                <p>Sistema de Permisos - Autenticación Requerida</p>
-            </div>
-            <div class="auth-body">
-                <div id="auth_error" class="auth-error"></div>
-                <form id="auth_form" onsubmit="handleLogin(event)">
-                    <div class="auth-form-field">
-                        <label for="auth_userid">ID de Usuario</label>
-                        <input type="text" id="auth_userid" placeholder="Ingrese su ID de usuario" required autocomplete="username">
-                    </div>
-                    <div class="auth-form-field">
-                        <label for="auth_password">Contraseña</label>
-                        <input type="password" id="auth_password" placeholder="••••••••" required autocomplete="current-password">
-                    </div>
-                    <button type="submit" class="auth-submit-btn" id="auth_submit_btn">Iniciar Sesión</button>
-                </form>
-                <div id="auth_loading" class="auth-loading">
-                    <div class="auth-spinner"></div>
-                    <p style="margin-top: 10px; color: #667eea; font-weight: 600;">Autenticando...</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="container">
         <h1>Sistema de Solicitud de Permisos La Zapateria ,UPM (Un paso más Colombia) y Milan</h1>
 
