@@ -421,6 +421,10 @@
                                 <select id="novEmpleado" style="margin-top:4px;"></select>
                             </div>
                             <div>
+                                <label for="novFecha">Fecha de la novedad</label>
+                                <input id="novFecha" type="date" style="margin-top:4px;" />
+                            </div>
+                            <div>
                                 <label for="novTipo">Tipo de Novedad</label>
                                 <select id="novTipo" style="margin-top:4px;">
                                     <option value="">— Seleccione —</option>
@@ -449,20 +453,40 @@
 
                 <!-- TAB: Historial -->
                 <div class="nov-panel" id="novPanelHistorial">
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-                        <select id="novFilterEmpleado" style="width:auto;min-width:180px;">
-                            <option value="">Todos los empleados</option>
-                        </select>
-                        <select id="novFilterTipo" style="width:auto;min-width:180px;">
-                            <option value="">Todos los tipos</option>
-                            <option value="llamado_verbal">Llamado verbal</option>
-                            <option value="llamado_escrito">Llamado escrito</option>
-                            <option value="memorando">Memorando</option>
-                            <option value="suspension">Suspensión</option>
-                        </select>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end;">
+                        <div>
+                            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">Empleado</label>
+                            <select id="novFilterEmpleado" style="width:auto;min-width:180px;">
+                                <option value="">Todos los empleados</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">Tipo</label>
+                            <select id="novFilterTipo" style="width:auto;min-width:180px;">
+                                <option value="">Todos los tipos</option>
+                                <option value="llamado_verbal">Llamado verbal</option>
+                                <option value="llamado_escrito">Llamado escrito</option>
+                                <option value="memorando">Memorando</option>
+                                <option value="suspension">Suspensión</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">Desde</label>
+                            <input id="novFilterDesde" type="date" style="width:auto;" />
+                        </div>
+                        <div>
+                            <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;">Hasta</label>
+                            <input id="novFilterHasta" type="date" style="width:auto;" />
+                        </div>
+                        <button class="btn" type="button" id="novFilterClear" style="font-size:11px;padding:7px 12px;">Limpiar</button>
                     </div>
                     <div class="list" id="novHistorialList">
                         <div class="card"><div class="mini">Cargando...</div></div>
+                    </div>
+                    <div id="novPaginacion" style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;flex-wrap:wrap;">
+                        <button class="btn" type="button" id="novPagPrev" style="font-size:12px;padding:6px 14px;" disabled>← Anterior</button>
+                        <span id="novPagInfo" style="font-size:12px;font-weight:700;color:var(--muted);"></span>
+                        <button class="btn" type="button" id="novPagNext" style="font-size:12px;padding:6px 14px;" disabled>Siguiente →</button>
                     </div>
                 </div>
 
@@ -1586,13 +1610,30 @@
             if (unsubNovedades) { unsubNovedades(); unsubNovedades = null; }
         }
 
+        // --- Colombia timezone helper ---
+        function getColombiaNow() {
+            return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        }
+        function getColombiaDateStr(d) {
+            if (!d) d = getColombiaNow();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        // Set default date on registration form to today Colombia
+        $('novFecha').value = getColombiaDateStr();
+
         // --- Save novedad ---
         $('btnGuardarNovedad').addEventListener('click', async () => {
             const usuario = $('novEmpleado').value;
             const tipo = $('novTipo').value;
             const descripcion = $('novDescripcion').value.trim();
+            const fechaSel = $('novFecha').value;
 
             if (!usuario) { await modalAlert('Campo requerido', 'Seleccione un empleado.'); return; }
+            if (!fechaSel) { await modalAlert('Campo requerido', 'Seleccione la fecha de la novedad.'); return; }
             if (!tipo) { await modalAlert('Campo requerido', 'Seleccione el tipo de novedad.'); return; }
             if (!descripcion) { await modalAlert('Campo requerido', 'Ingrese una descripción de la novedad.'); return; }
 
@@ -1610,14 +1651,18 @@
 
             const ok = await modalConfirm(
                 'Confirmar Novedad',
-                `¿Registrar ${TIPO_LABELS[tipo] || tipo} para ${user.nombreCompleto || user.usuario}?`,
+                `¿Registrar ${TIPO_LABELS[tipo] || tipo} para ${user.nombreCompleto || user.usuario} con fecha ${fechaSel}?`,
                 'Registrar',
                 'Cancelar'
             );
             if (!ok) return;
 
             try {
-                const now = new Date();
+                const nowCO = getColombiaNow();
+                // Build timestamp from selected date + current Colombia time
+                const [ay, am, ad] = fechaSel.split('-').map(Number);
+                const fechaDate = new Date(ay, am - 1, ad, nowCO.getHours(), nowCO.getMinutes(), nowCO.getSeconds());
+
                 await novedadesCol.add({
                     empleadoDocId: user.docId,
                     empleadoUsuario: user.usuario,
@@ -1629,8 +1674,8 @@
                     diasSuspension: tipo === 'suspension' ? diasSuspension : 0,
                     reportadoPor: datosUsuario.nombreCompleto || datosUsuario.usuario || 'Admin',
                     reportadoPorUsuario: datosUsuario.usuario || '',
-                    creadoEn: firebase.firestore.Timestamp.fromDate(now),
-                    fechaStr: now.toISOString().slice(0, 10)
+                    creadoEn: firebase.firestore.Timestamp.fromDate(fechaDate),
+                    fechaStr: fechaSel
                 });
 
                 // Reset form
@@ -1639,6 +1684,7 @@
                 $('novDescripcion').value = '';
                 $('novDias').value = '';
                 $('novSuspensionDias').style.display = 'none';
+                $('novFecha').value = getColombiaDateStr();
 
                 await modalAlert('Registrado', `${TIPO_LABELS[tipo]} registrado exitosamente para ${user.nombreCompleto || user.usuario}.`);
             } catch (e) {
@@ -1647,32 +1693,60 @@
             }
         });
 
-        // --- Render historial ---
-        function renderNovedadesHistorial() {
+        // --- Render historial (with date filter + pagination) ---
+        const NOV_PER_PAGE = 10;
+        let novCurrentPage = 0;
+        let novFilteredCache = [];
+
+        function getNovedadFechaStr(n) {
+            if (n.fechaStr) return n.fechaStr;
+            if (n.creadoEn && typeof n.creadoEn.toDate === 'function') {
+                return getColombiaDateStr(n.creadoEn.toDate());
+            }
+            return '';
+        }
+
+        function renderNovedadesHistorial(resetPage) {
+            if (resetPage === true || resetPage instanceof Event) novCurrentPage = 0;
+
             const listEl = $('novHistorialList');
             const filterEmp = $('novFilterEmpleado').value;
             const filterTipo = $('novFilterTipo').value;
+            const filterDesde = $('novFilterDesde').value;
+            const filterHasta = $('novFilterHasta').value;
 
             let filtered = [...allNovedades];
             if (filterEmp) filtered = filtered.filter(n => n.empleadoUsuario === filterEmp);
             if (filterTipo) filtered = filtered.filter(n => n.tipo === filterTipo);
+            if (filterDesde) filtered = filtered.filter(n => getNovedadFechaStr(n) >= filterDesde);
+            if (filterHasta) filtered = filtered.filter(n => getNovedadFechaStr(n) <= filterHasta);
+
+            novFilteredCache = filtered;
+
+            // Pagination
+            const totalPages = Math.max(1, Math.ceil(filtered.length / NOV_PER_PAGE));
+            if (novCurrentPage >= totalPages) novCurrentPage = totalPages - 1;
+            if (novCurrentPage < 0) novCurrentPage = 0;
+            const start = novCurrentPage * NOV_PER_PAGE;
+            const pageItems = filtered.slice(start, start + NOV_PER_PAGE);
 
             listEl.innerHTML = '';
             if (filtered.length === 0) {
                 listEl.innerHTML = '<div class="card"><div class="mini" style="text-align:center;padding:20px;">No se encontraron novedades.</div></div>';
+                updateNovPaginacion(0, 0, 0);
                 return;
             }
 
             const frag = document.createDocumentFragment();
-            filtered.forEach(n => {
+            pageItems.forEach(n => {
                 const card = document.createElement('div');
                 card.className = 'nov-card';
 
                 const fechaStr = n.creadoEn && typeof n.creadoEn.toDate === 'function'
-                    ? n.creadoEn.toDate().toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' })
+                    ? n.creadoEn.toDate().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', year:'numeric', month:'long', day:'numeric' })
                     : n.fechaStr || 'N/A';
                 const horaStr = n.creadoEn && typeof n.creadoEn.toDate === 'function'
-                    ? n.creadoEn.toDate().toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit', hour12:true })
+                    ? n.creadoEn.toDate().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour:'2-digit', minute:'2-digit', hour12:true })
                     : '';
                 const diasInfo = n.tipo === 'suspension' && n.diasSuspension
                     ? ` · ${n.diasSuspension} día(s) de suspensión`
@@ -1711,7 +1785,26 @@
                 frag.appendChild(card);
             });
             listEl.appendChild(frag);
+            updateNovPaginacion(novCurrentPage, totalPages, filtered.length);
         }
+
+        function updateNovPaginacion(page, totalPages, totalItems) {
+            const prev = $('novPagPrev');
+            const next = $('novPagNext');
+            const info = $('novPagInfo');
+            prev.disabled = page <= 0;
+            next.disabled = page >= totalPages - 1;
+            if (totalItems === 0) {
+                info.textContent = '';
+            } else {
+                const desde = page * NOV_PER_PAGE + 1;
+                const hasta = Math.min((page + 1) * NOV_PER_PAGE, totalItems);
+                info.textContent = `${desde}–${hasta} de ${totalItems}`;
+            }
+        }
+
+        $('novPagPrev').addEventListener('click', () => { novCurrentPage--; renderNovedadesHistorial(); });
+        $('novPagNext').addEventListener('click', () => { novCurrentPage++; renderNovedadesHistorial(); });
 
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -1720,8 +1813,17 @@
         }
 
         // --- Filter listeners ---
-        $('novFilterEmpleado').addEventListener('change', renderNovedadesHistorial);
-        $('novFilterTipo').addEventListener('change', renderNovedadesHistorial);
+        $('novFilterEmpleado').addEventListener('change', () => renderNovedadesHistorial(true));
+        $('novFilterTipo').addEventListener('change', () => renderNovedadesHistorial(true));
+        $('novFilterDesde').addEventListener('change', () => renderNovedadesHistorial(true));
+        $('novFilterHasta').addEventListener('change', () => renderNovedadesHistorial(true));
+        $('novFilterClear').addEventListener('click', () => {
+            $('novFilterEmpleado').value = '';
+            $('novFilterTipo').value = '';
+            $('novFilterDesde').value = '';
+            $('novFilterHasta').value = '';
+            renderNovedadesHistorial(true);
+        });
 
         // --- Render resumen por empleado ---
         function renderNovedadesResumen() {
