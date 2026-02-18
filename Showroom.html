@@ -409,28 +409,37 @@
 
             if (!fabricante) fabricante = cedula;
 
-            // === TRANSACCIÓN ATÓMICA: garantiza que no se duplique fecha+hora ===
-            const slotDocId = `${fecha}_${hora}`;
+            // === PROTECCIÓN ANTI-DUPLICADOS ===
+            // 1. Verificar que la cédula no tenga cita existente
+            const existCheck = await citasCol.where('cedula', '==', cedula).get();
+            if (!existCheck.empty) {
+                throw new Error('CEDULA_DUPLICADA');
+            }
+
+            // 2. Doc ID determinístico por fecha+hora (evita duplicados en el mismo slot)
+            const slotDocId = `${fecha}_${hora.replace(/:/g, '')}`;
             const slotRef = citasCol.doc(slotDocId);
 
-            await db.runTransaction(async (transaction) => {
-                const slotSnap = await transaction.get(slotRef);
-                if (slotSnap.exists) {
-                    throw new Error('SLOT_OCUPADO');
-                }
-                // Also check cedula doesn't already have a cita (query outside, verify inside)
-                const existCheck = await citasCol.where('cedula', '==', cedula).get();
-                if (!existCheck.empty) {
-                    throw new Error('CEDULA_DUPLICADA');
-                }
-                transaction.set(slotRef, {
-                    cedula,
-                    fabricante,
-                    fecha,
-                    hora,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
+            // 3. Pre-check: ¿ya existe este slot?
+            const slotSnap = await slotRef.get();
+            if (slotSnap.exists) {
+                throw new Error('SLOT_OCUPADO');
+            }
+
+            // 4. Escribir con set() — si dos escriben al mismo tiempo, ambos escriben al MISMO doc
+            await slotRef.set({
+                cedula,
+                fabricante,
+                fecha,
+                hora,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
+
+            // 5. Post-write: verificar que nuestros datos persisten (protección contra escritura simultánea)
+            const verify = await slotRef.get();
+            if (!verify.exists || verify.data().cedula !== cedula) {
+                throw new Error('SLOT_OCUPADO');
+            }
 
             const fechaF = new Date(fecha + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             const horaF = convertTo12h(hora);
