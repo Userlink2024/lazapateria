@@ -135,6 +135,13 @@
             </div>
 
             <input type="hidden" id="agendarCedula">
+            <input type="hidden" id="agendarFabId">
+
+            <div class="form-group" id="grupoNombre" style="display:none">
+                <label class="form-label">Nombre de su fábrica / empresa</label>
+                <input type="text" id="inputNombreFab" class="form-input" placeholder="Ej: Calzado Mi Estilo" autocomplete="off">
+                <p style="font-size:11px;color:var(--muted);margin-top:4px">Este nombre quedará registrado en su cita y comprobante PDF.</p>
+            </div>
 
             <div class="form-group">
                 <label class="form-label">Día de la Cita</label>
@@ -292,8 +299,17 @@
             }
 
             // 4. Allowed to register — show scheduling form
-            $('agendarNombre').textContent = fabData.nombre;
             $('agendarCedula').value = cedula;
+            $('agendarFabId').value = fabSnap.docs[0].id;
+            // Show name input if fabricante hasn't set their name yet
+            if (!fabData.nombre) {
+                $('grupoNombre').style.display = 'block';
+                $('inputNombreFab').value = '';
+                $('agendarNombre').textContent = 'Ingrese su nombre para continuar';
+            } else {
+                $('grupoNombre').style.display = 'none';
+                $('agendarNombre').textContent = fabData.nombre;
+            }
             // Populate days
             $('selectDia').innerHTML = '<option value="" disabled selected>Seleccione un día</option>';
             diasDisponibles.forEach(d => {
@@ -370,30 +386,50 @@
         $('btnAgendar').disabled = true;
 
         try {
-            // Double-check: still no existing appointment?
-            const existCheck = await citasCol.where('cedula', '==', cedula).get();
-            if (!existCheck.empty) {
-                alert('Ya tienes una cita agendada. No se permite agendar más de una.');
-                showStep('step1');
-                return;
+            // Get or resolve fabricante name BEFORE the transaction
+            let fabricante = currentFabricante ? currentFabricante.nombre : '';
+            const fabDocId = $('agendarFabId').value;
+
+            // If name field is visible, use the entered name
+            if ($('grupoNombre').style.display !== 'none') {
+                const nombreIngresado = $('inputNombreFab').value.trim();
+                if (!nombreIngresado) {
+                    alert('Por favor ingrese el nombre de su fábrica / empresa.');
+                    $('agendarTexto').textContent = 'Confirmar Cita';
+                    $('agendarSpinner').style.display = 'none';
+                    $('btnAgendar').disabled = false;
+                    return;
+                }
+                fabricante = nombreIngresado;
+                // Save name to fabricantesShowroom
+                if (fabDocId) {
+                    await fabricantesCol.doc(fabDocId).update({ nombre: nombreIngresado });
+                }
             }
 
-            // Double-check: slot still free?
-            const slotCheck = await citasCol.where('fecha', '==', fecha).where('hora', '==', hora).get();
-            if (!slotCheck.empty) {
-                alert('Lo sentimos, este horario acaba de ser ocupado. Por favor seleccione otro.');
-                $('selectDia').dispatchEvent(new Event('change')); // reload slots
-                return;
-            }
+            if (!fabricante) fabricante = cedula;
 
-            const fabricante = currentFabricante ? currentFabricante.nombre : cedula;
+            // === TRANSACCIÓN ATÓMICA: garantiza que no se duplique fecha+hora ===
+            const slotDocId = `${fecha}_${hora}`;
+            const slotRef = citasCol.doc(slotDocId);
 
-            await citasCol.add({
-                cedula,
-                fabricante,
-                fecha,
-                hora,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            await db.runTransaction(async (transaction) => {
+                const slotSnap = await transaction.get(slotRef);
+                if (slotSnap.exists) {
+                    throw new Error('SLOT_OCUPADO');
+                }
+                // Also check cedula doesn't already have a cita (query outside, verify inside)
+                const existCheck = await citasCol.where('cedula', '==', cedula).get();
+                if (!existCheck.empty) {
+                    throw new Error('CEDULA_DUPLICADA');
+                }
+                transaction.set(slotRef, {
+                    cedula,
+                    fabricante,
+                    fecha,
+                    hora,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
             });
 
             const fechaF = new Date(fecha + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -408,7 +444,15 @@
 
         } catch (err) {
             console.error(err);
-            alert('Error al agendar la cita. Inténtelo de nuevo.');
+            if (err && err.message === 'SLOT_OCUPADO') {
+                alert('Lo sentimos, este horario acaba de ser ocupado por otro fabricante. Por favor seleccione otro.');
+                $('selectDia').dispatchEvent(new Event('change'));
+            } else if (err && err.message === 'CEDULA_DUPLICADA') {
+                alert('Ya tienes una cita agendada. No se permite agendar más de una.');
+                showStep('step1');
+            } else {
+                alert('Error al agendar la cita. Inténtelo de nuevo.');
+            }
         } finally {
             $('agendarTexto').textContent = 'Confirmar Cita';
             $('agendarSpinner').style.display = 'none';
