@@ -646,11 +646,11 @@
           </div>
 
           <!-- Resumen de movimientos -->
-          <div class="china-dashboard" style="grid-template-columns:repeat(3,1fr);margin-top:16px">
+          <div class="china-dashboard" style="grid-template-columns:repeat(4,1fr);margin-top:16px">
             <div class="china-stat-card china-stat-green">
               <div class="china-stat-icon"><i class="fas fa-arrow-down"></i></div>
               <div class="china-stat-content">
-                <span class="china-stat-label">Ingresos Base</span>
+                <span class="china-stat-label">Ingresos</span>
                 <span class="china-stat-value" id="tirasResumenIngresos">$0</span>
               </div>
             </div>
@@ -661,10 +661,17 @@
                 <span class="china-stat-value" id="tirasResumenEgresos">$0</span>
               </div>
             </div>
+            <div class="china-stat-card china-stat-blue">
+              <div class="china-stat-icon"><i class="fas fa-check-double"></i></div>
+              <div class="china-stat-content">
+                <span class="china-stat-label">Cierres Entregados</span>
+                <span class="china-stat-value" id="tirasResumenCierres">$0</span>
+              </div>
+            </div>
             <div class="china-stat-card china-stat-purple">
               <div class="china-stat-icon"><i class="fas fa-wallet"></i></div>
               <div class="china-stat-content">
-                <span class="china-stat-label">Saldo en Caja</span>
+                <span class="china-stat-label">Saldo Actual en Caja</span>
                 <span class="china-stat-value" id="tirasResumenSaldo">$0</span>
               </div>
             </div>
@@ -696,7 +703,7 @@
 
         <div id="cajaTabLocal" class="caja-tab" style="display:none">
           <!-- Dashboard de Resumen Local -->
-          <div class="china-dashboard" style="grid-template-columns:repeat(3,1fr)">
+          <div class="china-dashboard" style="grid-template-columns:repeat(4,1fr)">
             <div class="china-stat-card china-stat-green">
               <div class="china-stat-icon"><i class="fas fa-arrow-down"></i></div>
               <div class="china-stat-content">
@@ -712,9 +719,16 @@
               </div>
             </div>
             <div class="china-stat-card china-stat-blue">
+              <div class="china-stat-icon"><i class="fas fa-check-double"></i></div>
+              <div class="china-stat-content">
+                <span class="china-stat-label">Cierres Entregados</span>
+                <span class="china-stat-value" id="localResumenCierres">$0</span>
+              </div>
+            </div>
+            <div class="china-stat-card china-stat-purple">
               <div class="china-stat-icon"><i class="fas fa-wallet"></i></div>
               <div class="china-stat-content">
-                <span class="china-stat-label">Saldo en Caja</span>
+                <span class="china-stat-label">Saldo Actual en Caja</span>
                 <span class="china-stat-value" id="localResumenSaldo">$0</span>
               </div>
             </div>
@@ -3500,22 +3514,76 @@
 
       let tirasIngresos = 0;
       let tirasEgresos = 0;
+      let tirasCierres = 0;
       let localIngresos = 0;
       let localEgresos = 0;
+      let localCierres = 0;
 
       function accumulate(m, isLocal){
         const tipo = safeStr(m.tipo);
         const val = Number(m.valor || 0);
         if (tipo === 'ingreso') {
           if (isLocal) localIngresos += val; else tirasIngresos += val;
-        } else if (tipo === 'egreso' || tipo === 'cierre') {
+        } else if (tipo === 'egreso') {
           if (isLocal) localEgresos += val; else tirasEgresos += val;
+        } else if (tipo === 'cierre') {
+          if (isLocal) localCierres += val; else tirasCierres += val;
         }
+      }
+
+      // Calcular saldo actual: solo ingresos y egresos DESPUÉS del último cierre
+      function calcSaldoActual(movimientos) {
+        // Ordenar por fecha/createdAt descendente para encontrar el último cierre
+        const sorted = [...movimientos].sort((a, b) => {
+          const da = tsToDate(a.fecha || a.createdAt);
+          const db = tsToDate(b.fecha || b.createdAt);
+          if (!da && !db) return 0;
+          if (!da) return 1;
+          if (!db) return -1;
+          return db.getTime() - da.getTime();
+        });
+
+        // Buscar el último cierre
+        let ultimoCierreDate = null;
+        for (const m of sorted) {
+          if (safeStr(m.tipo) === 'cierre') {
+            ultimoCierreDate = tsToDate(m.fecha || m.createdAt);
+            break;
+          }
+        }
+
+        // Si no hay cierre, saldo = ingresos - egresos de todo el periodo
+        if (!ultimoCierreDate) {
+          let ing = 0, egr = 0;
+          movimientos.forEach(m => {
+            const tipo = safeStr(m.tipo);
+            const val = Number(m.valor || 0);
+            if (tipo === 'ingreso') ing += val;
+            else if (tipo === 'egreso') egr += val;
+          });
+          return ing - egr;
+        }
+
+        // Si hay cierre, saldo = ingresos - egresos DESPUÉS del último cierre
+        let ing = 0, egr = 0;
+        movimientos.forEach(m => {
+          const tipo = safeStr(m.tipo);
+          if (tipo === 'cierre') return; // no contar cierres
+          const mDate = tsToDate(m.fecha || m.createdAt);
+          if (!mDate || mDate.getTime() <= ultimoCierreDate.getTime()) return;
+          const val = Number(m.valor || 0);
+          if (tipo === 'ingreso') ing += val;
+          else if (tipo === 'egreso') egr += val;
+        });
+        return ing - egr;
       }
 
       const tirasFiltered = tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor'));
       tirasFiltered.forEach(m => accumulate(m, false));
       localItems.forEach(m => accumulate(m, true));
+
+      const tirasSaldoActual = calcSaldoActual(tirasFiltered);
+      const localSaldoActual = calcSaldoActual(localItems);
 
       // Guardar items para filtros
       window._lastTirasFiltered = tirasFiltered;
@@ -3553,26 +3621,28 @@
       // Actualizar resumen de movimientos de China
       if ($('tirasResumenIngresos')) $('tirasResumenIngresos').textContent = fmtCOP(tirasIngresos);
       if ($('tirasResumenEgresos')) $('tirasResumenEgresos').textContent = fmtCOP(tirasEgresos);
-      if ($('tirasResumenSaldo')) $('tirasResumenSaldo').textContent = fmtCOP(tirasIngresos - tirasEgresos);
+      if ($('tirasResumenCierres')) $('tirasResumenCierres').textContent = fmtCOP(tirasCierres);
+      if ($('tirasResumenSaldo')) $('tirasResumenSaldo').textContent = fmtCOP(tirasSaldoActual);
       if ($('tirasMovCount')) $('tirasMovCount').textContent = tirasFiltered.length;
-      console.log('[Caja RT] Movimientos tiras:', tirasItems.length, 'Ingresos:', fmtCOP(tirasIngresos), 'Egresos:', fmtCOP(tirasEgresos));
+      console.log('[Caja RT] Movimientos tiras:', tirasItems.length, 'Ingresos:', fmtCOP(tirasIngresos), 'Egresos:', fmtCOP(tirasEgresos), 'Cierres:', fmtCOP(tirasCierres), 'Saldo actual:', fmtCOP(tirasSaldoActual));
 
       // Actualizar chips de China
       if ($('tirasTotalIngresos')) $('tirasTotalIngresos').textContent = `Ingresos: ${fmtCOP(tirasIngresos)}`;
       if ($('tirasTotalEgresos')) $('tirasTotalEgresos').textContent = `Egresos: ${fmtCOP(tirasEgresos)}`;
-      if ($('tirasSaldo')) $('tirasSaldo').textContent = `Saldo: ${fmtCOP(tirasIngresos - tirasEgresos)}`;
+      if ($('tirasSaldo')) $('tirasSaldo').textContent = `Saldo actual: ${fmtCOP(tirasSaldoActual)}`;
 
       // Actualizar chips de Local
-      $('localTotalIngresos').textContent = `Ingresos: ${fmtCOP(localIngresos)}`;
-      $('localTotalEgresos').textContent = `Egresos: ${fmtCOP(localEgresos)}`;
-      $('localSaldo').textContent = `Saldo: ${fmtCOP(localIngresos - localEgresos)}`;
+      if ($('localTotalIngresos')) $('localTotalIngresos').textContent = `Ingresos: ${fmtCOP(localIngresos)}`;
+      if ($('localTotalEgresos')) $('localTotalEgresos').textContent = `Egresos: ${fmtCOP(localEgresos)}`;
+      if ($('localSaldo')) $('localSaldo').textContent = `Saldo actual: ${fmtCOP(localSaldoActual)}`;
 
       // Actualizar dashboard resumen de Local
       if ($('localResumenIngresos')) $('localResumenIngresos').textContent = fmtCOP(localIngresos);
       if ($('localResumenEgresos')) $('localResumenEgresos').textContent = fmtCOP(localEgresos);
-      if ($('localResumenSaldo')) $('localResumenSaldo').textContent = fmtCOP(localIngresos - localEgresos);
+      if ($('localResumenCierres')) $('localResumenCierres').textContent = fmtCOP(localCierres);
+      if ($('localResumenSaldo')) $('localResumenSaldo').textContent = fmtCOP(localSaldoActual);
       if ($('localMovCount')) $('localMovCount').textContent = localItems.length;
-      console.log('[Caja RT] Movimientos local:', localItems.length, 'Ingresos:', fmtCOP(localIngresos), 'Egresos:', fmtCOP(localEgresos));
+      console.log('[Caja RT] Movimientos local:', localItems.length, 'Ingresos:', fmtCOP(localIngresos), 'Egresos:', fmtCOP(localEgresos), 'Cierres:', fmtCOP(localCierres), 'Saldo actual:', fmtCOP(localSaldoActual));
     }
 
     // Función para verificar movimiento (usa currentUser cargado de datosUsuario)
