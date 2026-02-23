@@ -348,6 +348,52 @@
             box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
         }
 
+        /* customModal always on top */
+        #customModal {
+            z-index: 3000;
+        }
+
+        /* Top bar */
+        .top-bar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .top-bar-btn {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-logout {
+            background: linear-gradient(135deg, #f44336, #ef5350);
+            color: white;
+        }
+        .btn-logout:hover {
+            background: linear-gradient(135deg, #d32f2f, #e53935);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(244, 67, 54, 0.3);
+        }
+        .btn-settings {
+            background: linear-gradient(135deg, #607D8B, #78909C);
+            color: white;
+            font-size: 18px;
+            padding: 10px 14px;
+        }
+        .btn-settings:hover {
+            background: linear-gradient(135deg, #455A64, #607D8B);
+            transform: translateY(-2px) rotate(30deg);
+            box-shadow: 0 6px 20px rgba(96, 125, 139, 0.3);
+        }
+
         /* Solicitudes Styles */
         .solicitudes-btn {
             background: linear-gradient(135deg, #FF9800, #FFB74D);
@@ -514,6 +560,10 @@ const firebaseConfig = {
     </div>
 
     <div class="container">
+        <div class="top-bar">
+            <button class="top-bar-btn btn-settings" onclick="abrirCambiarPassModal()" title="Configuración">&#9881;</button>
+            <button class="top-bar-btn btn-logout" onclick="cerrarSesion()">&#128274; Cerrar Sesión</button>
+        </div>
         <h1>Configuración de Usuarios</h1>
         <p id="estadoUsuarios"></p>
     <script>
@@ -832,8 +882,10 @@ const firebaseConfig = {
         window.onclick = function(event) {
             const customModal = document.getElementById('customModal');
             const solModal = document.getElementById('solicitudesModal');
+            const cpModal = document.getElementById('cambiarPassModal');
             if (event.target === customModal) closeModal();
             if (event.target === solModal) closeModal('solicitudesModal');
+            if (event.target === cpModal) closeModal('cambiarPassModal');
         }
 
         // Close modal with Escape key
@@ -841,8 +893,81 @@ const firebaseConfig = {
             if (event.key === 'Escape') {
                 closeModal();
                 closeModal('solicitudesModal');
+                closeModal('cambiarPassModal');
             }
         });
+
+        // === CERRAR SESIÓN ===
+        function cerrarSesion() {
+            if (!confirm('\u00bfEst\u00e1 seguro de que desea cerrar sesi\u00f3n?')) return;
+            localStorage.removeItem('datosUsuario');
+            window.location.href = 'index.html';
+        }
+
+        // === CAMBIAR CONTRASEÑA ===
+        function abrirCambiarPassModal() {
+            document.getElementById('cambiarPassModal').style.display = 'block';
+            document.getElementById('cp_error').textContent = '';
+            document.getElementById('cp_success').style.display = 'none';
+            document.getElementById('cp_form').reset();
+            document.getElementById('cp_form').style.display = 'block';
+        }
+
+        async function handleCambiarPassAdmin(event) {
+            event.preventDefault();
+            const errorDiv = document.getElementById('cp_error');
+            const successDiv = document.getElementById('cp_success');
+            const btn = document.getElementById('cp_submit_btn');
+            errorDiv.textContent = '';
+            successDiv.style.display = 'none';
+            btn.disabled = true;
+
+            const usuario = document.getElementById('cp_usuario').value.trim();
+            const passActual = document.getElementById('cp_actual').value;
+            const passNueva = document.getElementById('cp_nueva').value;
+            const passConfirmar = document.getElementById('cp_confirmar').value;
+
+            if (!usuario || !passActual || !passNueva || !passConfirmar) {
+                errorDiv.textContent = 'Complete todos los campos.';
+                btn.disabled = false;
+                return;
+            }
+            if (passNueva !== passConfirmar) {
+                errorDiv.textContent = 'La nueva contrase\u00f1a y su confirmaci\u00f3n no coinciden.';
+                btn.disabled = false;
+                return;
+            }
+            if (passNueva.length < 4) {
+                errorDiv.textContent = 'La nueva contrase\u00f1a debe tener al menos 4 caracteres.';
+                btn.disabled = false;
+                return;
+            }
+
+            try {
+                const q = await db.collection('usuarios').where('usuario', '==', usuario).limit(1).get();
+                if (q.empty) {
+                    errorDiv.textContent = 'Usuario no encontrado.';
+                    btn.disabled = false;
+                    return;
+                }
+                const userDoc = q.docs[0];
+                if (userDoc.data()['contrase\u00f1a'] !== passActual) {
+                    errorDiv.textContent = 'La contrase\u00f1a actual es incorrecta.';
+                    btn.disabled = false;
+                    return;
+                }
+                const upd = {};
+                upd['contrase\u00f1a'] = passNueva;
+                await db.collection('usuarios').doc(userDoc.id).update(upd);
+                document.getElementById('cp_form').style.display = 'none';
+                successDiv.style.display = 'block';
+            } catch (e) {
+                console.error('Error cambiando contrase\u00f1a:', e);
+                errorDiv.textContent = 'Error al cambiar la contrase\u00f1a. Intente de nuevo.';
+            } finally {
+                btn.disabled = false;
+            }
+        }
 
         // === SOLICITUDES DE USUARIO ===
         async function cargarConteoSolicitudes() {
@@ -1010,6 +1135,33 @@ const firebaseConfig = {
             }
         }
     </script>
+    </div>
+
+    <!-- Cambiar Contraseña Modal -->
+    <div id="cambiarPassModal" class="modal" style="z-index:2000;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>&#9881; Cambiar Contrase&ntilde;a</h3>
+                <span class="close" onclick="closeModal('cambiarPassModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p id="cp_error" style="color:#f44336;font-weight:600;margin-bottom:10px;min-height:20px;"></p>
+                <div id="cp_success" style="display:none;background:#e8f5e9;color:#2e7d32;padding:14px;border-radius:8px;border-left:4px solid #4CAF50;font-weight:600;margin-bottom:10px;">
+                    &#10003; Contrase&ntilde;a cambiada con &eacute;xito.
+                </div>
+                <form id="cp_form" onsubmit="handleCambiarPassAdmin(event)">
+                    <label for="cp_usuario">ID de Usuario</label>
+                    <input type="text" id="cp_usuario" required placeholder="Ingrese el usuario" style="width:100%;padding:10px;margin:6px 0 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;">
+                    <label for="cp_actual">Contrase&ntilde;a Actual</label>
+                    <input type="password" id="cp_actual" required placeholder="Contrase&ntilde;a actual" style="width:100%;padding:10px;margin:6px 0 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;">
+                    <label for="cp_nueva">Nueva Contrase&ntilde;a</label>
+                    <input type="password" id="cp_nueva" required placeholder="Nueva contrase&ntilde;a" minlength="4" style="width:100%;padding:10px;margin:6px 0 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;">
+                    <label for="cp_confirmar">Confirmar Nueva Contrase&ntilde;a</label>
+                    <input type="password" id="cp_confirmar" required placeholder="Repita la nueva contrase&ntilde;a" minlength="4" style="width:100%;padding:10px;margin:6px 0 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;">
+                    <button type="submit" id="cp_submit_btn" class="modal-btn" style="width:100%;margin-top:5px;">Cambiar Contrase&ntilde;a</button>
+                </form>
+            </div>
+        </div>
     </div>
 
     <!-- Solicitudes Modal -->
