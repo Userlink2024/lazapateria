@@ -864,15 +864,22 @@ const firebaseConfig = {
             document.getElementById('solicitudesListContainer').innerHTML = '<p style="text-align:center;"><span class="loading"></span> Cargando solicitudes...</p>';
             try {
                 const snap = await db.collection('solicitudes_usuario')
-                    .where('estado', '==', 'pendiente')
-                    .orderBy('fechaSolicitud', 'desc').get();
+                    .where('estado', '==', 'pendiente').get();
                 const container = document.getElementById('solicitudesListContainer');
                 container.innerHTML = '';
                 if (snap.empty) {
                     container.innerHTML = '<div class="solicitudes-empty">No hay solicitudes pendientes.</div>';
                     return;
                 }
-                snap.forEach(doc => {
+                // Sort client-side by fechaSolicitud desc
+                const docs = snap.docs.sort((a, b) => {
+                    const fa = a.data().fechaSolicitud;
+                    const fb = b.data().fechaSolicitud;
+                    if (!fa) return 1;
+                    if (!fb) return -1;
+                    return fb.toMillis() - fa.toMillis();
+                });
+                docs.forEach(doc => {
                     const s = doc.data();
                     const fecha = s.fechaSolicitud ? s.fechaSolicitud.toDate().toLocaleDateString('es-CO') : 'N/A';
                     const card = document.createElement('div');
