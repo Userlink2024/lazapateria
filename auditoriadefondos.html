@@ -672,7 +672,7 @@
 
           <!-- Historial de movimientos (abierto por defecto) -->
           <details class="china-form-section" style="margin-top:16px" open>
-            <summary><i class="fas fa-list"></i> Historial de Movimientos Manuales (<span id="tirasMovCount">0</span>)</summary>
+            <summary><i class="fas fa-list"></i> Historial de Movimientos (<span id="tirasMovCount">0</span>)</summary>
             <div class="china-form-content">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
                 <div class="chips">
@@ -687,6 +687,7 @@
                 <button class="btn ghost filter-tipo-btn" type="button" data-filter-tiras="ingreso" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-arrow-down"></i> Ingresos</button>
                 <button class="btn ghost filter-tipo-btn" type="button" data-filter-tiras="egreso" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-arrow-up"></i> Egresos</button>
                 <button class="btn ghost filter-tipo-btn" type="button" data-filter-tiras="cierre" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-calendar-week"></i> Cierres</button>
+                <button class="btn ghost filter-tipo-btn" type="button" data-filter-tiras="ventas" style="font-size:11px;padding:5px 12px;border-radius:20px"><i class="fas fa-cash-register"></i> Ventas a Caja</button>
               </div>
               <div id="cajaListTiras" class="list"></div>
             </div>
@@ -1671,11 +1672,14 @@
       setLoading(true);
       try {
         // 1. Crear movimiento de ingreso en caja_menor
+        const hoyStr = todayISO();
         const movData = {
           tipo: 'ingreso',
           categoria: 'abono_credito',
+          subcaja: 'tiras',
           valor: monto,
-          fecha: todayISO(),
+          fecha: parseDateToTimestamp(hoyStr),
+          fechaStr: hoyStr,
           cliente: cliente,
           factura: factura,
           observaciones: `Abono factura #${factura} - Cliente: ${cliente} - Fecha abono: ${fecha}`,
@@ -1729,14 +1733,17 @@
           setLoading(true);
           try {
             // 1. Crear movimiento de ingreso en caja_menor (colección de tiras/china)
+            const hoyStr = todayISO();
             const movData = {
               tipo: 'ingreso',
-              categoria: 'venta_credito',
+              categoria: 'venta_contado',
+              subcaja: 'tiras',
               valor: valor,
-              fecha: todayISO(),
+              fecha: parseDateToTimestamp(hoyStr),
+              fechaStr: hoyStr,
               cliente: cliente,
               factura: factura,
-              observaciones: `Pago completo factura #${factura} - Cliente: ${cliente}`,
+              observaciones: `Venta contado factura #${factura} - Cliente: ${cliente}`,
               createdAt: firebase.firestore.Timestamp.fromDate(new Date()),
               createdBy: safeStr(currentUser && currentUser.nombreCompleto),
               origen: 'tiras'
@@ -2116,7 +2123,13 @@
     function aplicarFiltroTiras(){
       const listEl = $('cajaListTiras');
       if (!listEl || !window._lastTirasFiltered) return;
-      const filtered = cajaFilterTiras === 'todos' ? window._lastTirasFiltered : window._lastTirasFiltered.filter(m => safeStr(m.tipo) === cajaFilterTiras);
+      const filtered = cajaFilterTiras === 'todos' ? window._lastTirasFiltered : window._lastTirasFiltered.filter(m => {
+        if (cajaFilterTiras === 'ventas') {
+          const cat = safeStr(m.categoria);
+          return cat === 'venta_contado' || cat === 'abono_credito' || cat === 'venta_credito';
+        }
+        return safeStr(m.tipo) === cajaFilterTiras;
+      });
       listEl.innerHTML = '';
       if (!filtered.length) {
         listEl.innerHTML = '<div class="hint">Sin movimientos de este tipo.</div>';
