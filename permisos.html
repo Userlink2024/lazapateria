@@ -397,6 +397,64 @@
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
         }
+        .top-bar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .top-bar-btn {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-logout {
+            background: linear-gradient(135deg, #f44336, #ef5350);
+            color: white;
+        }
+        .btn-logout:hover {
+            background: linear-gradient(135deg, #d32f2f, #e53935);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(244, 67, 54, 0.3);
+        }
+        .btn-settings {
+            background: linear-gradient(135deg, #607D8B, #78909C);
+            color: white;
+            font-size: 18px;
+            padding: 10px 14px;
+        }
+        .btn-settings:hover {
+            background: linear-gradient(135deg, #455A64, #607D8B);
+            transform: translateY(-2px) rotate(30deg);
+            box-shadow: 0 6px 20px rgba(96, 125, 139, 0.3);
+        }
+        #cambiarPassModalPermisos {
+            z-index: 3000;
+        }
+        .cp-error {
+            color: #f44336;
+            font-weight: 600;
+            margin-bottom: 10px;
+            min-height: 20px;
+        }
+        .cp-success {
+            display: none;
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 14px;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
         .auth-submit-btn:disabled {
             background: #ccc;
             cursor: not-allowed;
@@ -1602,6 +1660,76 @@
             if (suc) { suc.classList.remove('show'); suc.textContent = ''; }
         }
 
+        function cerrarSesionPermisos() {
+            if (!confirm('¿Está seguro de que desea cerrar sesión?')) return;
+            localStorage.removeItem('datosUsuario');
+            window.location.href = 'index.html';
+        }
+
+        function abrirCambiarPassPermisos() {
+            document.getElementById('cpp_error').textContent = '';
+            document.getElementById('cpp_success').style.display = 'none';
+            document.getElementById('cpp_form').reset();
+            document.getElementById('cpp_form').style.display = 'block';
+            document.getElementById('cambiarPassModalPermisos').classList.add('show');
+        }
+
+        async function handleCambiarPassPermisos(event) {
+            event.preventDefault();
+            const errorDiv = document.getElementById('cpp_error');
+            const successDiv = document.getElementById('cpp_success');
+            const btn = document.getElementById('cpp_submit_btn');
+            errorDiv.textContent = '';
+            successDiv.style.display = 'none';
+            btn.disabled = true;
+
+            const usuario = document.getElementById('cpp_usuario').value.trim();
+            const passActual = document.getElementById('cpp_actual').value;
+            const passNueva = document.getElementById('cpp_nueva').value;
+            const passConfirmar = document.getElementById('cpp_confirmar').value;
+
+            if (!usuario || !passActual || !passNueva || !passConfirmar) {
+                errorDiv.textContent = 'Complete todos los campos.';
+                btn.disabled = false;
+                return;
+            }
+            if (passNueva !== passConfirmar) {
+                errorDiv.textContent = 'La nueva contraseña y su confirmación no coinciden.';
+                btn.disabled = false;
+                return;
+            }
+            if (passNueva.length < 4) {
+                errorDiv.textContent = 'La nueva contraseña debe tener al menos 4 caracteres.';
+                btn.disabled = false;
+                return;
+            }
+            try {
+                const q = await db.collection('usuarios').where('usuario', '==', usuario).limit(1).get();
+                if (q.empty) {
+                    errorDiv.textContent = 'Usuario no encontrado.';
+                    btn.disabled = false;
+                    return;
+                }
+                const userDoc = q.docs[0];
+                if (userDoc.data()['contraseña'] !== passActual) {
+                    errorDiv.textContent = 'La contraseña actual es incorrecta.';
+                    btn.disabled = false;
+                    return;
+                }
+                const upd = {};
+                upd['contraseña'] = passNueva;
+                await db.collection('usuarios').doc(userDoc.id).update(upd);
+                document.getElementById('cpp_form').style.display = 'none';
+                successDiv.style.display = 'block';
+            } catch (e) {
+                console.error('Error cambiando contraseña:', e);
+                errorDiv.textContent = 'Error al cambiar la contraseña. Intente de nuevo.';
+                btn.disabled = false;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
         // --- Solicitar Usuario ---
         async function handleSolicitarUsuario(event) {
             event.preventDefault();
@@ -1946,6 +2074,10 @@
     </div>
 
     <div class="container">
+        <div class="top-bar">
+            <button class="top-bar-btn btn-settings" onclick="abrirCambiarPassPermisos()" title="Cambiar Contraseña">&#9881;</button>
+            <button class="top-bar-btn btn-logout" onclick="cerrarSesionPermisos()">&#128274; Cerrar Sesión</button>
+        </div>
         <h1>Sistema de Solicitud de Permisos JCB INDUSTRY S.A.S.</h1>
 
         <!-- Formulario de Solicitud de Permiso -->
@@ -2139,6 +2271,34 @@
 
                 <button type="submit">Guardar Cambios</button>
             </form>
+        </div>
+    </div>
+    <!-- Cambiar Contraseña Modal -->
+    <div id="cambiarPassModalPermisos" class="overlay-modal">
+        <div class="overlay-modal-box">
+            <h3 style="margin-bottom:16px;">&#9881; Cambiar Contraseña</h3>
+            <p id="cpp_error" class="cp-error"></p>
+            <div id="cpp_success" class="cp-success">&#10003; Contraseña cambiada con éxito.</div>
+            <form id="cpp_form" onsubmit="handleCambiarPassPermisos(event)">
+                <div class="auth-form-field">
+                    <label>ID de Usuario *</label>
+                    <input type="text" id="cpp_usuario" required placeholder="Ingrese su usuario">
+                </div>
+                <div class="auth-form-field">
+                    <label>Contraseña Actual *</label>
+                    <input type="password" id="cpp_actual" required placeholder="Contraseña actual">
+                </div>
+                <div class="auth-form-field">
+                    <label>Nueva Contraseña *</label>
+                    <input type="password" id="cpp_nueva" required placeholder="Nueva contraseña" minlength="4">
+                </div>
+                <div class="auth-form-field">
+                    <label>Confirmar Nueva Contraseña *</label>
+                    <input type="password" id="cpp_confirmar" required placeholder="Repita la nueva contraseña" minlength="4">
+                </div>
+                <button type="submit" id="cpp_submit_btn" class="auth-submit-btn">Cambiar Contraseña</button>
+            </form>
+            <a class="overlay-back-link" onclick="hideOverlayModal('cambiarPassModalPermisos')">&#8592; Cerrar</a>
         </div>
     </div>
 </body>
