@@ -470,6 +470,128 @@
             .auth-body {
                 padding: 25px 20px;
             }
+            .auth-actions a {
+                font-size: 0.85em;
+            }
+            .overlay-modal-content {
+                width: 95%;
+                max-width: 95%;
+            }
+            .overlay-modal-body {
+                padding: 20px;
+            }
+            .overlay-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Auth Action Links */
+        .auth-actions {
+            margin-top: 20px;
+            text-align: center;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        .auth-actions a {
+            display: block;
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9em;
+            margin: 8px 0;
+            cursor: pointer;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        .auth-actions a:hover {
+            color: #764ba2;
+            text-decoration: underline;
+        }
+
+        /* Overlay Modals */
+        .overlay-modal {
+            display: none;
+            position: fixed;
+            z-index: 10002;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            overflow-y: auto;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .overlay-modal.show {
+            display: flex;
+        }
+        .overlay-modal-content {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 480px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            overflow: hidden;
+            animation: slideIn 0.3s ease-out;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .overlay-modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px;
+            text-align: center;
+            color: white;
+        }
+        .overlay-modal-header h2 {
+            color: white;
+            margin: 0 0 5px 0;
+            font-size: 1.5em;
+            font-weight: 700;
+        }
+        .overlay-modal-header p {
+            color: rgba(255,255,255,0.9);
+            margin: 0;
+            font-size: 0.9em;
+        }
+        .overlay-modal-body {
+            padding: 25px 30px;
+        }
+        .overlay-modal-body .auth-form-field {
+            margin-bottom: 15px;
+        }
+        .overlay-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+            display: none;
+            border-left: 4px solid #4CAF50;
+            font-weight: 600;
+        }
+        .overlay-success.show {
+            display: block;
+        }
+        .overlay-back-link {
+            display: block;
+            text-align: center;
+            margin-top: 15px;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.9em;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .overlay-back-link:hover {
+            text-decoration: underline;
+            color: #764ba2;
+        }
+        .overlay-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
         }
     </style>
     <!-- Firebase SDKs -->
@@ -1449,6 +1571,217 @@
                 hideLoadingBar();
             }
         }
+
+        // --- Overlay Modal Helpers ---
+        function showOverlayModal(id) {
+            document.getElementById(id).classList.add('show');
+        }
+        function hideOverlayModal(id) {
+            document.getElementById(id).classList.remove('show');
+            const modal = document.getElementById(id);
+            const form = modal.querySelector('form');
+            if (form) { form.reset(); form.style.display = 'block'; }
+            const err = modal.querySelector('.auth-error');
+            if (err) { err.classList.remove('show'); err.textContent = ''; }
+            const suc = modal.querySelector('.overlay-success');
+            if (suc) { suc.classList.remove('show'); suc.textContent = ''; }
+        }
+
+        // --- Solicitar Usuario ---
+        async function handleSolicitarUsuario(event) {
+            event.preventDefault();
+            const errorDiv = document.getElementById('solicitar_error');
+            const successDiv = document.getElementById('solicitar_success');
+            const submitBtn = document.getElementById('sol_submit_btn');
+            errorDiv.classList.remove('show');
+            successDiv.classList.remove('show');
+            submitBtn.disabled = true;
+
+            const nombre = document.getElementById('sol_nombre').value.trim();
+            const tipoDocumento = document.getElementById('sol_tipo_doc').value.trim();
+            const celular = document.getElementById('sol_celular').value.trim();
+            const correo = document.getElementById('sol_correo').value.trim();
+            const direccion = document.getElementById('sol_direccion').value.trim();
+            const municipio = document.getElementById('sol_municipio').value.trim();
+            const empresa = document.getElementById('sol_empresa').value.trim();
+            const password = document.getElementById('sol_password').value;
+
+            if (!nombre || !tipoDocumento || !celular || !correo || !empresa || !password) {
+                errorDiv.textContent = 'Por favor complete todos los campos obligatorios.';
+                errorDiv.classList.add('show');
+                submitBtn.disabled = false;
+                return;
+            }
+
+            try {
+                // Check if there's already a pending request with same correo
+                const existing = await db.collection('solicitudes_usuario')
+                    .where('correo', '==', correo)
+                    .where('estado', '==', 'pendiente')
+                    .limit(1).get();
+                if (!existing.empty) {
+                    errorDiv.textContent = 'Ya existe una solicitud pendiente con este correo. Por favor espere a que sea procesada.';
+                    errorDiv.classList.add('show');
+                    submitBtn.disabled = false;
+                    return;
+                }
+
+                await db.collection('solicitudes_usuario').add({
+                    nombreCompleto: nombre,
+                    tipoDocumento: tipoDocumento,
+                    celular: celular,
+                    correo: correo,
+                    direccion: direccion,
+                    municipio: municipio,
+                    empresa: empresa,
+                    contraseña: password,
+                    estado: 'pendiente',
+                    fechaSolicitud: firebase.firestore.Timestamp.fromDate(new Date())
+                });
+
+                successDiv.textContent = '¡Solicitud enviada con éxito! Un administrador revisará su solicitud y le asignará un usuario. Puede consultar su usuario más tarde con su correo o celular.';
+                successDiv.classList.add('show');
+                document.getElementById('solicitar_form').style.display = 'none';
+            } catch (error) {
+                console.error('Error enviando solicitud:', error);
+                errorDiv.textContent = 'Error al enviar la solicitud. Intente nuevamente.';
+                errorDiv.classList.add('show');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        // --- Consultar mi Usuario ---
+        async function handleConsultarUsuario(event) {
+            event.preventDefault();
+            const errorDiv = document.getElementById('consultar_error');
+            const successDiv = document.getElementById('consultar_success');
+            const submitBtn = document.getElementById('consultar_submit_btn');
+            errorDiv.classList.remove('show');
+            successDiv.classList.remove('show');
+            submitBtn.disabled = true;
+
+            const input = document.getElementById('consultar_input').value.trim();
+            if (!input) {
+                errorDiv.textContent = 'Por favor ingrese su correo o celular.';
+                errorDiv.classList.add('show');
+                submitBtn.disabled = false;
+                return;
+            }
+
+            try {
+                // Try by correo first
+                let result = await db.collection('usuarios')
+                    .where('correo', '==', input).limit(1).get();
+                // If not found, try by celular
+                if (result.empty) {
+                    result = await db.collection('usuarios')
+                        .where('celular', '==', input).limit(1).get();
+                }
+
+                if (result.empty) {
+                    // Check if there's a pending request
+                    let solResult = await db.collection('solicitudes_usuario')
+                        .where('correo', '==', input)
+                        .where('estado', '==', 'pendiente')
+                        .limit(1).get();
+                    if (solResult.empty) {
+                        solResult = await db.collection('solicitudes_usuario')
+                            .where('celular', '==', input)
+                            .where('estado', '==', 'pendiente')
+                            .limit(1).get();
+                    }
+                    if (!solResult.empty) {
+                        errorDiv.textContent = 'Su solicitud aún está pendiente de aprobación. Un administrador le asignará un usuario pronto.';
+                    } else {
+                        errorDiv.textContent = 'No se encontró ningún usuario con ese correo o celular. Puede solicitar un usuario nuevo.';
+                    }
+                    errorDiv.classList.add('show');
+                    submitBtn.disabled = false;
+                    return;
+                }
+
+                const userData = result.docs[0].data();
+                successDiv.textContent = 'Su usuario es: ' + userData.usuario;
+                successDiv.classList.add('show');
+            } catch (error) {
+                console.error('Error consultando usuario:', error);
+                errorDiv.textContent = 'Error al consultar. Intente nuevamente.';
+                errorDiv.classList.add('show');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        // --- Cambiar Contraseña ---
+        async function handleCambiarPassword(event) {
+            event.preventDefault();
+            const errorDiv = document.getElementById('cambiar_error');
+            const successDiv = document.getElementById('cambiar_success');
+            const submitBtn = document.getElementById('cambiar_submit_btn');
+            errorDiv.classList.remove('show');
+            successDiv.classList.remove('show');
+            submitBtn.disabled = true;
+
+            const usuario = document.getElementById('cambiar_usuario').value.trim();
+            const passActual = document.getElementById('cambiar_pass_actual').value;
+            const passNueva = document.getElementById('cambiar_pass_nueva').value;
+            const passConfirmar = document.getElementById('cambiar_pass_confirmar').value;
+
+            if (!usuario || !passActual || !passNueva || !passConfirmar) {
+                errorDiv.textContent = 'Por favor complete todos los campos.';
+                errorDiv.classList.add('show');
+                submitBtn.disabled = false;
+                return;
+            }
+            if (passNueva !== passConfirmar) {
+                errorDiv.textContent = 'La nueva contraseña y su confirmación no coinciden.';
+                errorDiv.classList.add('show');
+                submitBtn.disabled = false;
+                return;
+            }
+            if (passNueva.length < 4) {
+                errorDiv.textContent = 'La nueva contraseña debe tener al menos 4 caracteres.';
+                errorDiv.classList.add('show');
+                submitBtn.disabled = false;
+                return;
+            }
+
+            try {
+                const userQuery = await db.collection('usuarios')
+                    .where('usuario', '==', usuario).limit(1).get();
+                if (userQuery.empty) {
+                    errorDiv.textContent = 'Usuario no encontrado.';
+                    errorDiv.classList.add('show');
+                    submitBtn.disabled = false;
+                    return;
+                }
+
+                const userDoc = userQuery.docs[0];
+                const userData = userDoc.data();
+
+                if (userData.contraseña !== passActual) {
+                    errorDiv.textContent = 'La contraseña actual es incorrecta.';
+                    errorDiv.classList.add('show');
+                    submitBtn.disabled = false;
+                    return;
+                }
+
+                await db.collection('usuarios').doc(userDoc.id).update({
+                    contraseña: passNueva
+                });
+
+                successDiv.textContent = '¡Contraseña cambiada con éxito! Ya puede iniciar sesión con su nueva contraseña.';
+                successDiv.classList.add('show');
+                document.getElementById('cambiar_form').reset();
+            } catch (error) {
+                console.error('Error cambiando contraseña:', error);
+                errorDiv.textContent = 'Error al cambiar la contraseña. Intente nuevamente.';
+                errorDiv.classList.add('show');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
     </script>
 </head>
 <body>
@@ -1476,6 +1809,121 @@
                     <div class="auth-spinner"></div>
                     <p style="margin-top: 10px; color: #667eea; font-weight: 600;">Autenticando...</p>
                 </div>
+                <div class="auth-actions">
+                    <a onclick="showOverlayModal('solicitar_modal')">¿No tienes usuario? Solicitar aquí</a>
+                    <a onclick="showOverlayModal('consultar_modal')">¿Olvidaste tu usuario? Consultar</a>
+                    <a onclick="showOverlayModal('cambiar_pass_modal')">Cambiar Contraseña</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Solicitar Usuario Modal -->
+    <div id="solicitar_modal" class="overlay-modal">
+        <div class="overlay-modal-content">
+            <div class="overlay-modal-header">
+                <h2>Solicitar Usuario</h2>
+                <p>Complete sus datos para solicitar una cuenta</p>
+            </div>
+            <div class="overlay-modal-body">
+                <div id="solicitar_error" class="auth-error"></div>
+                <div id="solicitar_success" class="overlay-success"></div>
+                <form id="solicitar_form" onsubmit="handleSolicitarUsuario(event)">
+                    <div class="auth-form-field">
+                        <label>Nombre Completo *</label>
+                        <input type="text" id="sol_nombre" required placeholder="Nombre y apellidos">
+                    </div>
+                    <div class="overlay-row">
+                        <div class="auth-form-field">
+                            <label>Tipo de documento y n&uacute;mero *</label>
+                            <input type="text" id="sol_tipo_doc" required placeholder="Ej: CC 1234567890">
+                        </div>
+                        <div class="auth-form-field">
+                            <label>Celular *</label>
+                            <input type="tel" id="sol_celular" required placeholder="Ej: 3001234567" inputmode="numeric">
+                        </div>
+                    </div>
+                    <div class="auth-form-field">
+                        <label>Correo Electr&oacute;nico *</label>
+                        <input type="email" id="sol_correo" required placeholder="correo@ejemplo.com">
+                    </div>
+                    <div class="overlay-row">
+                        <div class="auth-form-field">
+                            <label>Direcci&oacute;n</label>
+                            <input type="text" id="sol_direccion" placeholder="Direcci&oacute;n de residencia">
+                        </div>
+                        <div class="auth-form-field">
+                            <label>Municipio</label>
+                            <input type="text" id="sol_municipio" placeholder="Ciudad/Municipio">
+                        </div>
+                    </div>
+                    <div class="auth-form-field">
+                        <label>Empresa *</label>
+                        <input type="text" id="sol_empresa" required placeholder="Nombre de la empresa">
+                    </div>
+                    <div class="auth-form-field">
+                        <label>Contrase&ntilde;a deseada *</label>
+                        <input type="password" id="sol_password" required placeholder="M&iacute;nimo 4 caracteres" minlength="4">
+                    </div>
+                    <button type="submit" class="auth-submit-btn" id="sol_submit_btn">Enviar Solicitud</button>
+                </form>
+                <a class="overlay-back-link" onclick="hideOverlayModal('solicitar_modal')">&#8592; Volver al Login</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Consultar Usuario Modal -->
+    <div id="consultar_modal" class="overlay-modal">
+        <div class="overlay-modal-content">
+            <div class="overlay-modal-header">
+                <h2>Consultar mi Usuario</h2>
+                <p>Busque su usuario con su correo o celular</p>
+            </div>
+            <div class="overlay-modal-body">
+                <div id="consultar_error" class="auth-error"></div>
+                <div id="consultar_success" class="overlay-success"></div>
+                <form id="consultar_form" onsubmit="handleConsultarUsuario(event)">
+                    <div class="auth-form-field">
+                        <label>Correo Electr&oacute;nico o Celular</label>
+                        <input type="text" id="consultar_input" required placeholder="Ingrese su correo o n&uacute;mero de celular">
+                    </div>
+                    <button type="submit" class="auth-submit-btn" id="consultar_submit_btn">Consultar</button>
+                </form>
+                <a class="overlay-back-link" onclick="hideOverlayModal('consultar_modal')">&#8592; Volver al Login</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cambiar Contraseña Modal -->
+    <div id="cambiar_pass_modal" class="overlay-modal">
+        <div class="overlay-modal-content">
+            <div class="overlay-modal-header">
+                <h2>Cambiar Contrase&ntilde;a</h2>
+                <p>Actualice su contrase&ntilde;a de acceso</p>
+            </div>
+            <div class="overlay-modal-body">
+                <div id="cambiar_error" class="auth-error"></div>
+                <div id="cambiar_success" class="overlay-success"></div>
+                <form id="cambiar_form" onsubmit="handleCambiarPassword(event)">
+                    <div class="auth-form-field">
+                        <label>ID de Usuario</label>
+                        <input type="text" id="cambiar_usuario" required placeholder="Ingrese su ID de usuario">
+                    </div>
+                    <div class="auth-form-field">
+                        <label>Contrase&ntilde;a Actual</label>
+                        <input type="password" id="cambiar_pass_actual" required placeholder="Contrase&ntilde;a actual">
+                    </div>
+                    <div class="auth-form-field">
+                        <label>Nueva Contrase&ntilde;a</label>
+                        <input type="password" id="cambiar_pass_nueva" required placeholder="Nueva contrase&ntilde;a" minlength="4">
+                    </div>
+                    <div class="auth-form-field">
+                        <label>Confirmar Nueva Contrase&ntilde;a</label>
+                        <input type="password" id="cambiar_pass_confirmar" required placeholder="Repita la nueva contrase&ntilde;a" minlength="4">
+                    </div>
+                    <button type="submit" class="auth-submit-btn" id="cambiar_submit_btn">Cambiar Contrase&ntilde;a</button>
+                </form>
+                <a class="overlay-back-link" onclick="hideOverlayModal('cambiar_pass_modal')">&#8592; Volver al Login</a>
             </div>
         </div>
     </div>
