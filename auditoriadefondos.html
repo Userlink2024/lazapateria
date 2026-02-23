@@ -981,7 +981,7 @@
     function safeStr(v){ return String(v || '').trim(); }
     function normalizeRef(v){ return safeStr(v).toUpperCase(); }
     function fmtCOP(n){ return '$' + new Intl.NumberFormat('es-CO').format(Number(n || 0)); }
-    function tsToDate(ts){ try { return ts && ts.toDate ? ts.toDate() : null; } catch { return null; } }
+    function tsToDate(ts){ try { if (ts && ts.toDate) return ts.toDate(); if (typeof ts === 'string' && ts.length >= 10) { const d = new Date(ts.length === 10 ? ts + 'T12:00:00' : ts); return isNaN(d.getTime()) ? null : d; } if (typeof ts === 'number') { const d = new Date(ts); return isNaN(d.getTime()) ? null : d; } return null; } catch { return null; } }
     function formatDateTime(ts){ const d = tsToDate(ts); return d ? d.toLocaleString('es-CO') : ''; }
     function sumAbonos(abonos){ return (Array.isArray(abonos) ? abonos : []).reduce((acc,a)=> acc + Number((a && a.monto) || 0), 0); }
 
@@ -1673,6 +1673,7 @@
       try {
         // 1. Crear movimiento de ingreso en caja_menor
         const hoyStr = todayISO();
+        const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
         const movData = {
           tipo: 'ingreso',
           categoria: 'abono_credito',
@@ -1684,7 +1685,8 @@
           factura: factura,
           observaciones: `Abono factura #${factura} - Cliente: ${cliente} - Fecha abono: ${fecha}`,
           createdAt: firebase.firestore.Timestamp.fromDate(new Date()),
-          createdBy: safeStr(currentUser && currentUser.nombreCompleto),
+          createdBy: who,
+          usuario: who,
           origen: 'tiras'
         };
         await COL_CAJA.add(movData);
@@ -1734,6 +1736,7 @@
           try {
             // 1. Crear movimiento de ingreso en caja_menor (colección de tiras/china)
             const hoyStr = todayISO();
+            const who = safeStr(currentUser && (currentUser.nombreCompleto || currentUser.usuario));
             const movData = {
               tipo: 'ingreso',
               categoria: 'venta_contado',
@@ -1745,7 +1748,8 @@
               factura: factura,
               observaciones: `Venta contado factura #${factura} - Cliente: ${cliente}`,
               createdAt: firebase.firestore.Timestamp.fromDate(new Date()),
-              createdBy: safeStr(currentUser && currentUser.nombreCompleto),
+              createdBy: who,
+              usuario: who,
               origen: 'tiras'
             };
             await COL_CAJA.add(movData);
