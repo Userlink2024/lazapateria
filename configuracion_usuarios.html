@@ -347,6 +347,129 @@
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(76, 175, 80, 0.3);
         }
+
+        /* Solicitudes Styles */
+        .solicitudes-btn {
+            background: linear-gradient(135deg, #FF9800, #FFB74D);
+            color: white;
+            width: 100%;
+            margin-top: 10px;
+            position: relative;
+        }
+        .solicitudes-btn:hover {
+            background: linear-gradient(135deg, #F57C00, #FF9800);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 152, 0, 0.3);
+        }
+        .solicitudes-badge {
+            display: inline-block;
+            background: #f44336;
+            color: white;
+            border-radius: 50%;
+            min-width: 22px;
+            height: 22px;
+            font-size: 12px;
+            line-height: 22px;
+            text-align: center;
+            margin-left: 8px;
+            font-weight: bold;
+            padding: 0 4px;
+        }
+        .solicitud-card {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            animation: fadeIn 0.3s ease;
+        }
+        .solicitud-card h4 {
+            color: #2e7d32;
+            margin: 0 0 10px 0;
+            font-size: 1.1em;
+        }
+        .solicitud-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+        .solicitud-info p {
+            margin: 0;
+        }
+        .solicitud-info strong {
+            color: #555;
+        }
+        .solicitud-admin-fields {
+            background: rgba(76, 175, 80, 0.08);
+            border: 1px dashed #4CAF50;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .solicitud-admin-fields h5 {
+            margin: 0 0 10px 0;
+            color: #2e7d32;
+            font-size: 0.95em;
+        }
+        .solicitud-admin-fields label {
+            margin-top: 8px;
+            margin-bottom: 3px;
+            font-size: 0.85em;
+        }
+        .solicitud-admin-fields input,
+        .solicitud-admin-fields select {
+            padding: 8px 10px;
+            font-size: 14px;
+        }
+        .solicitud-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .solicitud-actions button {
+            margin: 0;
+            padding: 10px;
+            font-size: 14px;
+        }
+        .btn-accept {
+            background: linear-gradient(135deg, #4CAF50, #66BB6A) !important;
+            color: white !important;
+        }
+        .btn-accept:hover {
+            background: linear-gradient(135deg, #45a049, #5cb85c) !important;
+        }
+        .btn-reject {
+            background: linear-gradient(135deg, #f44336, #ef5350) !important;
+            color: white !important;
+        }
+        .btn-reject:hover {
+            background: linear-gradient(135deg, #d32f2f, #e53935) !important;
+        }
+        .solicitudes-empty {
+            text-align: center;
+            padding: 30px;
+            color: #888;
+            font-style: italic;
+        }
+        #solicitudesModal .modal-content {
+            max-width: 700px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        #solicitudesModal .modal-header {
+            background: linear-gradient(135deg, #FF9800, #FFB74D);
+        }
+        @media (max-width: 768px) {
+            .solicitud-info {
+                grid-template-columns: 1fr;
+            }
+            .solicitud-actions {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
@@ -369,6 +492,7 @@ const firebaseConfig = {
         window.onload = () => {
             cargarUsuarios();
             cargarEmpresas();
+            cargarConteoSolicitudes();
         };
     </script>
 </head>
@@ -477,7 +601,7 @@ const firebaseConfig = {
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div>
-                        <label for="tipoDocumento">Tipo de documento:</label>
+                        <label for="tipoDocumento">Tipo de documento y número:</label>
                         <input type="text" id="tipoDocumento" name="tipoDocumento">
                     </div>
                     <div>
@@ -659,6 +783,7 @@ const firebaseConfig = {
             <div class="actions">
                 <button type="button" id="loadMoreUsersBtn" onclick="cargarMasUsuarios()">Cargar más</button>
             </div>
+            <button type="button" class="solicitudes-btn" onclick="abrirSolicitudesModal()">Ver Solicitudes de Usuario <span id="solicitudesBadge" class="solicitudes-badge" style="display:none;">0</span></button>
         </div>
     <script>
         async function mostrarDatosUsuario() {
@@ -695,25 +820,204 @@ const firebaseConfig = {
             document.getElementById('customModal').style.display = 'block';
         }
 
-        function closeModal() {
-            document.getElementById('customModal').style.display = 'none';
+        function closeModal(id) {
+            if (id) {
+                document.getElementById(id).style.display = 'none';
+            } else {
+                document.getElementById('customModal').style.display = 'none';
+            }
         }
 
         // Close modal when clicking outside
         window.onclick = function(event) {
-            const modal = document.getElementById('customModal');
-            if (event.target === modal) {
-                closeModal();
-            }
+            const customModal = document.getElementById('customModal');
+            const solModal = document.getElementById('solicitudesModal');
+            if (event.target === customModal) closeModal();
+            if (event.target === solModal) closeModal('solicitudesModal');
         }
 
         // Close modal with Escape key
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
                 closeModal();
+                closeModal('solicitudesModal');
             }
         });
+
+        // === SOLICITUDES DE USUARIO ===
+        async function cargarConteoSolicitudes() {
+            try {
+                const snap = await db.collection('solicitudes_usuario')
+                    .where('estado', '==', 'pendiente').get();
+                const badge = document.getElementById('solicitudesBadge');
+                if (snap.size > 0) {
+                    badge.textContent = snap.size;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (e) { console.error('Error conteo solicitudes:', e); }
+        }
+
+        async function abrirSolicitudesModal() {
+            document.getElementById('solicitudesModal').style.display = 'block';
+            document.getElementById('solicitudesListContainer').innerHTML = '<p style="text-align:center;"><span class="loading"></span> Cargando solicitudes...</p>';
+            try {
+                const snap = await db.collection('solicitudes_usuario')
+                    .where('estado', '==', 'pendiente')
+                    .orderBy('fechaSolicitud', 'desc').get();
+                const container = document.getElementById('solicitudesListContainer');
+                container.innerHTML = '';
+                if (snap.empty) {
+                    container.innerHTML = '<div class="solicitudes-empty">No hay solicitudes pendientes.</div>';
+                    return;
+                }
+                snap.forEach(doc => {
+                    const s = doc.data();
+                    const fecha = s.fechaSolicitud ? s.fechaSolicitud.toDate().toLocaleDateString('es-CO') : 'N/A';
+                    const card = document.createElement('div');
+                    card.className = 'solicitud-card';
+                    card.id = 'sol_card_' + doc.id;
+                    card.innerHTML = `
+                        <h4>${s.nombreCompleto || 'Sin nombre'}</h4>
+                        <div class="solicitud-info">
+                            <p><strong>Tipo Doc y N\u00famero:</strong> ${s.tipoDocumento || 'N/A'}</p>
+                            <p><strong>Celular:</strong> ${s.celular || 'N/A'}</p>
+                            <p><strong>Correo:</strong> ${s.correo || 'N/A'}</p>
+                            <p><strong>Direcci\u00f3n:</strong> ${s.direccion || 'N/A'}</p>
+                            <p><strong>Municipio:</strong> ${s.municipio || 'N/A'}</p>
+                            <p><strong>Empresa:</strong> ${s.empresa || 'N/A'}</p>
+                            <p><strong>Fecha Solicitud:</strong> ${fecha}</p>
+                        </div>
+                        <div class="solicitud-admin-fields">
+                            <h5>Completar para aceptar:</h5>
+                            <label>Usuario (ID de acceso):</label>
+                            <input type="text" id="sol_usuario_${doc.id}" placeholder="Asignar usuario" required>
+                            <label>Tipo de contrato:</label>
+                            <select id="sol_contrato_${doc.id}">
+                                <option value="Fijo">Fijo</option>
+                                <option value="Temporal">Temporal</option>
+                                <option value="Indefinido">Indefinido</option>
+                            </select>
+                            <label>Tipo de usuario (Permisos):</label>
+                            <select id="sol_permisos_${doc.id}">
+                                <option value="Operador">Operador</option>
+                                <option value="Bodeguero">Bodeguero</option>
+                                <option value="Administrador">Administrador</option>
+                            </select>
+                        </div>
+                        <div class="solicitud-actions">
+                            <button class="btn-accept" onclick="aceptarSolicitud('${doc.id}')">Aceptar y Crear Usuario</button>
+                            <button class="btn-reject" onclick="rechazarSolicitud('${doc.id}')">Rechazar y Eliminar</button>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (e) {
+                console.error('Error cargando solicitudes:', e);
+                document.getElementById('solicitudesListContainer').innerHTML = '<p style="color:red;text-align:center;">Error al cargar solicitudes.</p>';
+            }
+        }
+
+        async function aceptarSolicitud(docId) {
+            const usuario = document.getElementById('sol_usuario_' + docId).value.trim();
+            const tipoContrato = document.getElementById('sol_contrato_' + docId).value;
+            const permisos = document.getElementById('sol_permisos_' + docId).value;
+
+            if (!usuario) {
+                showAlert('Debe asignar un Usuario (ID de acceso) antes de aceptar.');
+                return;
+            }
+
+            // Check if usuario already exists
+            try {
+                const existCheck = await db.collection('usuarios')
+                    .where('usuario', '==', usuario).limit(1).get();
+                if (!existCheck.empty) {
+                    showAlert('El usuario "' + usuario + '" ya existe. Asigne un usuario diferente.');
+                    return;
+                }
+            } catch (e) {
+                showAlert('Error verificando usuario. Intente de nuevo.');
+                return;
+            }
+
+            try {
+                const solDoc = await db.collection('solicitudes_usuario').doc(docId).get();
+                if (!solDoc.exists) { showAlert('La solicitud ya no existe.'); return; }
+                const s = solDoc.data();
+
+                // Create user in usuarios collection
+                const nuevoUsuario = {
+                    nombreCompleto: s.nombreCompleto || '',
+                    tipoDocumento: s.tipoDocumento || '',
+                    celular: s.celular || '',
+                    correo: s.correo || '',
+                    direccion: s.direccion || '',
+                    municipio: s.municipio || '',
+                    empresa: s.empresa || '',
+                    usuario: usuario,
+                    tipoContrato: tipoContrato,
+                    permisos: permisos
+                };
+                nuevoUsuario['contraseña'] = s['contraseña'] || '';
+                await db.collection('usuarios').add(nuevoUsuario);
+
+                // Delete solicitud
+                await db.collection('solicitudes_usuario').doc(docId).delete();
+
+                showAlert('Usuario "' + usuario + '" creado exitosamente para ' + s.nombreCompleto + '. Ya puede iniciar sesi\u00f3n.');
+                // Remove card from UI
+                const card = document.getElementById('sol_card_' + docId);
+                if (card) card.remove();
+                cargarConteoSolicitudes();
+                cargarUsuarios();
+
+                // Check if list is now empty
+                const remaining = document.querySelectorAll('#solicitudesListContainer .solicitud-card');
+                if (remaining.length === 0) {
+                    document.getElementById('solicitudesListContainer').innerHTML = '<div class="solicitudes-empty">No hay solicitudes pendientes.</div>';
+                }
+            } catch (e) {
+                console.error('Error aceptando solicitud:', e);
+                showAlert('Error al crear el usuario. Intente de nuevo.');
+            }
+        }
+
+        async function rechazarSolicitud(docId) {
+            if (!confirm('\u00bfEst\u00e1 seguro de rechazar y eliminar esta solicitud? Esta acci\u00f3n no se puede deshacer.')) return;
+            try {
+                await db.collection('solicitudes_usuario').doc(docId).delete();
+                showAlert('Solicitud eliminada.');
+                const card = document.getElementById('sol_card_' + docId);
+                if (card) card.remove();
+                cargarConteoSolicitudes();
+
+                const remaining = document.querySelectorAll('#solicitudesListContainer .solicitud-card');
+                if (remaining.length === 0) {
+                    document.getElementById('solicitudesListContainer').innerHTML = '<div class="solicitudes-empty">No hay solicitudes pendientes.</div>';
+                }
+            } catch (e) {
+                console.error('Error rechazando solicitud:', e);
+                showAlert('Error al eliminar la solicitud.');
+            }
+        }
     </script>
+    </div>
+
+    <!-- Solicitudes Modal -->
+    <div id="solicitudesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Solicitudes de Usuario Pendientes</h3>
+                <span class="close" onclick="closeModal('solicitudesModal')">&times;</span>
+            </div>
+            <div class="modal-body" style="text-align:left;">
+                <div id="solicitudesListContainer">
+                    <p style="text-align:center;">Cargando...</p>
+                </div>
+            </div>
+        </div>
     </div>
 </body>
 </html>
