@@ -3532,28 +3532,21 @@
       }
 
       // Calcular saldo actual: solo ingresos y egresos DESPUÉS del último cierre
+      // Usa el ORDEN del array (ya viene de Firestore ordenado por createdAt desc)
+      // Los movimientos más recientes están primero en el array
       function calcSaldoActual(movimientos) {
-        // Ordenar por fecha/createdAt descendente para encontrar el último cierre
-        const sorted = [...movimientos].sort((a, b) => {
-          const da = tsToDate(a.fecha || a.createdAt);
-          const db = tsToDate(b.fecha || b.createdAt);
-          if (!da && !db) return 0;
-          if (!da) return 1;
-          if (!db) return -1;
-          return db.getTime() - da.getTime();
-        });
-
-        // Buscar el último cierre
-        let ultimoCierreDate = null;
-        for (const m of sorted) {
-          if (safeStr(m.tipo) === 'cierre') {
-            ultimoCierreDate = tsToDate(m.fecha || m.createdAt);
+        // Buscar el índice del cierre más reciente en el array
+        // (el array ya está en orden createdAt desc desde Firestore)
+        let cierreIndex = -1;
+        for (let i = 0; i < movimientos.length; i++) {
+          if (safeStr(movimientos[i].tipo) === 'cierre') {
+            cierreIndex = i;
             break;
           }
         }
 
-        // Si no hay cierre, saldo = ingresos - egresos de todo el periodo
-        if (!ultimoCierreDate) {
+        // Si no hay cierre, saldo = todos los ingresos - todos los egresos
+        if (cierreIndex === -1) {
           let ing = 0, egr = 0;
           movimientos.forEach(m => {
             const tipo = safeStr(m.tipo);
@@ -3561,29 +3554,27 @@
             if (tipo === 'ingreso') ing += val;
             else if (tipo === 'egreso') egr += val;
           });
-          return ing - egr;
+          return { saldo: ing - egr, ingPostCierre: ing, egrPostCierre: egr, hayCierre: false };
         }
 
-        // Si hay cierre, saldo = ingresos - egresos DESPUÉS del último cierre
+        // Sumar solo los ingresos/egresos que están ANTES del cierre en el array
+        // (es decir, los que tienen createdAt más reciente que el cierre)
         let ing = 0, egr = 0;
-        movimientos.forEach(m => {
-          const tipo = safeStr(m.tipo);
-          if (tipo === 'cierre') return; // no contar cierres
-          const mDate = tsToDate(m.fecha || m.createdAt);
-          if (!mDate || mDate.getTime() <= ultimoCierreDate.getTime()) return;
-          const val = Number(m.valor || 0);
+        for (let i = 0; i < cierreIndex; i++) {
+          const tipo = safeStr(movimientos[i].tipo);
+          const val = Number(movimientos[i].valor || 0);
           if (tipo === 'ingreso') ing += val;
           else if (tipo === 'egreso') egr += val;
-        });
-        return ing - egr;
+        }
+        return { saldo: ing - egr, ingPostCierre: ing, egrPostCierre: egr, hayCierre: true };
       }
 
       const tirasFiltered = tirasItems.filter(m => !(safeStr(m.tipo) === 'pendiente' && safeStr(m.categoria) === 'pendiente_proveedor'));
       tirasFiltered.forEach(m => accumulate(m, false));
       localItems.forEach(m => accumulate(m, true));
 
-      const tirasSaldoActual = calcSaldoActual(tirasFiltered);
-      const localSaldoActual = calcSaldoActual(localItems);
+      const tirasCalc = calcSaldoActual(tirasFiltered);
+      const localCalc = calcSaldoActual(localItems);
 
       // Guardar items para filtros
       window._lastTirasFiltered = tirasFiltered;
@@ -3622,27 +3613,37 @@
       if ($('tirasResumenIngresos')) $('tirasResumenIngresos').textContent = fmtCOP(tirasIngresos);
       if ($('tirasResumenEgresos')) $('tirasResumenEgresos').textContent = fmtCOP(tirasEgresos);
       if ($('tirasResumenCierres')) $('tirasResumenCierres').textContent = fmtCOP(tirasCierres);
-      if ($('tirasResumenSaldo')) $('tirasResumenSaldo').textContent = fmtCOP(tirasSaldoActual);
+      if ($('tirasResumenSaldo')) $('tirasResumenSaldo').textContent = fmtCOP(tirasCalc.saldo);
       if ($('tirasMovCount')) $('tirasMovCount').textContent = tirasFiltered.length;
-      console.log('[Caja RT] Movimientos tiras:', tirasItems.length, 'Ingresos:', fmtCOP(tirasIngresos), 'Egresos:', fmtCOP(tirasEgresos), 'Cierres:', fmtCOP(tirasCierres), 'Saldo actual:', fmtCOP(tirasSaldoActual));
+      console.log('[Caja RT] Tiras:', tirasItems.length, 'Ing:', fmtCOP(tirasIngresos), 'Egr:', fmtCOP(tirasEgresos), 'Cierres:', fmtCOP(tirasCierres), 'PostCierre ing:', fmtCOP(tirasCalc.ingPostCierre), 'PostCierre egr:', fmtCOP(tirasCalc.egrPostCierre), 'Saldo:', fmtCOP(tirasCalc.saldo));
 
-      // Actualizar chips de China
-      if ($('tirasTotalIngresos')) $('tirasTotalIngresos').textContent = `Ingresos: ${fmtCOP(tirasIngresos)}`;
-      if ($('tirasTotalEgresos')) $('tirasTotalEgresos').textContent = `Egresos: ${fmtCOP(tirasEgresos)}`;
-      if ($('tirasSaldo')) $('tirasSaldo').textContent = `Saldo actual: ${fmtCOP(tirasSaldoActual)}`;
+      // Actualizar chips de China — mostrar post-cierre si hay cierre para que los números cuadren
+      if (tirasCalc.hayCierre) {
+        if ($('tirasTotalIngresos')) $('tirasTotalIngresos').textContent = `Ing. post-cierre: ${fmtCOP(tirasCalc.ingPostCierre)}`;
+        if ($('tirasTotalEgresos')) $('tirasTotalEgresos').textContent = `Egr. post-cierre: ${fmtCOP(tirasCalc.egrPostCierre)}`;
+      } else {
+        if ($('tirasTotalIngresos')) $('tirasTotalIngresos').textContent = `Ingresos: ${fmtCOP(tirasIngresos)}`;
+        if ($('tirasTotalEgresos')) $('tirasTotalEgresos').textContent = `Egresos: ${fmtCOP(tirasEgresos)}`;
+      }
+      if ($('tirasSaldo')) $('tirasSaldo').textContent = `Saldo actual: ${fmtCOP(tirasCalc.saldo)}`;
 
       // Actualizar chips de Local
-      if ($('localTotalIngresos')) $('localTotalIngresos').textContent = `Ingresos: ${fmtCOP(localIngresos)}`;
-      if ($('localTotalEgresos')) $('localTotalEgresos').textContent = `Egresos: ${fmtCOP(localEgresos)}`;
-      if ($('localSaldo')) $('localSaldo').textContent = `Saldo actual: ${fmtCOP(localSaldoActual)}`;
+      if (localCalc.hayCierre) {
+        if ($('localTotalIngresos')) $('localTotalIngresos').textContent = `Ing. post-cierre: ${fmtCOP(localCalc.ingPostCierre)}`;
+        if ($('localTotalEgresos')) $('localTotalEgresos').textContent = `Egr. post-cierre: ${fmtCOP(localCalc.egrPostCierre)}`;
+      } else {
+        if ($('localTotalIngresos')) $('localTotalIngresos').textContent = `Ingresos: ${fmtCOP(localIngresos)}`;
+        if ($('localTotalEgresos')) $('localTotalEgresos').textContent = `Egresos: ${fmtCOP(localEgresos)}`;
+      }
+      if ($('localSaldo')) $('localSaldo').textContent = `Saldo actual: ${fmtCOP(localCalc.saldo)}`;
 
       // Actualizar dashboard resumen de Local
       if ($('localResumenIngresos')) $('localResumenIngresos').textContent = fmtCOP(localIngresos);
       if ($('localResumenEgresos')) $('localResumenEgresos').textContent = fmtCOP(localEgresos);
       if ($('localResumenCierres')) $('localResumenCierres').textContent = fmtCOP(localCierres);
-      if ($('localResumenSaldo')) $('localResumenSaldo').textContent = fmtCOP(localSaldoActual);
+      if ($('localResumenSaldo')) $('localResumenSaldo').textContent = fmtCOP(localCalc.saldo);
       if ($('localMovCount')) $('localMovCount').textContent = localItems.length;
-      console.log('[Caja RT] Movimientos local:', localItems.length, 'Ingresos:', fmtCOP(localIngresos), 'Egresos:', fmtCOP(localEgresos), 'Cierres:', fmtCOP(localCierres), 'Saldo actual:', fmtCOP(localSaldoActual));
+      console.log('[Caja RT] Local:', localItems.length, 'Ing:', fmtCOP(localIngresos), 'Egr:', fmtCOP(localEgresos), 'Cierres:', fmtCOP(localCierres), 'PostCierre ing:', fmtCOP(localCalc.ingPostCierre), 'PostCierre egr:', fmtCOP(localCalc.egrPostCierre), 'Saldo:', fmtCOP(localCalc.saldo));
     }
 
     // Función para verificar movimiento (usa currentUser cargado de datosUsuario)
