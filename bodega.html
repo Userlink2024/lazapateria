@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Panel de Bodega</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
   <style>
     /* ---------- ESTILOS MODIFICADOS (solo apariencia, NO TOCAR LÓGICA) ---------- */
     :root{
@@ -238,6 +238,112 @@
     @media (prefers-reduced-motion: reduce) {
       .card::before, .contador.animated, .estado.animated { animation: none !important; }
       .card, .btn { transition: none !important; }
+    }
+    /* ---------- HEADER FECHA / HORA ---------- */
+    .datetime-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 18px;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, rgba(46,125,50,0.08), rgba(67,160,71,0.05));
+      border-radius: 16px;
+      border: 1px solid rgba(46,125,50,0.12);
+      animation: fadeIn 1s ease;
+    }
+    .datetime-date {
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 1.05em;
+      color: var(--accent-green-1);
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .datetime-date .date-icon {
+      font-size: 1.2em;
+      animation: pulseIcon 2s ease-in-out infinite;
+    }
+    @keyframes pulseIcon {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+    .datetime-clock {
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: 1.25em;
+      color: #1b5e20;
+      background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+      padding: 6px 16px;
+      border-radius: 12px;
+      letter-spacing: 2px;
+      box-shadow: 0 2px 8px rgba(46,125,50,0.12), inset 0 1px 2px rgba(255,255,255,0.8);
+      position: relative;
+      overflow: hidden;
+      min-width: 170px;
+      text-align: center;
+    }
+    .datetime-clock::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 200%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+      animation: clockShine 3s ease-in-out infinite;
+    }
+    @keyframes clockShine {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+    .clock-separator {
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+    .clock-ampm {
+      font-size: 0.6em;
+      vertical-align: super;
+      margin-left: 3px;
+      letter-spacing: 0;
+    }
+
+    /* ---------- MENSAJES MOTIVACIONALES ---------- */
+    .motivation-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-green-1), var(--accent-green-2));
+      color: white;
+      text-align: center;
+      padding: 10px 20px;
+      font-size: 0.9em;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      z-index: 90;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .motivation-bar .motiv-text {
+      display: inline-block;
+      animation: motivSlideIn 0.6s ease;
+    }
+    @keyframes motivSlideIn {
+      0% { opacity: 0; transform: translateY(12px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .motivation-bar .motiv-icon {
+      margin-right: 8px;
+      animation: pulseIcon 2s ease-in-out infinite;
+    }
+
+    @media (max-width: 768px) {
+      .datetime-bar { flex-direction: column; gap: 8px; text-align: center; }
+      .datetime-clock { font-size: 1.1em; min-width: 150px; }
+      .datetime-date { font-size: 0.95em; }
     }
     /* ---------- FIN ESTILOS ---------- */
   </style>
@@ -664,6 +770,14 @@
   <!-- ---------- FIN JS ORIGINAL ---------- -->
 </head>
 <body>
+  <div class="datetime-bar">
+    <div class="datetime-date">
+      <span class="date-icon">📅</span>
+      <span id="fechaDisplay">--/---/----</span>
+    </div>
+    <div class="datetime-clock" id="clockDisplay">--<span class="clock-separator">:</span>--<span class="clock-separator">:</span>--<span class="clock-ampm">--</span></div>
+  </div>
+
   <h1 id="tituloPanel">Panel de Bodega</h1>
   <div class="top-bar">
     <button class="btn" onclick="cambiarModo(false)">📦 Despachos Activos</button>
@@ -683,6 +797,11 @@
     </div>
   </div>
 
+  <div class="motivation-bar" id="motivationBar">
+    <span class="motiv-icon">💪</span>
+    <span class="motiv-text" id="motivText">Cargando mensaje...</span>
+  </div>
+
   <script>
     (function(){
       const btn = document.getElementById('btnEnableSound');
@@ -692,6 +811,70 @@
         e.stopPropagation();
         try { await armAudioOnce(); } catch (err) { /* no-op */ }
       }, { passive: false });
+    })();
+  </script>
+
+  <script>
+    (function(){
+      const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+      const ICONS = ['💪','🚀','⭐','🔥','✨','🏆','💎','🎯','👏','🌟'];
+      const MENSAJES = [
+        'El trabajo en equipo hace el sueño realidad.',
+        'Cada despacho cuenta, cada esfuerzo suma.',
+        'La excelencia no es un acto, es un hábito.',
+        'Tu actitud determina tu altitud.',
+        'Hoy es un gran día para ser el mejor.',
+        'El éxito es la suma de pequeños esfuerzos repetidos.',
+        'Juntos somos más fuertes.',
+        'La disciplina es el puente entre las metas y los logros.',
+        'Cada cliente satisfecho es una victoria del equipo.',
+        'No busques el momento perfecto, haz el momento perfecto.',
+        'El esfuerzo de hoy es el éxito de mañana.',
+        'Tu dedicación marca la diferencia.',
+        'Grandes cosas nunca vienen de la zona de confort.',
+        'Sé la razón por la que alguien sonríe hoy.',
+        'Un paso a la vez, pero sin detenerse.',
+        'La mejor hora del día es ahora.',
+        'Trabaja duro en silencio, deja que el éxito haga el ruido.',
+        'Haz que cada par despachado cuente.',
+        'La constancia vence lo que la dicha no alcanza.',
+        'Eres parte esencial de este equipo.'
+      ];
+      let msgIndex = Math.floor(Math.random() * MENSAJES.length);
+
+      function pad(n){ return n < 10 ? '0' + n : '' + n; }
+
+      function updateDateTime(){
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        const dia = pad(now.getDate());
+        const mes = MESES[now.getMonth()];
+        const anio = now.getFullYear();
+        document.getElementById('fechaDisplay').textContent = dia + '/' + mes + '/' + anio;
+
+        let h = now.getHours();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        const clockEl = document.getElementById('clockDisplay');
+        clockEl.innerHTML = pad(h) + '<span class="clock-separator">:</span>' + pad(now.getMinutes()) + '<span class="clock-separator">:</span>' + pad(now.getSeconds()) + '<span class="clock-ampm">' + ampm + '</span>';
+      }
+
+      function rotateMessage(){
+        msgIndex = (msgIndex + 1) % MENSAJES.length;
+        const iconIdx = msgIndex % ICONS.length;
+        const bar = document.getElementById('motivationBar');
+        const iconEl = bar.querySelector('.motiv-icon');
+        const textEl = document.getElementById('motivText');
+        iconEl.textContent = ICONS[iconIdx];
+        textEl.style.animation = 'none';
+        void textEl.offsetWidth;
+        textEl.textContent = MENSAJES[msgIndex];
+        textEl.style.animation = 'motivSlideIn 0.6s ease';
+      }
+
+      updateDateTime();
+      rotateMessage();
+      setInterval(updateDateTime, 1000);
+      setInterval(rotateMessage, 8000);
     })();
   </script>
 </body>
