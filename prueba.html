@@ -345,6 +345,102 @@
       .datetime-clock { font-size: 1.1em; min-width: 150px; }
       .datetime-date { font-size: 0.95em; }
     }
+    /* ---------- OVERLAY FULLSCREEN MESSAGES ---------- */
+    .fullscreen-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      text-align: center;
+      padding: 30px;
+      animation: overlayFadeIn 1.2s ease;
+    }
+    .fullscreen-overlay.active { display: flex; }
+
+    .fullscreen-overlay.lunch {
+      background: linear-gradient(135deg, #ff9800, #ff5722, #e65100);
+    }
+    .fullscreen-overlay.endday {
+      background: linear-gradient(135deg, #1a237e, #283593, #3949ab);
+    }
+
+    .overlay-emoji {
+      font-size: 5em;
+      animation: overlayBounce 2s ease-in-out infinite;
+      margin-bottom: 10px;
+    }
+    .overlay-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.4em;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 3px 15px rgba(0,0,0,0.3);
+      margin-bottom: 14px;
+      animation: overlaySlideDown 1s ease;
+    }
+    .overlay-msg {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.25em;
+      color: rgba(255,255,255,0.95);
+      max-width: 600px;
+      line-height: 1.7;
+      animation: overlaySlideUp 1.2s ease;
+    }
+    .overlay-brand {
+      margin-top: 24px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.95em;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      letter-spacing: 1px;
+      animation: overlaySlideUp 1.5s ease;
+    }
+    .overlay-timer {
+      position: absolute;
+      bottom: 20px;
+      right: 28px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.85em;
+      color: rgba(255,255,255,0.45);
+    }
+    .overlay-close {
+      position: absolute;
+      top: 18px;
+      right: 24px;
+      font-size: 2em;
+      color: rgba(255,255,255,0.5);
+      cursor: pointer;
+      transition: color 0.2s, transform 0.2s;
+      z-index: 10;
+    }
+    .overlay-close:hover { color: #fff; transform: scale(1.2); }
+
+    @keyframes overlayFadeIn {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    @keyframes overlayBounce {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-18px) scale(1.1); }
+    }
+    @keyframes overlaySlideDown {
+      0% { opacity: 0; transform: translateY(-40px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes overlaySlideUp {
+      0% { opacity: 0; transform: translateY(40px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 768px) {
+      .overlay-emoji { font-size: 3.5em; }
+      .overlay-title { font-size: 1.6em; }
+      .overlay-msg { font-size: 1em; padding: 0 10px; }
+    }
     /* ---------- FIN ESTILOS ---------- */
   </style>
 
@@ -875,6 +971,152 @@
       rotateMessage();
       setInterval(updateDateTime, 1000);
       setInterval(rotateMessage, 8000);
+    })();
+  </script>
+
+  <!-- Overlay Almuerzo 12:00 PM -->
+  <div class="fullscreen-overlay lunch" id="overlayLunch">
+    <span class="overlay-close" onclick="document.getElementById('overlayLunch').classList.remove('active')">&times;</span>
+    <div class="overlay-emoji" id="lunchEmoji">🍽️</div>
+    <div class="overlay-title">¡Hora de Almorzar!</div>
+    <div class="overlay-msg" id="lunchMsg"></div>
+    <div class="overlay-brand">Con cariño — La Zapatería 👟</div>
+    <div class="overlay-timer" id="lunchTimer"></div>
+  </div>
+
+  <!-- Overlay Fin de Jornada 6:00 PM -->
+  <div class="fullscreen-overlay endday" id="overlayEndday">
+    <span class="overlay-close" onclick="document.getElementById('overlayEndday').classList.remove('active')">&times;</span>
+    <div class="overlay-emoji" id="enddayEmoji">🌙</div>
+    <div class="overlay-title">¡Jornada Finalizada!</div>
+    <div class="overlay-msg" id="enddayMsg"></div>
+    <div class="overlay-brand">Hasta mañana — La Zapatería 👟</div>
+    <div class="overlay-timer" id="enddayTimer"></div>
+  </div>
+
+  <script>
+    (function(){
+      const LUNCH_MSGS = [
+        '🙏 Que Dios bendiga tus alimentos y renueve tus fuerzas para la tarde. ¡Buen provecho!',
+        '🙏 Gracias a Dios por este día y por el alimento. Recarga energías, te lo mereces.',
+        '🙏 Que cada bocado te llene de gratitud y fortaleza. ¡Bendiciones para ti y tu familia!',
+        '🙏 Dios te bendice con salud y trabajo. Disfruta tu almuerzo con paz en el corazón.',
+        '🙏 Haz una pausa, agradece y aliméntate bien. Dios provee cada día. ¡Buen provecho!',
+        '🙏 Que la bendición de Dios esté en tu mesa y en tu corazón. ¡A disfrutar el almuerzo!',
+        '🙏 Gracias Señor por el pan de cada día. Descansa un momento y vuelve con toda la actitud.',
+        '🙏 Bendito sea Dios que nos da fuerza y alimento. ¡Disfruta cada momento de tu descanso!',
+        '🙏 Tu esfuerzo de la mañana merece un buen descanso. Que Dios bendiga tu comida.',
+        '🙏 Come con alegría y gratitud. Dios tiene cosas grandes preparadas para esta tarde.',
+        '🙏 Que este almuerzo renueve tu cuerpo y tu espíritu. ¡Bendiciones para todos!',
+        '🙏 Dios cuida de ti cada instante. Descansa, come bien y regresa con energía.',
+        '🙏 Que la paz de Dios acompañe tu almuerzo. Eres valioso para este equipo.',
+        '🙏 Gracias Padre por permitirnos llegar hasta aquí. ¡Buen provecho, equipo!',
+        '🙏 Alimento para el cuerpo, fe para el alma. Que Dios te bendiga grandemente.',
+        '🙏 Hoy es un regalo de Dios. Disfruta tu almuerzo y vuelve lleno de bendiciones.',
+        '🙏 Que cada día Dios te dé más razones para sonreír. ¡Buen provecho, campeón!',
+        '🙏 Descansa en la presencia de Dios mientras almuerzas. Él renueva tus fuerzas.',
+        '🙏 Bendice tu alimento, bendice tu trabajo, bendice este día. ¡A comer con gratitud!',
+        '🙏 Que Dios llene tu tarde de logros y tu mesa de abundancia. ¡Buen almuerzo!',
+        '🙏 Tu trabajo honra a Dios. Ahora descansa y recarga. ¡Mereces este respiro!',
+        '🙏 Señor, gracias por cada miembro de este equipo. Bendice su alimento y su camino.',
+        '🙏 Come tranquilo, Dios está al mando. La tarde será productiva y bendecida.',
+        '🙏 Que la gracia de Dios acompañe tu almuerzo y cada paso de tu tarde.',
+        '🙏 Un equipo bendecido es un equipo imparable. ¡Buen provecho a todos!',
+        '🙏 Dios no te trajo hasta aquí para dejarte. Almuerza con fe y agradecimiento.',
+        '🙏 Que las bendiciones de hoy superen las de ayer. ¡Disfruta tu comida!',
+        '🙏 La fidelidad de Dios se renueva cada mañana. Ahora disfruta tu merecido descanso.',
+        '🙏 Gracias a Dios por la salud para trabajar y el alimento para continuar. ¡Buen provecho!',
+        '🙏 Que Dios multiplique tus bendiciones como multiplica tu esfuerzo. ¡A almorzar!'
+      ];
+
+      const ENDDAY_MSGS = [
+        '🌟 ¡Excelente jornada! Gracias por dar lo mejor de ti. Descansa, mañana será aún mejor.',
+        '🌟 El esfuerzo de hoy construye el éxito de mañana. ¡Ve a casa con orgullo!',
+        '🌟 Cada día que das tu 100% es un día ganado. ¡Gracias por tu dedicación!',
+        '🌟 Tu trabajo hace la diferencia. Descansa bien y vuelve mañana con esa misma energía.',
+        '🌟 ¡Lo logramos! Otro día de trabajo duro terminado. Disfruta tu noche, campeón.',
+        '🌟 Gracias por ser parte de este gran equipo. Descansa, recarga y nos vemos mañana.',
+        '🌟 Hoy fuiste increíble. Ahora ve y disfruta con quienes más quieres. ¡Hasta mañana!',
+        '🌟 El éxito se construye día a día, y hoy pusiste un gran ladrillo. ¡Feliz noche!',
+        '🌟 Tu esfuerzo no pasa desapercibido. ¡Gracias por todo! Descansa merecidamente.',
+        '🌟 Cierra este día con una sonrisa. Diste todo y eso es admirable. ¡Hasta mañana!',
+        '🌟 La constancia es tu superpoder. Otro día cumplido con excelencia. ¡Buen descanso!',
+        '🌟 Hoy el equipo brilló gracias a ti. Ve a casa tranquilo, lo hiciste genial.',
+        '🌟 Cada jornada terminada es un logro. ¡Celebra lo que conseguiste hoy!',
+        '🌟 Gracias por tu entrega y compromiso. La Zapatería es grande gracias a ti.',
+        '🌟 Misión cumplida por hoy. Ahora a descansar, que mañana hay más victorias por lograr.',
+        '🌟 Que tu noche sea tan productiva en descanso como lo fue tu día en trabajo. ¡Adiós!',
+        '🌟 Eres pieza clave de este equipo. Descansa bien, te esperamos mañana con los brazos abiertos.',
+        '🌟 Un día menos hacia tus metas, un paso más hacia tus sueños. ¡Feliz noche!',
+        '🌟 Hoy dejaste huella con tu trabajo. Ahora deja que la noche te recargue. ¡Hasta pronto!',
+        '🌟 Gracias por cada minuto de esfuerzo. Tu familia te espera, ¡ve y disfruta!',
+        '🌟 Lo mejor de hoy fue contar contigo. ¡Descansa mucho y vuelve con toda!',
+        '🌟 Jornada terminada con éxito. Que tengas una noche llena de paz y alegría.',
+        '🌟 Tu dedicación inspira a todos. Ahora toca recargar pilas. ¡Nos vemos mañana!',
+        '🌟 Cada día que trabajas con pasión, dejas una marca. ¡Gracias y buenas noches!',
+        '🌟 Hoy diste un gran ejemplo. Descansa tranquilo, La Zapatería está orgullosa de ti.',
+        '🌟 Se cierra un día más de logros. Que tu noche esté llena de bendiciones.',
+        '🌟 Gracias por hacer de este lugar algo especial. ¡Feliz descanso, nos vemos pronto!',
+        '🌟 El que trabaja con amor, cosecha con abundancia. ¡Buenas noches, equipo!',
+        '🌟 Terminaste fuerte. Eso habla de tu carácter. ¡Que descanses, crack!',
+        '🌟 Otro día donde La Zapatería brilla por su gente. ¡Gracias y hasta mañana!'
+      ];
+
+      const LUNCH_EMOJIS = ['🍽️','🍲','🥘','🍛','🙏','☀️','🌮','🥗','🍜','🫕'];
+      const ENDDAY_EMOJIS = ['🌙','🌅','🏠','💤','🌃','✨','🛌','🌠','🌇','💫'];
+
+      let lunchShown = false;
+      let enddayShown = false;
+      let lunchTimeout = null;
+      let enddayTimeout = null;
+
+      function getDayOfYear(){
+        const now = new Date();
+        const start = new Date(now.getFullYear(), 0, 0);
+        return Math.floor((now - start) / 86400000);
+      }
+
+      function showOverlay(id, msgs, emojis, emojiId, msgId, timerId, flagSetter){
+        const overlay = document.getElementById(id);
+        const dayIdx = getDayOfYear() % msgs.length;
+        document.getElementById(msgId).textContent = msgs[dayIdx];
+        document.getElementById(emojiId).textContent = emojis[dayIdx % emojis.length];
+        overlay.classList.add('active');
+
+        let remaining = 60;
+        const timerEl = document.getElementById(timerId);
+        timerEl.textContent = 'Se cierra en ' + remaining + 's';
+        const iv = setInterval(() => {
+          remaining--;
+          timerEl.textContent = 'Se cierra en ' + remaining + 's';
+          if (remaining <= 0) {
+            clearInterval(iv);
+            overlay.classList.remove('active');
+          }
+        }, 1000);
+
+        return setTimeout(() => { overlay.classList.remove('active'); clearInterval(iv); }, 60000);
+      }
+
+      function checkScheduledMessages(){
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        const h = now.getHours();
+        const m = now.getMinutes();
+
+        if (h === 12 && m === 0 && !lunchShown) {
+          lunchShown = true;
+          lunchTimeout = showOverlay('overlayLunch', LUNCH_MSGS, LUNCH_EMOJIS, 'lunchEmoji', 'lunchMsg', 'lunchTimer');
+        }
+        if (h === 12 && m >= 1) lunchShown = false;
+
+        if (h === 18 && m === 0 && !enddayShown) {
+          enddayShown = true;
+          enddayTimeout = showOverlay('overlayEndday', ENDDAY_MSGS, ENDDAY_EMOJIS, 'enddayEmoji', 'enddayMsg', 'enddayTimer');
+        }
+        if (h === 18 && m >= 1) enddayShown = false;
+      }
+
+      setInterval(checkScheduledMessages, 1000);
     })();
   </script>
 </body>
