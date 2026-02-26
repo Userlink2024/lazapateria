@@ -683,9 +683,38 @@
     #consigns-body tr.find-current td{
       background: rgba(76,175,80,0.12) !important;
     }
+
+    /* Loading overlay */
+    #loading-overlay{
+      position:fixed; inset:0; z-index:99999;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px);
+      display:none; align-items:center; justify-content:center;
+      flex-direction:column; gap:18px;
+    }
+    #loading-overlay.active{ display:flex; }
+    #loading-overlay .spinner{
+      width:52px; height:52px;
+      border: 5px solid rgba(255,255,255,0.25);
+      border-top: 5px solid #4CAF50;
+      border-radius:50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    #loading-overlay .loading-text{
+      color:#fff; font-size:16px; font-weight:600;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      text-align:center; line-height:1.5;
+    }
   </style>
 </head>
 <body>
+
+  <!-- Loading overlay para operaciones de red -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-text">Guardando consignación...</div>
+  </div>
 
   <div id="topbar">
     <div style="display:flex;gap:6px;align-items:center">
@@ -1328,6 +1357,15 @@ function parseDateRadio(name, pickerId){
   }
   
   return null; 
+}
+
+/* LOADING OVERLAY */
+function showLoading(msg = 'Guardando consignación...'){
+  $('loading-text').textContent = msg;
+  $('loading-overlay').classList.add('active');
+}
+function hideLoading(){
+  $('loading-overlay').classList.remove('active');
 }
 
 /* FUNCIONES DE MODAL GENÉRICO */
@@ -2519,7 +2557,9 @@ $('btn-export-master').addEventListener('click', async () => {
 
 
 /* OPERACIONES DE DATOS (Sin modal de éxito) */
+let _addingConsign = false; // Bandera para evitar doble clic
 $('add-consign').addEventListener('click', async ()=>{
+  if(_addingConsign) return; // Ya hay una operación en curso
   if(!selectedAccountId) return showModal('Atención', 'Seleccione una cuenta.', false);
   
   // 1. Validar datos con nueva validación mejorada
@@ -2570,7 +2610,12 @@ $('add-consign').addEventListener('click', async ()=>{
   
   // --- FIN DE LÓGICA DE ADVERTENCIA ---
 
-  // 3. Ejecutar adición
+  // 3. Ejecutar adición — BLOQUEAR botón y mostrar loading
+  _addingConsign = true;
+  const btnAdd = $('add-consign');
+  btnAdd.disabled = true;
+  showLoading('Guardando consignación...\nPor favor espere');
+
   try{ 
     // CONSIGNACIONES NORMALES:
     // IMPORTANTE: El orden debe ser ÚNICO para no perder el orden de ingreso.
@@ -2636,7 +2681,12 @@ $('add-consign').addEventListener('click', async ()=>{
     
     console.log('✅ Consignación agregada exitosamente con orden:', ordenParaNuevaConsignacion);
     
-  }catch(e){ showModal('Error', 'Error al agregar consignación: '+e.message, false); }
+  }catch(e){ showModal('Error', 'No se pudo guardar la consignación. Verifique su conexión a internet e intente de nuevo.\n\nDetalle: '+e.message, false); }
+  finally{
+    hideLoading();
+    btnAdd.disabled = false;
+    _addingConsign = false;
+  }
 });
 
 /* MANEJO ROBUSTO DE ERRORES Y RECOVERY STRATEGIES */
