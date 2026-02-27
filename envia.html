@@ -348,6 +348,22 @@
         .rep-btn-save{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff}
         .rep-btn-save:hover{filter:brightness(1.1)}
         .rep-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;background:rgba(220,38,38,.1);color:#dc2626;border:1px solid rgba(220,38,38,.2);margin-left:6px}
+        /* ── Gestión de Reportes ── */
+        .gestion-rep-icon{cursor:pointer;color:#dc2626;font-size:1.2em;margin-left:10px;transition:transform .2s}
+        .gestion-rep-icon:hover{transform:scale(1.15)}
+        .gestion-rep-badge{position:relative;top:-8px;left:-4px;background:#dc2626;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:10px;min-width:14px;text-align:center}
+        .rep-list-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:10px;transition:box-shadow .2s}
+        .rep-list-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08)}
+        .rep-list-card .rep-list-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+        .rep-list-card .rep-list-meta{font-size:11px;color:#6b7280}
+        .rep-list-card .rep-list-motivo{font-size:12px;font-weight:700;color:#374151;margin-bottom:4px}
+        .rep-list-card .rep-list-estado{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800}
+        .rep-list-card .rep-list-estado.pendiente{background:rgba(245,158,11,.1);color:#d97706;border:1px solid rgba(245,158,11,.2)}
+        .rep-list-card .rep-list-estado.firmado{background:rgba(34,197,94,.1);color:#16a34a;border:1px solid rgba(34,197,94,.2)}
+        .rep-list-card .rep-list-actions{display:flex;gap:6px;margin-top:8px}
+        .rep-list-card .rep-list-actions button{padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;border:none;cursor:pointer}
+        .rep-del-btn{background:rgba(220,38,38,.08);color:#dc2626}
+        .rep-del-btn:hover{background:rgba(220,38,38,.18)}
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
@@ -1145,6 +1161,7 @@
             Listado de Guías de Envía
             <i class="fas fa-history history-icon" title="Histórico" onclick="abrirHistoricoVerificadas()"></i>
             <i class="fas fa-cog help-icon" onclick="mostrarFiltrosModal()"></i>
+            <i class="fas fa-flag gestion-rep-icon" title="Gestión de Reportes" onclick="abrirGestionReportes()"></i><span class="gestion-rep-badge" id="repCountBadge" style="display:none">0</span>
         </h2>
         <input type="text" id="buscadorGuias" onkeyup="filtrarGuias()" placeholder="Buscar en todas las guías...">
 
@@ -1459,6 +1476,114 @@
             e.target.closest('.rep-motivo-opt').classList.add('selected');
         }
     });
+
+    // ══════════════════════════════════════════════════════
+    // ██  GESTIÓN DE REPORTES (Envía)                     ██
+    // ══════════════════════════════════════════════════════
+    let _gestionReportes = [];
+    let _gestionRepUnsub = null;
+
+    function initGestionReportesListener(){
+        if(_gestionRepUnsub) return;
+        _gestionRepUnsub = COL_REPORTES_GUIA.where('tipoReporte','==','guia_envia')
+            .onSnapshot(snap => {
+                _gestionReportes = [];
+                snap.forEach(d => _gestionReportes.push({ id: d.id, ...d.data() }));
+                _gestionReportes.sort((a,b) => {
+                    const ta = a.creadoEl && a.creadoEl.toDate ? a.creadoEl.toDate().getTime() : 0;
+                    const tb = b.creadoEl && b.creadoEl.toDate ? b.creadoEl.toDate().getTime() : 0;
+                    return tb - ta;
+                });
+                const badge = document.getElementById('repCountBadge');
+                const pendientes = _gestionReportes.filter(r => r.estado !== 'firmado').length;
+                if(pendientes > 0){ badge.textContent = pendientes; badge.style.display = 'inline'; }
+                else { badge.style.display = 'none'; }
+                if(document.getElementById('gestionReportesModal').classList.contains('active')){
+                    renderGestionReportes();
+                }
+            }, err => console.error('Error listener reportes:', err));
+    }
+
+    function abrirGestionReportes(){
+        initGestionReportesListener();
+        document.getElementById('gestionReportesModal').classList.add('active');
+        renderGestionReportes();
+    }
+
+    function cerrarGestionReportes(){
+        document.getElementById('gestionReportesModal').classList.remove('active');
+    }
+
+    function renderGestionReportes(){
+        const container = document.getElementById('gestionReportesBody');
+        const filtro = document.getElementById('gestionRepFiltro').value;
+        let lista = _gestionReportes;
+        if(filtro === 'pendiente') lista = lista.filter(r => r.estado !== 'firmado');
+        else if(filtro === 'firmado') lista = lista.filter(r => r.estado === 'firmado');
+
+        if(lista.length === 0){
+            container.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af"><i class="fas fa-inbox" style="font-size:24px;margin-bottom:8px;display:block"></i>No hay reportes</div>';
+            return;
+        }
+
+        container.innerHTML = lista.map(r => {
+            const fecha = r.creadoEl && r.creadoEl.toDate ? r.creadoEl.toDate().toLocaleString('es-CO') : '—';
+            const estadoClass = r.estado === 'firmado' ? 'firmado' : 'pendiente';
+            const estadoLabel = r.estado === 'firmado' ? 'Firmado' : 'Pendiente';
+            const firmaInfo = r.estado === 'firmado' ? `<div style="margin-top:6px;padding:6px 10px;background:rgba(34,197,94,.06);border-radius:6px;font-size:11px;color:#16a34a"><i class="fas fa-check-circle"></i> Firmado por <strong>${r.firmadoPor || '—'}</strong> el ${r.firmadoEl && r.firmadoEl.toDate ? r.firmadoEl.toDate().toLocaleString('es-CO') : '—'}</div>` : '';
+            return `
+            <div class="rep-list-card">
+                <div class="rep-list-head">
+                    <div>
+                        <div class="rep-list-motivo"><i class="fas fa-flag" style="color:#dc2626;margin-right:6px"></i>${r.motivo || '—'}</div>
+                        <div class="rep-list-meta"><strong>${r.asesor || '—'}</strong> · ${r.cliente || '—'} · Código: ${r.codigoUnico || '—'}</div>
+                    </div>
+                    <span class="rep-list-estado ${estadoClass}">${estadoLabel}</span>
+                </div>
+                <div class="rep-list-meta">Reportado por: <strong>${r.creadoPor || '—'}</strong> el ${fecha}</div>
+                ${r.observaciones ? '<div style="margin-top:4px;font-size:12px;color:#374151;padding:6px 10px;background:#f9fafb;border-radius:6px"><i class="fas fa-comment" style="color:#9ca3af;margin-right:4px"></i>' + r.observaciones + '</div>' : ''}
+                ${firmaInfo}
+                <div class="rep-list-actions">
+                    <button class="rep-del-btn" onclick="eliminarReporteEnvia('${r.id}')"><i class="fas fa-trash"></i> Eliminar</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function eliminarReporteEnvia(id){
+        if(!confirm('¿Eliminar este reporte? Esta acción no se puede deshacer.')) return;
+        try {
+            await COL_REPORTES_GUIA.doc(id).delete();
+            showMessageModal('Éxito','Reporte eliminado','success');
+        } catch(e){
+            showMessageModal('Error','Error al eliminar: '+(e.message||e),'error');
+        }
+    }
+
+    // Init listener on page load
+    initGestionReportesListener();
     </script>
+
+    <!-- Modal Gestión de Reportes -->
+    <div class="reporte-modal-overlay" id="gestionReportesModal">
+        <div class="reporte-modal" style="max-width:600px">
+            <div class="reporte-modal-header" style="background:linear-gradient(135deg,#1e40af,#1d4ed8)">
+                <i class="fas fa-clipboard-list"></i>
+                <h3>Gestión de Reportes — Envía</h3>
+                <button onclick="cerrarGestionReportes()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;margin-left:auto"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div style="padding:12px 20px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center">
+                <label style="font-size:12px;font-weight:700;color:#6b7280">Filtrar:</label>
+                <select id="gestionRepFiltro" onchange="renderGestionReportes()" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:12px;font-weight:600">
+                    <option value="todos">Todos</option>
+                    <option value="pendiente">Pendientes</option>
+                    <option value="firmado">Firmados</option>
+                </select>
+            </div>
+            <div id="gestionReportesBody" style="padding:16px 20px;max-height:60vh;overflow-y:auto">
+                <div style="text-align:center;padding:30px;color:#9ca3af"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
