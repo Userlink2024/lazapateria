@@ -1396,6 +1396,36 @@
             transition:all .2s;
         }
         .rep-modal-footer button:hover{ background:#f9fafb; }
+
+        /* ── Nuevo flujo de firma ── */
+        .rep-firma-detected{
+            display:flex;align-items:center;gap:10px;padding:10px 14px;
+            border-radius:10px;background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.15);
+            margin-bottom:8px;font-size:13px;font-weight:700;color:#1e40af;
+        }
+        .rep-firma-detected i{font-size:16px}
+        .rep-firma-otro-toggle{
+            display:flex;align-items:center;gap:8px;padding:8px 12px;
+            border-radius:8px;border:1.5px dashed #d1d5db;cursor:pointer;
+            font-size:11px;font-weight:700;color:#6b7280;transition:all .2s;margin-bottom:8px;
+        }
+        .rep-firma-otro-toggle:hover{border-color:#2563eb;color:#2563eb;background:rgba(37,99,235,.03)}
+        .rep-firma-otro-toggle.active{border-color:#2563eb;color:#2563eb;background:rgba(37,99,235,.06);border-style:solid}
+        .rep-firma-otro-toggle input[type=checkbox]{accent-color:#2563eb;width:14px;height:14px;cursor:pointer}
+        .rep-firma-otro-select{display:none;margin-bottom:8px}
+        .rep-firma-otro-select.visible{display:block}
+        .rep-firma-otro-select select{
+            width:100%;padding:9px 12px;border-radius:10px;
+            border:1.5px solid rgba(37,99,235,.25);font-size:13px;font-weight:600;
+            background:#fff;color:#1f2937;
+        }
+        .rep-firma-otro-select select:focus{border-color:#2563eb;outline:none;box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+        .rep-firma-terms{
+            padding:10px 14px;border-radius:10px;
+            background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);
+            font-size:11px;color:#92400e;line-height:1.5;margin-bottom:10px;
+        }
+        .rep-firma-terms i{color:#f59e0b;margin-right:6px}
     </style>
 
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -5292,6 +5322,21 @@
         let _repUnsub = null;
         let _reportesPendientes = [];
         let _reportesFirmados = [];
+        let _cachedUsuariosGP = [];
+
+        async function loadUsuariosGP(){
+            if(_cachedUsuariosGP.length) return _cachedUsuariosGP;
+            try {
+                const snap = await db.collection('usuarios').get();
+                _cachedUsuariosGP = [];
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    if(d.nombreCompleto) _cachedUsuariosGP.push(d.nombreCompleto);
+                });
+                _cachedUsuariosGP.sort((a,b) => a.localeCompare(b,'es'));
+            } catch(e){ console.error('[Reportes] Error cargando usuarios:', e); }
+            return _cachedUsuariosGP;
+        }
 
         const bell = document.getElementById('notifBell');
         const countEl = document.getElementById('notifCount');
@@ -5366,7 +5411,8 @@
             }
         }
 
-        function openReportesModal(){
+        async function openReportesModal(){
+            await loadUsuariosGP();
             renderReportes();
             overlay.classList.add('open');
         }
@@ -5388,6 +5434,9 @@
 
             let html = '';
 
+            const nombreDetectado = getNombreAsesor();
+            const optsHtml = _cachedUsuariosGP.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+
             // Pendientes primero
             pendientes.forEach(rep => {
                 html += `
@@ -5401,10 +5450,19 @@
                     <div class="rep-card-motivo"><i class="fas fa-flag" style="margin-right:8px"></i>${esc(rep.motivo)}</div>
                     ${rep.observaciones ? '<div class="rep-card-obs"><strong>Obs:</strong> ' + esc(rep.observaciones) + '</div>' : ''}
                     <div class="rep-firma-section">
-                        <label><i class="fas fa-pen-nib" style="margin-right:6px"></i>Firma Digital — Escriba su nombre completo para aceptar</label>
-                        <input type="text" class="rep-firma-input" id="firmaInput_${rep.id}" placeholder="Escriba su nombre completo aquí..." autocomplete="off">
-                        <div class="rep-firma-hint">Al firmar, usted acepta la falta registrada y esta quedará en su historial</div>
-                        <button class="btn-firmar" type="button" data-firmar-id="${rep.id}"><i class="fas fa-signature"></i> Firmar y Aceptar</button>
+                        <label><i class="fas fa-pen-nib" style="margin-right:6px"></i>Firma Digital</label>
+                        <div class="rep-firma-detected"><i class="fas fa-user-check"></i> Firmará como: <strong>${esc(nombreDetectado)}</strong></div>
+                        <label class="rep-firma-otro-toggle" data-otro-toggle="${rep.id}">
+                            <input type="checkbox" data-otro-check="${rep.id}"> Firmar por otra persona
+                        </label>
+                        <div class="rep-firma-otro-select" id="firmaOtroWrap_${rep.id}">
+                            <select id="firmaOtroSel_${rep.id}"><option value="">— Seleccione persona —</option>${optsHtml}</select>
+                        </div>
+                        <div class="rep-firma-terms">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Al firmar este reporte, <strong>acepta los cargos y términos</strong> de la falta registrada. Esta acción quedará guardada en su historial y no se puede deshacer.
+                        </div>
+                        <button class="btn-firmar" type="button" data-firmar-id="${rep.id}"><i class="fas fa-signature"></i> Aceptar Cargos y Firmar</button>
                     </div>
                 </div>`;
             });
@@ -5437,6 +5495,24 @@
             body.querySelectorAll('button[data-firmar-id]').forEach(btn => {
                 btn.addEventListener('click', () => firmarReporte(btn.getAttribute('data-firmar-id')));
             });
+
+            // Wire "firmar por otra persona" toggles
+            body.querySelectorAll('input[data-otro-check]').forEach(chk => {
+                chk.addEventListener('change', function(){
+                    const id = this.getAttribute('data-otro-check');
+                    const toggle = body.querySelector(`[data-otro-toggle="${id}"]`);
+                    const wrap = document.getElementById('firmaOtroWrap_' + id);
+                    if(this.checked){
+                        if(toggle) toggle.classList.add('active');
+                        if(wrap) wrap.classList.add('visible');
+                    } else {
+                        if(toggle) toggle.classList.remove('active');
+                        if(wrap) wrap.classList.remove('visible');
+                        const sel = document.getElementById('firmaOtroSel_' + id);
+                        if(sel) sel.value = '';
+                    }
+                });
+            });
         }
 
         function esc(s){ 
@@ -5446,26 +5522,30 @@
         }
 
         async function firmarReporte(reporteId){
-            const input = document.getElementById('firmaInput_' + reporteId);
-            if(!input) return;
-            const firmaTexto = input.value.trim();
-            const nombreAsesor = getNombreAsesor();
+            const nombreDetectado = getNombreAsesor();
 
-            if(!firmaTexto){
-                input.style.borderColor = '#dc2626';
-                input.placeholder = '⚠️ Debe escribir su nombre para firmar';
-                input.focus();
+            // Determinar quién firma
+            const chk = body.querySelector(`input[data-otro-check="${reporteId}"]`);
+            const usarOtro = chk && chk.checked;
+            let firmante = nombreDetectado;
+
+            if(usarOtro){
+                const sel = document.getElementById('firmaOtroSel_' + reporteId);
+                if(!sel || !sel.value){
+                    alert('⚠️ Seleccione la persona que va a firmar');
+                    return;
+                }
+                firmante = sel.value;
+            }
+
+            if(!firmante){
+                alert('⚠️ No se pudo determinar quién firma. Verifique su sesión.');
                 return;
             }
 
-            // Validar que la firma coincida con el nombre del asesor (case-insensitive)
-            if(firmaTexto.toUpperCase() !== nombreAsesor.toUpperCase()){
-                input.style.borderColor = '#dc2626';
-                input.value = '';
-                input.placeholder = '⚠️ La firma debe coincidir con su nombre: ' + nombreAsesor;
-                input.focus();
-                return;
-            }
+            // Confirmación final
+            const ok = confirm('⚠️ CONFIRMACIÓN DE FIRMA\n\nFirmará como: ' + firmante + '\n\nAl aceptar, confirma los cargos y términos de esta falta. Esta acción quedará registrada permanentemente.\n\n¿Desea continuar?');
+            if(!ok) return;
 
             const btn = body.querySelector(`button[data-firmar-id="${reporteId}"]`);
             if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Firmando...'; }
@@ -5473,15 +5553,15 @@
             try {
                 await COL_REPORTES.doc(reporteId).update({
                     estado: 'firmado',
-                    firmadoPor: nombreAsesor,
+                    firmadoPor: firmante,
                     firmadoEl: firebase.firestore.FieldValue.serverTimestamp(),
-                    firmaTexto: firmaTexto
+                    firmaTexto: firmante
                 });
                 // El listener en tiempo real actualizará la UI automáticamente
             } catch(e){
                 console.error('[Reportes] Error al firmar:', e);
                 alert('Error al firmar el reporte: ' + (e.message || e));
-                if(btn){ btn.disabled = false; btn.innerHTML = '<i class="fas fa-signature"></i> Firmar y Aceptar'; }
+                if(btn){ btn.disabled = false; btn.innerHTML = '<i class="fas fa-signature"></i> Aceptar Cargos y Firmar'; }
             }
         }
 
