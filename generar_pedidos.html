@@ -5321,24 +5321,38 @@
 
         function startReportesListener(){
             const nombre = getNombreAsesor();
+            console.log('[Reportes] getNombreAsesor() =>', JSON.stringify(nombre));
             if(!nombre){ console.log('[Reportes] No hay nombre de asesor, no se activa listener'); return; }
 
             if(_repUnsub) _repUnsub();
 
+            console.log('[Reportes] Creando listener para asesor:', nombre);
+
             _repUnsub = COL_REPORTES.where('asesor','==', nombre)
-                .orderBy('creadoEl','desc')
                 .onSnapshot(snap => {
+                    console.log('[Reportes] Snapshot recibido, docs:', snap.size);
                     _reportesPendientes = [];
                     _reportesFirmados = [];
                     snap.forEach(doc => {
                         const d = { id: doc.id, ...doc.data() };
+                        console.log('[Reportes] Doc:', doc.id, 'asesor:', d.asesor, 'estado:', d.estado);
                         if(d.estado === 'firmado') _reportesFirmados.push(d);
                         else _reportesPendientes.push(d);
                     });
+                    // Ordenar por fecha desc (client-side)
+                    const sortFn = (a,b) => {
+                        const ta = a.creadoEl && a.creadoEl.toDate ? a.creadoEl.toDate().getTime() : 0;
+                        const tb = b.creadoEl && b.creadoEl.toDate ? b.creadoEl.toDate().getTime() : 0;
+                        return tb - ta;
+                    };
+                    _reportesPendientes.sort(sortFn);
+                    _reportesFirmados.sort(sortFn);
+                    console.log('[Reportes] Pendientes:', _reportesPendientes.length, 'Firmados:', _reportesFirmados.length);
                     updateBell();
                     if(overlay.classList.contains('open')) renderReportes();
                 }, err => {
-                    console.error('[Reportes] Error listener:', err);
+                    console.error('[Reportes] ERROR en listener:', err);
+                    console.error('[Reportes] Si ve "index", cree el índice desde el link anterior');
                 });
         }
 
