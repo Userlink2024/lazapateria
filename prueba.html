@@ -1,1123 +1,1501 @@
-<!DOCTYPE html>
+<!DOCTYPE <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Panel de Bodega</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
-  <style>
-    /* ---------- ESTILOS MODIFICADOS (solo apariencia, NO TOCAR LÓGICA) ---------- */
-    :root{
-      --bg-1: #f0f2f5;
-      --bg-2: #e3f2fd;
-      --accent-green-1: #2e7d32;
-      --accent-green-2: #43a047;
-    }
-
-    /* base */
-    body {
-      font-family: 'Inter', sans-serif;
-      background: linear-gradient(135deg, var(--bg-1), var(--bg-2));
-      margin: 0;
-      padding: 15px;
-      overflow-x: hidden;
-      min-height: 100vh;
-      -webkit-font-smoothing:antialiased;
-      -moz-osx-font-smoothing:grayscale;
-    }
-
-    h1 {
-      text-align: center;
-      color: var(--accent-green-1);
-      font-size: 1.8em;
-      margin: 6px 0;
-      animation: fadeInDown 0.9s ease;
-    }
-
-    .top-bar {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      margin-top: 10px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-
-    .btn {
-      background: linear-gradient(135deg, var(--accent-green-1), var(--accent-green-2));
-      color: white;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: all 0.28s cubic-bezier(.2,.9,.2,1);
-      font-size: 1em;
-      box-shadow: 0 3px 8px rgba(0,0,0,0.18);
-    }
-
-    .btn:hover {
-      transform: translateY(-3px) scale(1.03);
-      box-shadow: 0 8px 18px rgba(0,0,0,0.2);
-    }
-
-    #btnEnableSound{
-      display:none;
-      background: linear-gradient(135deg, #1e88e5, #1565c0);
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 18px;
-      margin-top: 20px;
-      padding-bottom: 60px;
-    }
-
-    /* card */
-    .card {
-      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.98));
-      border-radius: 18px;
-      box-shadow: 0 6px 15px rgba(22,28,37,0.08);
-      padding: 20px;
-      text-align: center;
-      cursor: pointer;
-      transform: scale(1);
-      transition: transform 0.32s cubic-bezier(.2,.9,.2,1), box-shadow 0.32s;
-      position: relative;
-      overflow: hidden;
-      min-height: 120px;
-    }
-
-    .card:hover {
-      transform: translateY(-8px) scale(1.03);
-      box-shadow: 0 14px 28px rgba(22,28,37,0.12);
-    }
-
-    /* sutil brillo en movimiento sin interferir la lógica */
-    .card::before {
-      content: "";
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle at center, rgba(255,255,255,0.12), transparent 60%);
-      transform: rotate(25deg) translateX(-30%);
-      animation: shimmer 6s linear infinite;
-      pointer-events: none;
-      mix-blend-mode: screen;
-    }
-
-    @keyframes shimmer {
-      0% { transform: rotate(25deg) translateX(-30%); opacity: 0.6; }
-      50% { transform: rotate(25deg) translateX(0%); opacity: 1; }
-      100% { transform: rotate(25deg) translateX(30%); opacity: 0.6; }
-    }
-
-    .nombre {
-      font-weight: 600;
-      font-size: 1.05em;
-      color: #30343a;
-      margin-bottom: 10px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .contador {
-      font-size: 2.2em;
-      font-weight: 700;
-      margin: 10px 0;
-      border-radius: 50%;
-      width: 80px;
-      height: 80px;
-      line-height: 80px;
-      display: inline-block;
-      color: white;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      transition: transform 0.28s ease;
-    }
-
-    .contador:hover { transform: scale(1.08) rotate(4deg); }
-
-    .verde { background: linear-gradient(135deg, #2ecc71, #27ae60); }
-    .naranja { background: linear-gradient(135deg, #fbc02d, #f57c00); }
-    .rojo { background: linear-gradient(135deg, #e53935, #b71c1c); }
-
-    .ultimo-update {
-      font-size: 0.95em;
-      color: #424749;
-      margin-top: 10px;
-      animation: fadeIn 0.9s ease;
-    }
-
-    .contador.animated, .estado.animated {
-      animation: pulseGlow 1.6s infinite alternate;
-    }
-
-    @keyframes pulseGlow {
-      0% { box-shadow: 0 0 6px rgba(255,255,255,0.25); transform: translateY(0); }
-      100% { box-shadow: 0 0 24px rgba(255,255,255,0.45); transform: translateY(-3px); }
-    }
-
-    /* modal */
-    .modal {
-      display: none;
-      position: fixed;
-      z-index: 100;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.56);
-      justify-content: center;
-      align-items: center;
-      backdrop-filter: blur(4px);
-      animation: fadeIn 0.28s ease;
-    }
-
-    .modal-content {
-      background-color: #fff;
-      border-radius: 18px;
-      padding: 18px;
-      width: 95%;
-      max-width: 900px;
-      max-height: 85%;
-      overflow-y: auto;
-      box-shadow: 0 10px 28px rgba(0,0,0,0.26);
-      animation: slideUp 0.36s ease;
-    }
-
-    .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
-    .modal-header h2 { margin:0; color:var(--accent-green-1); font-size:1.05em; }
-    .close { cursor:pointer; font-size:1.5em; color:#333; transition:transform .2s; }
-    .close:hover { transform:scale(1.25); color:#e53935; }
-
-    input {
-      width: 100%;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #d6d6d6;
-      margin-bottom: 10px;
-      transition: border-color .18s ease;
-    }
-    input:focus { border-color: var(--accent-green-1); outline: none; }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.95em;
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    th, td {
-      padding: 10px;
-      border-bottom: 1px solid #e8e8e8;
-      text-align: left;
-    }
-    th { background-color: #e8f5e9; color: var(--accent-green-1); }
-
-    /* animaciones utilitarias */
-    @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
-    @keyframes fadeInDown { from {opacity:0; transform:translateY(-18px);} to {opacity:1; transform:translateY(0);} }
-    @keyframes slideUp { from {opacity:0; transform:translateY(28px);} to {opacity:1; transform:translateY(0);} }
-
-    /* ---------- ESTILOS RESPONSIVE MÓVIL ---------- */
-    @media (max-width: 768px) {
-      body { padding: 10px; }
-      h1 { font-size: 1.4em; }
-      .grid { grid-template-columns: 1fr; gap: 14px; }
-      .card { border-radius: 14px; padding: 14px; min-height: 110px; }
-      .contador { width: 70px; height: 70px; font-size: 2em; }
-      .btn { width: 100%; border-radius: 12px; padding: 10px; }
-      .modal-content { width: 96%; max-height: 90%; padding: 12px; }
-      table, th, td { font-size: 0.85em; }
-    }
-
-    /* pequeños ajustes para accesibilidad en pantalla pequeña */
-    @media (prefers-reduced-motion: reduce) {
-      .card::before, .contador.animated, .estado.animated { animation: none !important; }
-      .card, .btn { transition: none !important; }
-    }
-    /* ---------- HEADER FECHA / HORA ---------- */
-    .datetime-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 18px;
-      margin-bottom: 6px;
-      background: linear-gradient(135deg, rgba(46,125,50,0.08), rgba(67,160,71,0.05));
-      border-radius: 16px;
-      border: 1px solid rgba(46,125,50,0.12);
-      animation: fadeIn 1s ease;
-    }
-    .datetime-date {
-      font-family: 'Inter', sans-serif;
-      font-weight: 600;
-      font-size: 1.05em;
-      color: var(--accent-green-1);
-      letter-spacing: 0.5px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .datetime-date .date-icon {
-      font-size: 1.2em;
-      animation: pulseIcon 2s ease-in-out infinite;
-    }
-    @keyframes pulseIcon {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.15); }
-    }
-    .datetime-clock {
-      font-family: 'Orbitron', monospace;
-      font-weight: 700;
-      font-size: 1.25em;
-      color: #1b5e20;
-      background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
-      padding: 6px 16px;
-      border-radius: 12px;
-      letter-spacing: 2px;
-      box-shadow: 0 2px 8px rgba(46,125,50,0.12), inset 0 1px 2px rgba(255,255,255,0.8);
-      position: relative;
-      overflow: hidden;
-      min-width: 170px;
-      text-align: center;
-    }
-    .datetime-clock::before {
-      content: '';
-      position: absolute;
-      top: 0; left: -100%;
-      width: 200%; height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-      animation: clockShine 3s ease-in-out infinite;
-    }
-    @keyframes clockShine {
-      0% { left: -100%; }
-      100% { left: 100%; }
-    }
-    .clock-separator {
-      animation: blink 1s step-end infinite;
-    }
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.2; }
-    }
-    .clock-ampm {
-      font-size: 0.6em;
-      vertical-align: super;
-      margin-left: 3px;
-      letter-spacing: 0;
-    }
-
-    /* ---------- MENSAJES MOTIVACIONALES ---------- */
-    .motivation-bar {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      background: linear-gradient(135deg, var(--accent-green-1), var(--accent-green-2));
-      color: white;
-      text-align: center;
-      padding: 10px 20px;
-      font-size: 0.9em;
-      font-weight: 500;
-      letter-spacing: 0.3px;
-      z-index: 90;
-      box-shadow: 0 -2px 12px rgba(0,0,0,0.1);
-      overflow: hidden;
-    }
-    .motivation-bar .motiv-text {
-      display: inline-block;
-      animation: motivSlideIn 0.6s ease;
-    }
-    @keyframes motivSlideIn {
-      0% { opacity: 0; transform: translateY(12px); }
-      100% { opacity: 1; transform: translateY(0); }
-    }
-    .motivation-bar .motiv-icon {
-      margin-right: 8px;
-      animation: pulseIcon 2s ease-in-out infinite;
-    }
-
-    @media (max-width: 768px) {
-      .datetime-bar { flex-direction: column; gap: 8px; text-align: center; }
-      .datetime-clock { font-size: 1.1em; min-width: 150px; }
-      .datetime-date { font-size: 0.95em; }
-    }
-    /* ---------- OVERLAY FULLSCREEN MESSAGES ---------- */
-    .fullscreen-overlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 9999;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      text-align: center;
-      padding: 30px;
-      animation: overlayFadeIn 1.2s ease;
-    }
-    .fullscreen-overlay.active { display: flex; }
-
-    .fullscreen-overlay.lunch {
-      background: linear-gradient(135deg, #ff9800, #ff5722, #e65100);
-    }
-    .fullscreen-overlay.endday {
-      background: linear-gradient(135deg, #1a237e, #283593, #3949ab);
-    }
-
-    .overlay-emoji {
-      font-size: 5em;
-      animation: overlayBounce 2s ease-in-out infinite;
-      margin-bottom: 10px;
-    }
-    .overlay-title {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 2.4em;
-      font-weight: 700;
-      color: #fff;
-      text-shadow: 0 3px 15px rgba(0,0,0,0.3);
-      margin-bottom: 14px;
-      animation: overlaySlideDown 1s ease;
-    }
-    .overlay-msg {
-      font-family: 'Inter', sans-serif;
-      font-size: 1.25em;
-      color: rgba(255,255,255,0.95);
-      max-width: 600px;
-      line-height: 1.7;
-      animation: overlaySlideUp 1.2s ease;
-    }
-    .overlay-brand {
-      margin-top: 24px;
-      font-family: 'Inter', sans-serif;
-      font-size: 0.95em;
-      font-weight: 600;
-      color: rgba(255,255,255,0.7);
-      letter-spacing: 1px;
-      animation: overlaySlideUp 1.5s ease;
-    }
-    .overlay-timer {
-      position: absolute;
-      bottom: 20px;
-      right: 28px;
-      font-family: 'Orbitron', monospace;
-      font-size: 0.85em;
-      color: rgba(255,255,255,0.45);
-    }
-    .overlay-close {
-      position: absolute;
-      top: 18px;
-      right: 24px;
-      font-size: 2em;
-      color: rgba(255,255,255,0.5);
-      cursor: pointer;
-      transition: color 0.2s, transform 0.2s;
-      z-index: 10;
-    }
-    .overlay-close:hover { color: #fff; transform: scale(1.2); }
-
-    @keyframes overlayFadeIn {
-      0% { opacity: 0; }
-      100% { opacity: 1; }
-    }
-    @keyframes overlayBounce {
-      0%, 100% { transform: translateY(0) scale(1); }
-      50% { transform: translateY(-18px) scale(1.1); }
-    }
-    @keyframes overlaySlideDown {
-      0% { opacity: 0; transform: translateY(-40px); }
-      100% { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes overlaySlideUp {
-      0% { opacity: 0; transform: translateY(40px); }
-      100% { opacity: 1; transform: translateY(0); }
-    }
-
-    @media (max-width: 768px) {
-      .overlay-emoji { font-size: 3.5em; }
-      .overlay-title { font-size: 1.6em; }
-      .overlay-msg { font-size: 1em; padding: 0 10px; }
-    }
-    /* ---------- FIN ESTILOS ---------- */
-  </style>
-
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-
-  <!-- ---------- JS ORIGINAL (NO MODIFICADO) ---------- -->
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
-      authDomain: "lazapateria-c4157.firebaseapp.com",
-      projectId: "lazapateria-c4157",
-      storageBucket: "lazapateria-c4157.firebasestorage.app",
-      messagingSenderId: "300241769138",
-      appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
-      measurementId: "G-HVG7615JEE"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-
-    // --- Sonido tipo turnador ---
-    let audioContext = null;
-    let audioArmed = false;
-    let isFirstRealtimeSnapshot = true;
-    let lastActiveIds = new Set();
-
-    function initAudioContext() {
-      if (audioContext) return;
-      try {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        audioContext = AC ? new AC() : null;
-      } catch (e) {
-        audioContext = null;
-      }
-    }
-
-    function showEnableSoundButton() {
-      const btn = document.getElementById('btnEnableSound');
-      if (!btn) return;
-      btn.style.display = 'inline-block';
-    }
-
-    function hideEnableSoundButton() {
-      const btn = document.getElementById('btnEnableSound');
-      if (!btn) return;
-      btn.style.display = 'none';
-    }
-
-    async function ensureAudioReady() {
-      initAudioContext();
-      if (!audioContext) return false;
-      try {
-        if (audioContext.state === 'suspended') {
-          await audioContext.resume();
-        }
-      } catch (e) {
-        // no-op
-      }
-
-      try {
-        const buffer = audioContext.createBuffer(1, 1, 22050);
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        source.start(0);
-      } catch (e) {
-        // no-op
-      }
-
-      return audioContext && audioContext.state === 'running';
-    }
-
-    async function armAudioOnce() {
-      if (audioArmed) return;
-      audioArmed = true;
-      const ok = await ensureAudioReady();
-      if (ok) hideEnableSoundButton();
-      else showEnableSoundButton();
-    }
-
-    ['click','pointerdown','touchstart','keydown'].forEach(evt => {
-      document.addEventListener(evt, armAudioOnce, { once: true, capture: true, passive: true });
-    });
-
-    async function playTurnadorSound() {
-      const ok = await ensureAudioReady();
-      if (!ok) { showEnableSoundButton(); return; }
-      try {
-        const now = audioContext.currentTime;
-        const master = audioContext.createGain();
-        master.gain.setValueAtTime(0.0001, now);
-        master.gain.exponentialRampToValueAtTime(0.6, now + 0.03);
-        master.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
-        master.connect(audioContext.destination);
-
-        function beep(startAt, dur, f1, f2, type) {
-          const g = audioContext.createGain();
-          g.gain.setValueAtTime(0.0001, startAt);
-          g.gain.exponentialRampToValueAtTime(1.0, startAt + 0.02);
-          g.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
-          g.connect(master);
-
-          const o = audioContext.createOscillator();
-          o.type = type || 'sawtooth';
-          o.frequency.setValueAtTime(f1, startAt);
-          if (f2) o.frequency.exponentialRampToValueAtTime(f2, startAt + dur);
-          o.connect(g);
-          o.start(startAt);
-          o.stop(startAt + dur + 0.01);
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generar Guía Envía - La Zapatería</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --envia-primary: #cc0000;
+            --envia-primary-dark: #aa0000;
+            --envia-bg: #ffe0e0;
+            --envia-card: #ffffff;
+            --envia-border: #e7e7e7;
+            --envia-text: #2b2b2b;
         }
 
-        // Turnador más largo: 3 "llamadas" (beep-beep) con pausas
-        const call1 = now + 0.00;
-        beep(call1, 0.18, 880, 740, 'sawtooth');
-        beep(call1 + 0.22, 0.18, 990, 820, 'square');
-
-        const call2 = now + 0.55;
-        beep(call2, 0.18, 880, 740, 'sawtooth');
-        beep(call2 + 0.22, 0.18, 990, 820, 'square');
-
-        const call3 = now + 1.10;
-        beep(call3, 0.18, 880, 740, 'sawtooth');
-        beep(call3 + 0.22, 0.18, 990, 820, 'square');
-      } catch (e) {
-        // silencioso
-      }
-    }
-
-    let cacheRegistros = [];
-    let modoHistorial = false;
-    let bodeguerosDisponibles = [];
-    let despachosModal = [];
-    let bodegueroActual = "";
-
-    function getRecordDate(data) {
-      if (!data) return null;
-      const candidates = ['fecha_hora', 'fechaHora', 'fecha', 'createdAt', 'timestamp', 'fecha_registro'];
-      for (const k of candidates) {
-        if (!(k in data)) continue;
-        const v = data[k];
-        if (!v) continue;
-        if (typeof v.toDate === 'function') {
-          const d = v.toDate();
-          if (!Number.isNaN(d.getTime())) return d;
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--envia-bg); /* Fondo rojo claro */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
         }
-        if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
-        if (typeof v === 'number') {
-          const d = new Date(v);
-          if (!Number.isNaN(d.getTime())) return d;
+        .container {
+            background-color: var(--envia-card);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+            width: 95%;
+            max-width: 800px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            border: 1px solid var(--envia-border);
         }
-        if (typeof v === 'string') {
-          const d = new Date(v);
-          if (!Number.isNaN(d.getTime())) return d;
+        h2 {
+            text-align: center;
+            color: var(--envia-primary); /* Texto rojo oscuro */
+            margin-bottom: 25px;
+            /* Nuevos estilos para centrar el icono de ayuda */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px; /* Espacio entre el título y el icono */
         }
-      }
-      return null;
-    }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+            font-size: 1em;
+        }
+        input[type="text"],
+        input[type="date"],
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #d3d3d3;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 1em;
+        }
+        /* Estilo específico para el nuevo select del filtro */
+        select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #d3d3d3;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 1em;
+        }
+        button {
+            background-color: var(--envia-primary);
+            /* Botón rojo oscuro */
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            box-shadow: 0 8px 18px rgba(204, 0, 0, 0.18);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
+        }
+        button:hover {
+            background-color: var(--envia-primary-dark);
+            /* Rojo oscuro más intenso al pasar el mouse */
+            transform: translateY(-1px);
+            box-shadow: 0 10px 22px rgba(204, 0, 0, 0.22);
+        }
+        .error-message {
+            color: red;
+            margin-top: 15px;
+            font-size: 0.9em;
+            text-align: center;
+        }
+        #exportarExcelBtn {
+            background-color: #4CAF50;
+            /* Verde para exportar */
+        }
+        #exportarExcelBtn:hover {
+            background-color: #45a049;
+        }
+        #verGuiasBtn {
+            background-color: #6c757d;
+            /* Gris para ver guías */
+        }
+        #verGuiasBtn:hover {
+            background-color: #5a6268;
+        }
+        #guiasModulo {
+            display: none;
+            margin-top: 40px;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 95%;
+            box-sizing: border-box;
+        }
+        #buscadorGuias, #filtroAsesor { /* Añadido #filtroAsesor aquí para consistencia */
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1em;
+        }
+        #listaGuias {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #listaGuias li {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        #listaGuias li:last-child {
+            border-bottom: none;
+        }
+        .guia-acciones {
+            display: flex;
+            gap: 5px;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+        .accion-btn {
+            background-color: #007bff;
+            /* Azul para Editar, restaurado */
+            color: white;
+            border: none;
+            padding: 8px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .accion-btn.eliminar {
+            background-color: #dc3545;
+            /* Rojo para Eliminar */
+        }
+        .accion-btn:hover {
+            opacity: 0.8;
+        }
+        /* Estilo para botones deshabilitados (NUEVO) */
+        .accion-btn:disabled {
+            background-color: #cccccc !important;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
 
-    function isTodayDate(d) {
-      if (!d || Number.isNaN(d.getTime())) return false;
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const end = new Date();
-      end.setHours(23, 59, 59, 999);
-      return d >= start && d <= end;
-    }
+        /* Estilos para el icono de ayuda (NUEVO) */
+        .help-icon {
+            cursor: pointer;
+            color: #007bff;
+            font-size: 1.2em;
+            transition: color 0.3s ease;
+        }
+        .help-icon:hover {
+            color: #0056b3;
+        }
 
-    async function cargarBodegueros() {
-      const snapshot = await db.collection("usuarios").get();
-      bodeguerosDisponibles = snapshot.docs
-        .map(d => {
-          const data = d.data();
-          if (data.permisos === "Bodeguero") {
-            return data.nombreCompleto || d.id;
-          }
-          return null;
-        })
-        .filter(n => n !== null);
-    }
+        .history-icon {
+            cursor: pointer;
+            color: #6c757d;
+            font-size: 1.15em;
+            transition: color 0.3s ease;
+        }
 
-    async function cargarPanelBodega() {
-      await cargarBodegueros();
-      const contenedor = document.getElementById('panel');
-      contenedor.innerHTML = '<p>Cargando información...</p>';
+        .history-icon:hover {
+            color: #5a6268;
+        }
 
-      db.collectionGroup('registros').onSnapshot(snapshot => {
-        const conteo = {};
-        cacheRegistros = [];
+        /* Estilos para el modal personalizado (NUEVO) */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999; /* Corregido: z-index alto para estar encima de todo */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
 
-        const activeIds = new Set();
+        #confirmModal.modal-overlay,
+        #messageModal.modal-overlay {
+            z-index: 10001;
+        }
 
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const d = getRecordDate(data);
-          if (!d || !isTodayDate(d)) return;
-          cacheRegistros.push({ id: doc.id, ref: doc.ref, ...data });
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            margin: 20px auto;
+            box-sizing: border-box;
+            transform: translateY(-20px);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.active .modal-content {
+            transform: translateY(0);
+        }
+        .modal-content h3 {
+            color: #cc0000;
+            /* Color de título original de envia.txt */
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.8em;
+        }
+        .modal-content p {
+            margin-bottom: 10px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .modal-content p strong {
+            color: #cc0000;
+            /* Color de título original de envia.txt */
+        }
+        .modal-close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #888;
+            transition: color 0.3s ease;
+            width: auto;
+            /* Anular el 100% de width para este botón */
+            padding: 0;
+            margin: 0;
+        }
+        .modal-close-btn:hover {
+            color: #333;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-actions button {
+            width: auto;
+            padding: 10px 20px;
+            font-size: 0.9em;
+        }
+        .modal-actions .confirm-btn {
+            background-color: #dc3545;
+        }
+        .modal-actions .confirm-btn:hover {
+            background-color: #c82333;
+        }
+        .modal-actions .cancel-btn {
+            background-color: #6c757d;
+        }
+        .modal-actions .cancel-btn:hover {
+            background-color: #5a6268;
+        }
+        /* Estilos para los filtros dentro del modal */
+        .filter-options {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .filter-options label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: normal;
+            font-size: 1em;
+            color: #333;
+        }
+        .filter-options input[type="checkbox"] {
+            margin-right: 8px;
+            width: auto;
+            margin-bottom: 0; /* Override default input margin-bottom */
+        }
 
-          const despachado = data.despachado === true || data.despachado === "si" || data.despachado === "despachado";
-          if (modoHistorial && !despachado) return;
-          if (!modoHistorial && despachado) return;
+        /* Estilos para tabla de consignaciones */
+        .consignaciones-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .consignaciones-table th,
+        .consignaciones-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        .consignaciones-table th {
+            background-color: var(--envia-primary);
+            color: white;
+        }
+        .consignaciones-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .consignaciones-table tr:hover {
+            background-color: #f1f1f1;
+        }
+        .consignaciones-table input[type="date"],
+        .consignaciones-table input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-bottom: 0;
+        }
+        .consignaciones-table .verificado-check {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+        .consignaciones-table tr.verificado-row {
+            background-color: #d4edda !important;
+        }
+        .btn-add-row {
+            background-color: #28a745;
+            margin-top: 15px;
+        }
+        .btn-add-row:hover {
+            background-color: #218838;
+        }
+        .btn-remove-row {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .btn-remove-row:hover {
+            background-color: #c82333;
+        }
+        #ingresarDatosBtn {
+            background-color: #17a2b8;
+            margin-top: 8px;
+        }
+        #ingresarDatosBtn:hover {
+            background-color: #138496;
+        }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+            authDomain: "lazapateria-c4157.firebaseapp.com",
+            projectId: "lazapateria-c4157",
+            storageBucket: "lazapateria-c4157.firebasestorage.app",
+            messagingSenderId: "300241769138",
+            appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+            measurementId: "G-HVG7615JEE"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const collectionGuias = db.collection('guias_envia'); // Referencia a la colección de guías
+        const collectionConsignacionesEnvia = db.collection('consignaciones_envia'); // Colección de consignaciones
+        let guiasEnvia = [];
+        let consignacionesEnvia = [];
+        // Cambiado a guiasEnvia para claridad
+        let guiaAEditarId = null;
+        let datosUsuario = null; // Variable global para almacenar los datos del usuario
 
-          if (!despachado) activeIds.add(String(doc.id));
+        let historicoPage = 1;
+        const historicoPageSize = 20;
 
-          if (Array.isArray(data.bodegueros_encargados)) {
-            data.bodegueros_encargados.forEach(nombre => {
-              if (typeof nombre === "string" && nombre.trim() !== "") {
-                conteo[nombre] = conteo[nombre] || { totalDespachos: 0, totalPares: 0 };
-                conteo[nombre].totalDespachos += 1;
+        window.onload = () => {
+            cargarUsuarioLogueado();
+            verificarRolParaExportar();
+            verificarRolParaIngresarDatos();
+            establecerListenersParaSuma();
+            setupPendienteCheckListener(); // Configura el listener para el checkbox PENDIENTE
+            setupFilterModalListeners();
+            // Configura los listeners para los filtros del modal
+            cargarGuias();
+            // Carga las guías al iniciar
+        };
+        /**
+         * Configura el event listener para el checkbox PENDIENTE.
+         */
+        function setupPendienteCheckListener() {
+            const pendienteCheck = document.getElementById('pendienteCheck');
+            if (pendienteCheck) {
+                pendienteCheck.addEventListener('change', toggleNumeroGuiaInput);
+                toggleNumeroGuiaInput(); // Llama una vez al cargar para establecer el estado inicial
+            }
+        }
 
-                const paresField = Object.keys(data).find(k => k.toLowerCase().includes('pares'));
-                const pares = Number(data[paresField] || 0);
-                conteo[nombre].totalPares += pares;
-              }
+        /**
+         * Habilita o deshabilita el campo "Número de Guía" basado en el estado del checkbox "PENDIENTE".
+         * También vacía el campo si se deshabilita.
+         */
+        function toggleNumeroGuiaInput() {
+            const numeroGuiaInput = document.getElementById('numeroGuia');
+            const pendienteCheck = document.getElementById('pendienteCheck');
+
+            if (numeroGuiaInput && pendienteCheck) {
+                numeroGuiaInput.disabled = pendienteCheck.checked;
+                if (pendienteCheck.checked) {
+                    numeroGuiaInput.value = '';
+                    // Vacía el campo si está pendiente
+                }
+            }
+        }
+
+        /**
+         * Configura los event listeners para los checkboxes de filtro en el modal.
+         */
+        function setupFilterModalListeners() {
+            const filterCheckboxes = document.querySelectorAll('#filterModal .filter-options input[type="checkbox"]');
+            filterCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', filtrarGuias);
             });
-          }
-        });
-
-        // Sonido cuando entra un nuevo despacho activo (no sonar en la primera carga)
-        if (!modoHistorial) {
-          if (!isFirstRealtimeSnapshot && audioContext) {
-            let hasNew = false;
-            activeIds.forEach(id => { if (!lastActiveIds.has(id)) hasNew = true; });
-            if (hasNew) playTurnadorSound();
-          }
-          lastActiveIds = activeIds;
-          isFirstRealtimeSnapshot = false;
         }
 
-        renderizarPanel(contenedor, conteo);
-      });
-    }
+        function abrirHistoricoVerificadas() {
+            historicoPage = 1;
+            document.getElementById('historicoVerificadasModal').classList.add('active');
 
-    function renderizarPanel(contenedor, conteo) {
-      contenedor.innerHTML = '';
-      const nombres = Object.keys(conteo);
+            const asesoresUnicos = new Set();
+            guiasEnvia.forEach(g => {
+                if (g && g.usuario) asesoresUnicos.add(g.usuario);
+            });
+            const asesorSelect = document.getElementById('historicoAsesor');
+            if (asesorSelect) {
+                const current = asesorSelect.value;
+                asesorSelect.innerHTML = '<option value="">Todos los Asesores</option>';
+                asesoresUnicos.forEach(a => {
+                    const option = document.createElement('option');
+                    option.value = a;
+                    option.textContent = a;
+                    asesorSelect.appendChild(option);
+                });
+                asesorSelect.value = current;
+            }
 
-      if (nombres.length === 0) {
-        contenedor.innerHTML = '<p style="text-align:center;color:#666;">No hay registros en este momento.</p>';
-        return;
-      }
-
-      nombres.sort((a, b) => conteo[b].totalDespachos - conteo[a].totalDespachos);
-
-      nombres.forEach(nombre => {
-        const { totalDespachos, totalPares } = conteo[nombre];
-        const promedio = totalPares / totalDespachos;
-
-        // Lógica de colores: priman los pares
-        let color = 'verde';
-        if (totalPares >= 123) color = 'rojo';
-        else if (totalPares >= 101) color = 'naranja';
-        else {
-          if (totalDespachos >= 23) color = 'rojo';
-          else if (totalDespachos >= 16) color = 'naranja';
+            renderHistoricoVerificadas();
         }
 
-        const estadoText = color === 'verde' ? 'Disponible✅' :
-                           color === 'naranja' ? 'Ocupado⌛' :
-                           '⚠️Colapsado !⚠️';
-
-        const card = document.createElement('div');
-        card.className = 'card';
-
-        card.innerHTML = `
-          <div class="nombre">${nombre}</div>
-          <div class="contador ${color} ${color !== 'verde' ? 'animated' : ''}">${totalDespachos}</div>
-          <div class="ultimo-update estado ${color !== 'verde' ? 'animated' : ''}">${estadoText}</div>
-        `;
-
-        card.onclick = () => mostrarDetalles(nombre);
-        contenedor.appendChild(card);
-      });
-    }
-    function mostrarDetalles(nombre) {
-      bodegueroActual = nombre;
-      const modal = document.getElementById('detalleModal');
-      const body = document.getElementById('modalBody');
-      modal.style.display = 'flex';
-      body.innerHTML = '<p>Cargando información...</p>';
-
-      const registrosBodeguero = cacheRegistros.filter(r => {
-        const despachado = r.despachado === true || r.despachado === "si" || r.despachado === "despachado";
-        if (modoHistorial && !despachado) return false;
-        if (!modoHistorial && despachado) return false;
-        return Array.isArray(r.bodegueros_encargados) && r.bodegueros_encargados.includes(nombre);
-      });
-
-      despachosModal = registrosBodeguero;
-      renderTablaModal(registrosBodeguero);
-    }
-
-    function renderTablaModal(registros) {
-      const body = document.getElementById('modalBody');
-      if (!registros.length) {
-        body.innerHTML = `<p style="text-align:center;color:#555;">No hay registros para este bodeguero.</p>`;
-        return;
-      }
-
-      body.innerHTML = `
-        <div style="margin-bottom:10px;">
-          <input id="filtroAsesorModal" placeholder="Filtrar por asesor..." oninput="filtrarDespachosBodeguero()" />
-          <input id="filtroParesModal" placeholder="Filtrar por pares..." oninput="filtrarDespachosBodeguero()" />
-          <input id="filtroValorModal" placeholder="Filtrar por valor..." oninput="filtrarDespachosBodeguero()" />
-        </div>
-        <div id="tablaDespachosModal"></div>
-      `;
-      filtrarDespachosBodeguero();
-    }
-
-    function filtrarDespachosBodeguero() {
-      const tablaDiv = document.getElementById('tablaDespachosModal');
-      if (!tablaDiv) return;
-
-      const asesorFilter = document.getElementById('filtroAsesorModal').value.toLowerCase().trim();
-      const paresInput = document.getElementById('filtroParesModal').value.trim();
-      const valorInput = document.getElementById('filtroValorModal').value.trim();
-
-      const paresFilter = paresInput ? Number(paresInput) : null;
-      const valorFilter = valorInput ? Number(valorInput) : null;
-
-      const despachosFiltrados = despachosModal.filter(r => {
-        const asesor = (r.asesor || r.asesor_asignado || "").toLowerCase();
-        if (asesorFilter && !asesor.includes(asesorFilter)) return false;
-
-        const paresField = Object.keys(r).find(k => k.toLowerCase().includes('pares'));
-        const pares = Number(r[paresField] || 0);
-        if (paresFilter !== null && pares !== paresFilter) return false;
-
-        const valor = Number(r.valor_total || r.valor || 0);
-        if (valorFilter !== null && valor !== valorFilter) return false;
-
-        return true;
-      });
-
-      if (!despachosFiltrados.length) {
-        tablaDiv.innerHTML = '<p style="text-align:center;color:#555;">No hay despachos que coincidan con los filtros.</p>';
-        return;
-      }
-
-      let totalValor = 0, totalPares = 0;
-      const filas = despachosFiltrados.map(r => {
-        const cliente = r.cliente || '—';
-        const asesor = r.asesor || r.asesor_asignado || '—';
-        const valor = Number(r.valor_total || r.valor || 0);
-        const paresField = Object.keys(r).find(k => k.toLowerCase().includes('pares'));
-        const pares = Number(r[paresField] || 0);
-        const fechaCampo = Object.keys(r).find(k => k.toLowerCase().includes('fecha') || k.toLowerCase().includes('hora'));
-        let fechaAsignacion = '—';
-        if (fechaCampo && r[fechaCampo]) {
-          const f = r[fechaCampo];
-          fechaAsignacion = f.toDate ? f.toDate().toLocaleString() : new Date(f).toLocaleString();
+        function cerrarHistoricoVerificadas() {
+            document.getElementById('historicoVerificadasModal').classList.remove('active');
         }
-        totalValor += valor;
-        totalPares += pares;
-        return `
-          <tr>
-            <td>${cliente}</td><td>${asesor}</td><td>${valor.toLocaleString('es-CO')}</td><td>${pares}</td><td>${fechaAsignacion}</td>
-            <td><button class="btn" onclick="mostrarEdicionBodegueros('${r.id}')">Editar</button></td>
-          </tr>`;
-      }).join('');
 
-      tablaDiv.innerHTML = `
-        <table>
-          <thead><tr><th>Cliente</th><th>Asesor</th><th>Valor</th><th>Pares</th><th>Hora Asignación</th><th>Editar</th></tr></thead>
-          <tbody>${filas}</tbody>
-        </table>
-        <p><strong>Total valor:</strong> ${totalValor.toLocaleString('es-CO')} — <strong>Total pares:</strong> ${totalPares}</p>
-      `;
-    }
+        function getHistoricoFiltrado() {
+            const search = (document.getElementById('historicoSearch')?.value || '').toLowerCase();
+            const asesor = document.getElementById('historicoAsesor')?.value || '';
 
-    function mostrarEdicionBodegueros(id) {
-      const registro = cacheRegistros.find(r => r.id === id);
-      const body = document.getElementById('modalBody');
-      body.innerHTML = '<h3>Editar Bodegueros</h3>';
+            return guiasEnvia
+                .filter(g => g && g.verificado === true)
+                .filter(g => {
+                    const coincideAsesor = !asesor || (g.usuario && g.usuario === asesor);
+                    const coincideSearch = !search || Object.values(g).some(v => {
+                        if (typeof v === 'string' || typeof v === 'number') return String(v).toLowerCase().includes(search);
+                        return false;
+                    });
+                    return coincideAsesor && coincideSearch;
+                });
+        }
 
-      const lista = document.createElement('div');
-      lista.id = 'listaBodegueros';
-      lista.style.display = 'flex';
-      lista.style.flexWrap = 'wrap';
-      lista.style.gap = '10px';
-      lista.style.marginTop = '10px';
-      body.appendChild(lista);
+        function renderHistoricoVerificadas() {
+            const lista = document.getElementById('historicoListaGuias');
+            if (!lista) return;
+            lista.innerHTML = '';
 
-      bodeguerosDisponibles.forEach(b => {
-        const label = document.createElement('label');
-        label.innerHTML = `<input type="checkbox" value="${b}" ${registro.bodegueros_encargados.includes(b) ? 'checked' : ''}> ${b}`;
-        lista.appendChild(label);
-      });
+            const data = getHistoricoFiltrado();
+            const totalPages = Math.max(1, Math.ceil(data.length / historicoPageSize));
+            if (historicoPage > totalPages) historicoPage = totalPages;
 
-      const btnGuardar = document.createElement('button');
-      btnGuardar.className = 'btn';
-      btnGuardar.style.marginTop = '10px';
-      btnGuardar.textContent = 'Guardar';
-      btnGuardar.onclick = () => guardarEdicion(id);
-      body.appendChild(btnGuardar);
-    }
+            const start = (historicoPage - 1) * historicoPageSize;
+            const pageItems = data.slice(start, start + historicoPageSize);
 
-    async function guardarEdicion(id) {
-      const seleccionados = Array.from(document.querySelectorAll('#listaBodegueros input[type="checkbox"]:checked')).map(c => c.value);
-      try {
-        const registro = cacheRegistros.find(r => r.id === id);
-        if (!registro) throw new Error("Registro no encontrado");
-        await registro.ref.update({ bodegueros_encargados: seleccionados });
-        alert("Bodegueros actualizados correctamente");
-        mostrarDetalles(bodegueroActual);
-      } catch (e) {
-        console.error(e);
-        alert("Error al actualizar: " + e.message);
-      }
-    }
+            const pageLabel = document.getElementById('historicoPageLabel');
+            if (pageLabel) pageLabel.textContent = String(historicoPage);
 
-    function cerrarModal() { document.getElementById('detalleModal').style.display = 'none'; }
-    function cambiarModo(historial) { 
-      modoHistorial = historial; 
-      document.getElementById('tituloPanel').innerText = historial ? 'Historial de Bodega' : 'Panel de Bodega'; 
-      cargarPanelBodega(); 
-    }
+            if (pageItems.length === 0) {
+                lista.innerHTML = '<li>No hay guías verificadas para mostrar.</li>';
+                return;
+            }
 
-    window.onload = cargarPanelBodega;
-  </script>
-  <!-- ---------- FIN JS ORIGINAL ---------- -->
+            pageItems.forEach(guia => {
+                const li = document.createElement('li');
+                li.style.borderBottom = '1px solid #eee';
+                li.style.padding = '10px 0';
+                li.style.marginBottom = '10px';
+                li.style.fontSize = '0.9em';
+                li.innerHTML = `
+                    <div><strong>Número de Guía:</strong> ${guia.numeroGuia || 'N/A'}</div>
+                    <div><strong>Código Único:</strong> ${guia.codigoUnico || ''}</div>
+                    <div><strong>Nombre del Cliente:</strong> ${guia.nombreCliente || ''}</div>
+                    <div><strong>Fecha:</strong> ${guia.fecha || ''}</div>
+                    <div><strong>Valor Total:</strong> ${guia.valorTotal ? guia.valorTotal : 'N/A'}</div>
+                    <div><strong>Usuario (Asesor):</strong> ${guia.usuario || ''}</div>
+                `;
+                lista.appendChild(li);
+            });
+        }
+
+        function nextHistoricoPage() {
+            const totalPages = Math.max(1, Math.ceil(getHistoricoFiltrado().length / historicoPageSize));
+            if (historicoPage < totalPages) {
+                historicoPage++;
+                renderHistoricoVerificadas();
+            }
+        }
+
+        function prevHistoricoPage() {
+            if (historicoPage > 1) {
+                historicoPage--;
+                renderHistoricoVerificadas();
+            }
+        }
+
+        function establecerListenersParaSuma() {
+            const valorMercanciaInput = document.getElementById('valorMercancia');
+            const valorFleteInput = document.getElementById('valorFlete');
+
+            if (valorMercanciaInput && valorFleteInput) {
+                valorMercanciaInput.addEventListener('input', calcularValorTotal);
+                valorFleteInput.addEventListener('input', calcularValorTotal);
+            } else {
+                console.error("No se encontraron los campos de valor para la suma automática.");
+            }
+        }
+
+        function calcularValorTotal() {
+            const valorMercancia = parseFloat(document.getElementById('valorMercancia').value) ||
+                0;
+            const valorFlete = parseFloat(document.getElementById('valorFlete').value) || 0;
+            const valorTotalInput = document.getElementById('valorTotal');
+            if (valorTotalInput) {
+                valorTotalInput.value = Math.round(valorMercancia + valorFlete);
+            }
+        }
+
+        async function cargarUsuarioLogueado() {
+            const usuarioLogueadoElement = document.getElementById('usuarioLogueado');
+            datosUsuario = JSON.parse(localStorage.getItem('datosUsuario')); // Asigna a la variable global
+
+            if (datosUsuario && datosUsuario.nombreCompleto) {
+                usuarioLogueadoElement.value = datosUsuario.nombreCompleto;
+                usuarioLogueadoElement.readOnly = true;
+                usuarioLogueadoElement.draggable = true;
+                usuarioLogueadoElement.ondragstart = (event) => {
+                    event.dataTransfer.setData("text", event.target.value);
+                };
+                console.log("Usuario cargado y arrastrable:", datosUsuario.nombreCompleto);
+            } else {
+                usuarioLogueadoElement.value = 'No se pudo cargar el usuario';
+                usuarioLogueadoElement.readOnly = true;
+                console.error("No se encontraron datos del usuario en localStorage.");
+            }
+        }
+
+        function verificarRolParaExportar() {
+            const exportarExcelBtn = document.getElementById('exportarExcelBtn');
+            const deleteByStatusBtn = document.getElementById('deleteByStatusBtn');
+            if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
+                exportarExcelBtn.style.display = 'block';
+                if(deleteByStatusBtn) {
+                  deleteByStatusBtn.style.display = 'block';
+                }
+            } else {
+                exportarExcelBtn.style.display = 'none';
+                if(deleteByStatusBtn) {
+                  deleteByStatusBtn.style.display = 'none';
+                }
+            }
+        }
+
+        async function guardarGuia() {
+            const usuario = document.getElementById('usuarioLogueado').value;
+            const fecha = document.getElementById('fechaGuia').value;
+            const nombreCliente = document.getElementById('nombreCliente').value;
+            const codigoUnico = String(document.getElementById('codigoUnico')?.value || '').trim();
+            const valorTotal = document.getElementById('valorTotal').value;
+            const valorMercancia = parseFloat(document.getElementById('valorMercancia').value) || 0;
+            const valorFlete = parseFloat(document.getElementById('valorFlete').value) || 0;
+            const numeroGuiaInput = document.getElementById('numeroGuia');
+            const numeroGuia = numeroGuiaInput.value;
+            const pendienteCheck = document.getElementById('pendienteCheck');
+            const errorMessageElement = document.getElementById('error-message');
+            errorMessageElement.textContent = '';
+            const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
+            // Validación de campos obligatorios
+            if (!fecha || !nombreCliente || !usuario || isNaN(valorMercancia) || isNaN(valorFlete)) {
+                errorMessageElement.textContent = 'Por favor, completa todos los campos obligatorios.';
+                showMessageModal('Error de Validación', 'Por favor, completa todos los campos obligatorios.', 'error');
+                return;
+            }
+
+            // Validación específica para el número de guía y el checkbox PENDIENTE
+            if (!pendienteCheck.checked && !numeroGuia) {
+                errorMessageElement.textContent = 'El campo "Número de Guía" no puede estar vacío a menos que el check "PENDIENTE" esté activo.';
+                showMessageModal('Error de Validación', 'El campo "Número de Guía" no puede estar vacío a menos que el check "PENDIENTE" esté activo.', 'error');
+                return;
+            }
+
+            const guiaData = {
+                usuario: usuario,
+                fecha: fecha,
+                nombreCliente: nombreCliente,
+                codigoUnico: codigoUnico,
+                valorTotal: parseFloat(valorTotal),
+                valorMercancia: valorMercancia,
+                valorFlete: valorFlete,
+                valorFletePendiente: false,
+                numeroGuia: pendienteCheck.checked ?
+                    '' : numeroGuia, // Guarda vacío si PENDIENTE está marcado
+                pendiente: pendienteCheck.checked, // Guarda el estado del checkbox PENDIENTE
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                verificado: false, // Campo de verificación por defecto
+                novedad: false, // NUEVO: Campo de novedad por defecto
+                anulado: false // NUEVO: Campo de anulado por defecto
+            };
+            try {
+                if (guiaAEditarId) {
+                    console.log("Actualizando guía con ID:", guiaAEditarId, guiaData);
+                    await collectionGuias.doc(guiaAEditarId).update(guiaData);
+                    showMessageModal('Éxito', 'Guía de Envía actualizada exitosamente.', 'success');
+                    guardarBtn.textContent = 'Guardar Guía';
+                    guiaAEditarId = null;
+                } else {
+                    console.log("Guardando nueva guía:", guiaData);
+                    await collectionGuias.add(guiaData);
+                    showMessageModal('Éxito', 'Guía de Envía registrada exitosamente.', 'success');
+                }
+                document.getElementById('generarGuiaForm').reset();
+                cargarUsuarioLogueado();
+                toggleNumeroGuiaInput(); // Restablece el estado del campo y checkbox
+                // No es necesario llamar a cargarGuias() aquí, onSnapshot lo hará
+            } catch (error) {
+                console.error("Error al guardar/actualizar la guía: ", error);
+                errorMessageElement.textContent = `Error al ${guiaAEditarId ? 'actualizar' : 'guardar'} la guía de Envía. Inténtalo de nuevo.`;
+                showMessageModal('Error', `Error al ${guiaAEditarId ? 'actualizar' : 'guardar'} la guía de Envía. Inténtalo de nuevo.`, 'error');
+            }
+        }
+
+        async function exportarGuiasExcel() {
+            try {
+                // Mostrar el modal de selección de estados
+                showExportModal();
+            } catch (error) {
+                console.error("Error al exportar guías a Excel: ", error);
+                showMessageModal('Error', 'Error al exportar guías a Excel.', 'error');
+            }
+        }
+        
+        async function performExport(selectedStates) {
+            try {
+                const querySnapshot = await collectionGuias.get();
+                let data = [];
+                querySnapshot.forEach(doc => {
+                    const guia = doc.data();
+                    let shouldExport = false;
+                    
+                    if (selectedStates.includes('pendiente') && guia.pendiente) {
+                        shouldExport = true;
+                    }
+                    if (selectedStates.includes('verificado') && guia.verificado) {
+                        shouldExport = true;
+                    }
+                    if (selectedStates.includes('anulado') && guia.anulado) {
+                        shouldExport = true;
+                    }
+                    if (selectedStates.includes('novedad') && guia.novedad) {
+                        shouldExport = true;
+                    }
+                    
+                    if (shouldExport) {
+                        data.push(guia);
+                    }
+                });
+
+                if (data.length > 0) {
+                    const orderedData = data.map(guia => ({
+                        codigoUnico: guia.codigoUnico,
+                        numeroGuia: guia.numeroGuia,
+                        nombreCliente: guia.nombreCliente,
+                        valorMercancia: guia.valorMercancia,
+                        fecha: guia.fecha,
+                        timestamp: guia.timestamp ? new Date(guia.timestamp.seconds * 1000).toLocaleString() : '',
+                        usuario: guia.usuario,
+                        valorTotal: guia.valorTotal,
+                        valorFlete: (guia.valorFletePendiente ? 'PENDIENTE' : guia.valorFlete),
+                        verificado: guia.verificado,
+                        anulado: guia.anulado,
+                        pendiente: guia.pendiente,
+                        novedad: guia.novedad
+                    }));
+
+                    const workbook = XLSX.utils.book_new();
+                    const worksheet = XLSX.utils.json_to_sheet(orderedData);
+                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Guias Envia');
+                    XLSX.writeFile(workbook, 'guias_envia.xlsx');
+                } else {
+                    showMessageModal('Información', 'No hay guías para exportar con los estados seleccionados.', 'info');
+                }
+                document.getElementById('exportModal').classList.remove('active');
+            } catch (error) {
+                console.error("Error al exportar guías a Excel: ", error);
+                showMessageModal('Error', 'Error al exportar guías a Excel.', 'error');
+            }
+        }
+
+        function mostrarModuloGuias() {
+            document.getElementById('guiasModulo').style.display = 'block';
+            // No es necesario llamar a cargarGuias() aquí, onSnapshot ya está activo
+        }
+
+        /**
+         * Carga todas las guías desde Firestore en tiempo real usando onSnapshot.
+         * También actualiza el filtro de asesor con los usuarios únicos.
+         */
+        function cargarGuias() {
+            const listaGuiasElement = document.getElementById('listaGuias');
+            listaGuiasElement.innerHTML = '';
+            guiasEnvia = []; // Usar guiasEnvia
+
+            // Configura el listener en tiempo real
+            collectionGuias.orderBy('timestamp', 'desc').onSnapshot(snapshot => {
+                guiasEnvia = []; // Limpia el array antes de cargar los nuevos datos
+                const asesoresUnicos = new Set();
+
+                snapshot.forEach(doc => {
+                    const guia = doc.data();
+                    guia.id = doc.id;
+                    guiasEnvia.push(guia);
+                    if (guia.usuario) {
+                        asesoresUnicos.add(guia.usuario);
+                    }
+                });
+
+                // Actualiza el filtro de asesor
+                const filtroAsesorSelect = document.getElementById('filtroAsesor');
+                const currentSelectedAsesor = filtroAsesorSelect.value; // Guarda la selección actual
+                filtroAsesorSelect.innerHTML = '<option value="">Todos los Asesores</option>';
+                asesoresUnicos.forEach(asesor => {
+                    const option = document.createElement('option');
+                    option.value = asesor;
+                    option.textContent = asesor;
+                    filtroAsesorSelect.appendChild(option);
+                });
+                // Restaura la selección si el asesor sigue existiendo
+                if (asesoresUnicos.has(currentSelectedAsesor)) {
+                    filtroAsesorSelect.value = currentSelectedAsesor;
+                }
+
+                mostrarGuiasFiltradas(guiasEnvia);
+                // Usar guiasEnvia
+            }, error => {
+                console.error("Error al cargar las guías en tiempo real: ", error);
+                showMessageModal('Error', 'Error al cargar las guías de Envía en tiempo real.', 'error');
+            });
+        }
+
+        function mostrarGuiasFiltradas(guias) {
+            const listaGuiasElement = document.getElementById('listaGuias');
+            listaGuiasElement.innerHTML = '';
+
+            const filtroBusqueda = document.getElementById('buscadorGuias').value.toLowerCase();
+            const filtroAsesor = document.getElementById('filtroAsesor').value;
+            // Obtener el estado de los checkboxes de filtro del modal
+            const filtroPendiente = document.getElementById('pendienteFilter').checked;
+            const filtroVerificado = document.getElementById('verificadoFilter').checked;
+            const filtroAnulado = document.getElementById('anuladoFilter').checked;
+            const filtroNovedad = document.getElementById('novedadFilter').checked;
+            const guiasFiltradas = guias.filter(guia => {
+                const coincideBusqueda = Object.values(guia).some(valor => {
+                    if (typeof valor === 'string' || typeof valor === 'number') {
+                        return String(valor).toLowerCase().includes(filtroBusqueda);
+                    }
+                    return false;
+                });
+
+                const coincideAsesor = filtroAsesor === "" || (guia.usuario && guia.usuario === filtroAsesor);
+
+                // Aplicar los filtros de estado
+                const coincidePendiente = !filtroPendiente || guia.pendiente === true;
+                const coincideVerificado = !filtroVerificado || guia.verificado === true;
+                const coincideAnulado = !filtroAnulado || guia.anulado === true;
+                const coincideNovedad = !filtroNovedad || guia.novedad === true;
+
+                const esNoVerificado = guia.verificado !== true;
+
+                return esNoVerificado && coincideBusqueda && coincideAsesor && coincidePendiente
+                    && coincideVerificado && coincideAnulado && coincideNovedad;
+            });
+
+            if (guiasFiltradas.length === 0) {
+                listaGuiasElement.innerHTML = '<li>No se encontraron guías que coincidan con los filtros.</li>';
+                return;
+            }
+
+            guiasFiltradas.forEach(guia => {
+                const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+                const isAdministrador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'administrador';
+                const isVerificado = guia.verificado === true;
+                const isNovedad = guia.novedad === true;
+                const isAnulado = guia.anulado === true;
+                const disableActions = isOperador && (isVerificado || isNovedad || isAnulado);
+
+                const listItem = document.createElement('li');
+                // Construye los atributos `disabled` y `onclick` condicionalmente
+                const editButtonAttrs = `${disableActions ? 'disabled' : ''} ${disableActions ? '' : `onclick="cargarDatosParaEdicion('${guia.id}')"`}`;
+                const deleteButtonAttrs = `${disableActions ? 'disabled' : ''} ${disableActions ? '' : `onclick="showConfirmModal('Confirmar Eliminación', '¿Estás seguro de que deseas eliminar esta guía?', () => eliminarGuia('${guia.id}'))"`}`;
+                listItem.innerHTML = `
+                    <div><strong>Número de Guía:</strong> ${guia.numeroGuia ||
+                    (guia.pendiente ? 'PENDIENTE' : 'N/A')}</div>
+                    <div><strong>Código Único:</strong> ${guia.codigoUnico || ''}</div>
+                    <div><strong>Nombre del Cliente:</strong> ${guia.nombreCliente}</div>
+                    <div><strong>Fecha:</strong> ${guia.fecha}</div>
+                    <div><strong>Valor Total:</strong> ${guia.valorTotal ?
+                        guia.valorTotal : 'N/A'} (Mercancía: ${guia.valorMercancia ? Math.round(guia.valorMercancia) : 'N/A'}, Flete: ${(guia.valorFletePendiente ? 'PENDIENTE' : (guia.valorFlete ? Math.round(guia.valorFlete) : 'N/A'))})</div>
+                    <div><strong>Usuario (Asesor):</strong> ${guia.usuario}</div>
+                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 5px;">
+                        ${guia.pendiente ?
+                        '<div><strong>Estado:</strong> PENDIENTE</div>' : ''}
+                        ${isAdministrador ?
+                        `
+                            <label style="margin-bottom: 0; font-weight: normal;">
+                                <input type="checkbox"
+                                    id="verificado-${guia.id}"
+                                    ${guia.verificado ?
+                                    'checked' : ''}
+                                    onchange="toggleVerificado('${guia.id}', this.checked)"
+                                    style="margin-right: 5px; width: auto;"
+                                > Verificado
+                            </label>
+                            <label style="margin-bottom: 0; font-weight: normal;">
+                                <input type="checkbox"
+                                    id="novedad-${guia.id}"
+                                    ${guia.novedad ?
+                                    'checked' : ''}
+                                    onchange="toggleNovedad('${guia.id}', this.checked)"
+                                    style="margin-right: 5px; width: auto;"
+                                > Novedad
+                            </label>
+                        ` : `
+                            ${isVerificado ?
+                            '<div><strong>Verificado:</strong> Sí</div>' : ''}
+                            ${isNovedad ?
+                            '<div><strong>Novedad:</strong> Sí</div>' : ''}
+                        `}
+                        ${isAdministrador ||
+                        isOperador ? `
+                            <label style="margin-bottom: 0; font-weight: normal;">
+                                <input type="checkbox"
+                                    id="anulado-${guia.id}"
+                                    ${guia.anulado ?
+                                    'checked' : ''}
+                                    onchange="toggleAnulado('${guia.id}', this.checked)"
+                                    style="margin-right: 5px; width: auto;"
+                                > Anulado
+                            </label>
+                        ` : (isAnulado ? '<div><strong>Anulado:</strong> Sí</div>' : '')}
+                    </div>
+                    
+                    <div class="guia-acciones">
+                        <button class="accion-btn ${disableActions ? 'disabled-btn' : ''}" ${editButtonAttrs}>Editar</button>
+                        <button class="accion-btn eliminar ${disableActions ? 'disabled-btn' : ''}" ${deleteButtonAttrs}>Eliminar</button>
+                    </div>
+                
+                    <hr style="border-top: 1px solid #ccc; margin-top: 10px; margin-bottom: 10px;">
+                `;
+                listaGuiasElement.appendChild(listItem);
+            });
+        }
+
+        async function toggleVerificado(guiaId, isChecked) {
+            try {
+                await collectionGuias.doc(guiaId).update({ verificado: isChecked });
+                showMessageModal('Éxito', `Guía ${isChecked ? 'verificada' : 'desverificada'} exitosamente.`, 'success');
+                // La recarga se maneja por el onSnapshot
+            } catch (error) {
+                console.error("Error al actualizar el estado de verificación: ", error);
+                showMessageModal('Error', 'Error al actualizar el estado de verificación.', 'error');
+            }
+        }
+
+        // Función para alternar el estado de novedad
+        async function toggleNovedad(guiaId, isChecked) {
+            try {
+                await collectionGuias.doc(guiaId).update({ novedad: isChecked });
+                showMessageModal('Éxito', `Guía ${isChecked ? 'marcada con novedad' : 'sin novedad'} exitosamente.`, 'success');
+                // La recarga se maneja por el onSnapshot
+            } catch (error) {
+                console.error("Error al actualizar el estado de novedad: ", error);
+                showMessageModal('Error', 'Error al actualizar el estado de novedad.', 'error');
+            }
+        }
+
+        // Función para alternar el estado de anulado
+        async function toggleAnulado(guiaId, isChecked) {
+            try {
+                await collectionGuias.doc(guiaId).update({ anulado: isChecked });
+                showMessageModal('Éxito', `Guía ${isChecked ? 'marcada como anulada' : 'desmarcada como anulada'} exitosamente.`, 'success');
+                // La recarga se maneja por el onSnapshot
+            } catch (error) {
+                console.error("Error al actualizar el estado de anulado: ", error);
+                showMessageModal('Error', 'Error al actualizar el estado de anulado.', 'error');
+            }
+        }
+
+        async function cargarDatosParaEdicion(guiaId) {
+            console.log("Cargando datos para edición con ID:", guiaId);
+            const guiaParaEditar = guiasEnvia.find(guia => guia.id === guiaId); // Usar guiasEnvia
+
+            if (guiaParaEditar) {
+                const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+                const isVerificado = guiaParaEditar.verificado === true;
+                const isNovedad = guiaParaEditar.novedad === true;
+                const isAnulado = guiaParaEditar.anulado === true;
+                if (isOperador && (isVerificado || isNovedad || isAnulado)) {
+                    showMessageModal('Acción Restringida', 'No puedes editar guías verificadas, con novedad o anuladas como Operador.', 'info');
+                    return;
+                }
+
+                console.log("Guía encontrada para editar:", guiaParaEditar);
+                document.getElementById('usuarioLogueado').value = guiaParaEditar.usuario;
+                document.getElementById('fechaGuia').value = guiaParaEditar.fecha;
+                document.getElementById('nombreCliente').value = guiaParaEditar.nombreCliente;
+                document.getElementById('codigoUnico').value = guiaParaEditar.codigoUnico || '';
+                document.getElementById('valorMercancia').value = guiaParaEditar.valorMercancia;
+                document.getElementById('valorFlete').value = guiaParaEditar.valorFlete;
+                document.getElementById('valorTotal').value = guiaParaEditar.valorTotal;
+                document.getElementById('numeroGuia').value = guiaParaEditar.numeroGuia;
+                document.getElementById('pendienteCheck').checked = guiaParaEditar.pendiente || false; // Setear el estado del checkbox
+                toggleNumeroGuiaInput();
+                // Ajustar el campo de número de guía al cargar para edición
+
+                guiaAEditarId = guiaId;
+                const guardarBtn = document.querySelector('#generarGuiaForm button[type="submit"]');
+                guardarBtn.textContent = 'Actualizar Guía';
+                document.getElementById('guiasModulo').style.display = 'none';
+                // Ocultar la lista
+                document.querySelector('.container:first-child').style.display = 'block';
+                // Mostrar el formulario
+            } else {
+                console.error("No se encontró la guía con ID:", guiaId);
+                showMessageModal('Error', 'No se pudo cargar la guía para editar.', 'error');
+            }
+        }
+
+        async function eliminarGuia(id) {
+            const guiaAEliminar = guiasEnvia.find(guia => guia.id === id);
+            // Usar guiasEnvia
+            const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+            const isVerificado = guiaAEliminar && guiaAEliminar.verificado === true;
+            const isNovedad = guiaAEliminar && guiaAEliminar.novedad === true;
+            const isAnulado = guiaAEliminar && guiaAEliminar.anulado === true;
+
+            if (isOperador && (isVerificado || isNovedad || isAnulado)) {
+                showMessageModal('Acción Restringida', 'No puedes eliminar guías verificadas, con novedad o anuladas como Operador.', 'info');
+                return;
+            }
+
+            try {
+                await collectionGuias.doc(id).delete();
+                showMessageModal('Éxito', 'Guía eliminada exitosamente.', 'success');
+                // La recarga se maneja por el onSnapshot
+            }
+            catch (error) {
+                console.error("Error al eliminar la guía: ", error);
+                showMessageModal('Error', 'Error al eliminar la guía.', 'error');
+            }
+        }
+
+        async function eliminarGuiasPorEstado(estados) {
+            const querySnapshot = await collectionGuias.get();
+            const batch = db.batch();
+            let guiasParaEliminar = 0;
+
+            querySnapshot.forEach(doc => {
+                const guia = doc.data();
+                const id = doc.id;
+                let shouldDelete = false;
+
+                if (estados.includes('pendiente') && guia.pendiente) {
+                    shouldDelete = true;
+                }
+                if (estados.includes('verificado') && guia.verificado) {
+                    shouldDelete = true;
+                }
+                if (estados.includes('anulado') && guia.anulado) {
+                    shouldDelete = true;
+                }
+                if (estados.includes('novedad') && guia.novedad) {
+                    shouldDelete = true;
+                }
+
+                if (shouldDelete) {
+                    batch.delete(collectionGuias.doc(id));
+                    guiasParaEliminar++;
+                }
+            });
+
+            if (guiasParaEliminar > 0) {
+                await batch.commit();
+                showMessageModal('Éxito', `Se eliminaron ${guiasParaEliminar} guías exitosamente.`, 'success');
+            } else {
+                showMessageModal('Información', 'No se encontraron guías con los estados seleccionados para eliminar.', 'info');
+            }
+            document.getElementById('deleteConfirmModal').classList.remove('active');
+        }
+
+        function filtrarGuias() {
+            mostrarGuiasFiltradas(guiasEnvia);
+            // Usar guiasEnvia
+        }
+
+        /**
+         * Muestra el modal de filtros y ayuda.
+         */
+        function mostrarFiltrosModal() {
+            const filterModal = document.getElementById('filterModal');
+            filterModal.classList.add('active');
+        }
+
+        /**
+         * Cierra el modal de filtros y ayuda.
+         */
+        function cerrarFiltrosModal() {
+            const filterModal = document.getElementById('filterModal');
+            filterModal.classList.remove('active');
+        }
+
+        /**
+         * Muestra un modal de mensaje genérico.
+         */
+        function showMessageModal(title, message, type) {
+            const messageModal = document.getElementById('messageModal');
+            const messageModalTitle = document.getElementById('messageModalTitle');
+            const messageModalBody = document.getElementById('messageModalBody');
+            const messageModalCloseBtn = document.getElementById('messageModalCloseBtn');
+
+            messageModalTitle.textContent = title;
+            messageModalBody.textContent = message;
+            // Opcional: Cambiar estilos según el tipo de mensaje
+            messageModalTitle.style.color = '';
+            // Reset color
+            if (type === 'success') {
+                messageModalTitle.style.color = '#4CAF50';
+                /* Color verde de envia.txt */
+            } else if (type === 'error') {
+                messageModalTitle.style.color = '#dc3545';
+            } else if (type === 'info') {
+                messageModalTitle.style.color = '#007bff';
+            }
+
+            messageModal.classList.add('active');
+            messageModalCloseBtn.onclick = () => messageModal.classList.remove('active');
+        }
+
+        /**
+         * Muestra un modal de confirmación con botones de sí/no.
+         */
+        function showConfirmModal(title, message, onConfirm) {
+            const confirmModal = document.getElementById('confirmModal');
+            const confirmModalTitle = document.getElementById('confirmModalTitle');
+            const confirmModalBody = document.getElementById('confirmModalBody');
+            const confirmBtn = document.getElementById('confirmActionBtn');
+            const cancelBtn = document.getElementById('cancelActionBtn');
+
+            confirmModalTitle.textContent = title;
+            confirmModalBody.textContent = message;
+
+            confirmModal.classList.add('active');
+
+            confirmBtn.onclick = () => {
+                onConfirm();
+                confirmModal.classList.remove('active');
+            };
+            cancelBtn.onclick = () => confirmModal.classList.remove('active');
+        }
+        
+        function showExportModal() {
+            document.getElementById('exportModal').classList.add('active');
+        }
+        
+        function closeExportModal() {
+            document.getElementById('exportModal').classList.remove('active');
+        }
+        
+        function showDeleteConfirmModal() {
+          document.getElementById('deleteConfirmModal').classList.add('active');
+        }
+        
+        function closeDeleteConfirmModal() {
+          document.getElementById('deleteConfirmModal').classList.remove('active');
+        }
+
+        function parseCOP(value) {
+            const digits = String(value || '').replace(/[^0-9]/g, '');
+            return digits ? parseInt(digits, 10) : 0;
+        }
+
+        function formatCOP(value) {
+            const num = typeof value === 'number' ? value : parseCOP(value);
+            return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(num);
+        }
+
+        // ==================== FUNCIONES DE CONSIGNACIONES ====================
+        function abrirConsignacionesModal() {
+            document.getElementById('consignacionesModal').classList.add('active');
+            cargarConsignaciones();
+        }
+
+        function cerrarConsignacionesModal() {
+            document.getElementById('consignacionesModal').classList.remove('active');
+        }
+
+        function cargarConsignaciones() {
+            collectionConsignacionesEnvia.orderBy('timestamp', 'asc').onSnapshot(snapshot => {
+                consignacionesEnvia = [];
+                snapshot.forEach(doc => {
+                    const consignacion = doc.data();
+                    consignacion.id = doc.id;
+                    consignacionesEnvia.push(consignacion);
+                });
+                renderTablaConsignaciones();
+            }, error => {
+                console.error("Error al cargar consignaciones: ", error);
+            });
+        }
+
+        function renderTablaConsignaciones() {
+            const tbody = document.getElementById('consignacionesTableBody');
+            tbody.innerHTML = '';
+
+            consignacionesEnvia.forEach((consignacion, index) => {
+                const tr = document.createElement('tr');
+                if (consignacion.verificado) {
+                    tr.classList.add('verificado-row');
+                }
+                tr.innerHTML = `
+                    <td>
+                        <input type="date" value="${consignacion.fecha || ''}" 
+                            onchange="actualizarConsignacion('${consignacion.id}', 'fecha', this.value)" 
+                            ${consignacion.verificado ? 'disabled' : ''}>
+                    </td>
+                    <td>
+                        <input type="text" value="${formatCOP(consignacion.valor || 0)}" 
+                            oninput="this.value=this.value.replace(/[^0-9]/g,''); this.value=formatCOP(this.value);"
+                            onchange="actualizarConsignacion('${consignacion.id}', 'valor', this.value)"
+                            ${consignacion.verificado ? 'disabled' : ''}>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="verificado-check" 
+                            ${consignacion.verificado ? 'checked' : ''}
+                            onchange="toggleConsignacionVerificado('${consignacion.id}', this.checked)">
+                    </td>
+                    <td>
+                        <button class="btn-remove-row" onclick="eliminarConsignacion('${consignacion.id}')" 
+                            ${consignacion.verificado ? 'disabled' : ''}>X</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function agregarFilaConsignacion() {
+            try {
+                await collectionConsignacionesEnvia.add({
+                    fecha: '',
+                    valor: 0,
+                    verificado: false,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch (error) {
+                console.error("Error al agregar consignación: ", error);
+                showMessageModal('Error', 'Error al agregar la fila.', 'error');
+            }
+        }
+
+        async function actualizarConsignacion(id, campo, valor) {
+            try {
+                const updateData = {};
+                updateData[campo] = campo === 'valor' ? parseCOP(valor) : valor;
+                await collectionConsignacionesEnvia.doc(id).update(updateData);
+            } catch (error) {
+                console.error("Error al actualizar consignación: ", error);
+                showMessageModal('Error', 'Error al actualizar la consignación.', 'error');
+            }
+        }
+
+        async function toggleConsignacionVerificado(id, isChecked) {
+            try {
+                await collectionConsignacionesEnvia.doc(id).update({ verificado: isChecked });
+            } catch (error) {
+                console.error("Error al verificar consignación: ", error);
+                showMessageModal('Error', 'Error al verificar la consignación.', 'error');
+            }
+        }
+
+        async function eliminarConsignacion(id) {
+            showConfirmModal('Confirmar Eliminación', '¿Estás seguro de que deseas eliminar esta consignación?', async () => {
+                try {
+                    await collectionConsignacionesEnvia.doc(id).delete();
+                } catch (error) {
+                    console.error("Error al eliminar consignación: ", error);
+                    showMessageModal('Error', 'Error al eliminar la consignación.', 'error');
+                }
+            });
+        }
+
+        function verificarRolParaIngresarDatos() {
+            const ingresarDatosBtn = document.getElementById('ingresarDatosBtn');
+            if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
+                ingresarDatosBtn.style.display = 'block';
+            } else {
+                ingresarDatosBtn.style.display = 'none';
+            }
+        }
+    </script>
 </head>
 <body>
-  <div class="datetime-bar">
-    <div class="datetime-date">
-      <span class="date-icon">📅</span>
-      <span id="fechaDisplay">--/---/----</span>
+    <div class="container">
+        <h2>Generar guía de Envía
+            <button type="button" id="ingresarDatosBtn" onclick="abrirConsignacionesModal()" style="display:none; width: auto; padding: 8px 15px; font-size: 0.7em; margin-left: 10px;">Ingresar Datos</button>
+        </h2>
+        <form id="generarGuiaForm" onsubmit="event.preventDefault(); guardarGuia();">
+            <label for="usuarioLogueado">Usuario (Asesor):</label>
+            <input type="text" id="usuarioLogueado" readonly draggable="true" ondragstart="event.dataTransfer.setData('text', this.value)">
+
+            <label for="fechaGuia">Fecha:</label>
+            <input type="date" id="fechaGuia" required>
+
+            <label for="nombreCliente">Nombre del Cliente:</label>
+            <input type="text" id="nombreCliente" required>
+
+            <label for="codigoUnico">Código Único (Pedido):</label>
+            <input type="text" id="codigoUnico">
+
+            <label for="valorMercancia">Valor de la Mercancía:</label>
+            <input type="number" id="valorMercancia" required>
+
+            <label for="valorFlete">Valor del Flete:</label>
+            <input type="number" id="valorFlete" required>
+
+            <label for="valorTotal">Valor Total:</label>
+            <input type="text" id="valorTotal" readonly>
+
+            <label for="numeroGuia">Número de Guía:</label>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                <input type="number" id="numeroGuia" style="flex-grow: 1;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
+                <label for="pendienteCheck" style="margin-bottom: 0; font-weight: normal; display: flex; align-items: center;">
+                    <input type="checkbox" id="pendienteCheck" style="margin-right: 5px; width: auto;"> PENDIENTE
+                </label>
+            </div>
+
+            <button type="submit">Guardar Guía</button>
+            <button type="button" id="exportarExcelBtn" onclick="exportarGuiasExcel()" style="display:none;">Exportar a Excel</button>
+            <button type="button" id="verGuiasBtn" onclick="mostrarModuloGuias()">Ver Guías</button>
+            <p id="error-message" class="error-message"></p>
+        </form>
     </div>
-    <div class="datetime-clock" id="clockDisplay">--<span class="clock-separator">:</span>--<span class="clock-separator">:</span>--<span class="clock-ampm">--</span></div>
-  </div>
 
-  <h1 id="tituloPanel">Panel de Bodega</h1>
-  <div class="top-bar">
-    <button class="btn" onclick="cambiarModo(false)">📦 Despachos Activos</button>
-    <button class="btn" onclick="cambiarModo(true)">🕒 Historial</button>
-    <button class="btn" id="btnEnableSound" type="button">🔊 Activar sonido</button>
-  </div>
+    <div class="container" id="guiasModulo">
+        <h2>
+            Listado de Guías de Envía
+            <i class="fas fa-history history-icon" title="Histórico" onclick="abrirHistoricoVerificadas()"></i>
+            <i class="fas fa-cog help-icon" onclick="mostrarFiltrosModal()"></i>
+        </h2>
+        <input type="text" id="buscadorGuias" onkeyup="filtrarGuias()" placeholder="Buscar en todas las guías...">
 
-  <div id="panel" class="grid"></div>
+        <label for="filtroAsesor" class="mt-4">Filtrar por Asesor:</label>
+        <select id="filtroAsesor" onchange="filtrarGuias()">
+            <option value="">Todos los Asesores</option>
+        </select>
 
-  <div id="detalleModal" class="modal" onclick="if(event.target===this)cerrarModal()">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Detalles del Bodeguero</h2>
-        <span class="close" onclick="cerrarModal()">&times;</span>
-      </div>
-      <div id="modalBody"></div>
+        <ul id="listaGuias">
+        </ul>
     </div>
-  </div>
 
-  <div class="motivation-bar" id="motivationBar">
-    <span class="motiv-icon">💪</span>
-    <span class="motiv-text" id="motivText">Cargando mensaje...</span>
-  </div>
+    <div id="historicoVerificadasModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="cerrarHistoricoVerificadas()">&times;</button>
+            <h3>Histórico (Verificadas)</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="historicoSearch" placeholder="Buscar en verificadas..." onkeyup="renderHistoricoVerificadas()">
+                <select id="historicoAsesor" onchange="renderHistoricoVerificadas()">
+                    <option value="">Todos los Asesores</option>
+                </select>
+            </div>
+            <ul id="historicoListaGuias" style="list-style: none; padding: 0; margin: 0;"></ul>
+            <div class="modal-actions" style="justify-content: space-between; align-items: center;">
+                <button class="cancel-btn" onclick="prevHistoricoPage()">Anterior</button>
+                <div style="font-weight: 600; color: #555;">Página <span id="historicoPageLabel">1</span></div>
+                <button class="confirm-btn" onclick="nextHistoricoPage()">Siguiente</button>
+            </div>
+        </div>
+    </div>
 
-  <script>
-    (function(){
-      const btn = document.getElementById('btnEnableSound');
-      if (!btn) return;
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try { await armAudioOnce(); } catch (err) { /* no-op */ }
-      }, { passive: false });
-    })();
-  </script>
+    <div id="filterModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="cerrarFiltrosModal()">&times;</button>
+            <h3>Opciones de Filtrado y Ayuda</h3>
 
-  <script>
-    (function(){
-      const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
-      const ICONS = ['💪','🚀','⭐','🔥','✨','🏆','💎','🎯','👏','🌟'];
-      const MENSAJES = [
-        'El trabajo en equipo hace el sueño realidad.',
-        'Cada despacho cuenta, cada esfuerzo suma.',
-        'La excelencia no es un acto, es un hábito.',
-        'Tu actitud determina tu altitud.',
-        'Hoy es un gran día para ser el mejor.',
-        'El éxito es la suma de pequeños esfuerzos repetidos.',
-        'Juntos somos más fuertes.',
-        'La disciplina es el puente entre las metas y los logros.',
-        'Cada cliente satisfecho es una victoria del equipo.',
-        'No busques el momento perfecto, haz el momento perfecto.',
-        'El esfuerzo de hoy es el éxito de mañana.',
-        'Tu dedicación marca la diferencia.',
-        'Grandes cosas nunca vienen de la zona de confort.',
-        'Sé la razón por la que alguien sonríe hoy.',
-        'Un paso a la vez, pero sin detenerse.',
-        'La mejor hora del día es ahora.',
-        'Trabaja duro en silencio, deja que el éxito haga el ruido.',
-        'Haz que cada par despachado cuente.',
-        'La constancia vence lo que la dicha no alcanza.',
-        'Eres parte esencial de este equipo.'
-      ];
-      let msgIndex = Math.floor(Math.random() * MENSAJES.length);
+            <div class="filter-options">
+                <h4>Filtrar por Estado:</h4>
+                <label>
+                    <input type="checkbox" id="pendienteFilter"> Pendientes
+                </label>
+                <label>
+                    <input type="checkbox" id="verificadoFilter"> Verificados
+                </label>
+                <label>
+                    <input type="checkbox" id="anuladoFilter"> Anulados
+                </label>
+                <label>
+                    <input type="checkbox" id="novedadFilter"> Novedad
+                </label>
+            </div>
+            
+            <div class="modal-actions" style="justify-content: center; margin-top: 10px;">
+                <button id="deleteByStatusBtn" onclick="showDeleteConfirmModal()" style="background-color: #dc3545; display:none;">Eliminar por Estado</button>
+            </div>
+            
+            <div class="help-text">
+                <h4>Estados de Envío:</h4>
+                <p><strong>NOVEDAD:</strong> El envío presenta demoras en los pagos.</p>
+                <p><strong>PENDIENTE:</strong> El envío aún no tiene guía asignada.</p>
+                <p><strong>ANULADO:</strong> Se ha devuelto el paquete a la bodega.</p>
+            </div>
+        </div>
+    </div>
 
-      function pad(n){ return n < 10 ? '0' + n : '' + n; }
+    <div id="messageModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" id="messageModalCloseBtn">&times;</button>
+            <h3 id="messageModalTitle"></h3>
+            <p id="messageModalBody"></p>
+            <div class="modal-actions">
+                <button class="cancel-btn" onclick="document.getElementById('messageModal').classList.remove('active');">Cerrar</button>
+            </div>
+        </div>
+    </div>
 
-      function updateDateTime(){
-        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-        const dia = pad(now.getDate());
-        const mes = MESES[now.getMonth()];
-        const anio = now.getFullYear();
-        document.getElementById('fechaDisplay').textContent = dia + '/' + mes + '/' + anio;
-
-        let h = now.getHours();
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        h = h % 12 || 12;
-        const clockEl = document.getElementById('clockDisplay');
-        clockEl.innerHTML = pad(h) + '<span class="clock-separator">:</span>' + pad(now.getMinutes()) + '<span class="clock-separator">:</span>' + pad(now.getSeconds()) + '<span class="clock-ampm">' + ampm + '</span>';
-      }
-
-      function rotateMessage(){
-        msgIndex = (msgIndex + 1) % MENSAJES.length;
-        const iconIdx = msgIndex % ICONS.length;
-        const bar = document.getElementById('motivationBar');
-        const iconEl = bar.querySelector('.motiv-icon');
-        const textEl = document.getElementById('motivText');
-        iconEl.textContent = ICONS[iconIdx];
-        textEl.style.animation = 'none';
-        void textEl.offsetWidth;
-        textEl.textContent = MENSAJES[msgIndex];
-        textEl.style.animation = 'motivSlideIn 0.6s ease';
-      }
-
-      updateDateTime();
-      rotateMessage();
-      setInterval(updateDateTime, 1000);
-      setInterval(rotateMessage, 8000);
-    })();
-  </script>
-
-  <!-- Overlay Almuerzo 12:00 PM -->
-  <div class="fullscreen-overlay lunch" id="overlayLunch">
-    <span class="overlay-close" onclick="document.getElementById('overlayLunch').classList.remove('active')">&times;</span>
-    <div class="overlay-emoji" id="lunchEmoji">🍽️</div>
-    <div class="overlay-title">¡Hora de Almorzar!</div>
-    <div class="overlay-msg" id="lunchMsg"></div>
-    <div class="overlay-brand">Con cariño — La Zapatería 👟</div>
-    <div class="overlay-timer" id="lunchTimer"></div>
-  </div>
-
-  <!-- Overlay Fin de Jornada 6:00 PM -->
-  <div class="fullscreen-overlay endday" id="overlayEndday">
-    <span class="overlay-close" onclick="document.getElementById('overlayEndday').classList.remove('active')">&times;</span>
-    <div class="overlay-emoji" id="enddayEmoji">🌙</div>
-    <div class="overlay-title">¡Jornada Finalizada!</div>
-    <div class="overlay-msg" id="enddayMsg"></div>
-    <div class="overlay-brand">Hasta mañana — La Zapatería 👟</div>
-    <div class="overlay-timer" id="enddayTimer"></div>
-  </div>
-
-  <script>
-    (function(){
-      const LUNCH_MSGS = [
-        '🙏 Que Dios bendiga tus alimentos y renueve tus fuerzas para la tarde. ¡Buen provecho!',
-        '🙏 Gracias a Dios por este día y por el alimento. Recarga energías, te lo mereces.',
-        '🙏 Que cada bocado te llene de gratitud y fortaleza. ¡Bendiciones para ti y tu familia!',
-        '🙏 Dios te bendice con salud y trabajo. Disfruta tu almuerzo con paz en el corazón.',
-        '🙏 Haz una pausa, agradece y aliméntate bien. Dios provee cada día. ¡Buen provecho!',
-        '🙏 Que la bendición de Dios esté en tu mesa y en tu corazón. ¡A disfrutar el almuerzo!',
-        '🙏 Gracias Señor por el pan de cada día. Descansa un momento y vuelve con toda la actitud.',
-        '🙏 Bendito sea Dios que nos da fuerza y alimento. ¡Disfruta cada momento de tu descanso!',
-        '🙏 Tu esfuerzo de la mañana merece un buen descanso. Que Dios bendiga tu comida.',
-        '🙏 Come con alegría y gratitud. Dios tiene cosas grandes preparadas para esta tarde.',
-        '🙏 Que este almuerzo renueve tu cuerpo y tu espíritu. ¡Bendiciones para todos!',
-        '🙏 Dios cuida de ti cada instante. Descansa, come bien y regresa con energía.',
-        '🙏 Que la paz de Dios acompañe tu almuerzo. Eres valioso para este equipo.',
-        '🙏 Gracias Padre por permitirnos llegar hasta aquí. ¡Buen provecho, equipo!',
-        '🙏 Alimento para el cuerpo, fe para el alma. Que Dios te bendiga grandemente.',
-        '🙏 Hoy es un regalo de Dios. Disfruta tu almuerzo y vuelve lleno de bendiciones.',
-        '🙏 Que cada día Dios te dé más razones para sonreír. ¡Buen provecho, campeón!',
-        '🙏 Descansa en la presencia de Dios mientras almuerzas. Él renueva tus fuerzas.',
-        '🙏 Bendice tu alimento, bendice tu trabajo, bendice este día. ¡A comer con gratitud!',
-        '🙏 Que Dios llene tu tarde de logros y tu mesa de abundancia. ¡Buen almuerzo!',
-        '🙏 Tu trabajo honra a Dios. Ahora descansa y recarga. ¡Mereces este respiro!',
-        '🙏 Señor, gracias por cada miembro de este equipo. Bendice su alimento y su camino.',
-        '🙏 Come tranquilo, Dios está al mando. La tarde será productiva y bendecida.',
-        '🙏 Que la gracia de Dios acompañe tu almuerzo y cada paso de tu tarde.',
-        '🙏 Un equipo bendecido es un equipo imparable. ¡Buen provecho a todos!',
-        '🙏 Dios no te trajo hasta aquí para dejarte. Almuerza con fe y agradecimiento.',
-        '🙏 Que las bendiciones de hoy superen las de ayer. ¡Disfruta tu comida!',
-        '🙏 La fidelidad de Dios se renueva cada mañana. Ahora disfruta tu merecido descanso.',
-        '🙏 Gracias a Dios por la salud para trabajar y el alimento para continuar. ¡Buen provecho!',
-        '🙏 Que Dios multiplique tus bendiciones como multiplica tu esfuerzo. ¡A almorzar!'
-      ];
-
-      const ENDDAY_MSGS = [
-        '🌟 ¡Excelente jornada! Gracias por dar lo mejor de ti. Descansa, mañana será aún mejor.',
-        '🌟 El esfuerzo de hoy construye el éxito de mañana. ¡Ve a casa con orgullo!',
-        '🌟 Cada día que das tu 100% es un día ganado. ¡Gracias por tu dedicación!',
-        '🌟 Tu trabajo hace la diferencia. Descansa bien y vuelve mañana con esa misma energía.',
-        '🌟 ¡Lo logramos! Otro día de trabajo duro terminado. Disfruta tu noche, campeón.',
-        '🌟 Gracias por ser parte de este gran equipo. Descansa, recarga y nos vemos mañana.',
-        '🌟 Hoy fuiste increíble. Ahora ve y disfruta con quienes más quieres. ¡Hasta mañana!',
-        '🌟 El éxito se construye día a día, y hoy pusiste un gran ladrillo. ¡Feliz noche!',
-        '🌟 Tu esfuerzo no pasa desapercibido. ¡Gracias por todo! Descansa merecidamente.',
-        '🌟 Cierra este día con una sonrisa. Diste todo y eso es admirable. ¡Hasta mañana!',
-        '🌟 La constancia es tu superpoder. Otro día cumplido con excelencia. ¡Buen descanso!',
-        '🌟 Hoy el equipo brilló gracias a ti. Ve a casa tranquilo, lo hiciste genial.',
-        '🌟 Cada jornada terminada es un logro. ¡Celebra lo que conseguiste hoy!',
-        '🌟 Gracias por tu entrega y compromiso. La Zapatería es grande gracias a ti.',
-        '🌟 Misión cumplida por hoy. Ahora a descansar, que mañana hay más victorias por lograr.',
-        '🌟 Que tu noche sea tan productiva en descanso como lo fue tu día en trabajo. ¡Adiós!',
-        '🌟 Eres pieza clave de este equipo. Descansa bien, te esperamos mañana con los brazos abiertos.',
-        '🌟 Un día menos hacia tus metas, un paso más hacia tus sueños. ¡Feliz noche!',
-        '🌟 Hoy dejaste huella con tu trabajo. Ahora deja que la noche te recargue. ¡Hasta pronto!',
-        '🌟 Gracias por cada minuto de esfuerzo. Tu familia te espera, ¡ve y disfruta!',
-        '🌟 Lo mejor de hoy fue contar contigo. ¡Descansa mucho y vuelve con toda!',
-        '🌟 Jornada terminada con éxito. Que tengas una noche llena de paz y alegría.',
-        '🌟 Tu dedicación inspira a todos. Ahora toca recargar pilas. ¡Nos vemos mañana!',
-        '🌟 Cada día que trabajas con pasión, dejas una marca. ¡Gracias y buenas noches!',
-        '🌟 Hoy diste un gran ejemplo. Descansa tranquilo, La Zapatería está orgullosa de ti.',
-        '🌟 Se cierra un día más de logros. Que tu noche esté llena de bendiciones.',
-        '🌟 Gracias por hacer de este lugar algo especial. ¡Feliz descanso, nos vemos pronto!',
-        '🌟 El que trabaja con amor, cosecha con abundancia. ¡Buenas noches, equipo!',
-        '🌟 Terminaste fuerte. Eso habla de tu carácter. ¡Que descanses, crack!',
-        '🌟 Otro día donde La Zapatería brilla por su gente. ¡Gracias y hasta mañana!'
-      ];
-
-      const LUNCH_EMOJIS = ['🍽️','🍲','🥘','🍛','🙏','☀️','🌮','🥗','🍜','🫕'];
-      const ENDDAY_EMOJIS = ['🌙','🌅','🏠','💤','🌃','✨','🛌','🌠','🌇','💫'];
-
-      let lunchShown = false;
-      let enddayShown = false;
-      let lunchTimeout = null;
-      let enddayTimeout = null;
-
-      function getDayOfYear(){
-        const now = new Date();
-        const start = new Date(now.getFullYear(), 0, 0);
-        return Math.floor((now - start) / 86400000);
-      }
-
-      function showOverlay(id, msgs, emojis, emojiId, msgId, timerId, flagSetter){
-        const overlay = document.getElementById(id);
-        const dayIdx = getDayOfYear() % msgs.length;
-        document.getElementById(msgId).textContent = msgs[dayIdx];
-        document.getElementById(emojiId).textContent = emojis[dayIdx % emojis.length];
-        overlay.classList.add('active');
-
-        let remaining = 60;
-        const timerEl = document.getElementById(timerId);
-        timerEl.textContent = 'Se cierra en ' + remaining + 's';
-        const iv = setInterval(() => {
-          remaining--;
-          timerEl.textContent = 'Se cierra en ' + remaining + 's';
-          if (remaining <= 0) {
-            clearInterval(iv);
-            overlay.classList.remove('active');
-          }
-        }, 1000);
-
-        return setTimeout(() => { overlay.classList.remove('active'); clearInterval(iv); }, 60000);
-      }
-
-      function checkScheduledMessages(){
-        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-        const h = now.getHours();
-        const m = now.getMinutes();
-
-        if (h === 12 && m === 0 && !lunchShown) {
-          lunchShown = true;
-          lunchTimeout = showOverlay('overlayLunch', LUNCH_MSGS, LUNCH_EMOJIS, 'lunchEmoji', 'lunchMsg', 'lunchTimer');
-        }
-        if (h === 12 && m >= 1) lunchShown = false;
-
-        if (h === 18 && m === 0 && !enddayShown) {
-          enddayShown = true;
-          enddayTimeout = showOverlay('overlayEndday', ENDDAY_MSGS, ENDDAY_EMOJIS, 'enddayEmoji', 'enddayMsg', 'enddayTimer');
-        }
-        if (h === 18 && m >= 1) enddayShown = false;
-      }
-
-      setInterval(checkScheduledMessages, 1000);
-    })();
-  </script>
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="confirmModalTitle"></h3>
+            <p id="confirmModalBody"></p>
+            <div class="modal-actions">
+                <button class="confirm-btn" id="confirmActionBtn">Sí</button>
+                <button class="cancel-btn" id="cancelActionBtn">No</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NUEVO: Modal para selección de estados para exportar a Excel -->
+    <div id="exportModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="closeExportModal()">&times;</button>
+            <h3>Seleccionar Guías para Exportar</h3>
+            <div class="filter-options">
+                <label>
+                    <input type="checkbox" id="exportPendiente" checked> Pendientes
+                </label>
+                <label>
+                    <input type="checkbox" id="exportVerificado" checked> Verificados
+                </label>
+                <label>
+                    <input type="checkbox" id="exportAnulado" checked> Anulados
+                </label>
+                <label>
+                    <input type="checkbox" id="exportNovedad" checked> Novedad
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button class="confirm-btn" onclick="
+                    const selectedStates = [];
+                    if (document.getElementById('exportPendiente').checked) selectedStates.push('pendiente');
+                    if (document.getElementById('exportVerificado').checked) selectedStates.push('verificado');
+                    if (document.getElementById('exportAnulado').checked) selectedStates.push('anulado');
+                    if (document.getElementById('exportNovedad').checked) selectedStates.push('novedad');
+                    if(selectedStates.length > 0) {
+                        performExport(selectedStates);
+                    } else {
+                        showMessageModal('Advertencia', 'Por favor, selecciona al menos un estado para exportar.', 'info');
+                    }
+                ">Exportar</button>
+                <button class="cancel-btn" onclick="closeExportModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NUEVO: Modal de confirmación para eliminar por estado -->
+    <div id="deleteConfirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="closeDeleteConfirmModal()">&times;</button>
+            <h3>Confirmar Eliminación Masiva</h3>
+            <p><strong>ADVERTENCIA:</strong> Esta acción no se puede deshacer. ¿Qué tipos de guías deseas eliminar?</p>
+            <div class="filter-options">
+                <label>
+                    <input type="checkbox" id="deletePendiente"> Pendientes
+                </label>
+                <label>
+                    <input type="checkbox" id="deleteVerificado"> Verificados
+                </label>
+                <label>
+                    <input type="checkbox" id="deleteAnulado"> Anulados
+                </label>
+                <label>
+                    <input type="checkbox" id="deleteNovedad"> Novedad
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button class="confirm-btn" onclick="
+                    const statesToDelete = [];
+                    if (document.getElementById('deletePendiente').checked) statesToDelete.push('pendiente');
+                    if (document.getElementById('deleteVerificado').checked) statesToDelete.push('verificado');
+                    if (document.getElementById('deleteAnulado').checked) statesToDelete.push('anulado');
+                    if (document.getElementById('deleteNovedad').checked) statesToDelete.push('novedad');
+                    if(statesToDelete.length > 0) {
+                        closeDeleteConfirmModal(); // Cierra el modal de selección antes de abrir el de confirmación
+                        showConfirmModal('Confirmar Eliminación', '¿Estás completamente seguro de que deseas eliminar todas las guías con los estados seleccionados? Esta acción es irreversible.', () => eliminarGuiasPorEstado(statesToDelete));
+                    } else {
+                        showMessageModal('Advertencia', 'Por favor, selecciona al menos un estado para eliminar.', 'info');
+                    }
+                ">Eliminar Seleccionados</button>
+                <button class="cancel-btn" onclick="closeDeleteConfirmModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+    <!-- Modal de Consignaciones para Envía -->
+    <div id="consignacionesModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="cerrarConsignacionesModal()">&times;</button>
+            <h3>Registro de Consignaciones - Envía</h3>
+            <table class="consignaciones-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Valor</th>
+                        <th>Verificado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="consignacionesTableBody">
+                </tbody>
+            </table>
+            <button type="button" class="btn-add-row" onclick="agregarFilaConsignacion()">+ Agregar Fila</button>
+            <div class="modal-actions">
+                <button class="cancel-btn" onclick="cerrarConsignacionesModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
