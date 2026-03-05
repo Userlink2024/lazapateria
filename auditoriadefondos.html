@@ -175,6 +175,17 @@
 
     .reportes-existentes{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
 
+    /* ── Reportar a otra persona ── */
+    .rep-otro-toggle{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;border-radius:10px;border:1.5px dashed var(--border);cursor:pointer;transition:all .2s;font-size:12px;font-weight:700;color:#6b7280}
+    .rep-otro-toggle:hover{border-color:#dc2626;background:rgba(220,38,38,.03);color:#dc2626}
+    .rep-otro-toggle.active{border-color:#dc2626;background:rgba(220,38,38,.06);color:#dc2626;border-style:solid}
+    .rep-otro-toggle input[type=checkbox]{accent-color:#dc2626;width:16px;height:16px;cursor:pointer}
+    .rep-otro-select{display:none;margin-bottom:14px}
+    .rep-otro-select.visible{display:block}
+    .rep-otro-select select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid rgba(220,38,38,.3);font-size:13px;font-weight:600;background:#fff;color:#1f2937;transition:border-color .2s}
+    .rep-otro-select select:focus{border-color:#dc2626;outline:none;box-shadow:0 0 0 3px rgba(220,38,38,.1)}
+    .rep-otro-select label{font-size:11px;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;display:block}
+
     /* ── Panel Gestión de Reportes ── */
     #gestionReportesModal .modal-card{max-width:820px;max-height:92vh;display:flex;flex-direction:column}
     #gestionReportesModal .modal-head{background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;padding:18px 22px;display:flex;align-items:center;gap:12px;flex-shrink:0}
@@ -386,6 +397,13 @@
           <div><div class="ri-label">Cliente</div><div class="ri-value" id="repCliente">—</div></div>
           <div><div class="ri-label">Código</div><div class="ri-value" id="repCodigo">—</div></div>
           <div><div class="ri-label">Fecha pedido</div><div class="ri-value" id="repFecha">—</div></div>
+        </div>
+        <label class="rep-otro-toggle" id="repOtroToggle">
+          <input type="checkbox" id="repOtroCheck"> Reportar a otra persona (no al asesor del pedido)
+        </label>
+        <div class="rep-otro-select" id="repOtroSelectWrap">
+          <label>Seleccione la persona a reportar</label>
+          <select id="repOtroPersona"><option value="">— Seleccione —</option></select>
         </div>
         <label style="margin-bottom:8px">Motivo del reporte</label>
         <div class="reporte-motivos" id="repMotivos">
@@ -3862,9 +3880,24 @@
     // ██  MÓDULO REPORTES / ANOTACIONES DE FALTA            ██
     // ══════════════════════════════════════════════════════════
     const COL_REPORTES = db.collection('reportes_auditoria');
+    let _cachedUsuarios = [];
 
     let _repRegistroId = null;
     let _repRegistroData = null;
+
+    async function loadUsuariosForDropdown(){
+      if(_cachedUsuarios.length) return _cachedUsuarios;
+      try {
+        const snap = await COL_USUARIOS.get();
+        _cachedUsuarios = [];
+        snap.forEach(doc => {
+          const d = doc.data();
+          if(d.nombreCompleto) _cachedUsuarios.push(d.nombreCompleto);
+        });
+        _cachedUsuarios.sort((a,b) => a.localeCompare(b,'es'));
+      } catch(e){ console.error('Error cargando usuarios:', e); }
+      return _cachedUsuarios;
+    }
 
     function openReporteModal(registroId){
       const r = allRegistros.find(x => String(x.id) === String(registroId));
@@ -3881,6 +3914,22 @@
       document.querySelectorAll('input[name="repMotivo"]').forEach(r => r.checked = false);
       document.querySelectorAll('.reporte-motivo-opt').forEach(el => el.classList.remove('selected'));
       $('repObservaciones').value = '';
+
+      // Reset "otra persona" toggle
+      $('repOtroCheck').checked = false;
+      $('repOtroToggle').classList.remove('active');
+      $('repOtroSelectWrap').classList.remove('visible');
+
+      // Load users for dropdown
+      loadUsuariosForDropdown().then(users => {
+        const sel = $('repOtroPersona');
+        sel.innerHTML = '<option value="">— Seleccione —</option>';
+        users.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u; opt.textContent = u;
+          sel.appendChild(opt);
+        });
+      });
 
       $('reporteModal').classList.add('open');
     }
@@ -3909,11 +3958,24 @@
 
       const auditorNombre = currentUser ? (currentUser.nombreCompleto || currentUser.usuario || 'Auditor') : 'Auditor';
 
+      // Determinar a quién se reporta
+      const usarOtro = $('repOtroCheck').checked;
+      let asesorReportado = safeStr(_repRegistroData.asesor);
+      if(usarOtro){
+        const otraSel = $('repOtroPersona').value;
+        if(!otraSel){
+          showToast('⚠️ Seleccione la persona a reportar');
+          return;
+        }
+        asesorReportado = otraSel;
+      }
+
       const reporte = {
         registroId: _repRegistroId,
         codigoUnico: safeStr(_repRegistroData.codigo_unico) || _repRegistroId,
         cliente: safeStr(_repRegistroData.cliente),
-        asesor: safeStr(_repRegistroData.asesor),
+        asesor: asesorReportado,
+        asesorOriginal: safeStr(_repRegistroData.asesor),
         valorTotal: Number(_repRegistroData.valor_total || 0),
         motivo: motivo,
         observaciones: observaciones,
@@ -4001,6 +4063,14 @@
     $('btnRepCancelar').addEventListener('click', closeReporteModal);
     $('btnRepGuardar').addEventListener('click', guardarReporte);
 
+    // Toggle "Reportar a otra persona"
+    $('repOtroCheck').addEventListener('change', function(){
+      const checked = this.checked;
+      $('repOtroToggle').classList.toggle('active', checked);
+      $('repOtroSelectWrap').classList.toggle('visible', checked);
+      if(!checked) $('repOtroPersona').value = '';
+    });
+
     // ══════════════════════════════════════════════════════════
     // ██  PANEL GESTIÓN DE REPORTES                          ██
     // ══════════════════════════════════════════════════════════
@@ -4019,14 +4089,22 @@
 
     function startGestionListener(){
       if(_grUnsub) _grUnsub();
-      _grUnsub = COL_REPORTES.orderBy('creadoEl','desc').limit(500)
+      console.log('[GR] Iniciando listener de gestión...');
+      _grUnsub = COL_REPORTES.limit(500)
         .onSnapshot(snap => {
+          console.log('[GR] Snapshot recibido, docs:', snap.size);
           _grAllReportes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          // Ordenar client-side por fecha desc
+          _grAllReportes.sort((a,b) => {
+            const ta = a.creadoEl && a.creadoEl.toDate ? a.creadoEl.toDate().getTime() : 0;
+            const tb = b.creadoEl && b.creadoEl.toDate ? b.creadoEl.toDate().getTime() : 0;
+            return tb - ta;
+          });
           updateGrAsesorFilter();
           updateGrCountPill();
           renderGestionReportes();
         }, err => {
-          console.error('[GR] Error listener:', err);
+          console.error('[GR] ERROR listener:', err);
         });
     }
 
@@ -4109,6 +4187,7 @@
                 <div><div class="gri-label">Creado por</div><div class="gri-value">${safeStr(rep.creadoPor)}</div></div>
                 <div><div class="gri-label">Fecha reporte</div><div class="gri-value">${fechaCreacion}</div></div>
                 <div><div class="gri-label">Valor pedido</div><div class="gri-value">${fmtCOP(rep.valorTotal)}</div></div>
+                <div><div class="gri-label">Visto por asesor</div><div class="gri-value" style="${rep.vistoEl ? 'color:#16a34a;font-weight:600' : 'color:#dc2626;font-weight:600'}">${rep.vistoEl && rep.vistoEl.toDate ? '✓ ' + rep.vistoEl.toDate().toLocaleString('es-CO') : '✗ No visto'}</div></div>
               </div>
               <div class="gr-card-actions">
                 <button class="btn-del" type="button" data-gr-delete="${rep.id}" title="Eliminar reporte"><i class="fas fa-trash"></i></button>
