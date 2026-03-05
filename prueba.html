@@ -1501,7 +1501,14 @@
                 <div class="form-field" id="flete_porcentaje_container" style="display:none;">
                     <label for="flete_porcentaje_input">% Flete (Pago en casa - Envía):</label>
                     <input type="number" id="flete_porcentaje_input" min="0" max="100" step="0.1" placeholder="Ej: 5" style="max-width:150px;">
-                    <small id="flete_calculado_label" style="color:#007bff;font-weight:600;margin-top:4px;display:block;"></small>
+                    <div id="flete_valor_container" style="display:none;margin-top:6px;">
+                        <label for="flete_valor_input" style="font-size:0.85em;color:#555;">Valor flete (editable):</label>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span style="font-weight:600;color:#333;">$</span>
+                            <input type="number" id="flete_valor_input" min="0" step="100" placeholder="0" style="max-width:160px;font-weight:600;color:#007bff;">
+                            <small style="color:#888;">(puedes redondear)</small>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-field">
                     <label>Productos:</label>
@@ -1629,7 +1636,14 @@
                 <div class="form-field" id="modificar_flete_porcentaje_container" style="display:none;">
                     <label for="modificar_flete_porcentaje_input">% Flete (Pago en casa - Envía):</label>
                     <input type="number" id="modificar_flete_porcentaje_input" min="0" max="100" step="0.1" placeholder="Ej: 5" style="max-width:150px;">
-                    <small id="modificar_flete_calculado_label" style="color:#007bff;font-weight:600;margin-top:4px;display:block;"></small>
+                    <div id="modificar_flete_valor_container" style="display:none;margin-top:6px;">
+                        <label for="modificar_flete_valor_input" style="font-size:0.85em;color:#555;">Valor flete (editable):</label>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span style="font-weight:600;color:#333;">$</span>
+                            <input type="number" id="modificar_flete_valor_input" min="0" step="100" placeholder="0" style="max-width:160px;font-weight:600;color:#007bff;">
+                            <small style="color:#888;">(puedes redondear)</small>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-field">
                     <label>Productos:</label>
@@ -1993,7 +2007,8 @@
                 saldo_a_favor: document.getElementById('saldo_a_favor').value || '0',
                 bodegueros: Array.from(document.querySelectorAll('#bodeguero_checkbox_container input[type="checkbox"]:checked')).map(c => c.value),
                 enviar_empaque: document.getElementById('enviar_inmediato_empaque').checked,
-                flete_porcentaje: document.getElementById('flete_porcentaje_input')?.value || ''
+                flete_porcentaje: document.getElementById('flete_porcentaje_input')?.value || '',
+                flete_valor: document.getElementById('flete_valor_input')?.value || ''
             };
         }
 
@@ -2023,6 +2038,12 @@
             if (fleteInp) fleteInp.value = snap.flete_porcentaje || '';
             toggleFletePorcentaje();
             calcularFletePreview();
+            const fleteValInp = document.getElementById('flete_valor_input');
+            if (fleteValInp && snap.flete_valor) {
+                fleteValInp.value = snap.flete_valor;
+                const valCont = document.getElementById('flete_valor_container');
+                if (valCont) valCont.style.display = '';
+            }
         }
 
         // --- Clear the form to blank ---
@@ -2043,6 +2064,10 @@
             document.getElementById('enviar_inmediato_empaque').checked = false;
             const fleteInpClear = document.getElementById('flete_porcentaje_input');
             if (fleteInpClear) fleteInpClear.value = '';
+            const fleteValClear = document.getElementById('flete_valor_input');
+            if (fleteValClear) fleteValClear.value = '';
+            const fleteValContClear = document.getElementById('flete_valor_container');
+            if (fleteValContClear) fleteValContClear.style.display = 'none';
             toggleFletePorcentaje();
         }
 
@@ -2611,16 +2636,25 @@
                 container.style.display = 'none';
                 const inp = document.getElementById('flete_porcentaje_input');
                 if (inp) inp.value = '';
-                const lbl = document.getElementById('flete_calculado_label');
-                if (lbl) lbl.textContent = '';
+                const valCont = document.getElementById('flete_valor_container');
+                if (valCont) valCont.style.display = 'none';
+                const valInp = document.getElementById('flete_valor_input');
+                if (valInp) valInp.value = '';
             }
         }
         function calcularFletePreview() {
             const pct = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
             const total = Math.round(valorTotal || 0);
             const flete = Math.round(total * pct / 100);
-            const lbl = document.getElementById('flete_calculado_label');
-            if (lbl) lbl.textContent = pct > 0 ? `Flete calculado: $${new Intl.NumberFormat('es-CO').format(flete)}` : '';
+            const valCont = document.getElementById('flete_valor_container');
+            const valInp = document.getElementById('flete_valor_input');
+            if (pct > 0) {
+                if (valCont) valCont.style.display = '';
+                if (valInp) valInp.value = flete;
+            } else {
+                if (valCont) valCont.style.display = 'none';
+                if (valInp) valInp.value = '';
+            }
         }
         function toggleFletePorcentajeModificar() {
             const modalidad = (document.getElementById('modificar_modalidad_envio_select')?.value || '').toUpperCase();
@@ -2633,8 +2667,10 @@
                 container.style.display = 'none';
                 const inp = document.getElementById('modificar_flete_porcentaje_input');
                 if (inp) inp.value = '';
-                const lbl = document.getElementById('modificar_flete_calculado_label');
-                if (lbl) lbl.textContent = '';
+                const valCont = document.getElementById('modificar_flete_valor_container');
+                if (valCont) valCont.style.display = 'none';
+                const valInp = document.getElementById('modificar_flete_valor_input');
+                if (valInp) valInp.value = '';
             }
         }
         function calcularFletePreviewModificar() {
@@ -2643,8 +2679,15 @@
             const raw = totalEl ? totalEl.value.replace(/[^0-9]/g, '') : '0';
             const total = parseInt(raw) || 0;
             const flete = Math.round(total * pct / 100);
-            const lbl = document.getElementById('modificar_flete_calculado_label');
-            if (lbl) lbl.textContent = pct > 0 ? `Flete calculado: $${new Intl.NumberFormat('es-CO').format(flete)}` : '';
+            const valCont = document.getElementById('modificar_flete_valor_container');
+            const valInp = document.getElementById('modificar_flete_valor_input');
+            if (pct > 0) {
+                if (valCont) valCont.style.display = '';
+                if (valInp) valInp.value = flete;
+            } else {
+                if (valCont) valCont.style.display = 'none';
+                if (valInp) valInp.value = '';
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -2667,6 +2710,8 @@
         function getFleteFromPorcentaje(valorTotal) {
             const container = document.getElementById('flete_porcentaje_container');
             if (!container || container.style.display === 'none') return 0;
+            const manualVal = parseInt(document.getElementById('flete_valor_input')?.value) || 0;
+            if (manualVal > 0) return manualVal;
             const pct = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
             return Math.round((valorTotal || 0) * pct / 100);
         }
@@ -2689,7 +2734,7 @@
                     const ref = db.collection('guias_envia').doc(codigo);
                     const snap = await ref.get();
                     if (snap.exists) return;
-                    const fleteCalc = registro._fletePorcentaje ? Math.round(valorTotal * registro._fletePorcentaje / 100) : 0;
+                    const fleteCalc = registro._fleteManual > 0 ? registro._fleteManual : (registro._fletePorcentaje ? Math.round(valorTotal * registro._fletePorcentaje / 100) : 0);
                     const tieneFlete = fleteCalc > 0;
                     await ref.set({
                         usuario: asesor,
@@ -2790,6 +2835,7 @@
                 try {
                     await db.collection('registros').add(datos);
                     datos._fletePorcentaje = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
+                    datos._fleteManual = parseInt(document.getElementById('flete_valor_input')?.value) || 0;
                     await ensureAutoGuiaForPagoEnCasa(datos);
                     console.log("Datos guardados en Firebase:", datos);
 
@@ -3929,7 +3975,8 @@
                     transportadora: datosActualizados.transportadora,
                     valor_total: datosActualizados.valor_total,
                     modalidad_envio: datosActualizados.modalidad_envio,
-                    _fletePorcentaje: parseFloat(document.getElementById('modificar_flete_porcentaje_input')?.value) || 0
+                    _fletePorcentaje: parseFloat(document.getElementById('modificar_flete_porcentaje_input')?.value) || 0,
+                    _fleteManual: parseInt(document.getElementById('modificar_flete_valor_input')?.value) || 0
                 });
                 showAlert("Pedido modificado exitosamente."); // Reemplazado alert
                 cerrarModal('modal_modificar');
