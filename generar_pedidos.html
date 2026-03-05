@@ -5519,6 +5519,8 @@
         let _reportesPendientes = [];
         let _reportesFirmados = [];
         let _cachedUsuariosGP = [];
+        let _soundInterval = null;
+        let _audioContext = null;
 
         async function loadUsuariosGP(){
             if(_cachedUsuariosGP.length) return _cachedUsuariosGP;
@@ -5602,8 +5604,104 @@
             if(n > 0){
                 bell.classList.add('visible');
                 countEl.textContent = n;
+                startSoundAlerts();
             } else {
                 bell.classList.remove('visible');
+                stopSoundAlerts();
+            }
+        }
+
+        let _audioReady = false;
+
+        function initAudioContext(){
+            if(_audioContext) return;
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                _audioContext = AC ? new AC() : null;
+            } catch(e){ _audioContext = null; }
+        }
+
+        // Desbloquear audio al primer click/toque del usuario en la página
+        function unlockAudio(){
+            initAudioContext();
+            if(!_audioContext) return;
+            if(_audioContext.state === 'suspended'){
+                _audioContext.resume().then(() => {
+                    _audioReady = true;
+                    console.log('[Reportes] Audio desbloqueado');
+                    // Si hay pendientes, iniciar alertas ahora que el audio está listo
+                    if(_reportesPendientes.length > 0 && !_soundInterval){
+                        startSoundAlerts();
+                    }
+                });
+            } else {
+                _audioReady = true;
+                if(_reportesPendientes.length > 0 && !_soundInterval){
+                    startSoundAlerts();
+                }
+            }
+        }
+        document.addEventListener('click', unlockAudio, { once: true });
+        document.addEventListener('touchstart', unlockAudio, { once: true });
+
+        function playAlertSound(){
+            if(!_audioContext || !_audioReady) return;
+            try {
+                if(_audioContext.state === 'suspended') _audioContext.resume();
+                const now = _audioContext.currentTime;
+
+                // Master gain – volumen alto
+                const master = _audioContext.createGain();
+                master.gain.setValueAtTime(1.0, now);
+                master.gain.setValueAtTime(1.0, now + 2.5);
+                master.gain.linearRampToValueAtTime(0.0, now + 3.0);
+                master.connect(_audioContext.destination);
+
+                function tone(startAt, dur, freq, type, vol){
+                    const g = _audioContext.createGain();
+                    g.gain.setValueAtTime(0.001, startAt);
+                    g.gain.linearRampToValueAtTime(vol, startAt + 0.02);
+                    g.gain.setValueAtTime(vol, startAt + dur - 0.05);
+                    g.gain.linearRampToValueAtTime(0.001, startAt + dur);
+                    g.connect(master);
+                    const o = _audioContext.createOscillator();
+                    o.type = type || 'square';
+                    o.frequency.setValueAtTime(freq, startAt);
+                    o.connect(g);
+                    o.start(startAt);
+                    o.stop(startAt + dur + 0.01);
+                }
+
+                // Alarma larga y fuerte: patrón de sirena repetido
+                // Ciclo 1
+                tone(now,       0.35, 880, 'square', 0.9);
+                tone(now + 0.4, 0.35, 1100, 'square', 0.9);
+                // Ciclo 2
+                tone(now + 0.85, 0.35, 880, 'square', 0.9);
+                tone(now + 1.25, 0.35, 1100, 'square', 0.9);
+                // Ciclo 3 – más agudo
+                tone(now + 1.7,  0.35, 1000, 'sawtooth', 1.0);
+                tone(now + 2.1,  0.45, 1300, 'sawtooth', 1.0);
+
+            } catch(e){ console.error('[Reportes] Error reproduciendo sonido:', e); }
+        }
+
+        function startSoundAlerts(){
+            if(_soundInterval) return;
+            if(!_audioReady){ console.log('[Reportes] Audio no desbloqueado aún, esperando interacción…'); return; }
+            playAlertSound();
+            _soundInterval = setInterval(() => {
+                if(_reportesPendientes.length > 0) playAlertSound();
+                else stopSoundAlerts();
+            }, 60000); // cada 1 minuto
+            console.log('[Reportes] Alertas de sonido iniciadas (cada 1 min)');
+        }
+
+        function stopSoundAlerts(){
+            if(_soundInterval){
+                clearInterval(_soundInterval);
+                _soundInterval = null;
+                console.log('[Reportes] Alertas de sonido detenidas');
             }
         }
 
@@ -5611,6 +5709,27 @@
             await loadUsuariosGP();
             renderReportes();
             overlay.classList.add('open');
+            stopSoundAlerts();
+            await marcarReportesComoVistos();
+        }
+
+        async function marcarReportesComoVistos(){
+            const nombre = getNombreAsesor();
+            if(!nombre) return;
+            const pendientesNoVistos = _reportesPendientes.filter(r => !r.vistoEl);
+            if(!pendientesNoVistos.length) return;
+            console.log('[Reportes] Marcando', pendientesNoVistos.length, 'reportes como vistos');
+            const batch = db.batch();
+            const ahora = firebase.firestore.FieldValue.serverTimestamp();
+            pendientesNoVistos.forEach(r => {
+                batch.update(COL_REPORTES.doc(r.id), { vistoEl: ahora });
+            });
+            try {
+                await batch.commit();
+                console.log('[Reportes] Reportes marcados como vistos');
+            } catch(e){
+                console.error('[Reportes] Error marcando como vistos:', e);
+            }
         }
 
         function closeReportesModal(){
