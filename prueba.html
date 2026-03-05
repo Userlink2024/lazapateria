@@ -3311,7 +3311,15 @@
                 pedidosListenerUnsubscribe();
             }
 
-            let query = db.collection('registros').orderBy('fecha_hora', 'asc');
+            // Filtro server-side: solo traer registros de hoy para optimizar rendimiento
+            const _now = new Date();
+            const _startOfDay = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate(), 0, 0, 0, 0);
+            const _endOfDay = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate(), 23, 59, 59, 999);
+
+            let query = db.collection('registros')
+                .where('fecha_hora', '>=', _startOfDay)
+                .where('fecha_hora', '<=', _endOfDay)
+                .orderBy('fecha_hora', 'asc');
             // Updated logic: if user is operator OR bodeguero, filter by their own ID
             const isUserFilteredRole = datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero';
             const currentUserId = datosUsuario.usuario;
