@@ -1992,7 +1992,8 @@
                 observaciones: document.querySelector('textarea[name="observaciones"]').value || '',
                 saldo_a_favor: document.getElementById('saldo_a_favor').value || '0',
                 bodegueros: Array.from(document.querySelectorAll('#bodeguero_checkbox_container input[type="checkbox"]:checked')).map(c => c.value),
-                enviar_empaque: document.getElementById('enviar_inmediato_empaque').checked
+                enviar_empaque: document.getElementById('enviar_inmediato_empaque').checked,
+                flete_porcentaje: document.getElementById('flete_porcentaje_input')?.value || ''
             };
         }
 
@@ -2017,6 +2018,11 @@
                 cb.checked = bods.includes(cb.value);
             });
             document.getElementById('enviar_inmediato_empaque').checked = !!snap.enviar_empaque;
+            // Restore flete porcentaje
+            const fleteInp = document.getElementById('flete_porcentaje_input');
+            if (fleteInp) fleteInp.value = snap.flete_porcentaje || '';
+            toggleFletePorcentaje();
+            calcularFletePreview();
         }
 
         // --- Clear the form to blank ---
@@ -2035,6 +2041,9 @@
             document.getElementById('saldo_a_favor').value = '0';
             document.querySelectorAll('#bodeguero_checkbox_container input[type="checkbox"]').forEach(cb => cb.checked = false);
             document.getElementById('enviar_inmediato_empaque').checked = false;
+            const fleteInpClear = document.getElementById('flete_porcentaje_input');
+            if (fleteInpClear) fleteInpClear.value = '';
+            toggleFletePorcentaje();
         }
 
         // --- Draft label ---
@@ -2608,9 +2617,7 @@
         }
         function calcularFletePreview() {
             const pct = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
-            const totalEl = document.getElementById('valor_total');
-            const raw = totalEl ? totalEl.value.replace(/[^0-9]/g, '') : '0';
-            const total = parseInt(raw) || 0;
+            const total = Math.round(valorTotal || 0);
             const flete = Math.round(total * pct / 100);
             const lbl = document.getElementById('flete_calculado_label');
             if (lbl) lbl.textContent = pct > 0 ? `Flete calculado: $${new Intl.NumberFormat('es-CO').format(flete)}` : '';
