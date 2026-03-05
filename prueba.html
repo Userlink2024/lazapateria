@@ -1505,7 +1505,7 @@
                         <label for="flete_valor_input" style="font-size:0.85em;color:#555;">Valor flete (editable):</label>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <span style="font-weight:600;color:#333;">$</span>
-                            <input type="number" id="flete_valor_input" min="0" step="100" placeholder="0" style="max-width:160px;font-weight:600;color:#007bff;">
+                            <input type="text" id="flete_valor_input" placeholder="0" style="max-width:160px;font-weight:600;color:#007bff;">
                             <small style="color:#888;">(puedes redondear)</small>
                         </div>
                     </div>
@@ -1640,7 +1640,7 @@
                         <label for="modificar_flete_valor_input" style="font-size:0.85em;color:#555;">Valor flete (editable):</label>
                         <div style="display:flex;align-items:center;gap:6px;">
                             <span style="font-weight:600;color:#333;">$</span>
-                            <input type="number" id="modificar_flete_valor_input" min="0" step="100" placeholder="0" style="max-width:160px;font-weight:600;color:#007bff;">
+                            <input type="text" id="modificar_flete_valor_input" placeholder="0" style="max-width:160px;font-weight:600;color:#007bff;">
                             <small style="color:#888;">(puedes redondear)</small>
                         </div>
                     </div>
@@ -2040,9 +2040,10 @@
             calcularFletePreview();
             const fleteValInp = document.getElementById('flete_valor_input');
             if (fleteValInp && snap.flete_valor) {
-                fleteValInp.value = snap.flete_valor;
+                const num = parseInt(String(snap.flete_valor).replace(/[^0-9]/g, '')) || 0;
+                fleteValInp.value = num > 0 ? new Intl.NumberFormat('es-CO').format(num) : '';
                 const valCont = document.getElementById('flete_valor_container');
-                if (valCont) valCont.style.display = '';
+                if (valCont && num > 0) valCont.style.display = '';
             }
         }
 
@@ -2650,7 +2651,7 @@
             const valInp = document.getElementById('flete_valor_input');
             if (pct > 0) {
                 if (valCont) valCont.style.display = '';
-                if (valInp) valInp.value = flete;
+                if (valInp) valInp.value = new Intl.NumberFormat('es-CO').format(flete);
             } else {
                 if (valCont) valCont.style.display = 'none';
                 if (valInp) valInp.value = '';
@@ -2683,7 +2684,7 @@
             const valInp = document.getElementById('modificar_flete_valor_input');
             if (pct > 0) {
                 if (valCont) valCont.style.display = '';
-                if (valInp) valInp.value = flete;
+                if (valInp) valInp.value = new Intl.NumberFormat('es-CO').format(flete);
             } else {
                 if (valCont) valCont.style.display = 'none';
                 if (valInp) valInp.value = '';
@@ -2698,6 +2699,16 @@
             if (modSel) modSel.addEventListener('change', toggleFletePorcentaje);
             if (traSel) traSel.addEventListener('change', toggleFletePorcentaje);
             if (fleteInp) fleteInp.addEventListener('input', calcularFletePreview);
+            // Format flete valor inputs on user edit
+            const fleteValInp = document.getElementById('flete_valor_input');
+            if (fleteValInp) {
+                fleteValInp.addEventListener('blur', (e) => {
+                    const raw = e.target.value.replace(/[^0-9]/g, '');
+                    const num = parseInt(raw) || 0;
+                    if (num > 0) e.target.value = new Intl.NumberFormat('es-CO').format(num);
+                    else e.target.value = '';
+                });
+            }
             // Modify form listeners
             const modSelM = document.getElementById('modificar_modalidad_envio_select');
             const traSelM = document.getElementById('modificar_transportadora_select');
@@ -2705,12 +2716,24 @@
             if (modSelM) modSelM.addEventListener('change', toggleFletePorcentajeModificar);
             if (traSelM) traSelM.addEventListener('change', toggleFletePorcentajeModificar);
             if (fleteInpM) fleteInpM.addEventListener('input', calcularFletePreviewModificar);
+            // Format modificar flete valor input on user edit
+            const fleteValInpM = document.getElementById('modificar_flete_valor_input');
+            if (fleteValInpM) {
+                fleteValInpM.addEventListener('blur', (e) => {
+                    const raw = e.target.value.replace(/[^0-9]/g, '');
+                    const num = parseInt(raw) || 0;
+                    if (num > 0) e.target.value = new Intl.NumberFormat('es-CO').format(num);
+                    else e.target.value = '';
+                });
+            }
         });
 
         function getFleteFromPorcentaje(valorTotal) {
             const container = document.getElementById('flete_porcentaje_container');
             if (!container || container.style.display === 'none') return 0;
-            const manualVal = parseInt(document.getElementById('flete_valor_input')?.value) || 0;
+            const fleteInp = document.getElementById('flete_valor_input');
+            const fleteStr = fleteInp?.value || '';
+            const manualVal = parseInt(fleteStr.replace(/[^0-9]/g, '')) || 0;
             if (manualVal > 0) return manualVal;
             const pct = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
             return Math.round((valorTotal || 0) * pct / 100);
@@ -2835,7 +2858,8 @@
                 try {
                     await db.collection('registros').add(datos);
                     datos._fletePorcentaje = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
-                    datos._fleteManual = parseInt(document.getElementById('flete_valor_input')?.value) || 0;
+                    const fleteValStr = document.getElementById('flete_valor_input')?.value || '';
+                    datos._fleteManual = parseInt(fleteValStr.replace(/[^0-9]/g, '')) || 0;
                     await ensureAutoGuiaForPagoEnCasa(datos);
                     console.log("Datos guardados en Firebase:", datos);
 
@@ -3976,7 +4000,7 @@
                     valor_total: datosActualizados.valor_total,
                     modalidad_envio: datosActualizados.modalidad_envio,
                     _fletePorcentaje: parseFloat(document.getElementById('modificar_flete_porcentaje_input')?.value) || 0,
-                    _fleteManual: parseInt(document.getElementById('modificar_flete_valor_input')?.value) || 0
+                    _fleteManual: parseInt((document.getElementById('modificar_flete_valor_input')?.value || '').replace(/[^0-9]/g, '')) || 0
                 });
                 showAlert("Pedido modificado exitosamente."); // Reemplazado alert
                 cerrarModal('modal_modificar');
