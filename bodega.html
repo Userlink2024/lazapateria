@@ -413,6 +413,8 @@
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 
   <!-- ---------- JS ORIGINAL (NO MODIFICADO) ---------- -->
   <script>
@@ -864,6 +866,210 @@
       cargarPanelBodega(); 
     }
 
+    // ========== GRÁFICA RENDIMIENTO MENSUAL ==========
+    let graficaChart = null;
+    let graficaData = {}; // { nombre: { pares, despachos } }
+    let graficaMetrica = 'pares'; // 'pares' o 'despachos'
+
+    const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    function poblarSelectorMeses() {
+      const sel = document.getElementById('graficaMesSelect');
+      sel.innerHTML = '';
+      const now = new Date();
+      // Mostrar últimos 12 meses
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const val = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        const label = MESES_NOMBRES[d.getMonth()] + ' ' + d.getFullYear();
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      }
+    }
+
+    function abrirGrafica() {
+      poblarSelectorMeses();
+      document.getElementById('graficaModal').style.display = 'flex';
+      cargarDatosGrafica();
+    }
+
+    function cerrarGrafica() {
+      document.getElementById('graficaModal').style.display = 'none';
+    }
+
+    function setGraficaMetrica(m) {
+      graficaMetrica = m;
+      renderGrafica();
+    }
+
+    async function cargarDatosGrafica() {
+      const sel = document.getElementById('graficaMesSelect');
+      const loading = document.getElementById('graficaLoading');
+      const resumen = document.getElementById('graficaResumen');
+      if (!sel.value) return;
+
+      loading.style.display = 'inline';
+      resumen.innerHTML = '';
+
+      const [year, month] = sel.value.split('-').map(Number);
+      const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      const endDate = new Date(year, month, 0, 23, 59, 59, 999); // último día del mes
+
+      try {
+        const snapshot = await db.collectionGroup('registros')
+          .where('fecha_hora', '>=', startDate)
+          .where('fecha_hora', '<=', endDate)
+          .orderBy('fecha_hora', 'asc')
+          .get();
+
+        graficaData = {};
+        let totalParesMes = 0;
+        let totalDespachosMes = 0;
+
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          if (!Array.isArray(data.bodegueros_encargados)) return;
+
+          const paresField = Object.keys(data).find(k => k.toLowerCase().includes('pares'));
+          const pares = Number(data[paresField] || 0);
+
+          data.bodegueros_encargados.forEach(nombre => {
+            if (typeof nombre !== 'string' || !nombre.trim()) return;
+            const n = nombre.trim();
+            if (!graficaData[n]) graficaData[n] = { pares: 0, despachos: 0 };
+            graficaData[n].despachos += 1;
+            graficaData[n].pares += pares;
+          });
+
+          totalParesMes += pares;
+          totalDespachosMes++;
+        });
+
+        // Resumen general del mes
+        const numBodegueros = Object.keys(graficaData).length;
+        resumen.innerHTML = `
+          <strong>Resumen del mes:</strong> ${snapshot.size} registros · ${totalParesMes.toLocaleString('es-CO')} pares totales · ${numBodegueros} bodeguero(s) activo(s)
+        `;
+
+        renderGrafica();
+      } catch (err) {
+        console.error('Error cargando datos para gráfica:', err);
+        resumen.innerHTML = '<span style="color:#e53935;">Error al cargar datos. Revisa la consola.</span>';
+      } finally {
+        loading.style.display = 'none';
+      }
+    }
+
+    function renderGrafica() {
+      const ctx = document.getElementById('graficaCanvas');
+      if (graficaChart) {
+        graficaChart.destroy();
+        graficaChart = null;
+      }
+
+      const nombres = Object.keys(graficaData);
+      if (!nombres.length) {
+        // Sin datos
+        graficaChart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels: ['Sin datos'], datasets: [{ label: 'Sin datos', data: [0], backgroundColor: '#ccc' }] },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+        return;
+      }
+
+      // Ordenar de mayor a menor según la métrica seleccionada
+      nombres.sort((a, b) => graficaData[b][graficaMetrica] - graficaData[a][graficaMetrica]);
+
+      const paresArr = nombres.map(n => graficaData[n].pares);
+      const despachosArr = nombres.map(n => graficaData[n].despachos);
+
+      // Colores degradados por posición (del más productivo al menos)
+      const coloresPares = nombres.map((_, i) => {
+        const ratio = nombres.length > 1 ? i / (nombres.length - 1) : 0;
+        // Verde intenso → amarillo → rojo
+        const r = Math.round(46 + ratio * 183);  // 46 → 229
+        const g = Math.round(125 - ratio * 97);   // 125 → 28
+        const b = Math.round(50 - ratio * 22);    // 50 → 28
+        return `rgba(${r},${g},${b},0.85)`;
+      });
+      const coloresDespachos = nombres.map((_, i) => {
+        const ratio = nombres.length > 1 ? i / (nombres.length - 1) : 0;
+        const r = Math.round(21 + ratio * 160);
+        const g = Math.round(101 + ratio * 30);
+        const b = Math.round(192 - ratio * 130);
+        return `rgba(${r},${g},${b},0.75)`;
+      });
+
+      // Calcular altura dinámica según cantidad de bodegueros
+      const alturaBase = Math.max(350, nombres.length * 55);
+      ctx.parentElement.style.minHeight = alturaBase + 'px';
+
+      graficaChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: nombres,
+          datasets: [
+            {
+              label: 'Pares',
+              data: paresArr,
+              backgroundColor: coloresPares,
+              borderColor: coloresPares.map(c => c.replace('0.85', '1').replace('0.75', '1')),
+              borderWidth: 1,
+              borderRadius: 6
+            },
+            {
+              label: 'Despachos',
+              data: despachosArr,
+              backgroundColor: coloresDespachos,
+              borderColor: coloresDespachos.map(c => c.replace('0.75', '1')),
+              borderWidth: 1,
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { font: { size: 13, family: 'Inter' } } },
+            title: {
+              display: true,
+              text: graficaMetrica === 'pares' ? 'Ordenado por Pares (mayor a menor)' : 'Ordenado por Despachos (mayor a menor)',
+              font: { size: 14, family: 'Inter', weight: '600' },
+              color: '#333'
+            },
+            tooltip: {
+              callbacks: {
+                afterBody: function(tooltipItems) {
+                  const nombre = tooltipItems[0].label;
+                  const d = graficaData[nombre];
+                  if (!d) return '';
+                  const promedio = d.despachos > 0 ? (d.pares / d.despachos).toFixed(1) : '0';
+                  return 'Promedio pares/despacho: ' + promedio;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: 'rgba(0,0,0,0.06)' },
+              ticks: { font: { family: 'Inter' } }
+            },
+            y: {
+              ticks: { font: { size: 12, family: 'Inter', weight: '600' }, color: '#333' },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+    }
+    // ========== FIN GRÁFICA ==========
+
     window.onload = cargarPanelBodega;
   </script>
   <!-- ---------- FIN JS ORIGINAL ---------- -->
@@ -874,6 +1080,7 @@
     <button class="btn" onclick="cambiarModo(false)">📦 Despachos Activos</button>
     <button class="btn" onclick="cambiarModo(true)">🕒 Historial</button>
     <button class="btn" id="btnEnableSound" type="button">🔊 Activar sonido</button>
+    <button class="btn" onclick="abrirGrafica()" style="background:linear-gradient(135deg,#1565c0,#1e88e5);">📊 Gráfica</button>
   </div>
 
   <div id="panel" class="grid"></div>
@@ -885,6 +1092,30 @@
         <span class="close" onclick="cerrarModal()">&times;</span>
       </div>
       <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- Modal Gráfica Rendimiento -->
+  <div id="graficaModal" class="modal" onclick="if(event.target===this)cerrarGrafica()">
+    <div class="modal-content" style="max-width:960px;">
+      <div class="modal-header">
+        <h2>📊 Rendimiento Mensual de Bodegueros</h2>
+        <span class="close" onclick="cerrarGrafica()">&times;</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <label style="font-weight:600;color:#333;">Mes:</label>
+        <select id="graficaMesSelect" onchange="cargarDatosGrafica()" style="padding:8px 12px;border-radius:8px;border:1px solid #d6d6d6;font-size:1em;min-width:180px;">
+        </select>
+        <span id="graficaLoading" style="color:#888;font-size:0.9em;display:none;">Cargando...</span>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <button class="btn" style="padding:6px 14px;font-size:0.85em;" onclick="setGraficaMetrica('pares')">Ordenar por Pares</button>
+        <button class="btn" style="padding:6px 14px;font-size:0.85em;" onclick="setGraficaMetrica('despachos')">Ordenar por Despachos</button>
+      </div>
+      <div style="position:relative;width:100%;min-height:350px;">
+        <canvas id="graficaCanvas"></canvas>
+      </div>
+      <div id="graficaResumen" style="margin-top:14px;font-size:0.95em;color:#444;"></div>
     </div>
   </div>
 
