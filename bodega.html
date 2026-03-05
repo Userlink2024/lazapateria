@@ -873,26 +873,57 @@
 
     const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-    function poblarSelectorMeses() {
+    async function poblarSelectorMeses() {
       const sel = document.getElementById('graficaMesSelect');
-      sel.innerHTML = '';
-      const now = new Date();
-      // Mostrar últimos 12 meses
-      for (let i = 0; i < 12; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const val = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-        const label = MESES_NOMBRES[d.getMonth()] + ' ' + d.getFullYear();
-        const opt = document.createElement('option');
-        opt.value = val;
-        opt.textContent = label;
-        sel.appendChild(opt);
+      const loading = document.getElementById('graficaLoading');
+      sel.innerHTML = '<option value="">Cargando meses...</option>';
+      loading.style.display = 'inline';
+
+      try {
+        const snapshot = await db.collectionGroup('registros')
+          .orderBy('fecha_hora', 'asc')
+          .get();
+
+        const mesesSet = new Set();
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const d = getRecordDate(data);
+          if (!d) return;
+          const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+          mesesSet.add(key);
+        });
+
+        // Convertir a array y ordenar de más reciente a más antiguo
+        const meses = Array.from(mesesSet).sort((a, b) => b.localeCompare(a));
+
+        sel.innerHTML = '';
+        if (meses.length === 0) {
+          sel.innerHTML = '<option value="">Sin datos disponibles</option>';
+          return false;
+        }
+
+        meses.forEach(m => {
+          const [y, mon] = m.split('-').map(Number);
+          const label = MESES_NOMBRES[mon - 1] + ' ' + y;
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = label;
+          sel.appendChild(opt);
+        });
+        return true;
+      } catch (err) {
+        console.error('Error cargando meses disponibles:', err);
+        sel.innerHTML = '<option value="">Error al cargar meses</option>';
+        return false;
+      } finally {
+        loading.style.display = 'none';
       }
     }
 
-    function abrirGrafica() {
-      poblarSelectorMeses();
+    async function abrirGrafica() {
       document.getElementById('graficaModal').style.display = 'flex';
-      cargarDatosGrafica();
+      const ok = await poblarSelectorMeses();
+      if (ok) cargarDatosGrafica();
     }
 
     function cerrarGrafica() {
