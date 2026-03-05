@@ -1498,6 +1498,11 @@
                         <option value="ENVIO_NORMAL">Envío normal</option>
                     </select>
                 </div>
+                <div class="form-field" id="flete_porcentaje_container" style="display:none;">
+                    <label for="flete_porcentaje_input">% Flete (Pago en casa - Envía):</label>
+                    <input type="number" id="flete_porcentaje_input" min="0" max="100" step="0.1" placeholder="Ej: 5" style="max-width:150px;">
+                    <small id="flete_calculado_label" style="color:#007bff;font-weight:600;margin-top:4px;display:block;"></small>
+                </div>
                 <div class="form-field">
                     <label>Productos:</label>
                     <button type="button" onclick="mostrarModal('modal_producto')">Agregar Producto</button>
@@ -1620,6 +1625,11 @@
                         <option value="PAGO_EN_CASA">Pago en casa</option>
                         <option value="ENVIO_NORMAL">Envío normal</option>
                     </select>
+                </div>
+                <div class="form-field" id="modificar_flete_porcentaje_container" style="display:none;">
+                    <label for="modificar_flete_porcentaje_input">% Flete (Pago en casa - Envía):</label>
+                    <input type="number" id="modificar_flete_porcentaje_input" min="0" max="100" step="0.1" placeholder="Ej: 5" style="max-width:150px;">
+                    <small id="modificar_flete_calculado_label" style="color:#007bff;font-weight:600;margin-top:4px;display:block;"></small>
                 </div>
                 <div class="form-field">
                     <label>Productos:</label>
@@ -1982,7 +1992,8 @@
                 observaciones: document.querySelector('textarea[name="observaciones"]').value || '',
                 saldo_a_favor: document.getElementById('saldo_a_favor').value || '0',
                 bodegueros: Array.from(document.querySelectorAll('#bodeguero_checkbox_container input[type="checkbox"]:checked')).map(c => c.value),
-                enviar_empaque: document.getElementById('enviar_inmediato_empaque').checked
+                enviar_empaque: document.getElementById('enviar_inmediato_empaque').checked,
+                flete_porcentaje: document.getElementById('flete_porcentaje_input')?.value || ''
             };
         }
 
@@ -2007,6 +2018,11 @@
                 cb.checked = bods.includes(cb.value);
             });
             document.getElementById('enviar_inmediato_empaque').checked = !!snap.enviar_empaque;
+            // Restore flete porcentaje
+            const fleteInp = document.getElementById('flete_porcentaje_input');
+            if (fleteInp) fleteInp.value = snap.flete_porcentaje || '';
+            toggleFletePorcentaje();
+            calcularFletePreview();
         }
 
         // --- Clear the form to blank ---
@@ -2025,6 +2041,9 @@
             document.getElementById('saldo_a_favor').value = '0';
             document.querySelectorAll('#bodeguero_checkbox_container input[type="checkbox"]').forEach(cb => cb.checked = false);
             document.getElementById('enviar_inmediato_empaque').checked = false;
+            const fleteInpClear = document.getElementById('flete_porcentaje_input');
+            if (fleteInpClear) fleteInpClear.value = '';
+            toggleFletePorcentaje();
         }
 
         // --- Draft label ---
@@ -2204,14 +2223,16 @@
             } else {
                 const newId = generateDraftId();
                 activeDraftId = newId;
-                allDrafts.push({ docId: newId, productos: [], abonos: [], valorTotal: 0, cliente: '', usuario: draftUserId(), savedAt: new Date().toISOString() });
+                allDrafts.push({ docId: newId, cliente: '', transportadora: '', modalidad_envio: '', productos: [], abonos: [], valorTotal: 0 });
+                clearFormForNewDraft(); // Ensure form is clean/neutral
             }
             renderDraftTabs();
-            // Wire the "+" button
-            document.getElementById('btnNewDraft').addEventListener('click', createNewDraft);
-            // Wire auto-save on form field changes
-            _wireAutoSaveListeners();
         }
+
+        // Wire the "+" button
+        document.getElementById('btnNewDraft').addEventListener('click', createNewDraft);
+        // Wire auto-save on form field changes
+        _wireAutoSaveListeners();
 
         function _wireAutoSaveListeners() {
             const form = document.querySelector('#formulario form');
@@ -2326,6 +2347,24 @@
         function playConfirmationSound() {
             // Un "click" rápido y agudo
             playTone(880, 0.05, 0.7, 'square'); // Frecuencia alta, corta duración
+        }
+
+        function playDespachadoVoz() {
+            if ('speechSynthesis' in window) {
+                const utter = new SpeechSynthesisUtterance('DESPACHADO');
+                utter.lang = 'es-419'; // Español Latinoamérica
+                utter.rate = 1;
+                utter.pitch = 1;
+                utter.volume = 1;
+                // Fallback to es-MX or es-ES if es-419 voice not available
+                const voices = speechSynthesis.getVoices();
+                const latinVoice = voices.find(v => v.lang === 'es-419') || voices.find(v => v.lang === 'es-MX') || voices.find(v => v.lang.startsWith('es'));
+                if (latinVoice) utter.voice = latinVoice;
+                speechSynthesis.cancel();
+                speechSynthesis.speak(utter);
+            } else {
+                playConfirmationSound(); // Fallback
+            }
         }
 
         function playAlarmSound() {
@@ -2522,6 +2561,7 @@
         function actualizarValorTotal() {
             document.getElementById('valor_total').value = fmtCOP(Math.round(valorTotal));
             document.getElementById('valor_total_pesos').innerText = 'Valor Total: $' + fmtCOP(Math.round(valorTotal));
+            calcularFletePreview();
         }
 
         function formatModalidadEnvio(v) {
@@ -2559,6 +2599,78 @@
             return String(v || '').trim().toUpperCase().replace(/\s+/g, ' ');
         }
 
+        // === Flete Porcentaje: show/hide + calculate ===
+        function toggleFletePorcentaje() {
+            const modalidad = (document.getElementById('modalidad_envio_select')?.value || '').toUpperCase();
+            const transportadora = normalizeTransportadoraName(document.getElementById('transportadora_select')?.value || '');
+            const container = document.getElementById('flete_porcentaje_container');
+            if (!container) return;
+            if (modalidad === 'PAGO_EN_CASA' && transportadora.includes('ENVIA')) {
+                container.style.display = '';
+            } else {
+                container.style.display = 'none';
+                const inp = document.getElementById('flete_porcentaje_input');
+                if (inp) inp.value = '';
+                const lbl = document.getElementById('flete_calculado_label');
+                if (lbl) lbl.textContent = '';
+            }
+        }
+        function calcularFletePreview() {
+            const pct = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
+            const total = Math.round(valorTotal || 0);
+            const flete = Math.round(total * pct / 100);
+            const lbl = document.getElementById('flete_calculado_label');
+            if (lbl) lbl.textContent = pct > 0 ? `Flete calculado: $${new Intl.NumberFormat('es-CO').format(flete)}` : '';
+        }
+        function toggleFletePorcentajeModificar() {
+            const modalidad = (document.getElementById('modificar_modalidad_envio_select')?.value || '').toUpperCase();
+            const transportadora = normalizeTransportadoraName(document.getElementById('modificar_transportadora_select')?.value || '');
+            const container = document.getElementById('modificar_flete_porcentaje_container');
+            if (!container) return;
+            if (modalidad === 'PAGO_EN_CASA' && transportadora.includes('ENVIA')) {
+                container.style.display = '';
+            } else {
+                container.style.display = 'none';
+                const inp = document.getElementById('modificar_flete_porcentaje_input');
+                if (inp) inp.value = '';
+                const lbl = document.getElementById('modificar_flete_calculado_label');
+                if (lbl) lbl.textContent = '';
+            }
+        }
+        function calcularFletePreviewModificar() {
+            const pct = parseFloat(document.getElementById('modificar_flete_porcentaje_input')?.value) || 0;
+            const totalEl = document.getElementById('modificar_valor_total');
+            const raw = totalEl ? totalEl.value.replace(/[^0-9]/g, '') : '0';
+            const total = parseInt(raw) || 0;
+            const flete = Math.round(total * pct / 100);
+            const lbl = document.getElementById('modificar_flete_calculado_label');
+            if (lbl) lbl.textContent = pct > 0 ? `Flete calculado: $${new Intl.NumberFormat('es-CO').format(flete)}` : '';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Create form listeners
+            const modSel = document.getElementById('modalidad_envio_select');
+            const traSel = document.getElementById('transportadora_select');
+            const fleteInp = document.getElementById('flete_porcentaje_input');
+            if (modSel) modSel.addEventListener('change', toggleFletePorcentaje);
+            if (traSel) traSel.addEventListener('change', toggleFletePorcentaje);
+            if (fleteInp) fleteInp.addEventListener('input', calcularFletePreview);
+            // Modify form listeners
+            const modSelM = document.getElementById('modificar_modalidad_envio_select');
+            const traSelM = document.getElementById('modificar_transportadora_select');
+            const fleteInpM = document.getElementById('modificar_flete_porcentaje_input');
+            if (modSelM) modSelM.addEventListener('change', toggleFletePorcentajeModificar);
+            if (traSelM) traSelM.addEventListener('change', toggleFletePorcentajeModificar);
+            if (fleteInpM) fleteInpM.addEventListener('input', calcularFletePreviewModificar);
+        });
+
+        function getFleteFromPorcentaje(valorTotal) {
+            const container = document.getElementById('flete_porcentaje_container');
+            if (!container || container.style.display === 'none') return 0;
+            const pct = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
+            return Math.round((valorTotal || 0) * pct / 100);
+        }
+
         async function ensureAutoGuiaForPagoEnCasa(registro) {
             try {
                 const modalidad = String(registro && registro.modalidad_envio || '').trim().toUpperCase();
@@ -2577,14 +2689,16 @@
                     const ref = db.collection('guias_envia').doc(codigo);
                     const snap = await ref.get();
                     if (snap.exists) return;
+                    const fleteCalc = registro._fletePorcentaje ? Math.round(valorTotal * registro._fletePorcentaje / 100) : 0;
+                    const tieneFlete = fleteCalc > 0;
                     await ref.set({
                         usuario: asesor,
                         fecha: fecha,
                         nombreCliente: cliente,
-                        valorTotal: Number.isFinite(valorTotal) ? valorTotal : 0,
+                        valorTotal: Number.isFinite(valorTotal) ? (tieneFlete ? valorTotal + fleteCalc : valorTotal) : 0,
                         valorMercancia: Number.isFinite(valorTotal) ? valorTotal : 0,
-                        valorFlete: 0,
-                        valorFletePendiente: true,
+                        valorFlete: fleteCalc,
+                        valorFletePendiente: !tieneFlete,
                         numeroGuia: '',
                         pendiente: true,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
@@ -2675,6 +2789,7 @@
                 let pedidoGuardadoExitoso = false;
                 try {
                     await db.collection('registros').add(datos);
+                    datos._fletePorcentaje = parseFloat(document.getElementById('flete_porcentaje_input')?.value) || 0;
                     await ensureAutoGuiaForPagoEnCasa(datos);
                     console.log("Datos guardados en Firebase:", datos);
 
@@ -3381,7 +3496,7 @@
                             despachadoPor: '' // Clear the field when undispatched
                         };
                         await db.collection('registros').doc(id).update(updateData);
-                        playConfirmationSound(); // Play sound on checkbox click
+                        playDespachadoVoz(); // Dice 'DESPACHADO' en español latino
                         console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado} por ${datosUsuario.nombreCompleto}`);
                         // The onSnapshot listener will handle the UI update automatically
                     } catch (error) {
@@ -3414,7 +3529,7 @@
                         }
                     }
                     await db.collection('registros').doc(id).update(updateData);
-                    playConfirmationSound(); // Play sound on checkbox click
+                    playDespachadoVoz(); // Dice 'DESPACHADO' en español latino
                     console.log(`Pedido ${id} actualizado a despachado: ${nuevoEstadoDespachado} por ${datosUsuario.nombreCompleto}`);
                 } catch (error) {
                     console.error("Error al actualizar el estado de despachado:", error);
@@ -3805,7 +3920,8 @@
                     asesor: (docSnap && docSnap.data && docSnap.data().asesor) ? docSnap.data().asesor : (datosUsuario ? datosUsuario.nombreCompleto : ''),
                     transportadora: datosActualizados.transportadora,
                     valor_total: datosActualizados.valor_total,
-                    modalidad_envio: datosActualizados.modalidad_envio
+                    modalidad_envio: datosActualizados.modalidad_envio,
+                    _fletePorcentaje: parseFloat(document.getElementById('modificar_flete_porcentaje_input')?.value) || 0
                 });
                 showAlert("Pedido modificado exitosamente."); // Reemplazado alert
                 cerrarModal('modal_modificar');
@@ -3849,6 +3965,7 @@
             const valorTotalCalculado = preciosProductos.reduce((total, precio) => total + precio, 0);
             // console.log("Calculated total:", valorTotalCalculado);
             document.getElementById('modificar_valor_total').value = fmtCOP(Math.round(valorTotalCalculado));
+            calcularFletePreviewModificar();
         }
 
         async function eliminarPedido(id) {
