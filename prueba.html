@@ -5519,6 +5519,8 @@
         let _reportesPendientes = [];
         let _reportesFirmados = [];
         let _cachedUsuariosGP = [];
+        let _soundInterval = null;
+        let _audioContext = null;
 
         async function loadUsuariosGP(){
             if(_cachedUsuariosGP.length) return _cachedUsuariosGP;
@@ -5602,8 +5604,70 @@
             if(n > 0){
                 bell.classList.add('visible');
                 countEl.textContent = n;
+                startSoundAlerts();
             } else {
                 bell.classList.remove('visible');
+                stopSoundAlerts();
+            }
+        }
+
+        function initAudioContext(){
+            if(_audioContext) return;
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                _audioContext = AC ? new AC() : null;
+            } catch(e){ _audioContext = null; }
+        }
+
+        function playAlertSound(){
+            initAudioContext();
+            if(!_audioContext) return;
+            try {
+                if(_audioContext.state === 'suspended') _audioContext.resume();
+                const now = _audioContext.currentTime;
+                const master = _audioContext.createGain();
+                master.gain.setValueAtTime(0.0001, now);
+                master.gain.exponentialRampToValueAtTime(0.8, now + 0.05);
+                master.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+                master.connect(_audioContext.destination);
+
+                function beep(startAt, dur, f1, f2){
+                    const g = _audioContext.createGain();
+                    g.gain.setValueAtTime(0.0001, startAt);
+                    g.gain.exponentialRampToValueAtTime(1.0, startAt + 0.03);
+                    g.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+                    g.connect(master);
+                    const o = _audioContext.createOscillator();
+                    o.type = 'square';
+                    o.frequency.setValueAtTime(f1, startAt);
+                    if(f2) o.frequency.exponentialRampToValueAtTime(f2, startAt + dur);
+                    o.connect(g);
+                    o.start(startAt);
+                    o.stop(startAt + dur + 0.01);
+                }
+
+                // Alerta fuerte: 3 beeps rápidos
+                beep(now, 0.15, 1200, 1000);
+                beep(now + 0.2, 0.15, 1200, 1000);
+                beep(now + 0.4, 0.25, 1400, 1100);
+            } catch(e){ console.error('[Reportes] Error reproduciendo sonido:', e); }
+        }
+
+        function startSoundAlerts(){
+            if(_soundInterval) return;
+            playAlertSound();
+            _soundInterval = setInterval(() => {
+                if(_reportesPendientes.length > 0) playAlertSound();
+                else stopSoundAlerts();
+            }, 60000); // 1 minuto
+            console.log('[Reportes] Alertas de sonido iniciadas (cada 1 min)');
+        }
+
+        function stopSoundAlerts(){
+            if(_soundInterval){
+                clearInterval(_soundInterval);
+                _soundInterval = null;
+                console.log('[Reportes] Alertas de sonido detenidas');
             }
         }
 
@@ -5611,6 +5675,27 @@
             await loadUsuariosGP();
             renderReportes();
             overlay.classList.add('open');
+            stopSoundAlerts();
+            await marcarReportesComoVistos();
+        }
+
+        async function marcarReportesComoVistos(){
+            const nombre = getNombreAsesor();
+            if(!nombre) return;
+            const pendientesNoVistos = _reportesPendientes.filter(r => !r.vistoEl);
+            if(!pendientesNoVistos.length) return;
+            console.log('[Reportes] Marcando', pendientesNoVistos.length, 'reportes como vistos');
+            const batch = db.batch();
+            const ahora = firebase.firestore.FieldValue.serverTimestamp();
+            pendientesNoVistos.forEach(r => {
+                batch.update(COL_REPORTES.doc(r.id), { vistoEl: ahora });
+            });
+            try {
+                await batch.commit();
+                console.log('[Reportes] Reportes marcados como vistos');
+            } catch(e){
+                console.error('[Reportes] Error marcando como vistos:', e);
+            }
         }
 
         function closeReportesModal(){
