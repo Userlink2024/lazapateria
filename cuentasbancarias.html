@@ -1534,27 +1534,31 @@ async function checkReferenciaExists(referencia) {
   if (!referencia || referencia.trim() === '') return { exists: false };
   
   try {
-    // Buscar en todas las cuentas
+    // Buscar en todas las cuentas (consultas en paralelo para mayor velocidad)
     const cuentasSnapshot = await db.collection('cuentas').get();
     
-    for (const cuentaDoc of cuentasSnapshot.docs) {
-      const consignacionesSnapshot = await db.collection('cuentas')
-        .doc(cuentaDoc.id)
-        .collection('consignaciones')
-        .where('referencia', '==', referencia.trim())
-        .get();
-      
-      if (!consignacionesSnapshot.empty) {
-        const cuentaData = cuentaDoc.data();
-        return { 
-          exists: true, 
-          cuentaId: cuentaDoc.id,
-          cuentaNombre: cuentaData.name || 'Cuenta sin nombre'
-        };
-      }
-    }
+    const results = await Promise.all(
+      cuentasSnapshot.docs.map(async (cuentaDoc) => {
+        const consignacionesSnapshot = await db.collection('cuentas')
+          .doc(cuentaDoc.id)
+          .collection('consignaciones')
+          .where('referencia', '==', referencia.trim())
+          .limit(1)
+          .get();
+        if (!consignacionesSnapshot.empty) {
+          const cuentaData = cuentaDoc.data();
+          return { 
+            exists: true, 
+            cuentaId: cuentaDoc.id,
+            cuentaNombre: cuentaData.name || 'Cuenta sin nombre'
+          };
+        }
+        return null;
+      })
+    );
     
-    return { exists: false };
+    const found = results.find(r => r !== null);
+    return found || { exists: false };
   } catch (error) {
     console.error('Error verificando referencia:', error);
     throw new Error('Error al verificar la referencia: ' + error.message);
