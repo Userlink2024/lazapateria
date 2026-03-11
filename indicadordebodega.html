@@ -1024,81 +1024,103 @@
 
   <script>
   // ══════════════════════════════════════
-  // SCHEDULE DATA & SETTINGS LOGIC
+  // SCHEDULE DATA & SETTINGS LOGIC (Firebase Firestore)
   // ══════════════════════════════════════
   const DIAS = ['','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 
   const DEFAULT_EMPACADORES = {
-    1:{1:['Alejo','Santiago'],2:['Jeremy','Justine'],3:['Yeison','Alejo'],4:['Santiago','Yeison']},
-    2:{1:['Jeremy','Justine'],2:['Yeison','Alejo'],3:['Santiago','Yeison'],4:['Justine','Jeremy']},
-    3:{1:['Yeison','Alejo'],2:['Santiago','Yeison'],3:['Justine','Jeremy'],4:['Alejo','Santiago']},
-    4:{1:['Santiago','Yeison'],2:['Justine','Jeremy'],3:['Alejo','Santiago'],4:['Jeremy','Justine']},
-    5:{1:['Nicolás','Jeremy'],2:['Alejo','Santiago'],3:['Jeremy','Justine'],4:['Yeison','Alejo']},
-    6:{1:['Alejo','Santiago'],2:['Jeremy','Justine'],3:['Yeison','Alejo'],4:['Santiago','Yeison']}
+    '1':{'1':['Alejo','Santiago'],'2':['Jeremy','Justine'],'3':['Yeison','Alejo'],'4':['Santiago','Yeison']},
+    '2':{'1':['Jeremy','Justine'],'2':['Yeison','Alejo'],'3':['Santiago','Yeison'],'4':['Justine','Jeremy']},
+    '3':{'1':['Yeison','Alejo'],'2':['Santiago','Yeison'],'3':['Justine','Jeremy'],'4':['Alejo','Santiago']},
+    '4':{'1':['Santiago','Yeison'],'2':['Justine','Jeremy'],'3':['Alejo','Santiago'],'4':['Jeremy','Justine']},
+    '5':{'1':['Nicolás','Jeremy'],'2':['Alejo','Santiago'],'3':['Jeremy','Justine'],'4':['Yeison','Alejo']},
+    '6':{'1':['Alejo','Santiago'],'2':['Jeremy','Justine'],'3':['Yeison','Alejo'],'4':['Santiago','Yeison']}
   };
   const DEFAULT_ASEO_P1 = {
-    1:['Heidy','Jeremy'],2:['Edwin','Santiago'],3:['Andrea Almeyda','Jessid'],
-    4:['Carolina','Yeison'],5:['Justine','Dayana'],6:['Alejandro','Juliana']
+    '1':['Heidy','Jeremy'],'2':['Edwin','Santiago'],'3':['Andrea Almeyda','Jessid'],
+    '4':['Carolina','Yeison'],'5':['Justine','Dayana'],'6':['Alejandro','Juliana']
   };
   const DEFAULT_ASEO_P2 = {
-    2:['Laura','Nayely S'],4:['Nayely M','Marly'],6:['Andrea Parra','Silvia']
+    '2':['Laura','Nayely S'],'4':['Nayely M','Marly'],'6':['Andrea Parra','Silvia']
   };
 
-  function loadSchedule(){
-    const s = localStorage.getItem('bodega_schedule');
-    if(s){ try{ return JSON.parse(s); }catch(e){} }
-    return {
-      empacadores: JSON.parse(JSON.stringify(DEFAULT_EMPACADORES)),
-      aseoP1: JSON.parse(JSON.stringify(DEFAULT_ASEO_P1)),
-      aseoP2: JSON.parse(JSON.stringify(DEFAULT_ASEO_P2))
-    };
-  }
-  function saveScheduleData(data){ localStorage.setItem('bodega_schedule', JSON.stringify(data)); }
+  let scheduleCache = null;
+  let weekCache = null;
+  const turnosRef = db.collection('configuracion').doc('bodega_turnos');
 
   function getMondayOf(d){
     d = new Date(d); const day = d.getDay();
     d.setDate(d.getDate() - day + (day===0?-6:1));
     d.setHours(0,0,0,0); return d;
   }
-  function getCurrentWeek(){
-    const saved = JSON.parse(localStorage.getItem('bodega_semana')||'null');
+  function calcDefaultWeek(){
     const thisMonday = getMondayOf(new Date());
-    if(saved){
-      const lastMonday = getMondayOf(new Date(saved.fecha));
-      const diff = Math.round((thisMonday - lastMonday)/(7*864e5));
-      if(diff > 0){
-        const nw = ((saved.semana-1+diff)%4)+1;
-        localStorage.setItem('bodega_semana',JSON.stringify({semana:nw,fecha:thisMonday.toISOString()}));
-        return nw;
-      }
-      return saved.semana;
-    }
-    // Referencia: Lunes 2 de Marzo 2026 = Semana 1
-    const refMonday = new Date(2026,2,2);
-    refMonday.setHours(0,0,0,0);
+    const refMonday = new Date(2026,2,2); refMonday.setHours(0,0,0,0);
     const weeksDiff = Math.round((thisMonday - refMonday)/(7*864e5));
-    const defaultWeek = ((weeksDiff%4)+4)%4+1;
-    localStorage.setItem('bodega_semana',JSON.stringify({semana:defaultWeek,fecha:thisMonday.toISOString()}));
-    return defaultWeek;
-  }
-  function setCurrentWeek(w){
-    const thisMonday = getMondayOf(new Date());
-    localStorage.setItem('bodega_semana',JSON.stringify({semana:w,fecha:thisMonday.toISOString()}));
+    return ((weeksDiff%4)+4)%4+1;
   }
   function getTodayDayIndex(){
     return new Date(new Date().toLocaleString('en-US',{timeZone:'America/Bogota'})).getDay();
   }
+  function getSchedule(){
+    if(scheduleCache) return scheduleCache;
+    return { empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2 };
+  }
+  function getCurrentWeek(){
+    if(!weekCache) return calcDefaultWeek();
+    const thisMonday = getMondayOf(new Date());
+    const lastMonday = getMondayOf(new Date(weekCache.fecha));
+    const diff = Math.round((thisMonday - lastMonday)/(7*864e5));
+    if(diff > 0){
+      const nw = ((weekCache.semana-1+diff)%4)+1;
+      weekCache = { semana:nw, fecha:thisMonday.toISOString() };
+      turnosRef.update({ semana:nw, semanaFecha:thisMonday.toISOString() }).catch(()=>{});
+      return nw;
+    }
+    return weekCache.semana;
+  }
+
+  // ── Firestore real-time listener ──
+  turnosRef.onSnapshot(function(doc){
+    if(doc.exists){
+      const data = doc.data();
+      scheduleCache = {
+        empacadores: data.empacadores || DEFAULT_EMPACADORES,
+        aseoP1: data.aseoP1 || DEFAULT_ASEO_P1,
+        aseoP2: data.aseoP2 || DEFAULT_ASEO_P2
+      };
+      weekCache = {
+        semana: data.semana || calcDefaultWeek(),
+        fecha: data.semanaFecha || getMondayOf(new Date()).toISOString()
+      };
+    } else {
+      const dw = calcDefaultWeek();
+      turnosRef.set({
+        empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2,
+        semana:dw, semanaFecha:getMondayOf(new Date()).toISOString()
+      }).catch(function(e){ console.error('Error creando turnos:',e); });
+      scheduleCache = { empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2 };
+      weekCache = { semana:dw, fecha:getMondayOf(new Date()).toISOString() };
+    }
+    updateInfoBars();
+  }, function(err){
+    console.error('Error escuchando turnos:',err);
+    scheduleCache = { empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2 };
+    weekCache = { semana:calcDefaultWeek(), fecha:getMondayOf(new Date()).toISOString() };
+    updateInfoBars();
+  });
 
   function updateInfoBars(){
-    const sch = loadSchedule();
+    const sch = getSchedule();
     const dayIdx = getTodayDayIndex();
     const wk = getCurrentWeek();
+    const d = String(dayIdx), w = String(wk);
     const empEl = document.getElementById('infoEmpacadores');
     const wkEl = document.getElementById('infoSemana');
     const aseoEl = document.getElementById('infoAseo');
     if(empEl){
-      if(dayIdx>=1 && dayIdx<=6 && sch.empacadores[dayIdx] && sch.empacadores[dayIdx][wk]){
-        const p = sch.empacadores[dayIdx][wk];
+      if(dayIdx>=1 && dayIdx<=6 && sch.empacadores[d] && sch.empacadores[d][w]){
+        const p = sch.empacadores[d][w];
         empEl.textContent = p[0]+' — '+p[1];
       } else {
         empEl.textContent = dayIdx===0?'Domingo — Descanso':'No asignados';
@@ -1107,18 +1129,18 @@
     if(wkEl) wkEl.textContent = (DIAS[dayIdx]||'Domingo') + ' · Semana '+wk;
     if(aseoEl){
       let parts = [];
-      if(sch.aseoP1[dayIdx]) parts.push('1er Piso: '+sch.aseoP1[dayIdx].join(' y '));
-      if(sch.aseoP2[dayIdx]) parts.push('2do Piso: '+sch.aseoP2[dayIdx].join(' y '));
+      if(sch.aseoP1[d]) parts.push('1er Piso: '+sch.aseoP1[d].join(' y '));
+      if(sch.aseoP2[d]) parts.push('2do Piso: '+sch.aseoP2[d].join(' y '));
       aseoEl.textContent = parts.length?parts.join(' · '):(dayIdx===0?'Domingo — Descanso':'Sin aseo hoy');
     }
   }
 
   function getAseoNamesHTML(){
-    const sch = loadSchedule();
-    const dayIdx = getTodayDayIndex();
+    const sch = getSchedule();
+    const d = String(getTodayDayIndex());
     let lines = [];
-    if(sch.aseoP1[dayIdx]) lines.push('🏢 1er Piso: <b>'+sch.aseoP1[dayIdx].join('</b> y <b>')+'</b>');
-    if(sch.aseoP2[dayIdx]) lines.push('🏢 2do Piso: <b>'+sch.aseoP2[dayIdx].join('</b> y <b>')+'</b>');
+    if(sch.aseoP1[d]) lines.push('🏢 1er Piso: <b>'+sch.aseoP1[d].join('</b> y <b>')+'</b>');
+    if(sch.aseoP2[d]) lines.push('🏢 2do Piso: <b>'+sch.aseoP2[d].join('</b> y <b>')+'</b>');
     return lines.join('<br>');
   }
 
@@ -1137,7 +1159,7 @@
     document.getElementById(tab==='emp'?'cfgPaneEmp':'cfgPaneAseo').classList.add('active');
   }
   function buildSettingsUI(){
-    const sch = loadSchedule();
+    const sch = getSchedule();
     const wk = getCurrentWeek();
     const c = document.getElementById('cfgContent');
     let h = '';
@@ -1148,7 +1170,7 @@
     for(let w=1;w<=4;w++){
       h+='<div class="cfg-section"><h4>📦 Semana '+w+'</h4><div class="cfg-grid">';
       for(let d=1;d<=6;d++){
-        const p=(sch.empacadores[d]&&sch.empacadores[d][w])||['',''];
+        const p=(sch.empacadores[String(d)]&&sch.empacadores[String(d)][String(w)])||['',''];
         h+='<label>'+DIAS[d]+'</label>';
         h+='<input data-emp="'+d+'-'+w+'-0" value="'+p[0]+'">';
         h+='<input data-emp="'+d+'-'+w+'-1" value="'+p[1]+'">';
@@ -1159,15 +1181,15 @@
     h+='<div id="cfgPaneAseo" class="cfg-pane">';
     h+='<div class="cfg-section"><h4>🏢 Primer Piso (Lunes a Sábado)</h4><div class="cfg-grid">';
     for(let d=1;d<=6;d++){
-      const p=sch.aseoP1[d]||['',''];
+      const p=sch.aseoP1[String(d)]||['',''];
       h+='<label>'+DIAS[d]+'</label>';
       h+='<input data-ap1="'+d+'-0" value="'+p[0]+'">';
       h+='<input data-ap1="'+d+'-1" value="'+p[1]+'">';
     }
     h+='</div></div>';
     h+='<div class="cfg-section"><h4>🏢 Segundo Piso (Mar, Jue, Sáb)</h4><div class="cfg-grid">';
-    [2,4,6].forEach(d=>{
-      const p=sch.aseoP2[d]||['',''];
+    [2,4,6].forEach(function(d){
+      const p=sch.aseoP2[String(d)]||['',''];
       h+='<label>'+DIAS[d]+'</label>';
       h+='<input data-ap2="'+d+'-0" value="'+p[0]+'">';
       h+='<input data-ap2="'+d+'-1" value="'+p[1]+'">';
@@ -1177,32 +1199,40 @@
   }
   function saveSettings(){
     const ws = document.getElementById('cfgWeekSel');
-    if(ws) setCurrentWeek(parseInt(ws.value));
-    const sch = loadSchedule();
-    document.querySelectorAll('[data-emp]').forEach(inp=>{
-      const [d,w,i]=inp.dataset.emp.split('-').map(Number);
-      if(!sch.empacadores[d]) sch.empacadores[d]={};
-      if(!sch.empacadores[d][w]) sch.empacadores[d][w]=['',''];
-      sch.empacadores[d][w][i]=inp.value.trim();
-    });
-    document.querySelectorAll('[data-ap1]').forEach(inp=>{
-      const [d,i]=inp.dataset.ap1.split('-').map(Number);
-      if(!sch.aseoP1[d]) sch.aseoP1[d]=['',''];
-      sch.aseoP1[d][i]=inp.value.trim();
-    });
-    document.querySelectorAll('[data-ap2]').forEach(inp=>{
-      const [d,i]=inp.dataset.ap2.split('-').map(Number);
-      if(!sch.aseoP2[d]) sch.aseoP2[d]=['',''];
-      sch.aseoP2[d][i]=inp.value.trim();
-    });
-    saveScheduleData(sch);
-    updateInfoBars();
-    closeSettings();
-    requestAnimationFrame(autoFitScreen);
-  }
+    const newWeek = ws ? parseInt(ws.value) : getCurrentWeek();
+    const sch = getSchedule();
+    const emp = JSON.parse(JSON.stringify(sch.empacadores));
+    const ap1 = JSON.parse(JSON.stringify(sch.aseoP1));
+    const ap2 = JSON.parse(JSON.stringify(sch.aseoP2));
 
-  // Init info bars on load
-  updateInfoBars();
+    document.querySelectorAll('[data-emp]').forEach(function(inp){
+      const parts=inp.dataset.emp.split('-'); const dk=parts[0],wk=parts[1],i=parseInt(parts[2]);
+      if(!emp[dk]) emp[dk]={};
+      if(!emp[dk][wk]) emp[dk][wk]=['',''];
+      emp[dk][wk][i]=inp.value.trim();
+    });
+    document.querySelectorAll('[data-ap1]').forEach(function(inp){
+      const parts=inp.dataset.ap1.split('-'); const dk=parts[0],i=parseInt(parts[1]);
+      if(!ap1[dk]) ap1[dk]=['',''];
+      ap1[dk][i]=inp.value.trim();
+    });
+    document.querySelectorAll('[data-ap2]').forEach(function(inp){
+      const parts=inp.dataset.ap2.split('-'); const dk=parts[0],i=parseInt(parts[1]);
+      if(!ap2[dk]) ap2[dk]=['',''];
+      ap2[dk][i]=inp.value.trim();
+    });
+
+    turnosRef.set({
+      empacadores:emp, aseoP1:ap1, aseoP2:ap2,
+      semana:newWeek, semanaFecha:getMondayOf(new Date()).toISOString()
+    }).then(function(){
+      closeSettings();
+      requestAnimationFrame(autoFitScreen);
+    }).catch(function(e){
+      console.error('Error guardando turnos:',e);
+      alert('Error al guardar. Verifica la conexión a internet.');
+    });
+  }
   </script>
 
   <script>
