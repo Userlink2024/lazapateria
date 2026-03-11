@@ -301,6 +301,66 @@
       .overlay-title { font-size: 1.6em; }
       .overlay-msg { font-size: 1em; padding: 0 10px; }
     }
+
+    /* ── GEAR SETTINGS ── */
+    .settings-gear{
+      position:fixed;top:10px;right:10px;z-index:200;
+      width:38px;height:38px;border-radius:50%;border:none;
+      background:rgba(255,255,255,0.92);box-shadow:0 2px 10px rgba(0,0,0,0.12);
+      cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;
+      transition:transform 0.3s,box-shadow 0.3s;pointer-events:auto;
+    }
+    .settings-gear:hover{transform:rotate(90deg) scale(1.1);box-shadow:0 4px 15px rgba(0,0,0,0.2);}
+
+    /* ── INFO BARS ── */
+    .info-bars{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:8px;}
+    .info-bar{
+      background:rgba(255,255,255,0.95);border-radius:12px;padding:8px 18px;
+      box-shadow:0 3px 12px rgba(0,0,0,0.07);text-align:center;min-width:180px;
+      border-left:4px solid var(--accent-green-1);
+    }
+    .info-bar-title{font-size:0.65em;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:3px;font-weight:600;}
+    .info-bar-names{font-size:0.95em;font-weight:700;color:#2e7d32;}
+    .info-bar-sub{font-size:0.6em;color:#999;margin-top:2px;}
+
+    /* ── OVERLAY ASEO NAMES ── */
+    .overlay-aseo-names{
+      margin-top:16px;font-family:'Inter',sans-serif;font-size:1.3em;font-weight:700;
+      color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.3);line-height:1.8;
+      background:rgba(255,255,255,0.12);border-radius:14px;padding:14px 28px;
+      backdrop-filter:blur(4px);
+    }
+
+    /* ── SETTINGS MODAL ── */
+    .cfg-overlay{display:none;position:fixed;inset:0;z-index:50000;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;}
+    .cfg-overlay.active{display:flex;}
+    .cfg-card{
+      background:#fff;border-radius:18px;width:92%;max-width:860px;max-height:85vh;
+      overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);padding:20px 24px;
+    }
+    .cfg-card h2{color:#2e7d32;margin:0 0 14px;font-size:1.2em;text-align:center;}
+    .cfg-tabs{display:flex;gap:6px;margin-bottom:14px;justify-content:center;}
+    .cfg-tab{
+      padding:7px 16px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;
+      cursor:pointer;font-weight:600;font-size:0.8em;color:#555;transition:all 0.2s;
+    }
+    .cfg-tab.active{background:linear-gradient(135deg,#2e7d32,#43a047);color:#fff;border-color:#2e7d32;}
+    .cfg-pane{display:none;}
+    .cfg-pane.active{display:block;}
+    .cfg-section{margin-bottom:14px;border:1px solid #e8f5e9;border-radius:10px;padding:12px;}
+    .cfg-section h4{color:#2e7d32;margin:0 0 8px;font-size:0.9em;}
+    .cfg-grid{display:grid;grid-template-columns:80px 1fr 1fr;gap:4px 8px;align-items:center;font-size:0.8em;}
+    .cfg-grid label{font-weight:600;color:#555;}
+    .cfg-grid input{padding:4px 7px;border:1px solid #ddd;border-radius:5px;font-size:0.85em;width:100%;box-sizing:border-box;}
+    .cfg-grid input:focus{outline:none;border-color:#4CAF50;box-shadow:0 0 0 2px rgba(76,175,80,0.12);}
+    .cfg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+    .cfg-actions button{padding:8px 20px;border-radius:8px;border:none;font-weight:600;cursor:pointer;font-size:0.85em;}
+    .cfg-btn-save{background:linear-gradient(135deg,#2e7d32,#43a047);color:#fff;}
+    .cfg-btn-save:hover{opacity:0.9;}
+    .cfg-btn-cancel{background:#eee;color:#555;}
+    .cfg-btn-cancel:hover{background:#ddd;}
+    .cfg-week-sel{display:flex;gap:8px;align-items:center;margin-bottom:14px;justify-content:center;font-size:0.85em;font-weight:600;color:#2e7d32;}
+    .cfg-week-sel select{padding:4px 8px;border-radius:6px;border:1px solid #ccc;font-weight:600;}
   </style>
 
   <!-- Firebase -->
@@ -510,8 +570,21 @@
   </script>
 </head>
 <body>
+  <button class="settings-gear" onclick="openSettings()" title="Configuración">⚙️</button>
+
   <div class="scale-wrap" id="scaleWrap">
   <h1>Panel de Bodega</h1>
+  <div class="info-bars">
+    <div class="info-bar">
+      <div class="info-bar-title">📦 Empacadores del Día</div>
+      <div class="info-bar-names" id="infoEmpacadores">Cargando...</div>
+      <div class="info-bar-sub" id="infoSemana"></div>
+    </div>
+    <div class="info-bar">
+      <div class="info-bar-title">🧹 Aseo del Día</div>
+      <div class="info-bar-names" id="infoAseo">Cargando...</div>
+    </div>
+  </div>
   <div id="panel" class="grid"></div>
   </div>
 
@@ -918,7 +991,8 @@
     <div class="overlay-emoji" id="trashEmoji">🧹</div>
     <div class="overlay-title">¡Hora del Aseo!</div>
     <div class="overlay-msg" id="trashMsg"></div>
-    <div class="overlay-brand">A los 2 que les toca hoy — La Zapatería 👟</div>
+    <div class="overlay-aseo-names" id="trashAseoNames"></div>
+    <div class="overlay-brand">A los que les toca hoy — La Zapatería 👟</div>
     <div class="overlay-timer" id="trashTimer"></div>
   </div>
 
@@ -931,6 +1005,200 @@
     <div class="overlay-brand">Hasta mañana — La Zapatería 👟</div>
     <div class="overlay-timer" id="enddayTimer"></div>
   </div>
+
+  <!-- Settings Modal -->
+  <div class="cfg-overlay" id="cfgOverlay">
+    <div class="cfg-card">
+      <h2>⚙️ Configuración de Turnos</h2>
+      <div class="cfg-tabs">
+        <button class="cfg-tab active" data-cfg-tab="emp" onclick="switchCfgTab('emp')">📦 Empacadores</button>
+        <button class="cfg-tab" data-cfg-tab="aseo" onclick="switchCfgTab('aseo')">🧹 Aseo</button>
+      </div>
+      <div id="cfgContent"></div>
+      <div class="cfg-actions">
+        <button class="cfg-btn-cancel" onclick="closeSettings()">❌ Cancelar</button>
+        <button class="cfg-btn-save" onclick="saveSettings()">💾 Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ══════════════════════════════════════
+  // SCHEDULE DATA & SETTINGS LOGIC
+  // ══════════════════════════════════════
+  const DIAS = ['','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+  const DEFAULT_EMPACADORES = {
+    1:{1:['Alejo','Santiago'],2:['Jeremy','Justine'],3:['Yeison','Alejo'],4:['Santiago','Yeison']},
+    2:{1:['Jeremy','Justine'],2:['Yeison','Alejo'],3:['Santiago','Yeison'],4:['Justine','Jeremy']},
+    3:{1:['Yeison','Alejo'],2:['Santiago','Yeison'],3:['Justine','Jeremy'],4:['Alejo','Santiago']},
+    4:{1:['Santiago','Yeison'],2:['Justine','Jeremy'],3:['Alejo','Santiago'],4:['Jeremy','Justine']},
+    5:{1:['Nicolás','Jeremy'],2:['Alejo','Santiago'],3:['Jeremy','Justine'],4:['Yeison','Alejo']},
+    6:{1:['Alejo','Santiago'],2:['Jeremy','Justine'],3:['Yeison','Alejo'],4:['Santiago','Yeison']}
+  };
+  const DEFAULT_ASEO_P1 = {
+    1:['Heidy','Jeremy'],2:['Edwin','Santiago'],3:['Andrea Almeyda','Jessid'],
+    4:['Carolina','Yeison'],5:['Justine','Dayana'],6:['Alejandro','Juliana']
+  };
+  const DEFAULT_ASEO_P2 = {
+    2:['Laura','Nayely S'],4:['Nayely M','Marly'],6:['Andrea Parra','Silvia']
+  };
+
+  function loadSchedule(){
+    const s = localStorage.getItem('bodega_schedule');
+    if(s){ try{ return JSON.parse(s); }catch(e){} }
+    return {
+      empacadores: JSON.parse(JSON.stringify(DEFAULT_EMPACADORES)),
+      aseoP1: JSON.parse(JSON.stringify(DEFAULT_ASEO_P1)),
+      aseoP2: JSON.parse(JSON.stringify(DEFAULT_ASEO_P2))
+    };
+  }
+  function saveScheduleData(data){ localStorage.setItem('bodega_schedule', JSON.stringify(data)); }
+
+  function getMondayOf(d){
+    d = new Date(d); const day = d.getDay();
+    d.setDate(d.getDate() - day + (day===0?-6:1));
+    d.setHours(0,0,0,0); return d;
+  }
+  function getCurrentWeek(){
+    const saved = JSON.parse(localStorage.getItem('bodega_semana')||'null');
+    const thisMonday = getMondayOf(new Date());
+    if(saved){
+      const lastMonday = getMondayOf(new Date(saved.fecha));
+      const diff = Math.round((thisMonday - lastMonday)/(7*864e5));
+      if(diff > 0){
+        const nw = ((saved.semana-1+diff)%4)+1;
+        localStorage.setItem('bodega_semana',JSON.stringify({semana:nw,fecha:thisMonday.toISOString()}));
+        return nw;
+      }
+      return saved.semana;
+    }
+    localStorage.setItem('bodega_semana',JSON.stringify({semana:1,fecha:thisMonday.toISOString()}));
+    return 1;
+  }
+  function setCurrentWeek(w){
+    const thisMonday = getMondayOf(new Date());
+    localStorage.setItem('bodega_semana',JSON.stringify({semana:w,fecha:thisMonday.toISOString()}));
+  }
+  function getTodayDayIndex(){
+    return new Date(new Date().toLocaleString('en-US',{timeZone:'America/Bogota'})).getDay();
+  }
+
+  function updateInfoBars(){
+    const sch = loadSchedule();
+    const dayIdx = getTodayDayIndex();
+    const wk = getCurrentWeek();
+    const empEl = document.getElementById('infoEmpacadores');
+    const wkEl = document.getElementById('infoSemana');
+    const aseoEl = document.getElementById('infoAseo');
+    if(empEl){
+      if(dayIdx>=1 && dayIdx<=6 && sch.empacadores[dayIdx] && sch.empacadores[dayIdx][wk]){
+        const p = sch.empacadores[dayIdx][wk];
+        empEl.textContent = p[0]+' — '+p[1];
+      } else {
+        empEl.textContent = dayIdx===0?'Domingo — Descanso':'No asignados';
+      }
+    }
+    if(wkEl) wkEl.textContent = (DIAS[dayIdx]||'Domingo') + ' · Semana '+wk;
+    if(aseoEl){
+      let parts = [];
+      if(sch.aseoP1[dayIdx]) parts.push('1er Piso: '+sch.aseoP1[dayIdx].join(' y '));
+      if(sch.aseoP2[dayIdx]) parts.push('2do Piso: '+sch.aseoP2[dayIdx].join(' y '));
+      aseoEl.textContent = parts.length?parts.join(' · '):(dayIdx===0?'Domingo — Descanso':'Sin aseo hoy');
+    }
+  }
+
+  function getAseoNamesHTML(){
+    const sch = loadSchedule();
+    const dayIdx = getTodayDayIndex();
+    let lines = [];
+    if(sch.aseoP1[dayIdx]) lines.push('🏢 1er Piso: <b>'+sch.aseoP1[dayIdx].join('</b> y <b>')+'</b>');
+    if(sch.aseoP2[dayIdx]) lines.push('🏢 2do Piso: <b>'+sch.aseoP2[dayIdx].join('</b> y <b>')+'</b>');
+    return lines.join('<br>');
+  }
+
+  // ── Settings Modal ──
+  function openSettings(){
+    document.getElementById('cfgOverlay').classList.add('active');
+    buildSettingsUI();
+  }
+  function closeSettings(){
+    document.getElementById('cfgOverlay').classList.remove('active');
+  }
+  function switchCfgTab(tab){
+    document.querySelectorAll('.cfg-tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.cfg-pane').forEach(p=>p.classList.remove('active'));
+    document.querySelector('[data-cfg-tab="'+tab+'"]').classList.add('active');
+    document.getElementById(tab==='emp'?'cfgPaneEmp':'cfgPaneAseo').classList.add('active');
+  }
+  function buildSettingsUI(){
+    const sch = loadSchedule();
+    const wk = getCurrentWeek();
+    const c = document.getElementById('cfgContent');
+    let h = '';
+    h += '<div class="cfg-week-sel">📅 Semana actual: <select id="cfgWeekSel">';
+    for(let w=1;w<=4;w++) h+='<option value="'+w+'"'+(w===wk?' selected':'')+'>Semana '+w+'</option>';
+    h += '</select> <span style="color:#888;font-size:0.8em">(avanza automáticamente cada lunes)</span></div>';
+    h += '<div id="cfgPaneEmp" class="cfg-pane active">';
+    for(let w=1;w<=4;w++){
+      h+='<div class="cfg-section"><h4>📦 Semana '+w+'</h4><div class="cfg-grid">';
+      for(let d=1;d<=6;d++){
+        const p=(sch.empacadores[d]&&sch.empacadores[d][w])||['',''];
+        h+='<label>'+DIAS[d]+'</label>';
+        h+='<input data-emp="'+d+'-'+w+'-0" value="'+p[0]+'">';
+        h+='<input data-emp="'+d+'-'+w+'-1" value="'+p[1]+'">';
+      }
+      h+='</div></div>';
+    }
+    h+='</div>';
+    h+='<div id="cfgPaneAseo" class="cfg-pane">';
+    h+='<div class="cfg-section"><h4>🏢 Primer Piso (Lunes a Sábado)</h4><div class="cfg-grid">';
+    for(let d=1;d<=6;d++){
+      const p=sch.aseoP1[d]||['',''];
+      h+='<label>'+DIAS[d]+'</label>';
+      h+='<input data-ap1="'+d+'-0" value="'+p[0]+'">';
+      h+='<input data-ap1="'+d+'-1" value="'+p[1]+'">';
+    }
+    h+='</div></div>';
+    h+='<div class="cfg-section"><h4>🏢 Segundo Piso (Mar, Jue, Sáb)</h4><div class="cfg-grid">';
+    [2,4,6].forEach(d=>{
+      const p=sch.aseoP2[d]||['',''];
+      h+='<label>'+DIAS[d]+'</label>';
+      h+='<input data-ap2="'+d+'-0" value="'+p[0]+'">';
+      h+='<input data-ap2="'+d+'-1" value="'+p[1]+'">';
+    });
+    h+='</div></div></div>';
+    c.innerHTML = h;
+  }
+  function saveSettings(){
+    const ws = document.getElementById('cfgWeekSel');
+    if(ws) setCurrentWeek(parseInt(ws.value));
+    const sch = loadSchedule();
+    document.querySelectorAll('[data-emp]').forEach(inp=>{
+      const [d,w,i]=inp.dataset.emp.split('-').map(Number);
+      if(!sch.empacadores[d]) sch.empacadores[d]={};
+      if(!sch.empacadores[d][w]) sch.empacadores[d][w]=['',''];
+      sch.empacadores[d][w][i]=inp.value.trim();
+    });
+    document.querySelectorAll('[data-ap1]').forEach(inp=>{
+      const [d,i]=inp.dataset.ap1.split('-').map(Number);
+      if(!sch.aseoP1[d]) sch.aseoP1[d]=['',''];
+      sch.aseoP1[d][i]=inp.value.trim();
+    });
+    document.querySelectorAll('[data-ap2]').forEach(inp=>{
+      const [d,i]=inp.dataset.ap2.split('-').map(Number);
+      if(!sch.aseoP2[d]) sch.aseoP2[d]=['',''];
+      sch.aseoP2[d][i]=inp.value.trim();
+    });
+    saveScheduleData(sch);
+    updateInfoBars();
+    closeSettings();
+    requestAnimationFrame(autoFitScreen);
+  }
+
+  // Init info bars on load
+  updateInfoBars();
+  </script>
 
   <script>
     (function(){
@@ -1124,6 +1392,10 @@
         if (h === 17 && m === 45 && !trashShown) {
           trashShown = true;
           showOverlay('overlayTrash', TRASH_MSGS, TRASH_EMOJIS, 'trashEmoji', 'trashMsg', 'trashTimer');
+          var aseoNamesEl = document.getElementById('trashAseoNames');
+          if (aseoNamesEl && typeof getAseoNamesHTML === 'function') {
+            aseoNamesEl.innerHTML = getAseoNamesHTML();
+          }
         }
         if (h === 17 && m >= 46) trashShown = false;
 
