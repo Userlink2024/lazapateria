@@ -2358,24 +2358,36 @@
                     '</div><hr style="border:1px solid #1a237e;margin-bottom:15px;">' + content +
                     '<div style="margin-top:20px;padding-top:10px;border-top:1px dashed #ccc;font-size:7pt;color:#999;text-align:center;">Documento generado automáticamente por el Sistema de Permisos JCB INDUSTRY S.A.S.</div>';
 
-                var canvas = await html2canvas(tempDiv, { scale: 2, useCORS: true });
+                var fullCanvas = await html2canvas(tempDiv, { scale: 2, useCORS: true });
                 document.body.removeChild(tempDiv);
 
-                var imgData = canvas.toDataURL('image/png');
                 var margin = 10;
                 var imgWidth = doc.internal.pageSize.width - margin * 2;
-                var pageHeight = doc.internal.pageSize.height - margin * 2;
-                var imgHeight = canvas.height * imgWidth / canvas.width;
-                var heightLeft = imgHeight;
-                var position = margin;
+                var pageHeightMM = doc.internal.pageSize.height - margin * 2;
+                // How many canvas pixels correspond to one PDF page
+                var scaleFactor = fullCanvas.width / imgWidth;
+                var pageHeightPx = Math.floor(pageHeightMM * scaleFactor);
+                var totalHeight = fullCanvas.height;
+                var yOffset = 0;
+                var pageNum = 0;
 
-                doc.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
-                while (heightLeft > 0) {
-                    doc.addPage();
-                    position = margin - (imgHeight - heightLeft);
-                    doc.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
-                    heightLeft -= pageHeight;
+                while (yOffset < totalHeight) {
+                    var sliceHeight = Math.min(pageHeightPx, totalHeight - yOffset);
+                    // Create a canvas slice for this page
+                    var sliceCanvas = document.createElement('canvas');
+                    sliceCanvas.width = fullCanvas.width;
+                    sliceCanvas.height = sliceHeight;
+                    var ctx = sliceCanvas.getContext('2d');
+                    ctx.drawImage(fullCanvas, 0, yOffset, fullCanvas.width, sliceHeight, 0, 0, fullCanvas.width, sliceHeight);
+
+                    var sliceData = sliceCanvas.toDataURL('image/png');
+                    var sliceHeightMM = sliceHeight / scaleFactor;
+
+                    if (pageNum > 0) doc.addPage();
+                    doc.addImage(sliceData, 'PNG', margin, margin, imgWidth, sliceHeightMM);
+
+                    yOffset += sliceHeight;
+                    pageNum++;
                 }
                 doc.save('Reporte_Novedades_' + desde + '_' + hasta + '.pdf');
                 alert('Reporte PDF generado con éxito.');
