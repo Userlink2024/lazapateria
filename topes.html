@@ -195,13 +195,11 @@ input,select,textarea{font-family:inherit}
   <!-- TAB: HOY -->
   <div class="tab-content" id="tabHoy">
     <div class="date-bar">
-      <label style="font-size:12px;font-weight:800;color:var(--muted);margin:0">FECHA:</label>
-      <input type="date" id="todayDate"/>
-      <button class="btn sm" onclick="setToday()"><i class="fas fa-calendar-day"></i> Hoy</button>
+      <span style="font-size:13px;font-weight:800;color:var(--muted);display:flex;align-items:center;gap:8px"><i class="fas fa-calendar-day" style="color:var(--blue)"></i> Hoy: <span id="todayLabel" style="color:var(--text)"></span></span>
     </div>
     <div class="stats-row" id="statsRow">
       <div class="stat-card"><div class="stat-label">Cuentas Activas</div><div class="stat-val" id="statActivas">0</div></div>
-      <div class="stat-card"><div class="stat-label">Total Ingresado Hoy</div><div class="stat-val" id="statIngresado">$0</div></div>
+      <div class="stat-card"><div class="stat-label">Total Ingresado</div><div class="stat-val" id="statIngresado">$0</div></div>
       <div class="stat-card"><div class="stat-label">Tope Total</div><div class="stat-val" id="statTope">$0</div></div>
     </div>
     <div id="dashboardGrid" class="accounts-grid"></div>
@@ -321,7 +319,7 @@ function toast(msg){
   $('toast').classList.add('show');
   setTimeout(()=>$('toast').classList.remove('show'),2500);
 }
-function setToday(){ $('todayDate').value = todayISO(); currentDate = todayISO(); loadDayData(); }
+function setToday(){ currentDate = todayISO(); loadDayData(); }
 
 /* ===== TABS ===== */
 document.querySelectorAll('.tab-btn').forEach(btn=>{
@@ -336,12 +334,9 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
   });
 });
 
-/* ===== DATE CHANGE ===== */
-$('todayDate').value = currentDate;
-$('todayDate').addEventListener('change', ()=>{
-  currentDate = $('todayDate').value;
-  loadDayData();
-});
+/* ===== DATE (always today) ===== */
+$('todayLabel').textContent = new Date().toLocaleDateString('es-CO',{weekday:'long',year:'numeric',month:'long',day:'numeric',timeZone:'America/Bogota'});
+currentDate = todayISO();
 
 /* ===== LOAD ACCOUNTS ===== */
 function subscribeAccounts(){
@@ -364,10 +359,10 @@ function subscribeConfig(){
   });
 }
 
-/* ===== LOAD DAY MOVEMENTS ===== */
+/* ===== LOAD ALL MOVEMENTS (no date filter — accumulated) ===== */
 async function loadDayData(){
   try {
-    const snap = await COL_TOPES_MOV.where('fecha','==',currentDate).get();
+    const snap = await COL_TOPES_MOV.get();
     todayMovs = snap.docs.map(d=>({id:d.id,...d.data()}));
     todayMovs.sort((a,b)=>{
       const ta = a.createdAt ? a.createdAt.toMillis() : 0;
@@ -427,8 +422,8 @@ function renderDashboard(){
         <div class="progress-wrap">
           <div class="progress-bar ${colorClass}" style="width:${pct}%"></div>
         </div>
-        ${movs.length ? '<div style="margin-bottom:8px;max-height:100px;overflow:auto;font-size:11px;color:var(--muted)">' +
-          movs.map(m=>'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(0,0,0,.04)"><span>'+(m.descripcion||'Ingreso')+'</span><strong>'+fmtCOP(m.monto)+'</strong></div>').join('') +
+        ${movs.length ? '<div style="margin-bottom:8px;max-height:200px;overflow:auto;font-size:11px;color:var(--muted)">' +
+          movs.map(m=>'<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(0,0,0,.04)"><span>'+(m.fecha?'<span style=\"color:var(--blue);margin-right:4px\">'+m.fecha+'</span>':'')+(m.descripcion||'Ingreso')+'</span><strong>'+fmtCOP(m.monto)+'</strong></div>').join('') +
           '</div>' : ''}
         <div class="acc-actions">
           <button class="btn sm primary" onclick="openAddModal('${acc.id}','${acc.name} — ${acc.number}')"><i class="fas fa-plus"></i> Agregar</button>
