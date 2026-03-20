@@ -145,6 +145,7 @@
           <option value="china">🇨🇳 China (Inventario)</option>
         </select>
         <button class="btn" type="button" id="btnRefresh"><i class="fa-solid fa-rotate"></i> Recargar</button>
+        <button class="btn" type="button" onclick="location.href='cuentasbancarias.html'"><i class="fa-solid fa-building-columns"></i> Consignaciones</button>
       </div>
     </div>
 
@@ -343,6 +344,7 @@
       { id: 'empresas', name: 'Empresas', icon: 'fa-briefcase' },
       { id: 'transportadoras', name: 'Transportadoras', icon: 'fa-truck' },
       { id: 'cuentas', name: 'Cuentas Bancarias', icon: 'fa-building-columns' },
+      { id: 'consignaciones_all', name: 'Consignaciones (Todas)', icon: 'fa-money-bill-transfer', subcollection: true },
       { id: 'guias_envia', name: 'Guías Envía', icon: 'fa-barcode' },
       { id: 'guias_interrapidissimo', name: 'Guías Inter', icon: 'fa-barcode' },
       { id: 'novedades', name: 'Novedades', icon: 'fa-triangle-exclamation' },
@@ -357,7 +359,8 @@
       { id: 'permisos', name: 'Permisos (Solicitudes)', icon: 'fa-file-signature' },
       { id: 'novedades_empleados', name: 'Novedades Empleados', icon: 'fa-clipboard-list' },
       { id: 'fabricantesShowroom', name: 'Fabricantes Showroom', icon: 'fa-industry' },
-      { id: 'citasShowroom', name: 'Citas Showroom', icon: 'fa-calendar-day' }
+      { id: 'citasShowroom', name: 'Citas Showroom', icon: 'fa-calendar-day' },
+      { id: 'borradores_pedidos', name: 'Borradores Pedidos', icon: 'fa-floppy-disk' }
     ];
 
     const COLLECTIONS_CHINA = [
@@ -449,13 +452,33 @@
         listEl.appendChild(item);
 
         // Load count async
-        getDocs(collection(db, col.id)).then(snap => {
-          const badge = $('count_' + col.id);
-          if (badge) badge.textContent = snap.size;
-        }).catch(() => {
-          const badge = $('count_' + col.id);
-          if (badge) badge.textContent = '0';
-        });
+        if (col.subcollection && col.id === 'consignaciones_all') {
+          (async () => {
+            try {
+              const accSnap = await getDocs(collection(db, 'cuentas'));
+              let total = 0;
+              for (const accDoc of accSnap.docs) {
+                try {
+                  const conSnap = await getDocs(collection(db, 'cuentas', accDoc.id, 'consignaciones'));
+                  total += conSnap.size;
+                } catch (e) {}
+              }
+              const badge = $('count_consignaciones_all');
+              if (badge) badge.textContent = total;
+            } catch (e) {
+              const badge = $('count_consignaciones_all');
+              if (badge) badge.textContent = '0';
+            }
+          })();
+        } else {
+          getDocs(collection(db, col.id)).then(snap => {
+            const badge = $('count_' + col.id);
+            if (badge) badge.textContent = snap.size;
+          }).catch(() => {
+            const badge = $('count_' + col.id);
+            if (badge) badge.textContent = '0';
+          });
+        }
       }
     }
 
@@ -473,26 +496,56 @@
 
       const colInfo = COLLECTIONS.find(c => c.id === colId);
       $('mainTitle').innerHTML = `<i class="fa-solid ${colInfo?.icon || 'fa-table'}"></i> ${escapeHtml(colInfo?.name || colId)}`;
-      $('btnAdd').style.display = '';
+      $('btnAdd').style.display = colId === 'consignaciones_all' ? 'none' : '';
       $('btnExport').style.display = '';
-      $('btnImport').style.display = '';
+      $('btnImport').style.display = colId === 'consignaciones_all' ? 'none' : '';
       $('filtersBox').style.display = '';
       $('footerBox').style.display = '';
 
       $('tableContainer').innerHTML = '<div class="loading"><i class="fa-solid fa-spinner"></i> Cargando...</div>';
 
       try {
-        const snap = await getDocs(collection(db, colId));
-        allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        filteredDocs = [...allDocs];
-        renderTable();
-
-        // Mostrar/ocultar panel de verificaciones para caja_menor
-        if (colId === 'caja_menor') {
-          $('verificacionesCajaPanel').style.display = '';
-          renderVerificacionesPanel(allDocs);
-        } else {
+        // === SPECIAL: Load consignaciones from all accounts (subcollections) ===
+        if (colId === 'consignaciones_all') {
+          const accountsSnap = await getDocs(collection(db, 'cuentas'));
+          const accounts = accountsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          allDocs = [];
+          for (const acc of accounts) {
+            try {
+              const conSnap = await getDocs(collection(db, 'cuentas', acc.id, 'consignaciones'));
+              conSnap.docs.forEach(d => {
+                const data = d.data();
+                allDocs.push({
+                  id: d.id,
+                  _docPath: `cuentas/${acc.id}/consignaciones`,
+                  _accountId: acc.id,
+                  cuenta: acc.name || acc.number || acc.id,
+                  ...data
+                });
+              });
+            } catch (e) { /* skip accounts with no consignaciones */ }
+          }
+          allDocs.sort((a, b) => {
+            const ta = a.fecha && a.fecha.toMillis ? a.fecha.toMillis() : 0;
+            const tb = b.fecha && b.fecha.toMillis ? b.fecha.toMillis() : 0;
+            return tb - ta;
+          });
+          filteredDocs = [...allDocs];
+          renderTable();
           $('verificacionesCajaPanel').style.display = 'none';
+        } else {
+          const snap = await getDocs(collection(db, colId));
+          allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          filteredDocs = [...allDocs];
+          renderTable();
+
+          // Mostrar/ocultar panel de verificaciones para caja_menor
+          if (colId === 'caja_menor') {
+            $('verificacionesCajaPanel').style.display = '';
+            renderVerificacionesPanel(allDocs);
+          } else {
+            $('verificacionesCajaPanel').style.display = 'none';
+          }
         }
       } catch (e) {
         $('tableContainer').innerHTML = `<div class="empty"><i class="fa-solid fa-circle-exclamation"></i><div>Error: ${escapeHtml(e.message)}</div></div>`;
@@ -595,9 +648,10 @@
         return;
       }
 
-      // Get all unique keys
+      // Get all unique keys (hide internal _docPath, _accountId fields)
       const allKeys = new Set(['id']);
-      slice.forEach(doc => Object.keys(doc).forEach(k => allKeys.add(k)));
+      const hiddenKeys = new Set(['_docPath', '_accountId']);
+      slice.forEach(doc => Object.keys(doc).forEach(k => { if (!hiddenKeys.has(k)) allKeys.add(k); }));
       const keys = Array.from(allKeys).slice(0, 8); // Limit columns
 
       let html = '<table><thead><tr>';
@@ -669,7 +723,9 @@
       $('editModalTitle').innerHTML = `<i class="fa-solid fa-pen"></i> Editar: ${escapeHtml(docId.substring(0, 20))}...`;
 
       let html = '';
+      const editHiddenKeys = new Set(['_docPath', '_accountId']);
       Object.entries(editingDoc.data).forEach(([key, val]) => {
+        if (editHiddenKeys.has(key)) return;
         const isTimestamp = val && typeof val === 'object' && val.toDate;
         const isArray = Array.isArray(val);
         const isObject = val && typeof val === 'object' && !isTimestamp && !isArray;
@@ -749,7 +805,17 @@
       }
 
       try {
-        await updateDoc(doc(db, currentCollection, editingDoc.id), updates);
+        const docPath = editingDoc.data._docPath;
+        let docRef;
+        if (docPath) {
+          docRef = doc(db, docPath, editingDoc.id);
+          delete updates._docPath;
+          delete updates._accountId;
+          delete updates.cuenta;
+        } else {
+          docRef = doc(db, currentCollection, editingDoc.id);
+        }
+        await updateDoc(docRef, updates);
         toast('Guardado', 'Documento actualizado correctamente');
         $('editModal').classList.remove('open');
         await selectCollection(currentCollection);
@@ -764,7 +830,14 @@
       if (!okDel) return;
 
       try {
-        await deleteDoc(doc(db, currentCollection, docId));
+        const docData = allDocs.find(d => d.id === docId);
+        let docRef;
+        if (docData && docData._docPath) {
+          docRef = doc(db, docData._docPath, docId);
+        } else {
+          docRef = doc(db, currentCollection, docId);
+        }
+        await deleteDoc(docRef);
         toast('Eliminado', 'Documento eliminado');
         await selectCollection(currentCollection);
         loadCollectionCounts();
