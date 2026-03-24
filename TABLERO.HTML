@@ -524,7 +524,7 @@
                 icon: 'fas fa-shopping-cart',
                 class: 'btn-success',
                 action: 'generarPedidos',
-                roles: ['administrador', 'operador']
+                roles: ['administrador', 'operador', 'supernumerario', 'administrador de china']
             },
             {
                 id: 'adminButton',
@@ -533,7 +533,7 @@
                 icon: 'fas fa-cogs',
                 class: 'btn-primary',
                 action: 'panelAdministrativo',
-                roles: ['administrador']
+                roles: ['administrador', 'supernumerario']
             },
             {
                 id: 'showroomButton',
@@ -542,7 +542,7 @@
                 icon: 'fas fa-calendar-alt',
                 class: 'btn-info',
                 action: 'agendaShowroom',
-                roles: ['administrador']
+                roles: ['administrador', 'supernumerario']
             },
             {
                 id: 'configButton',
@@ -560,7 +560,7 @@
                 icon: 'fas fa-warehouse',
                 class: 'btn-warning',
                 action: 'Panelbodega',
-                roles: ['administrador']
+                roles: ['administrador', 'supernumerario']
             },
             {
                 id: 'guiasInterButton',
@@ -569,7 +569,7 @@
                 icon: 'fas fa-truck',
                 class: 'btn-primary',
                 action: 'guiasEnvia',
-                roles: ['administrador', 'operador']
+                roles: ['administrador', 'operador', 'supernumerario']
             },
             {
                 id: 'guiasEnviaButton',
@@ -578,7 +578,7 @@
                 icon: 'fas fa-shipping-fast',
                 class: 'btn-danger',
                 action: 'guiasInterrapidissimo',
-                roles: ['administrador', 'operador']
+                roles: ['administrador', 'operador', 'supernumerario']
             },
             {
                 id: 'inventarioChinaButton',
@@ -586,8 +586,8 @@
                 subtitle: 'Control de inventario internacional',
                 icon: 'fas fa-globe-asia',
                 class: 'btn-orange',
-                action: 'showInventarioPasswordModal',
-                roles: ['administrador']
+                action: 'accesoInventarioChina',
+                roles: ['administrador', 'supernumerario', 'administrador de china', 'operador de china']
             },
             {
                 id: 'permisosButton',
@@ -596,7 +596,7 @@
                 icon: 'fas fa-key',
                 class: 'btn-purple',
                 action: 'irAPermisos',
-                roles: ['administrador', 'operador']
+                roles: ['administrador', 'operador', 'supernumerario', 'administrador de china', 'operador de china']
             }
         ];
 
@@ -832,12 +832,27 @@
             }
         }
 
+        // Normaliza texto eliminando acentos/tildes para comparación robusta
+        function normalizarRol(str) {
+            return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        }
+
         function mostrarOpcionesSegunRol(rol) {
-            console.log("Mostrar opciones según el rol:", rol);
+            const rolNorm = normalizarRol(rol);
+            console.log("Mostrar opciones según el rol (original):", rol, "| (normalizado):", rolNorm);
             
             const device = detectDevice();
-            const allowedButtons = buttonConfigs.filter(btn => btn.roles.includes(rol));
+            const allowedButtons = buttonConfigs.filter(btn => btn.roles.some(r => normalizarRol(r) === rolNorm));
             
+            console.log("Botones permitidos:", allowedButtons.length, allowedButtons.map(b => b.title));
+
+            // DEBUG TEMPORAL - Eliminar después de verificar
+            const debugEl = document.getElementById('error-mensaje');
+            if (debugEl) {
+                debugEl.style.color = '#333';
+                debugEl.textContent = '[DEBUG] Rol detectado: "' + rol + '" → normalizado: "' + rolNorm + '" → Botones: ' + allowedButtons.length;
+            }
+
             if (device.isMobile) {
                 renderMobileButtons(allowedButtons);
             } else {
@@ -1021,6 +1036,19 @@
             }
         }
 
+        // ===== ACCESO INVENTARIO CHINA SEGÚN ROL =====
+        function accesoInventarioChina() {
+            const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
+            const rol = (datosUsuario.permisos || '').toLowerCase();
+            // Roles de China acceden directamente sin clave
+            if (rol === 'administrador de china' || rol === 'operador de china') {
+                window.location.href = 'chinainventario_v2.html';
+                return;
+            }
+            // Admin y Supernumerario usan modal de clave
+            showInventarioPasswordModal();
+        }
+
         // ===== FUNCIONES DEL MODAL (MANTIENEN LA FUNCIONALIDAD ORIGINAL) =====
         function showInventarioPasswordModal() {
             console.log("Showing Inventario China password modal");
@@ -1045,7 +1073,7 @@
             if (enteredPassword === correctPassword) {
                 console.log("Contraseña correcta. Redirigiendo...");
                 hideInventarioPasswordModal();
-                window.location.href = 'https://userlink2024.github.io/FACBA/chinainventario.html';
+                window.location.href = 'https://userlink2024.github.io/FACBA/temporal.html';
             } else {
                 console.warn("Contraseña incorrecta.");
                 if (modalErrorMessage) {
