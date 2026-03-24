@@ -546,6 +546,15 @@
     let bodegueroActual = "";
     let dispatchAlertTimeout = null;
 
+    // === ROLE HELPERS (Bodega) ===
+    const datosUsuarioBodega = JSON.parse(localStorage.getItem('datosUsuario') || '{}');
+    const rolBodega = (datosUsuarioBodega.permisos || '').toLowerCase();
+    const esAdminBodega = rolBodega === 'administrador';
+    const esSupernumerarioBodega = rolBodega === 'supernumerario';
+    const esOperadorChinaBodega = rolBodega === 'operador de china';
+    // Supernumerario puede cambiar bodegueros SOLO en panel (no historial)
+    function puedeEditarBodegueros() { return esAdminBodega || (esSupernumerarioBodega && !modoHistorial); }
+
     function showDispatchAlert(asignado, cantidadNuevos) {
       const alertEl = document.getElementById('dispatchAlert');
       const textEl = document.getElementById('dispatchAlertText');
@@ -819,6 +828,10 @@
     }
 
     function mostrarEdicionBodegueros(id) {
+      if (!puedeEditarBodegueros()) {
+        alert('No tiene permisos para editar bodegueros' + (modoHistorial ? ' en el historial.' : '.'));
+        return;
+      }
       const registro = cacheRegistros.find(r => r.id === id);
       const body = document.getElementById('modalBody');
       body.innerHTML = '<h3>Editar Bodegueros</h3>';
@@ -1770,17 +1783,4 @@
           trashShown = true;
           showOverlay('overlayTrash', TRASH_MSGS, TRASH_EMOJIS, 'trashEmoji', 'trashMsg', 'trashTimer');
         }
-        if (h === 17 && m >= 46) trashShown = false;
-
-        if (h === 17 && m === 58 && !enddayShown) {
-          enddayShown = true;
-          showOverlay('overlayEndday', ENDDAY_MSGS, ENDDAY_EMOJIS, 'enddayEmoji', 'enddayMsg', 'enddayTimer');
-        }
-        if (h === 17 && m >= 59) enddayShown = false;
-      }
-
-      setInterval(checkScheduledMessages, 1000);
-    })();
-  </script>
-</body>
-</html>
+       
