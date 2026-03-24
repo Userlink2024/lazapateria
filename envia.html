@@ -404,6 +404,12 @@
         let guiaAEditarId = null;
         let datosUsuario = null; // Variable global para almacenar los datos del usuario
 
+        // === ROLE HELPERS (Envia) ===
+        function getRolEnvia() { return (datosUsuario && datosUsuario.permisos) ? datosUsuario.permisos.toLowerCase() : ''; }
+        function esAdminEnvia() { return getRolEnvia() === 'administrador'; }
+        function esSupernumerarioEnvia() { return getRolEnvia() === 'supernumerario'; }
+        function tieneVistaAdminEnvia() { return esAdminEnvia() || esSupernumerarioEnvia(); }
+
         let historicoPage = 1;
         const historicoPageSize = 20;
 
@@ -597,10 +603,10 @@
         function verificarRolParaExportar() {
             const exportarExcelBtn = document.getElementById('exportarExcelBtn');
             const deleteByStatusBtn = document.getElementById('deleteByStatusBtn');
-            if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
+            if (tieneVistaAdminEnvia()) {
                 exportarExcelBtn.style.display = 'block';
                 if(deleteByStatusBtn) {
-                  deleteByStatusBtn.style.display = 'block';
+                  deleteByStatusBtn.style.display = esAdminEnvia() ? 'block' : 'none'; // Solo admin real puede eliminar
                 }
             } else {
                 exportarExcelBtn.style.display = 'none';
@@ -835,8 +841,8 @@
             }
 
             guiasFiltradas.forEach(guia => {
-                const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
-                const isAdministrador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'administrador';
+                const isOperador = getRolEnvia() === 'operador';
+                const isAdministrador = esAdminEnvia();
                 const isVerificado = guia.verificado === true;
                 const isNovedad = guia.novedad === true;
                 const isAnulado = guia.anulado === true;
@@ -950,7 +956,7 @@
             const guiaParaEditar = guiasEnvia.find(guia => guia.id === guiaId); // Usar guiasEnvia
 
             if (guiaParaEditar) {
-                const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+                const isOperador = getRolEnvia() === 'operador' || esSupernumerarioEnvia(); // Supernumerario treated as restricted
                 const isVerificado = guiaParaEditar.verificado === true;
                 const isNovedad = guiaParaEditar.novedad === true;
                 const isAnulado = guiaParaEditar.anulado === true;
@@ -988,7 +994,7 @@
         async function eliminarGuia(id) {
             const guiaAEliminar = guiasEnvia.find(guia => guia.id === id);
             // Usar guiasEnvia
-            const isOperador = datosUsuario && datosUsuario.permisos.toLowerCase() === 'operador';
+            const isOperador = getRolEnvia() === 'operador' || esSupernumerarioEnvia(); // Supernumerario can't delete
             const isVerificado = guiaAEliminar && guiaAEliminar.verificado === true;
             const isNovedad = guiaAEliminar && guiaAEliminar.novedad === true;
             const isAnulado = guiaAEliminar && guiaAEliminar.anulado === true;
@@ -1201,7 +1207,7 @@
         }
         function verificarRolParaIngresarDatos() {
             const ingresarDatosBtn = document.getElementById('ingresarDatosBtn');
-            if (datosUsuario && datosUsuario.permisos && datosUsuario.permisos.toLowerCase() === 'administrador') {
+            if (esAdminEnvia()) { // Solo admin real puede ingresar datos
                 ingresarDatosBtn.style.display = 'block';
             } else {
                 ingresarDatosBtn.style.display = 'none';
