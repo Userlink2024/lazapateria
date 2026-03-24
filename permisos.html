@@ -741,6 +741,17 @@
         let datosUsuario = JSON.parse(localStorage.getItem('datosUsuario'));
         console.log("Datos del usuario al inicio:", datosUsuario);
 
+        // === ROLE HELPERS ===
+        function getRolPermisos() { return (datosUsuario && datosUsuario.permisos) ? datosUsuario.permisos.toLowerCase() : ''; }
+        function esAdminPermisos() { return getRolPermisos() === 'administrador'; }
+        function esSupernumerarioPermisos() { return getRolPermisos() === 'supernumerario'; }
+        function esOperadorChinaPermisos() { return getRolPermisos() === 'operador de china'; }
+        function esAdminChinaPermisos() { return getRolPermisos() === 'administrador de china'; }
+        // Supernumerario can see everything but not edit; Admin de China acts like Operador
+        function tieneVistaAdminPermisos() { return esAdminPermisos() || esSupernumerarioPermisos(); }
+        // Roles that filter by own user ID
+        function filtraPorUsuarioPermisos() { return getRolPermisos() === 'operador' || getRolPermisos() === 'bodeguero' || esAdminChinaPermisos(); }
+
         // Check if user data is missing and show auth modal
         function checkUserAuthentication() {
             if (!datosUsuario || !datosUsuario.permisos || !datosUsuario.nombreCompleto || !datosUsuario.usuario) {
@@ -870,7 +881,7 @@
             updateTimeAuthorized(); // Calculate initial time authorized
 
             // Adjust visibility of Export to Excel and Report buttons based on user role
-            if (datosUsuario.permisos.toLowerCase() === 'administrador') {
+            if (tieneVistaAdminPermisos()) {
                 document.getElementById('export_excel_btn').style.display = 'block';
                 document.getElementById('btn_reporte_novedades').style.display = 'block';
             } else {
@@ -1109,12 +1120,12 @@
 
             let query = db.collection('permisos').orderBy('submissionDate', 'desc');
 
-            // Operators and Bodegueros only see their own permits
-            if (datosUsuario.permisos.toLowerCase() === 'operador' || datosUsuario.permisos.toLowerCase() === 'bodeguero') {
+            // Operators, Bodegueros, Admin de China, and Operador de China only see their own permits
+            if (filtraPorUsuarioPermisos() || esOperadorChinaPermisos()) {
                 console.log(`[Firestore Query] Filtering permits for user: ${datosUsuario.usuario}`);
                 query = query.where('userId', '==', datosUsuario.usuario);
             } else {
-                console.log(`[Firestore Query] Fetching all permits for Administrator/other role.`);
+                console.log(`[Firestore Query] Fetching all permits for Administrator/Supernumerario role.`);
             }
 
             permitsListenerUnsubscribe = query.onSnapshot(snapshot => {
@@ -1217,9 +1228,9 @@
                 const isRrhhSigned = permit.signedByRRHH;
 
                 // Determine edit/deny/delete button state
-                const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+                const isAdministrator = esAdminPermisos(); // Solo admin real puede editar/firmar/negar
                 const hasAnySignature = isWorkerSigned || isJefeSigned || isRrhhSigned;
-                const canEdit = isAdministrator || (!hasAnySignature && permit.status !== 'Autorizado' && permit.status !== 'Rechazado'); // Admins can always edit
+                const canEdit = isAdministrator || (!esSupernumerarioPermisos() && !hasAnySignature && permit.status !== 'Autorizado' && permit.status !== 'Rechazado');
 
                 const canDeny = isAdministrator && permit.status !== 'Autorizado' && permit.status !== 'Rechazado';
 
@@ -1264,7 +1275,7 @@
 
         // --- Signature Handling ---
         async function handleWorkerSignature(permitId, isChecked) {
-            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const isAdministrator = esAdminPermisos();
             if (!isChecked) { // Worker is trying to uncheck
                 if (!isAdministrator) { // Only admin can uncheck
                     document.getElementById(`worker_sign_${permitId}`).checked = true; // Revert checkbox
@@ -1293,7 +1304,7 @@
         }
 
         async function handleJefeSignature(permitId, isChecked) {
-            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const isAdministrator = esAdminPermisos();
             if (!isAdministrator) { // Only admin can modify this
                 document.getElementById(`jefe_sign_${permitId}`).checked = !isChecked; // Revert checkbox
                 alert("Solo un administrador puede firmar o desmarcar la firma del Jefe Inmediato.");
@@ -1317,7 +1328,7 @@
         }
 
         async function handleRRHHSignature(permitId, isChecked) {
-            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const isAdministrator = esAdminPermisos();
             if (!isAdministrator) { // Only admin can modify this
                 document.getElementById(`rrhh_sign_${permitId}`).checked = !isChecked; // Revert checkbox
                 alert("Solo un administrador puede firmar o desmarcar la firma de RR. HH.");
@@ -1391,7 +1402,7 @@
                 }
                 const permit = docSnap.data();
 
-                const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+                const isAdministrator = esAdminPermisos();
                 // A permit can't be edited by operator/bodeguero if any signature exists OR if it's already authorized/denied
                 const hasAnySignatureOrFinalStatus = permit.signedByWorker || permit.signedByJefe || permit.signedByRRHH || permit.status === 'Autorizado' || permit.status === 'Rechazado';
 
@@ -1435,7 +1446,7 @@
             event.preventDefault();
             showLoadingBar();
 
-            const isAdministrator = datosUsuario.permisos.toLowerCase() === 'administrador';
+            const isAdministrator = esAdminPermisos();
             const permitRef = db.collection('permisos').doc(currentEditPermitId);
             const docSnap = await permitRef.get();
             const permit = docSnap.data();
@@ -1477,7 +1488,7 @@
 
         // --- Deny Permit ---
         async function denyPermit(permitId) {
-            if (datosUsuario.permisos.toLowerCase() !== 'administrador') {
+            if (!esAdminPermisos()) {
                 alert("Solo un administrador puede negar permisos.");
                 return;
             }
