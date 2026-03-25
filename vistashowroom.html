@@ -252,6 +252,10 @@
         afternoon: ["14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30"]
     };
 
+    // === ROLE CHECK ===
+    const _vsUsuario = (() => { try { return JSON.parse(localStorage.getItem('datosUsuario')); } catch(e) { return null; } })();
+    const _vsSuperReadOnly = _vsUsuario && _vsUsuario.permisos && _vsUsuario.permisos.toLowerCase() === 'supernumerario';
+
     // === STATE ===
     let allFabricantes = [];
     let allCitas = [];
@@ -375,7 +379,8 @@
         const exists = await fabricantesCol.where('cedula', '==', cedula).get();
         if (!exists.empty) { toast('Ya existe un fabricante con esa cédula.', 'error'); return; }
         try {
-            await fabricantesCol.add({ cedula, nombre: '', observacion: obs, habilitado: true, creadoEn: new Date() });
+            if (_vsSuperReadOnly) { toast('Supernumerario: solo lectura, no puede registrar fabricantes.', 'error'); return; }
+        await fabricantesCol.add({ cedula, nombre: '', observacion: obs, habilitado: true, creadoEn: new Date() });
             toast('Fabricante registrado exitosamente.');
             $('formNuevoFabricante').reset();
         } catch (err) { toast('Error al registrar.', 'error'); }
@@ -409,6 +414,7 @@
         const obs = $('editFabObservacion').value.trim();
         if (!nombre) { toast('Nombre obligatorio.', 'error'); return; }
         try {
+            if (_vsSuperReadOnly) { toast('Supernumerario: solo lectura, no puede actualizar fabricantes.', 'error'); return; }
             await fabricantesCol.doc(id).update({ nombre, observacion: obs, habilitado: editFabHabilitado });
             toast('Fabricante actualizado.');
             cerrarModal('modalEditarFabricante');
@@ -430,6 +436,7 @@
     });
 
     window.eliminarFabricante = function(id, nombre) {
+        if (_vsSuperReadOnly) { toast('Supernumerario: solo lectura, no puede eliminar fabricantes.', 'error'); return; }
         showConfirm(`¿Eliminar al fabricante "${nombre}"? Esta acción no se puede deshacer.`, 'Eliminar Fabricante', async () => {
             try {
                 await fabricantesCol.doc(id).delete();
@@ -563,6 +570,7 @@
     }
 
     $('btnGuardarCita').addEventListener('click', async () => {
+        if (_vsSuperReadOnly) { toast('Supernumerario: solo lectura, no puede guardar citas.', 'error'); return; }
         const editId = $('citaEditId').value;
         const cedula = $('citaCedula').value.trim();
         const fecha = $('citaDia').value;
@@ -584,16 +592,15 @@
                 // Check if this cedula already has an appointment
                 const existingCita = allCitas.find(c => c.cedula === cedula);
                 if (existingCita) { toast('Este fabricante ya tiene cita agendada. Solo se permite una cita.', 'error'); return; }
-                // TRANSACCIÓN ATÓMICA: doc ID = fecha_hora para evitar duplicados concurrentes
-                const slotDocId = `${fecha}_${hora}`;
+                // Doc ID determinístico: fecha_hora (sin ':') para evitar duplicados concurrentes
+                const slotDocId = `${fecha}_${hora.replace(/:/g, '')}`;
                 const slotRef = citasCol.doc(slotDocId);
-                await db.runTransaction(async (transaction) => {
-                    const slotSnap = await transaction.get(slotRef);
-                    if (slotSnap.exists) {
-                        throw new Error('SLOT_OCUPADO');
-                    }
-                    transaction.set(slotRef, { cedula, fabricante, fecha, hora, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-                });
+                const slotSnap = await slotRef.get();
+                if (slotSnap.exists) { throw new Error('SLOT_OCUPADO'); }
+                await slotRef.set({ cedula, fabricante, fecha, hora, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+                // Post-write verify
+                const verify = await slotRef.get();
+                if (!verify.exists || verify.data().cedula !== cedula) { throw new Error('SLOT_OCUPADO'); }
                 toast('Cita creada.');
             }
             cerrarModal('modalCita');
@@ -608,6 +615,7 @@
 
     window.editarCita = function(id) { openCitaModal(id); };
     window.eliminarCita = function(id) {
+        if (_vsSuperReadOnly) { toast('Supernumerario: solo lectura, no puede eliminar citas.', 'error'); return; }
         showConfirm('¿Eliminar esta cita?', 'Eliminar Cita', async () => {
             try { await citasCol.doc(id).delete(); toast('Cita eliminada.'); } catch (e) { toast('Error.', 'error'); }
         });
