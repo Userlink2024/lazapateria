@@ -535,7 +535,8 @@ const firebaseConfig = {
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // === ACCESS CONTROL: Solo Administrador puede gestionar usuarios ===
+        // === ACCESS CONTROL: Admin y Supernumerario (solo lectura) ===
+        let _esSuperReadOnly = false;
         (function enforceAdminAccess() {
             let datosUsuario = null;
             try { datosUsuario = JSON.parse(localStorage.getItem('datosUsuario')); } catch(e) {}
@@ -545,6 +546,10 @@ const firebaseConfig = {
                 throw new Error('Sin sesión');
             }
             const rol = datosUsuario.permisos.toLowerCase();
+            if (rol === 'supernumerario') {
+                _esSuperReadOnly = true;
+                return; // Puede ver, pero las funciones de escritura lo bloquearán
+            }
             if (rol !== 'administrador') {
                 alert('Acceso denegado. Solo administradores pueden gestionar usuarios.');
                 window.location.href = 'index.html';
@@ -734,6 +739,7 @@ const firebaseConfig = {
         </div>
     <script>
         async function registrarUsuario() {
+            if (_esSuperReadOnly) { showAlert('Supernumerario: solo lectura, no puede registrar usuarios.'); return; }
             const nombreCompleto = document.getElementById("nombreCompleto").value;
             const tipoDocumento = document.getElementById("tipoDocumento").value;
             const celular = document.getElementById("celular").value;
@@ -786,6 +792,7 @@ const firebaseConfig = {
         }
 
         async function modificarUsuario() {
+            if (_esSuperReadOnly) { showAlert('Supernumerario: solo lectura, no puede modificar usuarios.'); return; }
             const usuarioId = document.getElementById('usuariosSelect').value;
             const nombreCompleto = document.getElementById("nombreCompleto").value;
             const tipoDocumento = document.getElementById("tipoDocumento").value;
@@ -826,6 +833,7 @@ const firebaseConfig = {
         }
 
         async function eliminarUsuario() {
+            if (_esSuperReadOnly) { showAlert('Supernumerario: solo lectura, no puede eliminar usuarios.'); return; }
             const usuarioId = document.getElementById('usuariosSelect').value;
 
             if (!usuarioId) {
@@ -935,6 +943,7 @@ const firebaseConfig = {
 
         async function handleCambiarPassAdmin(event) {
             event.preventDefault();
+            if (_esSuperReadOnly) { showAlert('Supernumerario: solo lectura, no puede cambiar contraseñas.'); return; }
             const errorDiv = document.getElementById('cp_error');
             const successDiv = document.getElementById('cp_success');
             const btn = document.getElementById('cp_submit_btn');
@@ -1075,6 +1084,7 @@ const firebaseConfig = {
         }
 
         async function aceptarSolicitud(docId) {
+            if (_esSuperReadOnly) { showAlert('Supernumerario: solo lectura, no puede aceptar solicitudes.'); return; }
             const usuario = document.getElementById('sol_usuario_' + docId).value.trim();
             const tipoContrato = document.getElementById('sol_contrato_' + docId).value;
             const permisos = document.getElementById('sol_permisos_' + docId).value;
@@ -1140,6 +1150,7 @@ const firebaseConfig = {
         }
 
         async function rechazarSolicitud(docId) {
+            if (_esSuperReadOnly) { showAlert('Supernumerario: solo lectura, no puede rechazar solicitudes.'); return; }
             if (!confirm('\u00bfEst\u00e1 seguro de rechazar y eliminar esta solicitud? Esta acci\u00f3n no se puede deshacer.')) return;
             try {
                 await db.collection('solicitudes_usuario').doc(docId).delete();
