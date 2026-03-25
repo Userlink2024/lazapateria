@@ -1550,6 +1550,7 @@ const db = firebase.firestore();
 const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
 if(!usuario){ showModal('Error', 'No hay sesión activa.', false, ()=>location.href='index.html'); }
 if(usuario.permisos !== 'Administrador' && usuario.permisos !== 'Supernumerario'){ showModal('Error', 'Acceso denegado.', false, ()=>location.href='index.html'); }
+const _esSuperReadOnlyCB = usuario.permisos === 'Supernumerario';
 
 $('user-info').textContent = usuario.usuario;
 $('logout').onclick = ()=>{ localStorage.removeItem('datosUsuario'); location.href='index.html'; };
@@ -2066,6 +2067,7 @@ async function handleDoubleClick(clickedConsign, index) {
 
     // 5. Lógica de Aceptar
     const insertAction = async () => {
+        if (_esSuperReadOnlyCB) { showModal('Acceso restringido', 'Supernumerario: solo lectura, no puede insertar consignaciones.', false); return; }
         const valorInput = document.getElementById('modal-retro-valor');
         const referenciaInput = document.getElementById('modal-retro-referencia');
         const fechaInput = document.getElementById('modal-retro-fecha');
@@ -2224,6 +2226,7 @@ $('gear-change').addEventListener('click', ()=> $('gear-panel').classList.toggle
 $('cancel-gear').addEventListener('click', ()=> $('gear-panel').classList.add('hidden'));
 
 $('save-manager-pass').addEventListener('click', async ()=>{
+  if (_esSuperReadOnlyCB) { showModal('Acceso restringido', 'Supernumerario: solo lectura, no puede cambiar la clave.', false); return; }
   const p = $('new-manager-pass').value.trim(); 
   if(!p){ showModal('Atención', 'Ingrese nueva clave.', false); return; }
   
@@ -2390,6 +2393,7 @@ document.addEventListener('change', async (e) => {
                 await showPasswordModal("Confirmación de Apertura", `¿Desea REABRIR la cuenta "${accountName}"? Esto permitirá nuevas consignaciones. Ingrese CLAVE DE GERENTE.`);
             }
             
+            if (_esSuperReadOnlyCB) { showModal('Acceso restringido', 'Supernumerario: solo lectura, no puede cerrar/abrir cuentas.', false); e.target.checked = !newState; return; }
             await db.collection('cuentas').doc(accountId).update({ closed: newState });
         } catch (error) {
             e.target.checked = !newState; // Revertir estado en la UI si falla o cancela
@@ -2410,6 +2414,7 @@ async function deleteAccount(id, name){
                 `Va a eliminar la cuenta "${name}" y todo su historial. Ingrese CLAVE DE GERENTE para confirmar:`
             );
 
+            if (_esSuperReadOnlyCB) { showModal('Acceso restringido', 'Supernumerario: solo lectura, no puede eliminar cuentas.', false); return; }
             await db.collection('cuentas').doc(id).delete();
             if(selectedAccountId === id) { selectedAccountId=null; $('consigns-body').innerHTML=''; $('selected-account-info').textContent='...'; }
             showModal('Éxito', "Cuenta eliminada.", false);
@@ -2421,6 +2426,7 @@ async function deleteAccount(id, name){
 
 /** Lógica para agregar cuentas nuevas */
 $('add-account').addEventListener('click', async ()=>{
+  if (_esSuperReadOnlyCB) { showModal('Acceso restringido', 'Supernumerario: solo lectura, no puede agregar cuentas.', false); return; }
   const name = $('new-account-name').value.trim();
   const number = $('new-account-number').value.trim();
   
