@@ -337,7 +337,8 @@
     const safeStr = v => (v === undefined || v === null) ? '' : String(v);
     const escapeHtml = s => safeStr(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-    // === ACCESS CONTROL: Solo Administrador puede acceder al Panel Maestro ===
+    // === ACCESS CONTROL: Admin y Supernumerario (solo lectura) ===
+    let _esSuperReadOnlyPM = false;
     (function enforceAdminAccess() {
         let datosUsuario = null;
         try { datosUsuario = JSON.parse(localStorage.getItem('datosUsuario')); } catch(e) {}
@@ -347,6 +348,10 @@
             throw new Error('Sin sesión');
         }
         const rol = datosUsuario.permisos.toLowerCase();
+        if (rol === 'supernumerario') {
+            _esSuperReadOnlyPM = true;
+            return; // Puede ver, pero las funciones de escritura lo bloquearán
+        }
         if (rol !== 'administrador') {
             alert('Acceso denegado. Solo administradores pueden acceder al Panel Maestro.');
             window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
@@ -789,6 +794,7 @@
     }
 
     async function saveDocument() {
+      if (_esSuperReadOnlyPM) { alert('Supernumerario: solo lectura, no puede guardar cambios.'); return; }
       if (!editingDoc || !currentCollection) return;
 
       const updates = {};
@@ -842,6 +848,7 @@
     }
 
     async function deleteDocument(docId) {
+      if (_esSuperReadOnlyPM) { alert('Supernumerario: solo lectura, no puede eliminar documentos.'); return; }
       if (!currentCollection) return;
       const okDel = await showConfirmModal({ title: 'Eliminar documento', message: `Se eliminará el documento <strong>${escapeHtml(docId.substring(0,25))}</strong>.<br><strong>Esta acción no se puede deshacer.</strong>`, icon: 'danger', confirmText: 'Sí, eliminar' });
       if (!okDel) return;
@@ -884,6 +891,7 @@
     }
 
     async function addDocument() {
+      if (_esSuperReadOnlyPM) { alert('Supernumerario: solo lectura, no puede agregar documentos.'); return; }
       if (!currentCollection) return;
 
       let data;
