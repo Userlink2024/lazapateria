@@ -82,12 +82,12 @@ input,select,textarea{font-family:inherit}
 
 /* Config list */
 .config-list{display:flex;flex-direction:column;gap:10px}
-.config-row{display:grid;grid-template-columns:1fr 160px 60px;gap:12px;align-items:center;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:#fafafa;transition:all .15s}
+.config-row{display:grid;grid-template-columns:1fr 140px 50px auto;gap:10px;align-items:center;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:#fafafa;transition:all .15s}
 .config-row:hover{background:#f0f0f5}
 .config-row .cfg-name{font-weight:700;font-size:13px}
 .config-row .cfg-num{font-size:11px;color:var(--muted)}
 .config-row input[type="text"]{padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:700;text-align:right;width:100%}
-@media(max-width:600px){.config-row{grid-template-columns:1fr 120px 50px}}
+@media(max-width:600px){.config-row{grid-template-columns:1fr 100px 44px auto}}
 
 /* Toggle switch */
 .toggle{position:relative;width:44px;height:26px;flex-shrink:0}
@@ -129,14 +129,12 @@ input,select,textarea{font-family:inherit}
 
 .hint{font-size:12px;color:var(--muted);font-weight:600}
 
-.save-float{position:sticky;bottom:0;background:rgba(245,245,247,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:14px 18px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:0 0 14px 14px;margin:-18px -18px 0;margin-top:18px}
-.save-float .save-hint{font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px}
-.save-float .save-hint i{color:var(--orange)}
-.btn.save-btn{padding:12px 28px;font-size:14px;border-radius:12px;background:linear-gradient(135deg,var(--blue),#005ec4);color:#fff;font-weight:800;box-shadow:0 4px 14px rgba(0,122,255,.3);transition:all .2s}
-.btn.save-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,122,255,.4)}
-.btn.save-btn:active{transform:scale(.97)}
-.btn.save-btn.saved{background:linear-gradient(135deg,var(--green),#28a745);box-shadow:0 4px 14px rgba(52,199,89,.3)}
 .config-row.changed{border-color:var(--orange);background:rgba(255,149,0,.04)}
+.row-save-btn{padding:8px 12px;border-radius:8px;border:none;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .2s;background:var(--blue);color:#fff;box-shadow:0 2px 8px rgba(0,122,255,.25);white-space:nowrap;min-width:70px;justify-content:center}
+.row-save-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,122,255,.35)}
+.row-save-btn:active{transform:scale(.95)}
+.row-save-btn.saved{background:var(--green);box-shadow:0 2px 8px rgba(52,199,89,.25)}
+.row-save-btn:disabled{opacity:.7;cursor:not-allowed;transform:none}
 
 /* Alert overlay */
 .tope-alert-overlay{position:fixed;inset:0;background:rgba(255,59,48,.15);display:flex;align-items:center;justify-content:center;z-index:999;backdrop-filter:blur(6px);animation:alertPulse .4s ease}
@@ -222,12 +220,8 @@ input,select,textarea{font-family:inherit}
         <span class="hint" id="configCount">0 cuentas</span>
       </div>
       <div class="card-b">
-        <p class="hint" style="margin-bottom:14px">Activa las cuentas que vas a usar hoy y establece el tope (limite) de cada una. Presiona <strong>Guardar</strong> al terminar.</p>
+        <p class="hint" style="margin-bottom:14px">Activa las cuentas que vas a usar hoy y establece el tope (limite) de cada una. Presiona <strong>Guardar</strong> en cada fila al terminar.</p>
         <div class="config-list" id="configList"></div>
-        <div class="save-float" id="saveFloat">
-          <div class="save-hint" id="saveHint"><i class="fas fa-circle-info"></i> Configura los topes y presiona Guardar</div>
-          <button class="btn save-btn" id="btnSaveConfig" onclick="saveAllConfig()"><i class="fas fa-floppy-disk"></i> Guardar Configuración</button>
-        </div>
       </div>
     </div>
   </div>
@@ -467,7 +461,7 @@ function renderConfig(){
     const tope = cfg.tope || '';
     const activo = cfg.activo === true;
     return `
-      <div class="config-row">
+      <div class="config-row" data-acc-id="${acc.id}">
         <div>
           <div class="cfg-name">${acc.name}</div>
           <div class="cfg-num">${acc.number}</div>
@@ -477,71 +471,56 @@ function renderConfig(){
           <input type="checkbox" data-id="${acc.id}" class="activo-toggle" ${activo?'checked':''}/>
           <span class="slider"></span>
         </label>
+        <button class="row-save-btn" data-id="${acc.id}" onclick="saveRowConfig('${acc.id}',this)"><i class="fas fa-floppy-disk"></i> Guardar</button>
       </div>`;
   }).join('');
 
-  // Tope input: format only (no auto-save)
+  // Tope input: format only (no auto-save), mark row changed
   list.querySelectorAll('.tope-input').forEach(input=>{
     input.addEventListener('input',()=>{
       const raw = input.value.replace(/[^0-9]/g,'');
       input.value = raw ? Number(raw).toLocaleString('es-CO') : '';
-      markConfigChanged(input.closest('.config-row'));
+      const row = input.closest('.config-row');
+      if(row) row.classList.add('changed');
     });
   });
 
-  // Active toggle: mark changed (no auto-save)
+  // Active toggle: mark row changed (no auto-save)
   list.querySelectorAll('.activo-toggle').forEach(toggle=>{
     toggle.addEventListener('change',()=>{
-      markConfigChanged(toggle.closest('.config-row'));
+      const row = toggle.closest('.config-row');
+      if(row) row.classList.add('changed');
     });
   });
 }
 
-function markConfigChanged(row){
-  if(row) row.classList.add('changed');
-  const hint = $('saveHint');
-  if(hint) hint.innerHTML = '<i class="fas fa-pen" style="color:var(--orange)"></i> <span style="color:var(--orange)">Hay cambios sin guardar</span>';
-  const btn = $('btnSaveConfig');
-  if(btn){ btn.classList.remove('saved'); }
-}
+async function saveRowConfig(accId, btnEl){
+  const row = btnEl.closest('.config-row');
+  if(!row) return;
+  const input = row.querySelector('.tope-input');
+  const toggle = row.querySelector('.activo-toggle');
+  const val = parseMoneda(input ? input.value : '0');
+  const activo = toggle ? toggle.checked : false;
 
-async function saveAllConfig(){
-  const btn = $('btnSaveConfig');
-  const list = $('configList');
-  if(!list) return;
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
-
-  const inputs = list.querySelectorAll('.tope-input');
-  const toggles = list.querySelectorAll('.activo-toggle');
-  const batch = db.batch();
-
-  inputs.forEach(input=>{
-    const id = input.dataset.id;
-    const val = parseMoneda(input.value);
-    const toggleEl = list.querySelector(`.activo-toggle[data-id="${id}"]`);
-    const activo = toggleEl ? toggleEl.checked : false;
-    batch.set(COL_TOPES_CFG.doc(id), { tope: val, activo: activo }, { merge: true });
-  });
+  btnEl.disabled = true;
+  btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
   try {
-    await batch.commit();
-    toast('Configuración guardada correctamente');
-    btn.innerHTML = '<i class="fas fa-check"></i> Guardado';
-    btn.classList.add('saved');
-    const hint = $('saveHint');
-    if(hint) hint.innerHTML = '<i class="fas fa-check-circle" style="color:var(--green)"></i> <span style="color:var(--green)">Todo guardado</span>';
-    list.querySelectorAll('.config-row.changed').forEach(r=>r.classList.remove('changed'));
+    await COL_TOPES_CFG.doc(accId).set({ tope: val, activo: activo }, { merge: true });
+    toast(activo ? 'Tope guardado y cuenta activada' : 'Tope guardado');
+    btnEl.innerHTML = '<i class="fas fa-check"></i> Listo';
+    btnEl.classList.add('saved');
+    row.classList.remove('changed');
     setTimeout(()=>{
-      btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar Configuración';
-      btn.classList.remove('saved');
-      btn.disabled = false;
-    }, 2000);
+      btnEl.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar';
+      btnEl.classList.remove('saved');
+      btnEl.disabled = false;
+    }, 1500);
   } catch(e){
     console.error('Error guardando config:', e);
-    toast('Error al guardar configuración');
-    btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar Configuración';
-    btn.disabled = false;
+    toast('Error al guardar');
+    btnEl.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar';
+    btnEl.disabled = false;
   }
 }
 
