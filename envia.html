@@ -617,6 +617,11 @@
         }
 
         async function guardarGuia() {
+            // Supernumerario: solo lectura total
+            if (esSupernumerarioEnvia()) {
+                showMessageModal('Acción Restringida', 'Supernumerario: solo lectura, no puede crear ni guardar guías.', 'info');
+                return;
+            }
             const usuario = document.getElementById('usuarioLogueado').value;
             const fecha = document.getElementById('fechaGuia').value;
             const nombreCliente = document.getElementById('nombreCliente').value;
@@ -843,10 +848,11 @@
             guiasFiltradas.forEach(guia => {
                 const isOperador = getRolEnvia() === 'operador';
                 const isAdministrador = esAdminEnvia();
+                const isSuperReadOnly = esSupernumerarioEnvia();
                 const isVerificado = guia.verificado === true;
                 const isNovedad = guia.novedad === true;
                 const isAnulado = guia.anulado === true;
-                const disableActions = isOperador && (isVerificado || isNovedad || isAnulado);
+                const disableActions = isSuperReadOnly || (isOperador && (isVerificado || isNovedad || isAnulado));
 
                 const listItem = document.createElement('li');
                 // Construye los atributos `disabled` y `onclick` condicionalmente
@@ -956,7 +962,12 @@
             const guiaParaEditar = guiasEnvia.find(guia => guia.id === guiaId); // Usar guiasEnvia
 
             if (guiaParaEditar) {
-                const isOperador = getRolEnvia() === 'operador' || esSupernumerarioEnvia(); // Supernumerario treated as restricted
+                // Supernumerario: solo lectura total
+                if (esSupernumerarioEnvia()) {
+                    showMessageModal('Acción Restringida', 'Supernumerario: solo lectura, no puede editar.', 'info');
+                    return;
+                }
+                const isOperador = getRolEnvia() === 'operador';
                 const isVerificado = guiaParaEditar.verificado === true;
                 const isNovedad = guiaParaEditar.novedad === true;
                 const isAnulado = guiaParaEditar.anulado === true;
@@ -992,22 +1003,23 @@
         }
 
         async function eliminarGuia(id) {
+            // Supernumerario: solo lectura total
+            if (esSupernumerarioEnvia()) {
+                showMessageModal('Acción Restringida', 'Supernumerario: solo lectura, no puede eliminar.', 'info');
+                return;
+            }
             const guiaAEliminar = guiasEnvia.find(guia => guia.id === id);
-            // Usar guiasEnvia
-            const isOperador = getRolEnvia() === 'operador' || esSupernumerarioEnvia(); // Supernumerario can't delete
+            const isOperador = getRolEnvia() === 'operador';
             const isVerificado = guiaAEliminar && guiaAEliminar.verificado === true;
             const isNovedad = guiaAEliminar && guiaAEliminar.novedad === true;
             const isAnulado = guiaAEliminar && guiaAEliminar.anulado === true;
-
             if (isOperador && (isVerificado || isNovedad || isAnulado)) {
                 showMessageModal('Acción Restringida', 'No puedes eliminar guías verificadas, con novedad o anuladas como Operador.', 'info');
                 return;
             }
-
             try {
                 await collectionGuias.doc(id).delete();
                 showMessageModal('Éxito', 'Guía eliminada exitosamente.', 'success');
-                // La recarga se maneja por el onSnapshot
             }
             catch (error) {
                 console.error("Error al eliminar la guía: ", error);
