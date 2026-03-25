@@ -132,6 +132,16 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--border)}
 @keyframes modalIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 
+.order-card.old-pending{border-left:4px solid #7c3aed;background:rgba(139,92,246,.03)}
+.old-day-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;background:rgba(139,92,246,.12);color:#7c3aed}
+
+.alert-banner{background:linear-gradient(135deg,#fef3c7,#fff7ed);border:1.5px solid #f59e0b;border-radius:var(--radius);padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px;animation:bannerPulse 3s infinite}
+.alert-banner .alert-icon{width:40px;height:40px;border-radius:10px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;font-size:18px;color:#d97706;flex-shrink:0}
+.alert-banner .alert-text{flex:1}
+.alert-banner .alert-title{font-size:14px;font-weight:800;color:#92400e}
+.alert-banner .alert-desc{font-size:12px;color:#a16207;margin-top:2px}
+@keyframes bannerPulse{0%,100%{border-color:#f59e0b}50%{border-color:#fbbf24}}
+
 .hidden{display:none!important}
 
 @media(max-width:768px){
@@ -185,6 +195,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
     <button class="tab-btn active" data-tab="pendientes"><i class="fas fa-hourglass-half"></i> Pendientes <span class="count" id="tabCountPendientes">0</span></button>
     <button class="tab-btn" data-tab="retardos"><i class="fas fa-exclamation-triangle"></i> Retardos <span class="count" id="tabCountRetardos">0</span></button>
     <button class="tab-btn" data-tab="despachados"><i class="fas fa-check-double"></i> Despachados <span class="count" id="tabCountDespachados">0</span></button>
+    <button class="tab-btn" data-tab="anteriores"><i class="fas fa-calendar-minus" style="color:inherit"></i> Días Anteriores <span class="count" id="tabCountAnteriores">0</span></button>
     <button class="tab-btn" data-tab="todos"><i class="fas fa-list"></i> Todos <span class="count" id="tabCountTodos">0</span></button>
   </div>
 
@@ -195,6 +206,17 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
       <button class="btn btn-success btn-sm" id="btnBulkDispatch"><i class="fas fa-truck-fast"></i> Despachar Seleccionados</button>
       <button class="btn btn-secondary btn-sm" id="btnBulkClear"><i class="fas fa-times"></i> Limpiar</button>
     </div>
+  </div>
+
+  <!-- ALERT BANNER FOR PREVIOUS DAYS -->
+  <div class="alert-banner hidden" id="alertBannerPrevDays">
+    <div class="alert-icon"><i class="fas fa-calendar-exclamation"></i>⚠️</div>
+    <div class="alert-text">
+      <div class="alert-title" id="alertBannerTitle">Pedidos de días anteriores sin despachar</div>
+      <div class="alert-desc" id="alertBannerDesc">Hay pedidos pendientes de días anteriores que requieren atención.</div>
+    </div>
+    <button class="btn btn-warning btn-sm" onclick="switchToTab('anteriores')"><i class="fas fa-eye"></i> Ver</button>
+    <button class="btn btn-ghost" style="color:#92400e;padding:4px 8px" onclick="this.parentElement.classList.add('hidden')"><i class="fas fa-xmark"></i></button>
   </div>
 
   <!-- ORDERS GRID -->
@@ -251,12 +273,16 @@ document.getElementById('userPill').innerHTML = `<i class="fas fa-user"></i> <st
 // ============================
 const $ = id => document.getElementById(id);
 let allRegistros = [];
+let previousDayRegistros = [];
 let filteredRegistros = [];
+let filteredPrevDayRegistros = [];
 let currentTab = 'pendientes';
 let retardTimeMinutes = 20;
 let selectedIds = new Set();
 let unsubscribe = null;
+let unsubscribePrevDays = null;
 let audioCtx = null;
+let _startOfDay = null;
 
 // ============================
 // UTILITIES
@@ -352,55 +378,101 @@ async function loadSettings() {
 // ============================
 // REAL-TIME LISTENER
 // ============================
+function parseRegistro(d) {
+    const data = d.data();
+    const fechaHora = data.fecha_hora && data.fecha_hora.toDate ? data.fecha_hora.toDate() : null;
+    const despachadoTimestamp = data.despachadoTimestamp && data.despachadoTimestamp.toDate ? data.despachadoTimestamp.toDate() : null;
+    const empaqueTimestamp = data.enviadoAEmpaqueTimestamp && data.enviadoAEmpaqueTimestamp.toDate ? data.enviadoAEmpaqueTimestamp.toDate() : null;
+    const nowMs = Date.now();
+    const isRetardo = !data.enviadoAEmpaque && data.despachado !== true && fechaHora && ((nowMs - fechaHora.getTime()) / 60000 > retardTimeMinutes);
+    const isPreviousDay = fechaHora ? fechaHora < _startOfDay : false;
+    return {
+        id: d.id,
+        ...data,
+        _fechaHora: fechaHora,
+        _despachadoTimestamp: despachadoTimestamp,
+        _empaqueTimestamp: empaqueTimestamp,
+        _isRetardo: isRetardo,
+        _isPreviousDay: isPreviousDay,
+        _searchBlob: norm([data.codigo_unico, data.cliente, data.asesor, data.transportadora, data.observaciones,
+            (Array.isArray(data.productos) ? data.productos.map(p => [p.referencia, p.color, p.talla].join(' ')).join(' ') : '')
+        ].join(' '))
+    };
+}
+
 function startListener() {
     const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    _startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     if (unsubscribe) unsubscribe();
+    if (unsubscribePrevDays) unsubscribePrevDays();
 
+    // Listener 1: Today's orders (all statuses)
     unsubscribe = db.collection('registros')
-        .where('fecha_hora', '>=', startOfDay)
+        .where('fecha_hora', '>=', _startOfDay)
         .where('fecha_hora', '<=', endOfDay)
         .orderBy('fecha_hora', 'desc')
         .onSnapshot(snapshot => {
             allRegistros = [];
-            snapshot.forEach(d => {
-                const data = d.data();
-                const fechaHora = data.fecha_hora && data.fecha_hora.toDate ? data.fecha_hora.toDate() : null;
-                const despachadoTimestamp = data.despachadoTimestamp && data.despachadoTimestamp.toDate ? data.despachadoTimestamp.toDate() : null;
-                const empaqueTimestamp = data.enviadoAEmpaqueTimestamp && data.enviadoAEmpaqueTimestamp.toDate ? data.enviadoAEmpaqueTimestamp.toDate() : null;
-
-                const nowMs = Date.now();
-                const isRetardo = !data.enviadoAEmpaque && data.despachado !== true && fechaHora && ((nowMs - fechaHora.getTime()) / 60000 > retardTimeMinutes);
-
-                allRegistros.push({
-                    id: d.id,
-                    ...data,
-                    _fechaHora: fechaHora,
-                    _despachadoTimestamp: despachadoTimestamp,
-                    _empaqueTimestamp: empaqueTimestamp,
-                    _isRetardo: isRetardo,
-                    _searchBlob: norm([data.codigo_unico, data.cliente, data.asesor, data.transportadora, data.observaciones,
-                        (Array.isArray(data.productos) ? data.productos.map(p => [p.referencia, p.color, p.talla].join(' ')).join(' ') : '')
-                    ].join(' '))
-                });
-            });
+            snapshot.forEach(d => { allRegistros.push(parseRegistro(d)); });
             populateFilters();
             applyFiltersAndRender();
         }, err => {
             console.error('Error en listener:', err);
             $('ordersContainer').innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error al cargar pedidos.</p></div>';
         });
+
+    // Listener 2: Previous days — only non-dispatched orders
+    unsubscribePrevDays = db.collection('registros')
+        .where('despachado', '==', false)
+        .where('fecha_hora', '<', _startOfDay)
+        .orderBy('fecha_hora', 'desc')
+        .onSnapshot(snapshot => {
+            previousDayRegistros = [];
+            snapshot.forEach(d => {
+                const r = parseRegistro(d);
+                r._isPreviousDay = true;
+                previousDayRegistros.push(r);
+            });
+            populateFilters();
+            applyFiltersAndRender();
+            showPrevDaysBanner();
+        }, err => {
+            console.warn('Error en listener de días anteriores:', err);
+        });
 }
 
 // ============================
 // FILTERS
 // ============================
+function showPrevDaysBanner() {
+    const banner = $('alertBannerPrevDays');
+    if (previousDayRegistros.length > 0) {
+        const count = previousDayRegistros.length;
+        const pares = previousDayRegistros.reduce((s, r) => s + (parseInt(r.num_pares) || 0), 0);
+        $('alertBannerTitle').textContent = `${count} pedido(s) de días anteriores sin despachar`;
+        $('alertBannerDesc').textContent = `${pares} pares pendientes de días anteriores requieren atención inmediata.`;
+        banner.classList.remove('hidden');
+    } else {
+        banner.classList.add('hidden');
+    }
+}
+
+function switchToTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+    if (btn) btn.classList.add('active');
+    currentTab = tab;
+    renderOrders();
+}
+window.switchToTab = switchToTab;
+
 function populateFilters() {
     const transportadoraSet = new Set();
     const asesorSet = new Set();
-    allRegistros.forEach(r => {
+    const combined = allRegistros.concat(previousDayRegistros);
+    combined.forEach(r => {
         if (r.transportadora) transportadoraSet.add(r.transportadora);
         if (r.asesor) asesorSet.add(r.asesor);
     });
@@ -427,12 +499,15 @@ function applyFiltersAndRender() {
     const tFilter = $('filterTransportadora').value;
     const aFilter = $('filterAsesor').value;
 
-    filteredRegistros = allRegistros.filter(r => {
+    const filterFn = r => {
         if (q && !r._searchBlob.includes(q)) return false;
         if (tFilter && r.transportadora !== tFilter) return false;
         if (aFilter && r.asesor !== aFilter) return false;
         return true;
-    });
+    };
+
+    filteredRegistros = allRegistros.filter(filterFn);
+    filteredPrevDayRegistros = previousDayRegistros.filter(filterFn);
 
     updateStats();
     updateTabs();
@@ -449,7 +524,7 @@ function updateStats() {
     const retardos = filteredRegistros.filter(r => r._isRetardo);
     const paresDesp = despachados.reduce((s, r) => s + (parseInt(r.num_pares) || 0), 0);
 
-    $('statTotal').textContent = total;
+    $('statTotal').textContent = total + (filteredPrevDayRegistros.length > 0 ? ` (+${filteredPrevDayRegistros.length})` : '');
     $('statPendientes').textContent = pendientes.length;
     $('statDespachados').textContent = despachados.length;
     $('statRetardos').textContent = retardos.length;
@@ -460,11 +535,25 @@ function updateTabs() {
     const pendientes = filteredRegistros.filter(r => r.despachado !== true);
     const retardos = filteredRegistros.filter(r => r._isRetardo);
     const despachados = filteredRegistros.filter(r => r.despachado === true);
+    const anteriores = filteredPrevDayRegistros.length;
 
     $('tabCountPendientes').textContent = pendientes.length;
     $('tabCountRetardos').textContent = retardos.length;
     $('tabCountDespachados').textContent = despachados.length;
+    $('tabCountAnteriores').textContent = anteriores;
     $('tabCountTodos').textContent = filteredRegistros.length;
+
+    // Highlight the anteriores tab if there are old pending orders
+    const antTab = document.querySelector('.tab-btn[data-tab="anteriores"]');
+    if (antTab) {
+        if (anteriores > 0 && currentTab !== 'anteriores') {
+            antTab.style.background = antTab.classList.contains('active') ? '' : 'rgba(239,68,68,.08)';
+            antTab.style.color = antTab.classList.contains('active') ? '' : '#dc2626';
+        } else {
+            antTab.style.background = '';
+            antTab.style.color = '';
+        }
+    }
 }
 
 // ============================
@@ -475,6 +564,7 @@ function getTabRecords() {
         case 'pendientes': return filteredRegistros.filter(r => r.despachado !== true);
         case 'retardos': return filteredRegistros.filter(r => r._isRetardo);
         case 'despachados': return filteredRegistros.filter(r => r.despachado === true);
+        case 'anteriores': return filteredPrevDayRegistros;
         default: return filteredRegistros;
     }
 }
@@ -488,10 +578,11 @@ function renderOrders() {
             pendientes: 'No hay pedidos pendientes de despacho.',
             retardos: '¡Sin retardos! Todo al día.',
             despachados: 'No hay despachos registrados hoy.',
+            anteriores: '¡Excelente! No hay pedidos de días anteriores pendientes.',
             todos: 'No hay pedidos hoy.'
         };
         const icons = {
-            pendientes: 'fa-inbox', retardos: 'fa-champagne-glasses', despachados: 'fa-truck', todos: 'fa-calendar-xmark'
+            pendientes: 'fa-inbox', retardos: 'fa-champagne-glasses', despachados: 'fa-truck', anteriores: 'fa-calendar-check', todos: 'fa-calendar-xmark'
         };
         container.innerHTML = `<div class="empty"><i class="fas ${icons[currentTab]}"></i><p>${msgs[currentTab]}</p></div>`;
         updateBulkBar();
@@ -499,7 +590,7 @@ function renderOrders() {
     }
 
     // Group by transportadora
-    if (currentTab === 'pendientes' || currentTab === 'retardos') {
+    if (currentTab === 'pendientes' || currentTab === 'retardos' || currentTab === 'anteriores') {
         const groups = {};
         records.forEach(r => {
             const key = r.transportadora || 'Sin transportadora';
@@ -540,7 +631,8 @@ function renderOrderCard(r) {
     const isDespachado = r.despachado === true;
     const isBloqueado = r.bloqueado === true;
     const isRetardo = r._isRetardo;
-    const fecha = r._fechaHora ? fmtTime(r._fechaHora) : '';
+    const isPrevDay = r._isPreviousDay === true;
+    const fecha = r._fechaHora ? (isPrevDay ? fmtDate(r._fechaHora) : fmtTime(r._fechaHora)) : '';
     const pares = parseInt(r.num_pares) || 0;
     const valor = parseFloat(r.valor_total) || 0;
     const bodegueros = Array.isArray(r.bodegueros_encargados) && r.bodegueros_encargados.length > 0 ? r.bodegueros_encargados.join(', ') : '';
@@ -580,11 +672,19 @@ function renderOrderCard(r) {
     }
 
     const isSelected = selectedIds.has(r.id);
+    let oldDayHtml = '';
+    if (isPrevDay && r._fechaHora) {
+        const diffDays = Math.floor((_startOfDay.getTime() - r._fechaHora.getTime()) / (1000 * 60 * 60 * 24));
+        const dayLabel = diffDays === 1 ? 'Ayer' : diffDays === 2 ? 'Hace 2 días' : `Hace ${diffDays} días`;
+        oldDayHtml = `<span class="old-day-badge"><i class="fas fa-calendar-clock"></i> ${dayLabel} — ${r._fechaHora.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</span>`;
+    }
+
     const cardClass = [
         'order-card',
         isDespachado ? 'dispatched' : '',
         isRetardo ? 'retardo' : '',
-        isBloqueado ? 'bloqueado' : ''
+        isBloqueado ? 'bloqueado' : '',
+        isPrevDay ? 'old-pending' : ''
     ].filter(Boolean).join(' ');
 
     let actionBtn = '';
@@ -611,7 +711,7 @@ function renderOrderCard(r) {
                 <div class="order-code">${r.codigo_unico || ''} · ${fecha}</div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                ${retardoHtml} ${empaqueHtml} ${bloqueadoHtml}
+                ${oldDayHtml} ${retardoHtml} ${empaqueHtml} ${bloqueadoHtml}
             </div>
         </div>
         <div class="order-meta">
@@ -821,6 +921,9 @@ window.toggleSelect = toggleSelect;
         const now = Date.now();
         allRegistros.forEach(r => {
             r._isRetardo = !r.enviadoAEmpaque && r.despachado !== true && r._fechaHora && ((now - r._fechaHora.getTime()) / 60000 > retardTimeMinutes);
+        });
+        previousDayRegistros.forEach(r => {
+            r._isRetardo = true;
         });
         applyFiltersAndRender();
     }, 30000);
