@@ -115,6 +115,18 @@
     .toast-title{font-weight:700;font-size:13px}
     .toast-msg{margin-top:4px;font-size:12px;opacity:.8}
 
+    .prod-editor{border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:12px}
+    .prod-editor table{width:100%;border-collapse:collapse}
+    .prod-editor th{background:#f8fafc;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800;border-bottom:2px solid var(--border)}
+    .prod-editor td{padding:8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+    .prod-editor tr:hover td{background:#fafbfc}
+    .prod-editor .pe-name{font-weight:700;font-size:12px}
+    .prod-editor .pe-prov{font-size:10px;color:var(--muted)}
+    .prod-editor input[type="number"]{width:80px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:700;text-align:right}
+    .prod-editor input[type="number"]:focus{border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+    .prod-editor .pe-subtotal{font-weight:800;color:var(--primary);white-space:nowrap}
+    .prod-editor .pe-unit{font-size:10px;color:var(--muted);margin-top:2px}
+
     #confirmModalPM{z-index:9000}
     #confirmModalPM .modal-card{max-width:400px;animation:confirmPopPM .25s cubic-bezier(.34,1.56,.64,1)}
     @keyframes confirmPopPM{from{opacity:0;transform:scale(.88) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
@@ -759,6 +771,9 @@
           const d = val.toDate();
           inputHtml = `<input type="datetime-local" data-field="${escapeHtml(key)}" data-type="timestamp" value="${d.toISOString().slice(0,16)}">`;
           typeLabel = 'Timestamp';
+        } else if (isArray && key === 'productos' && val.length > 0 && val[0] && (val[0].referenciaColor || val[0].cantidadFacturada !== undefined)) {
+          inputHtml = renderProductosEditor(val);
+          typeLabel = `Productos (${val.length})`;
         } else if (isArray || isObject) {
           inputHtml = `<textarea data-field="${escapeHtml(key)}" data-type="json" rows="4">${escapeHtml(JSON.stringify(val, null, 2))}</textarea>`;
           typeLabel = isArray ? 'Array (JSON)' : 'Objeto (JSON)';
@@ -793,14 +808,106 @@
       $('editModal').classList.add('open');
     }
 
+    function renderProductosEditor(productos) {
+      let html = '<div class="prod-editor" data-field="productos" data-type="productos"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>V. Unitario</th><th>Subtotal</th></tr></thead><tbody>';
+      productos.forEach((p, i) => {
+        const name = p.referenciaColor || p.referencia || 'Producto';
+        const prov = p.proveedor || '';
+        const unit = p.unidadMedida || 'unidades';
+        const isMetros = unit === 'metros';
+        let cantHtml;
+        if (isMetros) {
+          const m = p.metrosFacturados || 0;
+          const c = p.centimetrosFacturados || 0;
+          cantHtml = `<div style="display:flex;gap:4px;align-items:center"><input type="number" data-pi="${i}" data-pf="metrosFacturados" value="${m}" min="0" onchange="window._pmRecalcProd(${i})"><span style="font-size:10px">m</span><input type="number" data-pi="${i}" data-pf="centimetrosFacturados" value="${c}" min="0" max="99" style="width:55px" onchange="window._pmRecalcProd(${i})"><span style="font-size:10px">cm</span></div><div class="pe-unit">Metros</div>`;
+        } else {
+          const u = p.unidadesFacturadas || p.cantidadFacturada || 0;
+          cantHtml = `<input type="number" data-pi="${i}" data-pf="unidadesFacturadas" value="${u}" min="0" onchange="window._pmRecalcProd(${i})"><div class="pe-unit">Unidades</div>`;
+        }
+        const vu = p.valorUnitario || 0;
+        const st = p.subtotal || 0;
+        html += `<tr data-prod-idx="${i}">`;
+        html += `<td><div class="pe-name">${escapeHtml(name)}</div>${prov ? '<div class="pe-prov">' + escapeHtml(prov) + '</div>' : ''}<input type="hidden" data-pi="${i}" data-pf="_json" value='${escapeHtml(JSON.stringify(p))}'></td>`;
+        html += `<td>${cantHtml}</td>`;
+        html += `<td><input type="number" data-pi="${i}" data-pf="valorUnitario" value="${vu}" min="0" step="any" onchange="window._pmRecalcProd(${i})"></td>`;
+        html += `<td class="pe-subtotal" data-pi="${i}" data-pf="subtotalDisplay">$${Number(st).toLocaleString('es-CO')}</td>`;
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+      return html;
+    }
+
+    window._pmRecalcProd = function(idx) {
+      const row = document.querySelector(`tr[data-prod-idx="${idx}"]`);
+      if (!row) return;
+      const jsonInput = row.querySelector(`input[data-pf="_json"]`);
+      const base = JSON.parse(jsonInput.value);
+      const unit = base.unidadMedida || 'unidades';
+      let cant = 0;
+      if (unit === 'metros') {
+        const mEl = row.querySelector(`input[data-pf="metrosFacturados"]`);
+        const cEl = row.querySelector(`input[data-pf="centimetrosFacturados"]`);
+        const m = parseFloat(mEl?.value) || 0;
+        const c = parseFloat(cEl?.value) || 0;
+        cant = m + c / 100;
+      } else {
+        const uEl = row.querySelector(`input[data-pf="unidadesFacturadas"]`);
+        cant = parseFloat(uEl?.value) || 0;
+      }
+      const vuEl = row.querySelector(`input[data-pf="valorUnitario"]`);
+      const vu = parseFloat(vuEl?.value) || 0;
+      const subtotal = cant * vu;
+      const stEl = row.querySelector(`[data-pf="subtotalDisplay"]`);
+      if (stEl) stEl.textContent = '$' + Number(subtotal).toLocaleString('es-CO');
+    };
+
+    function collectProductosFromEditor() {
+      const rows = document.querySelectorAll('.prod-editor tr[data-prod-idx]');
+      const productos = [];
+      rows.forEach(row => {
+        const jsonInput = row.querySelector('input[data-pf="_json"]');
+        const p = JSON.parse(jsonInput.value);
+        const unit = p.unidadMedida || 'unidades';
+        if (unit === 'metros') {
+          const mEl = row.querySelector('input[data-pf="metrosFacturados"]');
+          const cEl = row.querySelector('input[data-pf="centimetrosFacturados"]');
+          p.metrosFacturados = parseInt(mEl?.value) || 0;
+          p.centimetrosFacturados = parseInt(cEl?.value) || 0;
+          p.cantidadFacturada = p.metrosFacturados + p.centimetrosFacturados / 100;
+        } else {
+          const uEl = row.querySelector('input[data-pf="unidadesFacturadas"]');
+          p.unidadesFacturadas = parseInt(uEl?.value) || 0;
+          p.cantidadFacturada = p.unidadesFacturadas;
+        }
+        const vuEl = row.querySelector('input[data-pf="valorUnitario"]');
+        p.valorUnitario = parseFloat(vuEl?.value) || 0;
+        p.subtotal = p.cantidadFacturada * p.valorUnitario;
+        productos.push(p);
+      });
+      return productos;
+    }
+
     async function saveDocument() {
       if (_esSuperReadOnlyPM) { alert('Supernumerario: solo lectura, no puede guardar cambios.'); return; }
       if (!editingDoc || !currentCollection) return;
 
       const updates = {};
+
+      // Check for special productos editor
+      const prodEditor = document.querySelector('.prod-editor[data-field="productos"]');
+      if (prodEditor) {
+        updates['productos'] = collectProductosFromEditor();
+        // Recalculate valorTotal
+        const newTotal = updates['productos'].reduce((s, p) => s + (p.subtotal || 0), 0);
+        const descField = document.querySelector('[data-field="descuento"]');
+        const descuento = descField ? (parseFloat(descField.value) || 0) : 0;
+        updates['valorTotal'] = newTotal - descuento;
+      }
+
       document.querySelectorAll('#editModalBody [data-field]').forEach(input => {
         const key = input.dataset.field;
         const type = input.dataset.type;
+        if (type === 'productos') return; // Already handled above
         let val = input.value;
 
         if (type === 'number') {
