@@ -704,6 +704,14 @@
         let allZapateriaEmployees = []; // Array of { nombreCompleto, permisos, empresa }
         let excludedFromGeneralCommission = new Set(); // Names excluded from general commission table
 
+        // Users to always exclude from commission tables
+        const EXCLUDED_USERS = ['juan carlos barrios', 'propulsar bpo', 'usuario de prueba'];
+
+        // Normalize name: lowercase, strip accents, trim
+        function normalizeName(name) {
+            return (name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
         // Flags
         let includeExcelData = true; // Default to true, loaded from localStorage
         let currentDashboardFilterMode = 'custom_date_range'; // For Dashboard tab
@@ -1534,24 +1542,31 @@
                 }
             });
 
-            // Merge La Zapateria employees (dedup by lowercase name)
-            const mergedNames = new Set();
+            // Merge La Zapateria employees (dedup by normalized name: lowercase + no accents)
+            const mergedNames = new Map(); // normalizedKey -> canonicalName
             const allAsesores = [];
 
             // First add asesores from sales data
             for (const name of Object.keys(asesorMonthlyPerformance)) {
-                const key = name.toLowerCase().trim();
-                if (!mergedNames.has(key)) {
-                    mergedNames.add(key);
+                const key = normalizeName(name);
+                if (EXCLUDED_USERS.includes(key)) continue;
+                if (mergedNames.has(key)) {
+                    // Merge sales into existing entry (accent duplicate)
+                    const canonical = mergedNames.get(key);
+                    asesorMonthlyPerformance[canonical].totalSales += asesorMonthlyPerformance[name].totalSales;
+                    asesorMonthlyPerformance[canonical].totalPairs += asesorMonthlyPerformance[name].totalPairs;
+                } else {
+                    mergedNames.set(key, name);
                     allAsesores.push(name);
                 }
             }
 
             // Then add employees from usuarios collection (if not already present)
             allZapateriaEmployees.forEach(emp => {
-                const key = emp.nombreCompleto.toLowerCase().trim();
+                const key = normalizeName(emp.nombreCompleto);
+                if (EXCLUDED_USERS.includes(key)) return;
                 if (!mergedNames.has(key)) {
-                    mergedNames.add(key);
+                    mergedNames.set(key, emp.nombreCompleto);
                     allAsesores.push(emp.nombreCompleto);
                     asesorMonthlyPerformance[emp.nombreCompleto] = { totalSales: 0, totalPairs: 0 };
                 }
@@ -1568,7 +1583,7 @@
                 <p class="mb-2"><strong>Tope de Pares (Empresa):</strong> ${monthlyCompanyPairsThreshold.toLocaleString('es-CO')} pares</p>
                 <p class="mb-2"><strong>Total Pares Vendidos (Empresa en período filtrado):</strong> ${totalCompanyPairsFilteredPeriod.toLocaleString('es-CO')} pares</p>
                 <p class="mb-4"><strong>Empresa cumple el tope:</strong> ${totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold ? '<span class="text-green-600 font-bold">SÍ</span>' : '<span class="text-red-600 font-bold">NO</span>'}</p>
-                <button class="btn btn-secondary" style="margin-bottom:10px;font-size:0.85em;padding:6px 14px" onclick="restaurarExcluidosGeneral()">♻️ Restaurar Eliminados</button>
+                <button onclick="restaurarExcluidosGeneral()" style="margin-bottom:10px;font-size:0.85em;padding:8px 16px;background:#6b7280;color:#fff;border:none;border-radius:6px;cursor:pointer;display:inline-block">&#9851; Restaurar Eliminados</button>
                 <table class="commission-table">
                     <thead>
                         <tr>
@@ -1616,7 +1631,7 @@
                 const escapedName = asesor.replace(/'/g, "\\'");
                 commissionHtml += `
                     <tr data-asesor="${asesor}">
-                        <td style="width:30px;text-align:center;cursor:pointer" onclick="excluirDeComisionGeneral('${escapedName}')" title="Quitar de la lista">❌</td>
+                        <td style="width:36px;text-align:center;cursor:pointer;color:#dc2626;font-size:1.1em" onclick="excluirDeComisionGeneral('${escapedName}')" title="Quitar de la lista">&#10060;</td>
                         <td>${asesor}</td>
                         <td>${totalPairs.toLocaleString('es-CO')}</td>
                         <td>${fmtCOP(totalSales)}</td>
@@ -2402,12 +2417,27 @@
                 }
             });
 
-            // Merge La Zapateria employees (dedup by lowercase)
-            const mergedNames = new Set(Object.keys(asesorPerf).map(n => n.toLowerCase().trim()));
+            // Merge La Zapateria employees (dedup by normalized name: lowercase + no accents)
+            const mergedNamesLiq = new Map(); // normalizedKey -> canonicalName
+            // First consolidate sales data entries (handle accent duplicates)
+            for (const name of Object.keys(asesorPerf)) {
+                const key = normalizeName(name);
+                if (EXCLUDED_USERS.includes(key)) { delete asesorPerf[name]; continue; }
+                if (mergedNamesLiq.has(key)) {
+                    const canonical = mergedNamesLiq.get(key);
+                    asesorPerf[canonical].totalSales += asesorPerf[name].totalSales;
+                    asesorPerf[canonical].totalPairs += asesorPerf[name].totalPairs;
+                    delete asesorPerf[name];
+                } else {
+                    mergedNamesLiq.set(key, name);
+                }
+            }
+            // Then add employees from usuarios collection
             allZapateriaEmployees.forEach(emp => {
-                const key = emp.nombreCompleto.toLowerCase().trim();
-                if (!mergedNames.has(key)) {
-                    mergedNames.add(key);
+                const key = normalizeName(emp.nombreCompleto);
+                if (EXCLUDED_USERS.includes(key)) return;
+                if (!mergedNamesLiq.has(key)) {
+                    mergedNamesLiq.set(key, emp.nombreCompleto);
                     asesorPerf[emp.nombreCompleto] = { totalSales: 0, totalPairs: 0 };
                 }
             });
@@ -2460,8 +2490,9 @@
                     // Match any variation of "la zapateria" / "lazapateria"
                     if (empresa.includes('zapateria')) {
                         const name = (data.nombreCompleto || '').trim();
-                        if (name && !namesSet.has(name.toLowerCase())) {
-                            namesSet.add(name.toLowerCase());
+                        const key = normalizeName(name);
+                        if (name && !namesSet.has(key) && !EXCLUDED_USERS.includes(key)) {
+                            namesSet.add(key);
                             employees.push({ nombreCompleto: name, permisos: data.permisos || '', empresa: data.empresa || '' });
                         }
                     }
