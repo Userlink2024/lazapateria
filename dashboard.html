@@ -1600,28 +1600,43 @@
 
             const companyMeetsMonthlyPairsTarget = (monthlyCompanyPairsThreshold > 0 && totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold);
 
+            // Build role lookup: normalizedName -> permisos
+            const roleLookup = {};
+            allZapateriaEmployees.forEach(emp => { roleLookup[normalizeName(emp.nombreCompleto)] = (emp.permisos || '').toLowerCase(); });
+
             allAsesores.forEach(asesor => {
                 const { totalSales, totalPairs } = asesorMonthlyPerformance[asesor] || { totalSales: 0, totalPairs: 0 };
                 let monthlyCommission = 0;
                 let individualStatus = '';
                 let statusColorClass = 'text-red-600';
 
+                const rol = roleLookup[normalizeName(asesor)] || 'operador';
+                const esAsesor = (rol === 'operador');
+
                 if (companyMeetsMonthlyPairsTarget) {
-                    if (monthlyIndividualPairsThreshold > 0) {
-                        if (totalPairs >= monthlyIndividualPairsThreshold) {
-                            monthlyCommission = monthlyCompanyCommissionAmount;
-                            individualStatus = `Cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
-                            statusColorClass = 'text-green-600';
-                        } else if (totalPairs >= (monthlyIndividualPairsThreshold / 2)) {
-                            monthlyCommission = monthlyCompanyCommissionAmount / 2;
-                            individualStatus = `Cumple (50% de tope: ${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
-                            statusColorClass = 'text-orange-500';
+                    if (esAsesor) {
+                        // Asesores/Operadores: commission depends on individual pair sales
+                        if (monthlyIndividualPairsThreshold > 0) {
+                            if (totalPairs >= monthlyIndividualPairsThreshold) {
+                                monthlyCommission = monthlyCompanyCommissionAmount;
+                                individualStatus = `Cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                                statusColorClass = 'text-green-600';
+                            } else if (totalPairs >= (monthlyIndividualPairsThreshold / 2)) {
+                                monthlyCommission = monthlyCompanyCommissionAmount / 2;
+                                individualStatus = `Cumple (50% de tope: ${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                                statusColorClass = 'text-orange-500';
+                            } else {
+                                individualStatus = `No cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                            }
                         } else {
-                            individualStatus = `No cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
+                            monthlyCommission = monthlyCompanyCommissionAmount;
+                            individualStatus = `Cumple (no requiere tope individual)`;
+                            statusColorClass = 'text-green-600';
                         }
                     } else {
+                        // Non-asesor roles: automatic full commission when company meets threshold
                         monthlyCommission = monthlyCompanyCommissionAmount;
-                        individualStatus = `Cumple (no requiere tope individual)`;
+                        individualStatus = `Aplica (${rol.charAt(0).toUpperCase() + rol.slice(1)})`;
                         statusColorClass = 'text-green-600';
                     }
                 } else {
@@ -2445,25 +2460,38 @@
             const companyMeets = (monthlyCompanyPairsThreshold > 0 && totalCompanyPairs >= monthlyCompanyPairsThreshold);
             const result = {};
 
+            // Build role lookup for this function
+            const roleLookupLiq = {};
+            allZapateriaEmployees.forEach(emp => { roleLookupLiq[normalizeName(emp.nombreCompleto)] = (emp.permisos || '').toLowerCase(); });
+
             for (const asesor in asesorPerf) {
                 const { totalSales, totalPairs } = asesorPerf[asesor];
                 let comision = 0;
                 let status = '';
 
+                const rol = roleLookupLiq[normalizeName(asesor)] || 'operador';
+                const esAsesor = (rol === 'operador');
+
                 if (companyMeets) {
-                    if (monthlyIndividualPairsThreshold > 0) {
-                        if (totalPairs >= monthlyIndividualPairsThreshold) {
+                    if (esAsesor) {
+                        if (monthlyIndividualPairsThreshold > 0) {
+                            if (totalPairs >= monthlyIndividualPairsThreshold) {
+                                comision = monthlyCompanyCommissionAmount;
+                                status = 'Cumple';
+                            } else if (totalPairs >= (monthlyIndividualPairsThreshold / 2)) {
+                                comision = monthlyCompanyCommissionAmount / 2;
+                                status = '50%';
+                            } else {
+                                status = 'No cumple';
+                            }
+                        } else {
                             comision = monthlyCompanyCommissionAmount;
                             status = 'Cumple';
-                        } else if (totalPairs >= (monthlyIndividualPairsThreshold / 2)) {
-                            comision = monthlyCompanyCommissionAmount / 2;
-                            status = '50%';
-                        } else {
-                            status = 'No cumple';
                         }
                     } else {
+                        // Non-asesor: automatic full commission
                         comision = monthlyCompanyCommissionAmount;
-                        status = 'Cumple';
+                        status = `Aplica (${rol.charAt(0).toUpperCase() + rol.slice(1)})`;
                     }
                 } else {
                     status = 'Empresa no cumple';
