@@ -10,6 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -498,6 +499,9 @@
                     <p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>
                 </div>
             </div>
+            <button id="btn_descargar_general" class="btn btn-secondary" style="margin-top:12px;display:none" onclick="descargarImagen('general_commission_summary','Comision_General')">
+                📥 Descargar Imagen
+            </button>
         </div>
 
         <div id="comision_semanal" class="tab-content">
@@ -538,6 +542,9 @@
                     <p class="text-center text-gray-500">Selecciona un rango de fechas para calcular la comisión semanal.</p>
                 </div>
             </div>
+            <button id="btn_descargar_semanal" class="btn btn-secondary" style="margin-top:12px;display:none" onclick="descargarImagen('weekly_commission_summary','Comision_Semanal')">
+                📥 Descargar Imagen
+            </button>
         </div>
 
         <div id="historial_ventas" class="tab-content">
@@ -572,6 +579,9 @@
                     <select id="month_selector_liquidacion" class="flex-grow"></select>
                     <button id="btn_cargar_liquidacion" class="btn btn-primary w-full md:w-auto">
                         Cargar Liquidación
+                    </button>
+                    <button id="btn_descargar_liquidacion" class="btn btn-secondary w-full md:w-auto" style="display:none" onclick="descargarImagen('liquidacion_capture_area','Liquidacion_Mensual')">
+                        📥 Descargar Imagen
                     </button>
                 </div>
             </div>
@@ -1586,6 +1596,9 @@
 
             if (Object.keys(asesorMonthlyPerformance).length === 0) {
                 generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">No hay datos de asesores para calcular comisiones generales en el período seleccionado.</p>';
+                document.getElementById('btn_descargar_general').style.display = 'none';
+            } else {
+                document.getElementById('btn_descargar_general').style.display = 'inline-flex';
             }
         }
 
@@ -1630,6 +1643,7 @@
             monthSelectorGeneral.value = ''; // Reset month selector
             currentGeneralMonthFilter = ''; // Reset filter variable
             generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>';
+            document.getElementById('btn_descargar_general').style.display = 'none';
             showMessageModal("Filtro Reiniciado", "El filtro de Comisión General ha sido reiniciado. Selecciona un mes para ver los datos.");
         }
 
@@ -1743,7 +1757,9 @@
                 weeklyCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">No hay datos de ventas para el período seleccionado.</p>';
                 lastWeeklyCommissionData = null;
                 document.getElementById('btn_capturar_semana').disabled = true;
+                document.getElementById('btn_descargar_semanal').style.display = 'none';
             } else {
+                document.getElementById('btn_descargar_semanal').style.display = 'inline-flex';
                 // Store data for capture
                 const asesoresCapture = {};
                 sortedAsesores.forEach(asesor => {
@@ -1873,6 +1889,7 @@
             currentWeeklyFilterMode = 'custom_date_range'; // Reset mode
             lastWeeklyCommissionData = null;
             document.getElementById('btn_capturar_semana').disabled = true;
+            document.getElementById('btn_descargar_semanal').style.display = 'none';
         }
 
 
@@ -2063,9 +2080,11 @@
             const monthSelector = document.getElementById('month_selector_liquidacion');
             const selectedMonth = monthSelector.value;
             const resultDiv = document.getElementById('liquidacion_resultado');
+            const btnDescargar = document.getElementById('btn_descargar_liquidacion');
 
             if (!selectedMonth) {
                 resultDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para ver la liquidación acumulada.</p>';
+                btnDescargar.style.display = 'none';
                 return;
             }
 
@@ -2092,6 +2111,7 @@
                                 Ve a la pestaña <strong>"COMISIÓN SEMANAL"</strong>, filtra cada semana y presiona <strong>"📸 Capturar esta Semana"</strong>.
                             </p>
                         </div>`;
+                    btnDescargar.style.display = 'none';
                     hideLoading();
                     return;
                 }
@@ -2099,9 +2119,13 @@
                 const capturedWeeks = [];
                 snapshot.forEach(doc => capturedWeeks.push({ id: doc.id, ...doc.data() }));
 
+                // Calculate general commission for this month
+                const generalComm = calcularComisionGeneralMes(selectedMonth);
+                const comisionesGenerales = generalComm.comisionesPorAsesor;
+
                 // Accumulate totals per asesor across all captured weeks
-                const acumulado = {}; // { "Nombre": { totalVendido: 0, totalComision: 0, semanas: 0 } }
-                const semanasColumns = []; // For column headers
+                const acumulado = {};
+                const semanasColumns = [];
 
                 capturedWeeks.forEach((week, idx) => {
                     const weekLabel = `S${idx + 1} (${week.desde.slice(5)} al ${week.hasta.slice(5)})`;
@@ -2110,24 +2134,33 @@
                     if (week.asesores) {
                         for (const [nombre, data] of Object.entries(week.asesores)) {
                             if (!acumulado[nombre]) {
-                                acumulado[nombre] = { totalVendido: 0, totalComision: 0, semanas: {} };
+                                acumulado[nombre] = { totalVendido: 0, totalComisionSemanal: 0, comisionGeneral: 0, semanas: {} };
                             }
                             acumulado[nombre].totalVendido += (data.valorVendido || 0);
-                            acumulado[nombre].totalComision += (data.comision || 0);
+                            acumulado[nombre].totalComisionSemanal += (data.comision || 0);
                             acumulado[nombre].semanas[week.id] = data;
                         }
                     }
                 });
 
+                // Merge general commission into acumulado
+                for (const [nombre, gData] of Object.entries(comisionesGenerales)) {
+                    if (!acumulado[nombre]) {
+                        acumulado[nombre] = { totalVendido: 0, totalComisionSemanal: 0, comisionGeneral: 0, semanas: {} };
+                    }
+                    acumulado[nombre].comisionGeneral = gData.comisionGeneral;
+                }
+
                 const monthName = firstDay.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
                 const fmtCOP = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
                 const sortedAsesores = Object.keys(acumulado).sort();
 
-                // Build the table
-                let html = `
+                // Build the table — wrap capturable area
+                let html = `<div id="liquidacion_capture_area" style="background:#fff;padding:1.5rem;border-radius:0.75rem">
                     <div class="commission-table-container">
                         <h3 class="text-xl font-semibold mb-2" style="text-transform:capitalize">Liquidación: ${monthName}</h3>
-                        <p class="mb-4 text-gray-600"><strong>${capturedWeeks.length}</strong> semana(s) capturada(s)</p>
+                        <p class="mb-2 text-gray-600"><strong>${capturedWeeks.length}</strong> semana(s) capturada(s)</p>
+                        <p class="mb-4 text-gray-500" style="font-size:0.85em">Empresa ${generalComm.companyMeets ? '<span style="color:#059669;font-weight:700">cumple</span>' : '<span style="color:#dc2626;font-weight:700">no cumple</span>'} tope general (${generalComm.totalCompanyPairs.toLocaleString('es-CO')}/${monthlyCompanyPairsThreshold.toLocaleString('es-CO')} pares)</p>
                         <div style="overflow-x:auto">
                         <table class="commission-table">
                             <thead>
@@ -2138,16 +2171,23 @@
                     html += `<th style="text-align:center;min-width:120px">${s.label}</th>`;
                 });
 
-                html += `       <th style="text-align:center;background:#d1fae5;color:#065f46;min-width:140px">TOTAL A PAGAR</th>
+                html += `       <th style="text-align:center;min-width:110px">Subtotal Semanal</th>
+                                <th style="text-align:center;background:#dbeafe;color:#1e40af;min-width:120px">Com. General</th>
+                                <th style="text-align:center;background:#d1fae5;color:#065f46;min-width:140px">TOTAL A PAGAR</th>
                                 </tr>
                             </thead>
                             <tbody>`;
 
-                let grandTotalComision = 0;
+                let grandTotalSemanal = 0;
+                let grandTotalGeneral = 0;
+                let grandTotal = 0;
 
                 sortedAsesores.forEach(nombre => {
                     const data = acumulado[nombre];
-                    grandTotalComision += data.totalComision;
+                    const totalPago = data.totalComisionSemanal + data.comisionGeneral;
+                    grandTotalSemanal += data.totalComisionSemanal;
+                    grandTotalGeneral += data.comisionGeneral;
+                    grandTotal += totalPago;
 
                     html += `<tr><td style="font-weight:600">${nombre}</td>`;
                     semanasColumns.forEach(s => {
@@ -2159,21 +2199,36 @@
                             html += `<td style="text-align:center;color:#9ca3af">—</td>`;
                         }
                     });
-                    const totalColor = data.totalComision > 0 ? 'color:#059669' : 'color:#dc2626';
-                    html += `<td style="text-align:center;font-weight:800;font-size:1.1em;${totalColor};background:#ecfdf5">${fmtCOP(data.totalComision)}</td></tr>`;
+
+                    // Subtotal semanal
+                    const subSemColor = data.totalComisionSemanal > 0 ? 'color:#059669' : 'color:#dc2626';
+                    html += `<td style="text-align:center;font-weight:700;${subSemColor}">${fmtCOP(data.totalComisionSemanal)}</td>`;
+
+                    // Comisión General
+                    const genColor = data.comisionGeneral > 0 ? 'color:#1e40af;font-weight:700' : 'color:#dc2626';
+                    html += `<td style="text-align:center;${genColor};background:#eff6ff">${fmtCOP(data.comisionGeneral)}</td>`;
+
+                    // Total a pagar
+                    const totalColor = totalPago > 0 ? 'color:#059669' : 'color:#dc2626';
+                    html += `<td style="text-align:center;font-weight:800;font-size:1.1em;${totalColor};background:#ecfdf5">${fmtCOP(totalPago)}</td></tr>`;
                 });
 
                 html += `</tbody>
                         <tfoot>
                             <tr>
-                                <td style="font-weight:800;text-align:right" colspan="${semanasColumns.length + 1}">GRAN TOTAL:</td>
-                                <td style="font-weight:800;text-align:center;font-size:1.2em;color:#059669;background:#d1fae5">${fmtCOP(grandTotalComision)}</td>
+                                <td style="font-weight:800;text-align:right" colspan="${semanasColumns.length + 1}">TOTALES:</td>
+                                <td style="font-weight:800;text-align:center;color:#059669">${fmtCOP(grandTotalSemanal)}</td>
+                                <td style="font-weight:800;text-align:center;color:#1e40af;background:#eff6ff">${fmtCOP(grandTotalGeneral)}</td>
+                                <td style="font-weight:800;text-align:center;font-size:1.2em;color:#059669;background:#d1fae5">${fmtCOP(grandTotal)}</td>
                             </tr>
                         </tfoot>
                         </table>
                         </div>
+                    </div>
+                </div>`;
 
-                        <h3 class="text-lg font-semibold mt-6 mb-2">Semanas Capturadas</h3>
+                // Semanas capturadas cards (outside capture area)
+                html += `<h3 class="text-lg font-semibold mt-6 mb-2">Semanas Capturadas</h3>
                         <div style="display:flex;flex-wrap:wrap;gap:10px">`;
 
                 capturedWeeks.forEach((week, idx) => {
@@ -2189,12 +2244,14 @@
                         </div>`;
                 });
 
-                html += `</div></div>`;
+                html += `</div>`;
                 resultDiv.innerHTML = html;
+                btnDescargar.style.display = 'inline-flex';
 
             } catch (error) {
                 console.error("Error al cargar liquidación mensual:", error);
                 resultDiv.innerHTML = '<p class="text-center text-red-500">Error al cargar la liquidación. Revisa la consola.</p>';
+                btnDescargar.style.display = 'none';
             } finally {
                 hideLoading();
             }
@@ -2218,6 +2275,103 @@
             } finally {
                 hideLoading();
             }
+        }
+
+        // --- IMAGE DOWNLOAD Function ---
+        /**
+         * Captures a DOM element as a high-quality PNG and downloads it.
+         * @param {string} elementId - The ID of the element to capture.
+         * @param {string} filename - The base filename for the download.
+         */
+        async function descargarImagen(elementId, filename) {
+            const element = document.getElementById(elementId);
+            if (!element || element.innerHTML.trim() === '' || element.querySelector('.text-gray-500:only-child')) {
+                showMessageModal("Sin contenido", "No hay contenido para descargar. Genera los datos primero.");
+                return;
+            }
+
+            showLoading();
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 3, // 3x resolution for high quality
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    windowWidth: element.scrollWidth,
+                    windowHeight: element.scrollHeight
+                });
+
+                const link = document.createElement('a');
+                const today = new Date().toISOString().split('T')[0];
+                link.download = `${filename}_${today}.png`;
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.click();
+            } catch (error) {
+                console.error("Error al generar imagen:", error);
+                showMessageModal("Error", "No se pudo generar la imagen. Intenta de nuevo.");
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // --- GENERAL COMMISSION Helper for Liquidación Mensual ---
+        /**
+         * Calculates the general (monthly) commission per advisor for a given month.
+         * Returns an object { asesorName: { comisionGeneral, paresVendidos, valorVendido, status } }
+         */
+        function calcularComisionGeneralMes(selectedMonth) {
+            const [year, month] = selectedMonth.split('-').map(Number);
+            const firstDayOfMonth = new Date(year, month - 1, 1);
+            const firstDayOfNextMonth = new Date(year, month, 1);
+
+            const filteredData = allOrdersData.filter(order => {
+                const orderDate = order.fecha_hora;
+                return orderDate >= firstDayOfMonth && orderDate < firstDayOfNextMonth;
+            });
+
+            let totalCompanyPairs = 0;
+            const asesorPerf = {};
+
+            filteredData.forEach(order => {
+                totalCompanyPairs += order.num_pares || 0;
+                if (order.asesor) {
+                    if (!asesorPerf[order.asesor]) asesorPerf[order.asesor] = { totalSales: 0, totalPairs: 0 };
+                    asesorPerf[order.asesor].totalSales += (order.valor_total || 0);
+                    asesorPerf[order.asesor].totalPairs += (order.num_pares || 0);
+                }
+            });
+
+            const companyMeets = (monthlyCompanyPairsThreshold > 0 && totalCompanyPairs >= monthlyCompanyPairsThreshold);
+            const result = {};
+
+            for (const asesor in asesorPerf) {
+                const { totalSales, totalPairs } = asesorPerf[asesor];
+                let comision = 0;
+                let status = '';
+
+                if (companyMeets) {
+                    if (monthlyIndividualPairsThreshold > 0) {
+                        if (totalPairs >= monthlyIndividualPairsThreshold) {
+                            comision = monthlyCompanyCommissionAmount;
+                            status = 'Cumple';
+                        } else if (totalPairs >= (monthlyIndividualPairsThreshold / 2)) {
+                            comision = monthlyCompanyCommissionAmount / 2;
+                            status = '50%';
+                        } else {
+                            status = 'No cumple';
+                        }
+                    } else {
+                        comision = monthlyCompanyCommissionAmount;
+                        status = 'Cumple';
+                    }
+                } else {
+                    status = 'Empresa no cumple';
+                }
+
+                result[asesor] = { comisionGeneral: comision, paresVendidos: totalPairs, valorVendido: totalSales, status: status };
+            }
+
+            return { comisionesPorAsesor: result, totalCompanyPairs, companyMeets };
         }
 
         // --- Event Listeners and Initial Load ---
