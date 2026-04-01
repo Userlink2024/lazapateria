@@ -700,6 +700,10 @@
         let weeklyIncrementalValueThreshold = 2000000;
         let weeklyIncrementalBonusAmount = 10000;
 
+        // Employees from Firestore 'usuarios' collection (La Zapateria only)
+        let allZapateriaEmployees = []; // Array of { nombreCompleto, permisos, empresa }
+        let excludedFromGeneralCommission = new Set(); // Names excluded from general commission table
+
         // Flags
         let includeExcelData = true; // Default to true, loaded from localStorage
         let currentDashboardFilterMode = 'custom_date_range'; // For Dashboard tab
@@ -1497,50 +1501,78 @@
          */
         function calculateAndDisplayGeneralCommissions() {
             currentGeneralMonthFilter = monthSelectorGeneral.value;
+            excludedFromGeneralCommission.clear(); // Reset exclusions on new filter
 
-            let filteredData = [...allOrdersData]; // Start with all data
+            let filteredData = [...allOrdersData];
 
-            // Apply month filter if a month is selected
             if (currentGeneralMonthFilter) {
                 const [year, month] = currentGeneralMonthFilter.split('-').map(Number);
-                const firstDayOfMonth = new Date(year, month - 1, 1); // Month is 0-indexed
-                const firstDayOfNextMonth = new Date(year, month, 1); // First day of NEXT month
+                const firstDayOfMonth = new Date(year, month - 1, 1);
+                const firstDayOfNextMonth = new Date(year, month, 1);
 
                 filteredData = filteredData.filter(order => {
                     const orderDate = order.fecha_hora;
                     return orderDate >= firstDayOfMonth && orderDate < firstDayOfNextMonth;
                 });
             } else {
-                // If no month is selected, clear the display or show a message
                 generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para calcular la comisión general.</p>';
                 return;
             }
 
-
             let totalCompanyPairsFilteredPeriod = 0;
-            const asesorMonthlyPerformance = {}; // { 'AsesorName': { totalSales: 0, totalPairs: 0 } }
+            const asesorMonthlyPerformance = {};
 
             filteredData.forEach(order => {
                 totalCompanyPairsFilteredPeriod += order.num_pares || 0;
                 if (order.asesor) {
-                    if (!asesorMonthlyPerformance[order.asesor]) {
-                        asesorMonthlyPerformance[order.asesor] = { totalSales: 0, totalPairs: 0 };
+                    const asesorName = order.asesor.trim();
+                    if (!asesorMonthlyPerformance[asesorName]) {
+                        asesorMonthlyPerformance[asesorName] = { totalSales: 0, totalPairs: 0 };
                     }
-                    asesorMonthlyPerformance[order.asesor].totalSales += (order.valor_total || 0);
-                    asesorMonthlyPerformance[order.asesor].totalPairs += (order.num_pares || 0);
+                    asesorMonthlyPerformance[asesorName].totalSales += (order.valor_total || 0);
+                    asesorMonthlyPerformance[asesorName].totalPairs += (order.num_pares || 0);
                 }
             });
 
+            // Merge La Zapateria employees (dedup by lowercase name)
+            const mergedNames = new Set();
+            const allAsesores = [];
+
+            // First add asesores from sales data
+            for (const name of Object.keys(asesorMonthlyPerformance)) {
+                const key = name.toLowerCase().trim();
+                if (!mergedNames.has(key)) {
+                    mergedNames.add(key);
+                    allAsesores.push(name);
+                }
+            }
+
+            // Then add employees from usuarios collection (if not already present)
+            allZapateriaEmployees.forEach(emp => {
+                const key = emp.nombreCompleto.toLowerCase().trim();
+                if (!mergedNames.has(key)) {
+                    mergedNames.add(key);
+                    allAsesores.push(emp.nombreCompleto);
+                    asesorMonthlyPerformance[emp.nombreCompleto] = { totalSales: 0, totalPairs: 0 };
+                }
+            });
+
+            allAsesores.sort((a, b) => a.localeCompare(b, 'es'));
+
             const [yearDisp, monthDisp] = currentGeneralMonthFilter.split('-').map(Number);
             const monthDisplayDate = new Date(yearDisp, monthDisp - 1, 1);
+            const fmtCOP = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+
             let commissionHtml = `
                 <h3 class="text-xl font-semibold mb-4">Resumen de Comisión General (Mes: ${monthDisplayDate.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })})</h3>
                 <p class="mb-2"><strong>Tope de Pares (Empresa):</strong> ${monthlyCompanyPairsThreshold.toLocaleString('es-CO')} pares</p>
                 <p class="mb-2"><strong>Total Pares Vendidos (Empresa en período filtrado):</strong> ${totalCompanyPairsFilteredPeriod.toLocaleString('es-CO')} pares</p>
                 <p class="mb-4"><strong>Empresa cumple el tope:</strong> ${totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold ? '<span class="text-green-600 font-bold">SÍ</span>' : '<span class="text-red-600 font-bold">NO</span>'}</p>
+                <button class="btn btn-secondary" style="margin-bottom:10px;font-size:0.85em;padding:6px 14px" onclick="restaurarExcluidosGeneral()">♻️ Restaurar Eliminados</button>
                 <table class="commission-table">
                     <thead>
                         <tr>
+                            <th></th>
                             <th>Asesor</th>
                             <th>Pares Vendidos</th>
                             <th>Valor Vendido</th>
@@ -1553,8 +1585,8 @@
 
             const companyMeetsMonthlyPairsTarget = (monthlyCompanyPairsThreshold > 0 && totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold);
 
-            for (const asesor in asesorMonthlyPerformance) {
-                const { totalSales, totalPairs } = asesorMonthlyPerformance[asesor];
+            allAsesores.forEach(asesor => {
+                const { totalSales, totalPairs } = asesorMonthlyPerformance[asesor] || { totalSales: 0, totalPairs: 0 };
                 let monthlyCommission = 0;
                 let individualStatus = '';
                 let statusColorClass = 'text-red-600';
@@ -1568,11 +1600,11 @@
                         } else if (totalPairs >= (monthlyIndividualPairsThreshold / 2)) {
                             monthlyCommission = monthlyCompanyCommissionAmount / 2;
                             individualStatus = `Cumple (50% de tope: ${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
-                            statusColorClass = 'text-orange-500'; // A different color for partial fulfillment
+                            statusColorClass = 'text-orange-500';
                         } else {
                             individualStatus = `No cumple (${totalPairs.toLocaleString('es-CO')}/${monthlyIndividualPairsThreshold.toLocaleString('es-CO')} pares)`;
                         }
-                    } else { // No individual threshold set
+                    } else {
                         monthlyCommission = monthlyCompanyCommissionAmount;
                         individualStatus = `Cumple (no requiere tope individual)`;
                         statusColorClass = 'text-green-600';
@@ -1581,20 +1613,23 @@
                     individualStatus = `Empresa no cumple el tope general`;
                 }
 
+                const escapedName = asesor.replace(/'/g, "\\'");
                 commissionHtml += `
-                    <tr>
+                    <tr data-asesor="${asesor}">
+                        <td style="width:30px;text-align:center;cursor:pointer" onclick="excluirDeComisionGeneral('${escapedName}')" title="Quitar de la lista">❌</td>
                         <td>${asesor}</td>
                         <td>${totalPairs.toLocaleString('es-CO')}</td>
-                        <td>${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(totalSales)}</td>
-                        <td class="${statusColorClass}">${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(monthlyCommission)}</td>
+                        <td>${fmtCOP(totalSales)}</td>
+                        <td class="${statusColorClass}">${fmtCOP(monthlyCommission)}</td>
                         <td>${individualStatus}</td>
                     </tr>
                 `;
-            }
+            });
+
             commissionHtml += '</tbody></table>';
             generalCommissionSummaryDiv.innerHTML = commissionHtml;
 
-            if (Object.keys(asesorMonthlyPerformance).length === 0) {
+            if (allAsesores.length === 0) {
                 generalCommissionSummaryDiv.innerHTML = '<p class="text-center text-gray-500">No hay datos de asesores para calcular comisiones generales en el período seleccionado.</p>';
                 document.getElementById('btn_descargar_general').style.display = 'none';
             } else {
@@ -2360,9 +2395,20 @@
             filteredData.forEach(order => {
                 totalCompanyPairs += order.num_pares || 0;
                 if (order.asesor) {
-                    if (!asesorPerf[order.asesor]) asesorPerf[order.asesor] = { totalSales: 0, totalPairs: 0 };
-                    asesorPerf[order.asesor].totalSales += (order.valor_total || 0);
-                    asesorPerf[order.asesor].totalPairs += (order.num_pares || 0);
+                    const asesorName = order.asesor.trim();
+                    if (!asesorPerf[asesorName]) asesorPerf[asesorName] = { totalSales: 0, totalPairs: 0 };
+                    asesorPerf[asesorName].totalSales += (order.valor_total || 0);
+                    asesorPerf[asesorName].totalPairs += (order.num_pares || 0);
+                }
+            });
+
+            // Merge La Zapateria employees (dedup by lowercase)
+            const mergedNames = new Set(Object.keys(asesorPerf).map(n => n.toLowerCase().trim()));
+            allZapateriaEmployees.forEach(emp => {
+                const key = emp.nombreCompleto.toLowerCase().trim();
+                if (!mergedNames.has(key)) {
+                    mergedNames.add(key);
+                    asesorPerf[emp.nombreCompleto] = { totalSales: 0, totalPairs: 0 };
                 }
             });
 
@@ -2399,6 +2445,57 @@
             return { comisionesPorAsesor: result, totalCompanyPairs, companyMeets };
         }
 
+        // --- EMPLOYEES LOADING ---
+        /**
+         * Loads all employees from the 'usuarios' collection that belong to La Zapateria.
+         */
+        async function cargarEmpleadosZapateria() {
+            try {
+                const snapshot = await db.collection('usuarios').get();
+                const employees = [];
+                const namesSet = new Set();
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const empresa = (data.empresa || '').toLowerCase().replace(/\s+/g, '');
+                    // Match any variation of "la zapateria" / "lazapateria"
+                    if (empresa.includes('zapateria')) {
+                        const name = (data.nombreCompleto || '').trim();
+                        if (name && !namesSet.has(name.toLowerCase())) {
+                            namesSet.add(name.toLowerCase());
+                            employees.push({ nombreCompleto: name, permisos: data.permisos || '', empresa: data.empresa || '' });
+                        }
+                    }
+                });
+                allZapateriaEmployees = employees;
+                console.log("Empleados La Zapateria cargados:", allZapateriaEmployees.length);
+            } catch (error) {
+                console.error("Error cargando empleados:", error);
+            }
+        }
+
+        /**
+         * Excludes a person from the general commission table and re-renders.
+         */
+        function excluirDeComisionGeneral(nombre) {
+            excludedFromGeneralCommission.add(nombre);
+            // Hide the row in the DOM
+            const rows = document.querySelectorAll('#general_commission_summary tr[data-asesor]');
+            rows.forEach(row => {
+                if (row.getAttribute('data-asesor') === nombre) {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        /**
+         * Restores all excluded people and shows them again.
+         */
+        function restaurarExcluidosGeneral() {
+            excludedFromGeneralCommission.clear();
+            const rows = document.querySelectorAll('#general_commission_summary tr[data-asesor]');
+            rows.forEach(row => row.style.display = '');
+        }
+
         // --- Event Listeners and Initial Load ---
         document.addEventListener('DOMContentLoaded', () => {
             // Initialize charts for the dashboard tab
@@ -2411,6 +2508,9 @@
 
             // Set up real-time listeners for all relevant collections (this also fetches initial allOrdersData in background)
             setupRealtimeListeners();
+
+            // Load La Zapateria employees for commission tables
+            cargarEmpleadosZapateria();
 
             // Activate the first tab (DASHBOARD) on load, but don't load data immediately
             document.querySelector('.tab-button').click(); 
