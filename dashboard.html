@@ -858,17 +858,30 @@
          * @param {HTMLElement} selectorElement - The select element to populate.
          */
         function populateMonthSelector(selectorElement) {
-            const today = new Date();
             selectorElement.innerHTML = '<option value="">Todos los Meses</option>'; // Default option
-            for (let i = 0; i < 12; i++) {
-                const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+
+            // Collect months that actually have data
+            const monthsWithData = new Set();
+            allOrdersData.forEach(order => {
+                if (order.fecha_hora instanceof Date) {
+                    const y = order.fecha_hora.getFullYear();
+                    const m = String(order.fecha_hora.getMonth() + 1).padStart(2, '0');
+                    monthsWithData.add(`${y}-${m}`);
+                }
+            });
+
+            // Sort descending (most recent first)
+            const sortedMonths = Array.from(monthsWithData).sort().reverse();
+
+            sortedMonths.forEach(monthValue => {
+                const [y, m] = monthValue.split('-').map(Number);
+                const date = new Date(y, m - 1, 1);
                 const monthName = date.toLocaleString('es-CO', { month: 'long', year: 'numeric' });
-                const monthValue = date.toISOString().slice(0, 7); //YYYY-MM format
                 const option = document.createElement('option');
                 option.value = monthValue;
-                option.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1); // Capitalize first letter
+                option.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
                 selectorElement.appendChild(option);
-            }
+            });
         }
 
         /**
@@ -1481,11 +1494,11 @@
             if (currentGeneralMonthFilter) {
                 const [year, month] = currentGeneralMonthFilter.split('-').map(Number);
                 const firstDayOfMonth = new Date(year, month - 1, 1); // Month is 0-indexed
-                const lastDayOfMonth = new Date(year, month, 0); // Last day of the selected month
+                const firstDayOfNextMonth = new Date(year, month, 1); // First day of NEXT month
 
                 filteredData = filteredData.filter(order => {
                     const orderDate = order.fecha_hora;
-                    return orderDate >= firstDayOfMonth && orderDate <= lastDayOfMonth;
+                    return orderDate >= firstDayOfMonth && orderDate < firstDayOfNextMonth;
                 });
             } else {
                 // If no month is selected, clear the display or show a message
@@ -1508,8 +1521,10 @@
                 }
             });
 
+            const [yearDisp, monthDisp] = currentGeneralMonthFilter.split('-').map(Number);
+            const monthDisplayDate = new Date(yearDisp, monthDisp - 1, 1);
             let commissionHtml = `
-                <h3 class="text-xl font-semibold mb-4">Resumen de Comisión General ${currentGeneralMonthFilter ? `(Mes: ${new Date(currentGeneralMonthFilter + '-01').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })})` : '(Todos los períodos)'}</h3>
+                <h3 class="text-xl font-semibold mb-4">Resumen de Comisión General (Mes: ${monthDisplayDate.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })})</h3>
                 <p class="mb-2"><strong>Tope de Pares (Empresa):</strong> ${monthlyCompanyPairsThreshold.toLocaleString('es-CO')} pares</p>
                 <p class="mb-2"><strong>Total Pares Vendidos (Empresa en período filtrado):</strong> ${totalCompanyPairsFilteredPeriod.toLocaleString('es-CO')} pares</p>
                 <p class="mb-4"><strong>Empresa cumple el tope:</strong> ${totalCompanyPairsFilteredPeriod >= monthlyCompanyPairsThreshold ? '<span class="text-green-600 font-bold">SÍ</span>' : '<span class="text-red-600 font-bold">NO</span>'}</p>
