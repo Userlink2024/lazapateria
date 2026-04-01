@@ -2292,14 +2292,39 @@
 
             showLoading();
             try {
-                const canvas = await html2canvas(element, {
-                    scale: 3, // 3x resolution for high quality
+                // Clone the element into an off-screen container with no width constraints
+                const clone = element.cloneNode(true);
+                const wrapper = document.createElement('div');
+                wrapper.style.cssText = 'position:fixed;top:0;left:0;z-index:-9999;pointer-events:none;opacity:0;background:#fff;padding:20px;width:max-content;max-width:none;overflow:visible;';
+                // Remove all overflow constraints inside the clone
+                clone.style.width = 'max-content';
+                clone.style.maxWidth = 'none';
+                clone.style.overflow = 'visible';
+                clone.querySelectorAll('*').forEach(el => {
+                    if (el.style.overflow || el.style.overflowX) {
+                        el.style.overflow = 'visible';
+                        el.style.overflowX = 'visible';
+                    }
+                    if (el.style.maxWidth) el.style.maxWidth = 'none';
+                });
+                wrapper.appendChild(clone);
+                document.body.appendChild(wrapper);
+
+                // Wait a frame for layout to settle
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+                const canvas = await html2canvas(wrapper, {
+                    scale: 3,
                     useCORS: true,
                     backgroundColor: '#ffffff',
                     logging: false,
-                    windowWidth: element.scrollWidth,
-                    windowHeight: element.scrollHeight
+                    width: wrapper.scrollWidth,
+                    height: wrapper.scrollHeight,
+                    windowWidth: wrapper.scrollWidth + 100,
+                    windowHeight: wrapper.scrollHeight + 100
                 });
+
+                document.body.removeChild(wrapper);
 
                 const link = document.createElement('a');
                 const today = new Date().toISOString().split('T')[0];
