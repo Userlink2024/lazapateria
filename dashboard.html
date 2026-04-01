@@ -583,6 +583,9 @@
                     <button id="btn_cargar_liquidacion" class="btn btn-primary w-full md:w-auto">
                         Cargar Liquidación
                     </button>
+                    <button id="btn_restaurar_liquidacion" class="btn btn-secondary w-full md:w-auto" style="display:none" onclick="restaurarExcluidosLiquidacion()">
+                        ♻ Restaurar Eliminados
+                    </button>
                     <button id="btn_descargar_liquidacion" class="btn btn-secondary w-full md:w-auto" style="display:none" onclick="descargarImagen('liquidacion_capture_area','Liquidacion_Mensual')">
                         📥 Descargar Imagen
                     </button>
@@ -2152,10 +2155,12 @@
             const selectedMonth = monthSelector.value;
             const resultDiv = document.getElementById('liquidacion_resultado');
             const btnDescargar = document.getElementById('btn_descargar_liquidacion');
+            const btnRestaurarLiq = document.getElementById('btn_restaurar_liquidacion');
 
             if (!selectedMonth) {
                 resultDiv.innerHTML = '<p class="text-center text-gray-500">Selecciona un mes para ver la liquidación acumulada.</p>';
                 btnDescargar.style.display = 'none';
+                btnRestaurarLiq.style.display = 'none';
                 return;
             }
 
@@ -2183,6 +2188,7 @@
                             </p>
                         </div>`;
                     btnDescargar.style.display = 'none';
+                    btnRestaurarLiq.style.display = 'none';
                     hideLoading();
                     return;
                 }
@@ -2194,8 +2200,9 @@
                 const generalComm = calcularComisionGeneralMes(selectedMonth);
                 const comisionesGenerales = generalComm.comisionesPorAsesor;
 
-                // Accumulate totals per asesor across all captured weeks
-                const acumulado = {};
+                // Accumulate totals per asesor across all captured weeks (using normalized keys)
+                const acumulado = {}; // normalizedKey -> data
+                const nameDisplay = {}; // normalizedKey -> display name
                 const semanasColumns = [];
 
                 capturedWeeks.forEach((week, idx) => {
@@ -2204,27 +2211,33 @@
 
                     if (week.asesores) {
                         for (const [nombre, data] of Object.entries(week.asesores)) {
-                            if (!acumulado[nombre]) {
-                                acumulado[nombre] = { totalVendido: 0, totalComisionSemanal: 0, comisionGeneral: 0, semanas: {} };
+                            const key = normalizeName(nombre);
+                            if (EXCLUDED_USERS.includes(key)) continue;
+                            if (!acumulado[key]) {
+                                acumulado[key] = { totalVendido: 0, totalComisionSemanal: 0, comisionGeneral: 0, semanas: {} };
+                                nameDisplay[key] = nombre;
                             }
-                            acumulado[nombre].totalVendido += (data.valorVendido || 0);
-                            acumulado[nombre].totalComisionSemanal += (data.comision || 0);
-                            acumulado[nombre].semanas[week.id] = data;
+                            acumulado[key].totalVendido += (data.valorVendido || 0);
+                            acumulado[key].totalComisionSemanal += (data.comision || 0);
+                            acumulado[key].semanas[week.id] = data;
                         }
                     }
                 });
 
-                // Merge general commission into acumulado
+                // Merge general commission into acumulado (using normalized keys)
                 for (const [nombre, gData] of Object.entries(comisionesGenerales)) {
-                    if (!acumulado[nombre]) {
-                        acumulado[nombre] = { totalVendido: 0, totalComisionSemanal: 0, comisionGeneral: 0, semanas: {} };
+                    const key = normalizeName(nombre);
+                    if (EXCLUDED_USERS.includes(key)) continue;
+                    if (!acumulado[key]) {
+                        acumulado[key] = { totalVendido: 0, totalComisionSemanal: 0, comisionGeneral: 0, semanas: {} };
+                        nameDisplay[key] = nombre;
                     }
-                    acumulado[nombre].comisionGeneral = gData.comisionGeneral;
+                    acumulado[key].comisionGeneral = gData.comisionGeneral;
                 }
 
                 const monthName = firstDay.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
                 const fmtCOP = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
-                const sortedAsesores = Object.keys(acumulado).sort();
+                const sortedKeys = Object.keys(acumulado).sort((a, b) => (nameDisplay[a] || a).localeCompare(nameDisplay[b] || b, 'es'));
 
                 // Build the table — wrap capturable area
                 let html = `<div id="liquidacion_capture_area" style="background:#fff;padding:1.5rem;border-radius:0.75rem">
@@ -2236,6 +2249,7 @@
                         <table class="commission-table">
                             <thead>
                                 <tr>
+                                    <th class="col-eliminar" style="width:36px"></th>
                                     <th>Asesor</th>`;
 
                 semanasColumns.forEach(s => {
@@ -2253,14 +2267,18 @@
                 let grandTotalGeneral = 0;
                 let grandTotal = 0;
 
-                sortedAsesores.forEach(nombre => {
-                    const data = acumulado[nombre];
+                sortedKeys.forEach(key => {
+                    const data = acumulado[key];
+                    const displayName = nameDisplay[key] || key;
                     const totalPago = data.totalComisionSemanal + data.comisionGeneral;
                     grandTotalSemanal += data.totalComisionSemanal;
                     grandTotalGeneral += data.comisionGeneral;
                     grandTotal += totalPago;
 
-                    html += `<tr><td style="font-weight:600">${nombre}</td>`;
+                    const escapedKey = key.replace(/'/g, "\\'");
+                    html += `<tr data-asesor-key="${key}">`;
+                    html += `<td class="col-eliminar" style="width:36px;text-align:center;cursor:pointer;color:#dc2626;font-weight:bold;font-size:1.1em" onclick="excluirDeLiquidacion('${escapedKey}')" title="Quitar de la lista">X</td>`;
+                    html += `<td style="font-weight:600">${displayName}</td>`;
                     semanasColumns.forEach(s => {
                         const weekData = data.semanas[s.id];
                         if (weekData) {
@@ -2280,13 +2298,14 @@
                     html += `<td style="text-align:center;${genColor};background:#eff6ff">${fmtCOP(data.comisionGeneral)}</td>`;
 
                     // Total a pagar
-                    const totalColor = totalPago > 0 ? 'color:#059669' : 'color:#dc2626';
+                    const totalColor = totalPago > 0 ? 'color:#059679' : 'color:#dc2626';
                     html += `<td style="text-align:center;font-weight:800;font-size:1.1em;${totalColor};background:#ecfdf5">${fmtCOP(totalPago)}</td></tr>`;
                 });
 
                 html += `</tbody>
                         <tfoot>
                             <tr>
+                                <td class="col-eliminar" style="width:36px"></td>
                                 <td style="font-weight:800;text-align:right" colspan="${semanasColumns.length + 1}">TOTALES:</td>
                                 <td style="font-weight:800;text-align:center;color:#059669">${fmtCOP(grandTotalSemanal)}</td>
                                 <td style="font-weight:800;text-align:center;color:#1e40af;background:#eff6ff">${fmtCOP(grandTotalGeneral)}</td>
@@ -2318,11 +2337,13 @@
                 html += `</div>`;
                 resultDiv.innerHTML = html;
                 btnDescargar.style.display = 'inline-flex';
+                btnRestaurarLiq.style.display = 'inline-flex';
 
             } catch (error) {
                 console.error("Error al cargar liquidación mensual:", error);
                 resultDiv.innerHTML = '<p class="text-center text-red-500">Error al cargar la liquidación. Revisa la consola.</p>';
                 btnDescargar.style.display = 'none';
+                btnRestaurarLiq.style.display = 'none';
             } finally {
                 hideLoading();
             }
@@ -2378,6 +2399,10 @@
                     }
                     if (el.style.maxWidth) el.style.maxWidth = 'none';
                 });
+                // Remove X column (col-eliminar) from the clone for a clean image
+                clone.querySelectorAll('.col-eliminar').forEach(el => el.remove());
+                // Remove hidden rows (excluded people) from the clone
+                clone.querySelectorAll('tr[style*="display: none"], tr[style*="display:none"]').forEach(el => el.remove());
                 wrapper.appendChild(clone);
                 document.body.appendChild(wrapper);
 
@@ -2536,6 +2561,26 @@
             } catch (error) {
                 console.error("Error cargando empleados:", error);
             }
+        }
+
+        /**
+         * Excludes a person from the liquidación mensual table (hides the row).
+         */
+        function excluirDeLiquidacion(normalizedKey) {
+            const rows = document.querySelectorAll('#liquidacion_capture_area tr[data-asesor-key]');
+            rows.forEach(row => {
+                if (row.getAttribute('data-asesor-key') === normalizedKey) {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        /**
+         * Restores all hidden rows in the liquidación mensual table.
+         */
+        function restaurarExcluidosLiquidacion() {
+            const rows = document.querySelectorAll('#liquidacion_capture_area tr[data-asesor-key]');
+            rows.forEach(row => row.style.display = '');
         }
 
         /**
