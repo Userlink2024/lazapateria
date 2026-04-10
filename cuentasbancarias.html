@@ -4416,43 +4416,54 @@ function validarPrecisionMonetaria(valor) {
   return pesosReconstruidos;
 }
 
-// Event listeners para formateo del campo valor - MEJORADO
+// Event listeners para formateo del campo valor - CORREGIDO: manejo de cursor
 $('valor').addEventListener('input', function(e) {
-  const cursorPosition = e.target.selectionStart;
-  const oldValue = e.target.value;
-  const oldLength = oldValue.length;
-  
+  const el = e.target;
+  const cursorPosition = el.selectionStart;
+  const oldValue = el.value;
+
+  // Contar dígitos antes del cursor (para mantener posición lógica)
+  const valueBeforeCursor = oldValue.substring(0, cursorPosition);
+  const digitsBeforeCursor = valueBeforeCursor.replace(/[^\d]/g, '').length;
+
   // Solo permitir números y formatear
   const numericOnly = oldValue.replace(/[^\d]/g, '');
-  
+
   // Limitar a 12 dígitos máximo
   const limitedValue = numericOnly.substring(0, 12);
-  
+
   // Formatear el valor si no está vacío
   const formattedValue = limitedValue ? formatNumberWithSeparators(limitedValue) : '';
-  e.target.value = formattedValue;
-  
-  // Ajustar posición del cursor
-  const newLength = formattedValue.length;
-  const lengthDiff = newLength - oldLength;
-  const newCursorPosition = Math.max(0, Math.min(cursorPosition + lengthDiff, newLength));
-  
+  el.value = formattedValue;
+
+  // Calcular nueva posición: contar caracteres hasta tener los mismos dígitos antes del cursor
+  let newCursorPosition = 0;
+  let digitCount = 0;
+  for (let i = 0; i < formattedValue.length; i++) {
+    if (/\d/.test(formattedValue[i])) {
+      digitCount++;
+    }
+    newCursorPosition = i + 1;
+    if (digitCount >= digitsBeforeCursor) {
+      break;
+    }
+  }
+
   // Establecer nueva posición del cursor
-  setTimeout(() => {
-    e.target.setSelectionRange(newCursorPosition, newCursorPosition);
-  }, 0);
+  el.setSelectionRange(newCursorPosition, newCursorPosition);
 });
 
-// Validar al hacer focus - mostrar valor sin formato para edición
+// Validar al hacer focus - mostrar valor sin formato y posicionar cursor al final
 $('valor').addEventListener('focus', function(e) {
   const numericValue = getNumericValue(e.target.value);
   if (numericValue !== '') {
     e.target.value = numericValue;
-    // Seleccionar todo el texto para facilitar edición
-    setTimeout(() => {
-      e.target.select();
-    }, 0);
   }
+  // Posicionar cursor al final, no seleccionar todo (evita que se borre al escribir)
+  setTimeout(() => {
+    const len = e.target.value.length;
+    e.target.setSelectionRange(len, len);
+  }, 0);
 });
 
 // Restaurar formato y validar al perder focus
