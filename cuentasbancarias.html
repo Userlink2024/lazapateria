@@ -1591,42 +1591,9 @@ let dragMouseX = 0;
 let dragMouseY = 0;
 let dragAutoScrollRaf = 0;
 
-/* VARIABLES DE OPTIMIZACIÓN (NO ALTERAN LÓGICA) */
-let debounceTimer = null;
-const referenciaCache = new Map();
-const CACHE_DURATION = 30000; // 30 segundos
-window.isUpdatingTotales = false;
-window.lastRenderedAccountId = null;
-window.lastRenderSnapshotTime = null;
-window.lastSnapshotHash = null;
-
 /* UTILIDADES */
 function $(id){ return document.getElementById(id); }
 function fmtCOP(n){ return new Intl.NumberFormat('es-CO').format(Number(n||0)); }
-
-/* FUNCIONES DE OPTIMIZACIÓN (NO ALTERAN LÓGICA EXISTENTE) */
-function debounceOperation(func, delay = 300) {
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(func, delay);
-}
-
-function showAccountLoading(isLoading) {
-  const accountInfo = $('selected-account-info');
-  if (accountInfo) {
-    if (isLoading) {
-      accountInfo.style.background = 'rgba(255, 193, 7, 0.1)';
-      accountInfo.innerHTML = '⏳ Cargando cuenta...';
-    } else {
-      accountInfo.style.background = 'rgba(76, 175, 80, 0.1)';
-      // El contenido se actualizará normalmente en la lógica existente
-    }
-  }
-}
-
-function createSnapshotHash(docs) {
-  if (!docs || !docs.length) return '';
-  return docs.map(doc => `${doc.id}:${doc.data().orden || 0}`).join('|');
-}
 
 /* BUSCADOR TIPO CTRL+F (solo Movimientos) */
 let findState = {
@@ -1787,15 +1754,6 @@ window.addEventListener('keydown', (e) => {
 async function checkReferenciaExists(referencia) {
   if (!referencia || referencia.trim() === '') return { exists: false };
   
-  const cacheKey = referencia.trim();
-  const cached = referenciaCache.get(cacheKey);
-  
-  // Usar cache si es reciente (sin alterar la lógica)
-  if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
-    console.log('📋 Usando cache para referencia:', cacheKey);
-    return cached.result;
-  }
-  
   try {
     // Buscar en todas las cuentas (consultas en paralelo para mayor velocidad)
     const cuentasSnapshot = await db.collection('cuentas').get();
@@ -1821,15 +1779,7 @@ async function checkReferenciaExists(referencia) {
     );
     
     const found = results.find(r => r !== null);
-    const result = found || { exists: false };
-    
-    // Guardar en cache (sin alterar el resultado)
-    referenciaCache.set(cacheKey, {
-      result: result,
-      timestamp: Date.now()
-    });
-    
-    return result;
+    return found || { exists: false };
   } catch (error) {
     console.error('Error verificando referencia:', error);
     throw new Error('Error al verificar la referencia: ' + error.message);
@@ -2394,20 +2344,13 @@ function subscribeAccounts(){
         const isClosedState = a.closed || false;
         $('selected-account-info').textContent = `Cuenta: ${a.name} — ${a.number || ''}${isClosedState ? ' (🔒 CERRADA)' : ''}`; 
         
-        // Mostrar indicador de carga (mejora UX sin alterar lógica)
-        showAccountLoading(true);
+        // Recalcular totales de separadores verdes al cambiar de cuenta
+        setTimeout(async () => {
+          await actualizarTotalesVerdes(); // Nueva lógica simple
+        }, 500);
         
-        // Usar debounce para operaciones pesadas (reduce demora perceptible)
-        debounceOperation(() => {
-          renderConsigns();
-          updateSelectedTotals();
-          showAccountLoading(false);
-        }, 200);
-        
-        // Separar el cálculo pesado de totales verdes con debounce más largo
-        debounceOperation(() => {
-          if (selectedAccountId) actualizarTotalesVerdes();
-        }, 800);
+        updateSelectedTotals(); 
+        renderConsigns(); 
       };
       container.appendChild(div);
     });
@@ -2534,24 +2477,8 @@ function renderConsigns(){
 
   updateFloatingVerifyButton();
 
-  // Early return si ya se renderizó esta cuenta recientemente (optimización sin alterar lógica)
-  if (window.lastRenderedAccountId === selectedAccountId && 
-      window.lastRenderSnapshotTime && 
-      (Date.now() - window.lastRenderSnapshotTime) < 3000) {
-    console.log('📋 Usando renderizado cacheado (menos de 3s)');
-    updateFloatingVerifyButton();
-    return;
-  }
-
   // Obtener todas las consignaciones y ordenar manualmente para manejar migración
   consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').onSnapshot(async snapshot=>{
-    // Evitar actualización si los datos son los mismos (optimización sin alterar lógica)
-    const currentHash = createSnapshotHash(snapshot.docs);
-    if (window.lastSnapshotHash === currentHash) {
-      console.log('📋 Mismos datos detectados, omitiendo renderizado');
-      return;
-    }
-    
     tbody.innerHTML = '';
     currentConsignsSnapshot = [];
     
@@ -2718,11 +2645,6 @@ function renderConsigns(){
     // Prevenir que el onSnapshot actualice los totales si hay un cuadre en proceso
     // Nota: No modificamos el onSnapshot directamente, sino que protegemos las actualizaciones
     console.log('🛡️ PROTECCIÓN ACTIVA: Sistema listo para proteger contra sobreescribir totales');
-    
-    // Guardar timestamp y hash para cache (optimización sin alterar lógica)
-    window.lastRenderedAccountId = selectedAccountId;
-    window.lastRenderSnapshotTime = Date.now();
-    window.lastSnapshotHash = createSnapshotHash(snapshot.docs);
     
     // Actualizar indicadores de jerarquía después de renderizar
     setTimeout(() => {
@@ -3430,14 +3352,6 @@ async function actualizarTotalesVerdes() {
     return;
   }
   
-  // Evitar recálculo si ya se está procesando (optimización sin alterar lógica)
-  if (window.isUpdatingTotales) {
-    console.log('⏳ Ya se está actualizando totales, omitiendo...');
-    return;
-  }
-  
-  window.isUpdatingTotales = true;
-  
   console.log('🔄 LÓGICA CORREGIDA: Recalculando todos los separadores verdes...');
   
   try {
@@ -3539,8 +3453,6 @@ async function actualizarTotalesVerdes() {
     
   } catch (error) {
     console.error('❌ Error en nueva lógica:', error);
-  } finally {
-    window.isUpdatingTotales = false;
   }
 }
 
