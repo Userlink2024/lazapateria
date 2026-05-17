@@ -2595,8 +2595,9 @@ function renderConsigns(){
     
     // Solo actualizar si no hay un cuadre en proceso
     if (!window.isProcessingCuadre) {
+      setCachedTotal(selectedAccountId, 'accountTotal', calculateAccountTotal(currentConsignsSnapshot));
       updateSelectedTotals(); 
-      updateTotalGeneral();
+      scheduleTotalGeneralUpdate();
       
       // Verificar que los totales se actualizaron correctamente
       setTimeout(() => {
@@ -2619,7 +2620,7 @@ function renderConsigns(){
           console.log('🔄 REINTENTO AUTOMÁTICO...');
           invalidateCache(selectedAccountId);
           updateSelectedTotals();
-          updateTotalGeneral();
+          scheduleTotalGeneralUpdate(true);
           
           setTimeout(() => {
             const retryDisplay = totalElement ? totalElement.textContent : '$0';
@@ -4570,7 +4571,7 @@ $('btn-verify').addEventListener('click', async ()=>{
     
     setTimeout(() => {
       updateSelectedTotals();
-      updateTotalGeneral();
+      scheduleTotalGeneralUpdate(true);
     }, 500);
     
     showModal('Éxito', successMessage, false);
@@ -4605,7 +4606,7 @@ $('btn-unverify').addEventListener('click', async ()=>{
   
   setTimeout(() => {
     updateSelectedTotals();
-    updateTotalGeneral();
+    scheduleTotalGeneralUpdate(true);
   }, 500);
   
   // Limpia la selección después de la acción
@@ -4713,7 +4714,7 @@ $('btn-delete').addEventListener('click', async ()=>{
             await actualizarTotalesVerdes();
             
             updateSelectedTotals();
-            updateTotalGeneral();
+            scheduleTotalGeneralUpdate(true);
             
             showModal('¡Atención!', `Eliminación exitosa. Todos los separadores han sido recalculados automáticamente.`, false);
         } else {
@@ -4731,7 +4732,7 @@ $('btn-delete').addEventListener('click', async ()=>{
             }
             
             updateSelectedTotals();
-            updateTotalGeneral();
+            scheduleTotalGeneralUpdate(true);
             
             showModal('Éxito', `${ids.length} items eliminados. Separadores recalculados automáticamente.`, false);
         }
@@ -4967,6 +4968,8 @@ let isUpdatingTotals = false; // Flag para prevenir llamadas concurrentes
 let updateTimeout = null; // Timeout para liberar flag automáticamente
 
 async function updateSelectedTotals(){ 
+  const accountIdAtStart = selectedAccountId;
+  
   // Prevenir llamadas concurrentes
   if (isUpdatingTotals) {
     console.log('⏳ Ya hay una actualización de totales en progreso, saltando...');
@@ -4974,16 +4977,16 @@ async function updateSelectedTotals(){
   }
   
   // Validación inicial de cuenta seleccionada
-  if(!selectedAccountId){ 
+  if(!accountIdAtStart){ 
     $('total-cuenta').textContent = fmtCOP(0); 
     console.log('❌ No hay cuenta seleccionada, estableciendo total en 0');
     return; 
   }
   
   // Verificar caché primero
-  const cachedTotal = getCachedTotal(selectedAccountId, 'accountTotal');
+  const cachedTotal = getCachedTotal(accountIdAtStart, 'accountTotal');
   if (cachedTotal !== null) {
-    updateTotalDisplay(cachedTotal);
+    if (selectedAccountId === accountIdAtStart) updateTotalDisplay(cachedTotal);
     return;
   }
   
@@ -4995,23 +4998,23 @@ async function updateSelectedTotals(){
   }, 10000); // 10 segundos de timeout
   
   console.log('=== INICIANDO ACTUALIZACIÓN DE TOTALES (CONCURRENCY-SAFE) ===');
-  console.log('Cuenta seleccionada:', selectedAccountId);
+  console.log('Cuenta seleccionada:', accountIdAtStart);
   
   try {
     // Verificación múltiple de cuenta seleccionada
-    if (!selectedAccountId) {
+    if (!selectedAccountId || selectedAccountId !== accountIdAtStart) {
       console.log('❌ Cuenta seleccionada se perdió durante la ejecución');
-      $('total-cuenta').textContent = fmtCOP(0);
+      if (!selectedAccountId) $('total-cuenta').textContent = fmtCOP(0);
       return;
     }
     
     console.log('🔄 Consultando Firebase directamente...');
     
     // Usar consulta optimizada
-    const fbDocs = await getConsignationsOptimized(selectedAccountId);
+    const fbDocs = await getConsignationsOptimized(accountIdAtStart);
     
     // Verificación post-consulta
-    if (!selectedAccountId) {
+    if (!selectedAccountId || selectedAccountId !== accountIdAtStart) {
       console.log('❌ Cuenta seleccionada cambió durante la consulta Firebase');
       return;
     }
@@ -5024,10 +5027,10 @@ async function updateSelectedTotals(){
     console.log(`💰 TOTAL CALCULADO PARA CUENTA (COMPLETO): ${totalActual}`);
     
     // Guardar en caché
-    setCachedTotal(selectedAccountId, 'accountTotal', totalActual);
+    setCachedTotal(accountIdAtStart, 'accountTotal', totalActual);
     
     // Verificación final antes de actualizar UI
-    if (!selectedAccountId) {
+    if (!selectedAccountId || selectedAccountId !== accountIdAtStart) {
       console.log('❌ Cuenta seleccionada se perdió antes de actualizar UI');
       return;
     }
@@ -5438,7 +5441,29 @@ async function batchRecalculateSeparators(separatorIds, accountId) {
 
 
 // ** Total General (Implementación más robusta sin CollectionGroup) **
+let totalGeneralCache = { value: null, timestamp: 0 };
+let isUpdatingTotalGeneral = false;
+let totalGeneralPending = false;
+let totalGeneralDebounceTimeout = null;
+const TOTAL_GENERAL_CACHE_MS = 60000;
+const TOTAL_GENERAL_DEBOUNCE_MS = 1200;
+
 async function updateTotalGeneral(){ 
+  if (isUpdatingTotalGeneral) {
+    totalGeneralPending = true;
+    console.log('⏳ Total general ya está actualizándose; se programó una actualización posterior.');
+    return;
+  }
+  
+  const cachedIsFresh = totalGeneralCache.value !== null && (Date.now() - totalGeneralCache.timestamp) < TOTAL_GENERAL_CACHE_MS;
+  if (cachedIsFresh) {
+    $('total-general').textContent = fmtCOP(totalGeneralCache.value);
+    console.log('💾 Usando total general desde caché:', totalGeneralCache.value);
+    return;
+  }
+  
+  isUpdatingTotalGeneral = true;
+  
   try{ 
     // 1. Obtener todas las cuentas
     const accountsSnapshot = await db.collection('cuentas').get();
@@ -5460,16 +5485,35 @@ async function updateTotalGeneral(){
             }
         });
     });
-
+    totalGeneralCache = { value: total, timestamp: Date.now() };
     $('total-general').textContent = fmtCOP(total); 
   }catch(e){ 
     console.error("Error al actualizar total general (VERIFIQUE CONSOLA):", e);
     // En caso de fallo, se asegura de mostrar 0 para evitar valores incorrectos o vacíos.
     $('total-general').textContent = fmtCOP(0); 
+  } finally {
+    isUpdatingTotalGeneral = false;
+    if (totalGeneralPending) {
+      totalGeneralPending = false;
+      scheduleTotalGeneralUpdate(true);
+    }
   } 
 }
+
+function scheduleTotalGeneralUpdate(force = false) {
+  if (force) totalGeneralCache.timestamp = 0;
+  
+  if (totalGeneralDebounceTimeout) {
+    clearTimeout(totalGeneralDebounceTimeout);
+  }
+  
+  totalGeneralDebounceTimeout = setTimeout(() => {
+    totalGeneralDebounceTimeout = null;
+    updateTotalGeneral();
+  }, TOTAL_GENERAL_DEBOUNCE_MS);
+}
 // Se llama al inicio en subscribeAccounts y luego cada vez que se actualiza una cuenta.
-setInterval(updateTotalGeneral,15000); 
+setInterval(() => scheduleTotalGeneralUpdate(),60000); 
 
 /* BUSQUEDA */
 const filter = (id) => {
