@@ -319,6 +319,56 @@
       100% { transform: scale(1) rotate(0deg); opacity: 1; }
     }
 
+    .server-loading {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(67,160,71,0.24), transparent 32%),
+        radial-gradient(circle at 80% 35%, rgba(30,136,229,0.18), transparent 34%),
+        linear-gradient(135deg, rgba(5,20,35,0.92), rgba(10,38,32,0.9));
+      backdrop-filter: blur(12px) saturate(140%);
+      color: #fff;
+      text-align: center;
+      padding: 24px;
+    }
+    .server-loading.active { display: flex; }
+    .server-loading .server-spinner {
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, transparent, #64dd17, #29b6f6, transparent 72%);
+      animation: spinServer 0.9s linear infinite;
+      box-shadow: 0 0 34px rgba(100,221,23,0.38);
+      position: relative;
+    }
+    .server-loading .server-spinner::before {
+      content: "";
+      position: absolute;
+      inset: 9px;
+      border-radius: 50%;
+      background: rgba(5,20,35,0.94);
+    }
+    .server-loading .server-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(18px, 3vw, 30px);
+      font-weight: 700;
+      text-shadow: 0 0 18px rgba(41,182,246,0.42);
+    }
+    .server-loading .server-subtitle {
+      color: #b9f6ca;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    @keyframes spinServer { to { transform: rotate(360deg); } }
+
     /* ---------- OVERLAY FULLSCREEN MESSAGES ---------- */
     .fullscreen-overlay {
       display: none;
@@ -430,6 +480,31 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    let panelUnsub = null;
+    let panelLoadingTimeout = null;
+
+    function showServerLoading(message = 'Sincronizando con la base de datos del servidor...') {
+      const overlay = document.getElementById('serverLoading');
+      const title = document.getElementById('serverLoadingTitle');
+      if (title) title.textContent = message;
+      if (overlay) overlay.classList.add('active');
+      if (panelLoadingTimeout) clearTimeout(panelLoadingTimeout);
+      panelLoadingTimeout = setTimeout(() => {
+        const subtitle = document.getElementById('serverLoadingSubtitle');
+        if (subtitle) subtitle.textContent = 'La carga está tardando más de lo normal. Seguimos esperando respuesta del servidor.';
+      }, 12000);
+    }
+
+    function hideServerLoading() {
+      const overlay = document.getElementById('serverLoading');
+      const subtitle = document.getElementById('serverLoadingSubtitle');
+      if (overlay) overlay.classList.remove('active');
+      if (subtitle) subtitle.textContent = 'Por favor espere.';
+      if (panelLoadingTimeout) {
+        clearTimeout(panelLoadingTimeout);
+        panelLoadingTimeout = null;
+      }
+    }
 
     // --- Sonido tipo turnador ---
     let audioContext = null;
@@ -624,11 +699,21 @@
     }
 
     async function cargarPanelBodega() {
-      await cargarBodegueros();
       const contenedor = document.getElementById('panel');
+      showServerLoading();
       contenedor.innerHTML = '<p>Cargando información...</p>';
 
-      db.collectionGroup('registros').onSnapshot(snapshot => {
+      try {
+        await cargarBodegueros();
+      } catch (error) {
+        hideServerLoading();
+        console.error('Error cargando bodegueros:', error);
+        contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo cargar la información de bodegueros. Verifique la conexión.</p>';
+        return;
+      }
+
+      if (panelUnsub) panelUnsub();
+      panelUnsub = db.collectionGroup('registros').onSnapshot(snapshot => {
         const conteo = {};
         cacheRegistros = [];
 
@@ -686,6 +771,11 @@
         }
 
         renderizarPanel(contenedor, conteo);
+        hideServerLoading();
+      }, error => {
+        hideServerLoading();
+        console.error('Error escuchando registros de bodega:', error);
+        contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo sincronizar con la base de datos del servidor. Intente recargar la página.</p>';
       });
     }
 
@@ -1119,6 +1209,12 @@
   <!-- ---------- FIN JS ORIGINAL ---------- -->
 </head>
 <body>
+  <div class="server-loading" id="serverLoading">
+    <div class="server-spinner"></div>
+    <div class="server-title" id="serverLoadingTitle">Sincronizando con la base de datos del servidor...</div>
+    <div class="server-subtitle" id="serverLoadingSubtitle">Por favor espere.</div>
+  </div>
+
   <h1 id="tituloPanel">Panel de Bodega</h1>
   <div class="top-bar">
     <button class="btn" onclick="cambiarModo(false)">📦 Despachos Activos</button>
