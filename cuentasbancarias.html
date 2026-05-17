@@ -930,24 +930,80 @@
     /* Loading overlay */
     #loading-overlay{
       position:fixed; inset:0; z-index:99999;
-      background: rgba(0,0,0,0.55);
-      backdrop-filter: blur(6px);
+      background:
+        radial-gradient(circle at 20% 20%, rgba(74,222,128,0.22), transparent 32%),
+        radial-gradient(circle at 80% 30%, rgba(34,211,238,0.18), transparent 34%),
+        linear-gradient(135deg, rgba(2,6,23,0.92), rgba(15,23,42,0.88));
+      backdrop-filter: blur(14px) saturate(140%);
       display:none; align-items:center; justify-content:center;
       flex-direction:column; gap:18px;
+      overflow:hidden;
+    }
+    #loading-overlay::before{
+      content:"";
+      position:absolute; inset:-40%;
+      background:
+        linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+      background-size:42px 42px;
+      transform: perspective(700px) rotateX(58deg);
+      animation: gridFlow 2.4s linear infinite;
+    }
+    #loading-overlay::after{
+      content:"";
+      position:absolute; width:420px; height:420px;
+      border-radius:50%;
+      border:1px solid rgba(74,222,128,0.26);
+      box-shadow:0 0 80px rgba(74,222,128,0.18), inset 0 0 80px rgba(34,211,238,0.08);
+      animation: pulseHalo 1.8s ease-in-out infinite;
     }
     #loading-overlay.active{ display:flex; }
     #loading-overlay .spinner{
-      width:52px; height:52px;
-      border: 5px solid rgba(255,255,255,0.25);
-      border-top: 5px solid #4CAF50;
+      position:relative; z-index:1;
+      width:86px; height:86px;
       border-radius:50%;
-      animation: spin 0.8s linear infinite;
+      background: conic-gradient(from 0deg, transparent, #22d3ee, #4ade80, transparent 72%);
+      animation: spin 0.95s linear infinite;
+      box-shadow:0 0 34px rgba(74,222,128,0.42);
+    }
+    #loading-overlay .spinner::before{
+      content:"";
+      position:absolute; inset:9px;
+      border-radius:50%;
+      background:rgba(2,6,23,0.92);
+      box-shadow:inset 0 0 22px rgba(34,211,238,0.22);
+    }
+    #loading-overlay .spinner::after{
+      content:"";
+      position:absolute; inset:31px;
+      border-radius:50%;
+      background:#4ade80;
+      box-shadow:0 0 18px #4ade80, 0 0 42px rgba(34,211,238,0.65);
     }
     @keyframes spin{ to{ transform:rotate(360deg); } }
+    @keyframes gridFlow{ to{ transform:perspective(700px) rotateX(58deg) translateY(42px); } }
+    @keyframes pulseHalo{
+      0%,100%{ transform:scale(.94); opacity:.72; }
+      50%{ transform:scale(1.05); opacity:1; }
+    }
     #loading-overlay .loading-text{
-      color:#fff; font-size:16px; font-weight:600;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.4);
-      text-align:center; line-height:1.5;
+      position:relative; z-index:1;
+      color:#f8fafc; font-size:20px; font-weight:800;
+      text-shadow:0 0 18px rgba(34,211,238,0.45);
+      text-align:center; line-height:1.45;
+      letter-spacing:.03em;
+      max-width:520px;
+      padding:0 22px;
+    }
+    #loading-overlay .loading-text::after{
+      content:"Por favor espere, la información no se ha borrado.";
+      display:block;
+      margin-top:8px;
+      color:#a7f3d0;
+      font-size:12px;
+      font-weight:600;
+      letter-spacing:.08em;
+      text-transform:uppercase;
     }
 
     /* === DARK MODE === */
@@ -2475,10 +2531,13 @@ function renderConsigns(){
 
   if(!selectedAccountId) return;
 
+  const renderingAccountId = selectedAccountId;
+  showLoading('Sincronizando cuenta con Firebase...');
   updateFloatingVerifyButton();
 
   // Obtener todas las consignaciones y ordenar manualmente para manejar migración
   consignsUnsub = db.collection('cuentas').doc(selectedAccountId).collection('consignaciones').onSnapshot(async snapshot=>{
+    if (selectedAccountId !== renderingAccountId) return;
     tbody.innerHTML = '';
     currentConsignsSnapshot = [];
     
@@ -2515,6 +2574,7 @@ function renderConsigns(){
     
     if (needsMigration) {
       console.log('🔄 Migrando consignaciones sin campo orden...');
+      showLoading('Preparando información de la cuenta...');
       await batch.commit();
       return; // El snapshot se actualizará automáticamente
     }
@@ -2653,6 +2713,11 @@ function renderConsigns(){
         updateVerificationIndicators();
       }
     }, 300);
+    if (selectedAccountId === renderingAccountId) hideLoading();
+  }, error => {
+    if (selectedAccountId === renderingAccountId) hideLoading();
+    console.error('Error al cargar consignaciones:', error);
+    showModal('Error de carga', 'No se pudo cargar la información de la cuenta. Verifique la conexión e intente nuevamente.<br><br>Detalle: ' + error.message, false);
   });
 }
 
