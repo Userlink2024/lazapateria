@@ -2376,6 +2376,7 @@ function subscribeAccounts(){
     }
 
     // Renderizar cuentas
+    const accountsFragment = document.createDocumentFragment();
     accountsData.forEach(a=>{
       const isClosed = a.closed || false; 
       const isMgr = (sessionRole === 'Gerente');
@@ -2423,11 +2424,11 @@ function subscribeAccounts(){
           await actualizarTotalesVerdes(); // Nueva lógica simple
         }, 500);
         
-        updateSelectedTotals(); 
         renderConsigns(); 
       };
-      container.appendChild(div);
+      accountsFragment.appendChild(div);
     });
+    container.appendChild(accountsFragment);
 
     // *** FIX 2: Asegurar que el título se actualice en la carga inicial si se seleccionó la primera cuenta ***
     if(firstAccount){ 
@@ -2435,7 +2436,6 @@ function subscribeAccounts(){
         $('selected-account-info').textContent = `Cuenta: ${selectedAccountName} — ${firstAccount.number || ''}${isClosed ? ' (🔒 CERRADA)' : ''}`; 
         lastAssignedOrden = null;
         renderConsigns(); 
-        updateSelectedTotals();
         
         // Recalcular totales al cargar la primera cuenta
         setTimeout(async () => {
@@ -2443,7 +2443,7 @@ function subscribeAccounts(){
         }, 1000);
     }
     // Aseguramos que el total general se actualice al cargar las cuentas por primera vez
-    updateTotalGeneral(); 
+    scheduleTotalGeneralUpdate(); 
   });
 }
 subscribeAccounts();
@@ -2607,6 +2607,8 @@ function renderConsigns(){
       return ordenA - ordenB; // Ascendente - mantiene orden de ingreso
     });
 
+    const fragment = document.createDocumentFragment();
+
     currentConsignsSnapshot.forEach((c, index)=>{
       
       const isSelected = selectedConsignIds.has(c.id); // <-- Verificar el estado en la "memoria"
@@ -2621,7 +2623,7 @@ function renderConsigns(){
         if(c.type === 'green') labelText = `💰 TOTAL: ${fmtCOP(c.total)}`;
         if(c.type === 'red') labelText = `🛑 CORTE (${c.label})`;
         tr.innerHTML = `<td><input type="checkbox" data-id="${c.id}" data-idx="${index}" data-separator="true" ${checkedAttr}></td><td colspan="4">${labelText}</td><td></td>`;
-        tbody.appendChild(tr);
+        fragment.appendChild(tr);
         return;
       }
 
@@ -2661,8 +2663,10 @@ function renderConsigns(){
       // FUNCIONALIDAD DE DOBLE CLICK REMOVIDA - Usar modal de ajustes manuales
       // tr.addEventListener('dblclick', (e) => handleDoubleClick(c, index));
 
-      tbody.appendChild(tr);
+      fragment.appendChild(tr);
     });
+
+    tbody.appendChild(fragment);
 
     updateFloatingVerifyButton();
     refreshFindIfOpen();
