@@ -313,6 +313,7 @@ const COL_TOPES_MOV = db.collection('topes_movimientos');
 let allAccounts = []; // {id, name, number}
 let topesConfig = {}; // accountId -> {tope, activo}
 let todayMovs = [];   // movements for selected date
+let carriedMovs = []; // movements up to selected date, used to continue incomplete topes
 let currentDate = todayISO();
 
 /* ===== UTILS ===== */
@@ -366,18 +367,56 @@ function subscribeConfig(){
   });
 }
 
-/* ===== LOAD TODAY MOVEMENTS (only current day) ===== */
+/* ===== LOAD TODAY MOVEMENTS + CARRIED PENDING MOVEMENTS ===== */
 async function loadDayData(){
   try {
-    const snap = await COL_TOPES_MOV.where('fecha','==',currentDate).get();
-    todayMovs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    const [todaySnap, carriedSnap] = await Promise.all([
+      COL_TOPES_MOV.where('fecha','==',currentDate).get(),
+      COL_TOPES_MOV.where('fecha','<=',currentDate).limit(1000).get()
+    ]);
+    todayMovs = todaySnap.docs.map(d=>({id:d.id,...d.data()}));
+    carriedMovs = carriedSnap.docs.map(d=>({id:d.id,...d.data()}));
     todayMovs.sort((a,b)=>{
       const ta = a.createdAt ? a.createdAt.toMillis() : 0;
       const tb = b.createdAt ? b.createdAt.toMillis() : 0;
       return tb - ta;
     });
-  } catch(e){ console.error('loadDayData error:', e); todayMovs = []; }
+    carriedMovs.sort((a,b)=>{
+      const fa = a.fecha || '';
+      const fb = b.fecha || '';
+      if(fa !== fb) return fa.localeCompare(fb);
+      const ta = a.createdAt ? a.createdAt.toMillis() : 0;
+      const tb = b.createdAt ? b.createdAt.toMillis() : 0;
+      return ta - tb;
+    });
+  } catch(e){ console.error('loadDayData error:', e); todayMovs = []; carriedMovs = []; }
   renderDashboard();
+}
+
+function getCarriedProgress(accountId, tope){
+  const accountMovs = carriedMovs.filter(m=>m.accountId===accountId);
+  if(!tope || tope <= 0) {
+    return {
+      movs: todayMovs.filter(m=>m.accountId===accountId),
+      total: todayMovs.filter(m=>m.accountId===accountId).reduce((s,m)=>s + (Number(m.monto)||0), 0),
+      hasCarry: false
+    };
+  }
+
+  let cycleTotal = 0;
+  let cycleMovs = [];
+  accountMovs.forEach(m=>{
+    const monto = Number(m.monto) || 0;
+    if(cycleTotal >= tope) {
+      cycleTotal = 0;
+      cycleMovs = [];
+    }
+    cycleTotal += monto;
+    cycleMovs.push(m);
+  });
+
+  const hasCarry = cycleMovs.some(m=>m.fecha && m.fecha < currentDate) && cycleTotal < tope;
+  return { movs: cycleMovs, total: cycleTotal, hasCarry };
 }
 
 /* ===== RENDER DASHBOARD (HOY) ===== */
@@ -402,8 +441,9 @@ function renderDashboard(){
   activeAccounts.forEach(acc=>{
     const cfg = topesConfig[acc.id] || {};
     const tope = Number(cfg.tope) || 0;
-    const movs = todayMovs.filter(m=>m.accountId===acc.id);
-    const ingresado = movs.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+    const progress = getCarriedProgress(acc.id, tope);
+    const movs = progress.movs;
+    const ingresado = progress.total;
     const faltante = Math.max(tope - ingresado, 0);
     const pct = tope > 0 ? Math.min((ingresado/tope)*100, 100) : 0;
     const colorClass = pct >= 85 ? 'red' : pct >= 60 ? 'orange' : 'green';
@@ -425,6 +465,7 @@ function renderDashboard(){
           </div>
         </div>
         <div class="acc-pct" style="color:${colorText}">${pct.toFixed(1)}%${pct>=100?' — TOPE ALCANZADO':''}</div>
+        ${progress.hasCarry ? '<div style="font-size:12px;color:var(--orange);font-weight:700;margin-top:4px;margin-bottom:4px"><i class="fas fa-clock-rotate-left"></i> Continúa saldo pendiente de días anteriores</div>' : ''}
         ${faltante > 0 ? '<div style="font-size:12px;color:#6b7280;font-weight:600;margin-top:4px;margin-bottom:6px">Falta: '+fmtCOP(faltante)+'</div>' : ''}
         <div class="progress-wrap">
           <div class="progress-bar ${colorClass}" style="width:${pct}%"></div>
@@ -434,7 +475,7 @@ function renderDashboard(){
           '</div>' : ''}
         <div class="acc-actions">
           <button class="btn sm primary" onclick="openAddModal('${acc.id}','${acc.name} — ${acc.number}')"><i class="fas fa-plus"></i> Agregar</button>
-          ${movs.length ? '<button class="btn sm danger" onclick="undoLast(\''+acc.id+'\',\''+movs[0].id+'\')"><i class="fas fa-undo"></i> Deshacer</button>' : ''}
+          ${movs.length ? '<button class="btn sm danger" onclick="undoLast(\''+acc.id+'\',\''+movs.slice().sort((a,b)=>((b.createdAt?b.createdAt.toMillis():0)-(a.createdAt?a.createdAt.toMillis():0)))[0].id+'\')"><i class="fas fa-undo"></i> Deshacer</button>' : ''}
         </div>
       </div>`;
   });
@@ -593,8 +634,8 @@ async function saveIngreso(){
   const acc = allAccounts.find(a=>a.id===accountId);
   const cfg = topesConfig[accountId] || {};
   const tope = Number(cfg.tope) || 0;
-  const movsHoy = todayMovs.filter(m=>m.accountId===accountId);
-  const ingresado = movsHoy.reduce((s,m)=>s + (Number(m.monto)||0), 0);
+  const progress = getCarriedProgress(accountId, tope);
+  const ingresado = progress.total;
 
   if(tope > 0 && (ingresado + monto) > tope){
     showTopeAlert(acc || {name:'Cuenta',number:''}, monto, ingresado, tope);
