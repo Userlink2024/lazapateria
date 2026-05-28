@@ -833,7 +833,7 @@ body.dark .checkbox-text{
     <div class="alert-modal-buttons">
       <button class="alert-btn alert-btn-secondary" onclick="cerrarOpcionesExcel()">Cancelar</button>
       <button class="alert-btn alert-btn-primary" onclick="exportarExcel(); cerrarOpcionesExcel();">Total</button>
-      <button class="alert-btn alert-btn-primary" onclick="abrirInformeModal(); cerrarOpcionesExcel();">Reporte</button>
+      <button class="alert-btn alert-btn-primary" onclick="exportarExcelInforme(); cerrarOpcionesExcel();">Reporte</button>
     </div>
   </div>
 </div>
@@ -849,8 +849,11 @@ body.dark .checkbox-text{
         Cerrar
       </button>
     </div>
-    <div style="margin-top:16px;text-align:right;font-weight:bold;font-size:18px;">
-      Deuda total: <span id="informeTotal">$0</span>
+    <div style="display:flex; gap:10px; margin-top:16px; align-items:center;">
+      <input id="buscarInforme" type="text" placeholder="Buscar fabricante o NIT..." oninput="filtrarInforme()" style="flex:1;">
+      <div style="white-space:nowrap; text-align:right; font-weight:bold; font-size:18px;">
+        Deuda total: <span id="informeTotal">$0</span>
+      </div>
     </div>
     <div id="informeList" style="margin-top:16px;"></div>
   </div>
@@ -1503,6 +1506,8 @@ function cerrarOpcionesExcel(){
   document.getElementById("excelOptionsBackdrop").style.display = "none";
 }
 
+let datosInformeActual = [];
+
 function obtenerInformeFabricantes(){
   const mapa = new Map();
   registros.forEach(r=>{
@@ -1525,10 +1530,17 @@ function obtenerInformeFabricantes(){
 }
 
 function abrirInformeModal(){
-  const informe = obtenerInformeFabricantes();
-  const total = informe.reduce((s,x)=> s + Number(x.deuda || 0), 0);
+  datosInformeActual = obtenerInformeFabricantes();
+  document.getElementById("buscarInforme").value = "";
+
+  const total = datosInformeActual.reduce((s,x)=> s + Number(x.deuda || 0), 0);
   document.getElementById("informeTotal").textContent = "$" + total.toLocaleString();
 
+  renderTablaInforme(datosInformeActual);
+  document.getElementById("informeModalBackdrop").style.display = "flex";
+}
+
+function renderTablaInforme(lista){
   let html = `
     <table style='width:100%;border-collapse:collapse;'>
       <thead>
@@ -1541,7 +1553,7 @@ function abrirInformeModal(){
       <tbody>
   `;
 
-  informe.forEach(r=>{
+  lista.forEach(r=>{
     html += `
       <tr>
         <td>${r.nombre}</td>
@@ -1552,7 +1564,19 @@ function abrirInformeModal(){
 
   html += "</tbody></table>";
   document.getElementById("informeList").innerHTML = html;
-  document.getElementById("informeModalBackdrop").style.display = "flex";
+}
+
+function filtrarInforme(){
+  const q = normalizarTexto(document.getElementById("buscarInforme").value);
+  const filtrado = datosInformeActual.filter(r =>
+    normalizarTexto(r.nombre).includes(q) ||
+    normalizarTexto(r.nit).includes(q)
+  );
+
+  const total = filtrado.reduce((s,x)=> s + Number(x.deuda || 0), 0);
+  document.getElementById("informeTotal").textContent = "$" + total.toLocaleString();
+
+  renderTablaInforme(filtrado);
 }
 
 function cerrarInformeModal(){
@@ -1585,6 +1609,21 @@ function exportarExcel(){
   XLSX.utils.book_append_sheet(wb,ws,"Reporte");
 
   XLSX.writeFile(wb,"Fabricantes.xlsx");
+}
+
+function exportarExcelInforme(){
+  const informe = obtenerInformeFabricantes();
+  const data = informe.map(r=>({
+    "FABRICANTE": r.nombre,
+    "NIT": r.nit,
+    "DEUDA TOTAL": r.deuda
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Informe Resumen");
+
+  XLSX.writeFile(wb, "Reporte_Resumen_Deudas_Fabricantes.xlsx");
 }
 /* =======================================================
     =============  PARTE 3 - EDICIÓN COMPLETA  ============
