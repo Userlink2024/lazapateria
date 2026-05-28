@@ -774,7 +774,12 @@ body.dark .checkbox-text{
 <!-- PANEL DERECHO -->
 <div class="panel right">
   <div style="display:flex;justify-content:space-between;align-items:center;">
-    <h2 style="margin:0;">Lista</h2>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <h2 style="margin:0;">Lista</h2>
+      <button onclick="abrirInformeModal()" style="background:#2e7d32;color:white;border:none;padding:8px 12px;border-radius:8px;">
+        Informe
+      </button>
+    </div>
 
     <div>
       <small>Deuda total:</small><br>
@@ -784,7 +789,7 @@ body.dark .checkbox-text{
 
   <div style="display:flex;gap:10px;margin-top:12px;">
     <input id="buscar" type="text" placeholder="Buscar..." oninput="filtrar()" style="flex:1">
-    <button onclick="exportarExcel()" style="background:#27ae60;color:white;border:none;padding:10px;border-radius:8px;">
+    <button onclick="abrirOpcionesExcel()" style="background:#27ae60;color:white;border:none;padding:10px;border-radius:8px;">
       Excel
     </button>
   </div>
@@ -820,6 +825,36 @@ body.dark .checkbox-text{
 </div>
 
 </div> <!-- container -->
+
+<div id="excelOptionsBackdrop" class="alert-modal-back">
+  <div class="alert-modal">
+    <h3>📊 Excel</h3>
+    <p>Selecciona qué deseas generar.</p>
+    <div class="alert-modal-buttons">
+      <button class="alert-btn alert-btn-secondary" onclick="cerrarOpcionesExcel()">Cancelar</button>
+      <button class="alert-btn alert-btn-primary" onclick="exportarExcel(); cerrarOpcionesExcel();">Total</button>
+      <button class="alert-btn alert-btn-primary" onclick="abrirInformeModal(); cerrarOpcionesExcel();">Reporte</button>
+    </div>
+  </div>
+</div>
+
+<div id="informeModalBackdrop" class="modal-back">
+  <div class="modal" style="max-width:800px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <h3 style="margin:0;">Informe</h3>
+        <small>Deuda total por fabricante</small>
+      </div>
+      <button onclick="cerrarInformeModal()" style="background:#636e72;color:white;border:none;padding:8px 12px;border-radius:6px;">
+        Cerrar
+      </button>
+    </div>
+    <div style="margin-top:16px;text-align:right;font-weight:bold;font-size:18px;">
+      Deuda total: <span id="informeTotal">$0</span>
+    </div>
+    <div id="informeList" style="margin-top:16px;"></div>
+  </div>
+</div>
 
 <!-- MODAL -->
 <div id="modalBackdrop" class="modal-back">
@@ -1010,10 +1045,15 @@ let currentModalNit = null;
 let currentModalNombre = null;
 let grouped = {};
 let chartDonut = null;
+let guardando = false;
 
 const PAGE_SIZE = 50;
 let currentPage = 1;
 let currentList = [];
+
+function normalizarTexto(value){
+  return String(value || "").trim().toLowerCase();
+}
 
 async function cargarTodos(){
   const snap = await db.collection(COLECCION).get();
@@ -1037,6 +1077,7 @@ function renderTabla(list){
   currentList = Array.isArray(list) ? list : [];
   const tbody = document.getElementById("tablaFabricantes");
   tbody.innerHTML = "";
+  const fragment = document.createDocumentFragment();
 
   const start = (currentPage - 1) * PAGE_SIZE;
   const pageItems = currentList.slice(start, start + PAGE_SIZE);
@@ -1073,9 +1114,10 @@ function renderTabla(list){
       }
     };
 
-    tbody.appendChild(tr);
+    fragment.appendChild(tr);
   });
 
+  tbody.appendChild(fragment);
   document.getElementById("countRegs").textContent = currentList.length;
   renderPagination();
 }
@@ -1097,9 +1139,9 @@ function filtrar(){
   const q = document.getElementById("buscar").value.trim().toLowerCase();
 
   const out = registros.filter(r =>
-    r.nit.toLowerCase().includes(q) ||
-    r.nombre.toLowerCase().includes(q) ||
-    r.numFactura.toLowerCase().includes(q)
+    normalizarTexto(r.nit).includes(q) ||
+    normalizarTexto(r.nombre).includes(q) ||
+    normalizarTexto(r.numFactura).includes(q)
   );
 
   currentPage = 1;
@@ -1146,6 +1188,7 @@ document.getElementById("soloAbonar").onchange = function(){
   }
 };
 document.getElementById("btnGuardar").onclick = async function(){
+  if(guardando) return;
 
   const fecha = document.getElementById("fecha").value || new Date().toISOString().slice(0,10);
   const nit = document.getElementById("nit").value.trim();
@@ -1154,6 +1197,7 @@ document.getElementById("btnGuardar").onclick = async function(){
   const valor = parseMoney(document.getElementById("valor").value);
   const abono = parseMoney(document.getElementById("abono").value);
   const solo = document.getElementById("soloAbonar").checked;
+  const btnGuardar = document.getElementById("btnGuardar");
 
   if(!nit || !nombre){
     showAlert("Debes ingresar NIT y Nombre.", "error");
@@ -1166,14 +1210,30 @@ document.getElementById("btnGuardar").onclick = async function(){
       return;
     }
 
-    await db.collection(COLECCION).add({
-      fecha, nit, nombre,
-      numFactura:"ABONO",
-      valor:0,
-      abono:abono
-    });
+    try{
+      guardando = true;
+      btnGuardar.disabled = true;
+      btnGuardar.style.opacity = "0.6";
+      btnGuardar.textContent = "Guardando...";
 
-    showAlert("Abono registrado correctamente.", "success");
+      const docRef = await db.collection(COLECCION).add({
+        fecha, nit, nombre,
+        numFactura:"ABONO",
+        valor:0,
+        abono:abono
+      });
+
+      registros.unshift({id:docRef.id, fecha, nit, nombre, numFactura:"ABONO", valor:0, abono:abono});
+      renderTabla(registros);
+      actualizarTotales(registros);
+      showAlert("Abono registrado correctamente.", "success");
+    }
+    finally{
+      guardando = false;
+      btnGuardar.disabled = false;
+      btnGuardar.style.opacity = "1";
+      btnGuardar.textContent = "Guardar";
+    }
   }
   else{
     if(valor <= 0){
@@ -1181,18 +1241,60 @@ document.getElementById("btnGuardar").onclick = async function(){
       return;
     }
 
-    await db.collection(COLECCION).add({
-      fecha, nit, nombre,
-      numFactura,
-      valor:valor,
-      abono:0
-    });
+    try{
+      guardando = true;
+      btnGuardar.disabled = true;
+      btnGuardar.style.opacity = "0.6";
+      btnGuardar.textContent = "Guardando...";
 
-    showAlert("Factura registrada correctamente.", "success");
+      const duplicadoLocal = registros.some(r =>
+        Number(r.valor || 0) > 0 &&
+        normalizarTexto(r.nit) === normalizarTexto(nit) &&
+        normalizarTexto(r.nombre) === normalizarTexto(nombre) &&
+        normalizarTexto(r.numFactura) === normalizarTexto(numFactura)
+      );
+
+      if(duplicadoLocal){
+        showAlert("Esta factura ya existe para este fabricante. Verifica el NIT, nombre y N° Factura.", "error");
+        return;
+      }
+
+      const duplicadoSnap = await db.collection(COLECCION)
+        .where("nit","==",nit)
+        .where("numFactura","==",numFactura)
+        .where("valor",">",0)
+        .get();
+
+      const duplicadoFirestore = duplicadoSnap.docs.some(d =>
+        normalizarTexto(d.data().nombre) === normalizarTexto(nombre)
+      );
+
+      if(duplicadoFirestore){
+        showAlert("Esta factura ya existe para este fabricante. Verifica el NIT, nombre y N° Factura.", "error");
+        return;
+      }
+
+      const docRef = await db.collection(COLECCION).add({
+        fecha, nit, nombre,
+        numFactura,
+        valor:valor,
+        abono:0
+      });
+
+      registros.unshift({id:docRef.id, fecha, nit, nombre, numFactura, valor:valor, abono:0});
+      renderTabla(registros);
+      actualizarTotales(registros);
+      showAlert("Factura registrada correctamente.", "success");
+    }
+    finally{
+      guardando = false;
+      btnGuardar.disabled = false;
+      btnGuardar.style.opacity = "1";
+      btnGuardar.textContent = "Guardar";
+    }
   }
 
   limpiar();
-  cargarTodos();
 };
 
 /* =======================================================
@@ -1223,23 +1325,14 @@ async function openModal(nit, nombre){
   document.getElementById("modalNit").textContent = nit;
   modalBackdrop.style.display="flex";
 
-  const snap = await db.collection(COLECCION)
-    .where("nit","==",nit).get();
+  const rows = registros.filter(r => normalizarTexto(r.nit) === normalizarTexto(nit));
 
-  if(snap.empty){
+  if(rows.length === 0){
     document.getElementById("modalTotal").textContent = "$0";
     if(chartDonut) chartDonut.destroy();
     document.getElementById("detalleList").innerHTML = "";
     return;
   }
-
-  const rows = snap.docs.map(d=>({id:d.id, ...d.data()}));
-
-  rows.forEach(r=>{
-    if(r.fecha?.seconds){
-      r.fecha = new Date(r.fecha.seconds*1000).toISOString().slice(0,10);
-    }
-  });
 
   renderDonut(rows);
   renderDetalle(rows);
@@ -1402,6 +1495,70 @@ document.getElementById('btnGenFactura').onclick = ()=>{
   el.focus();
 };
 
+function abrirOpcionesExcel(){
+  document.getElementById("excelOptionsBackdrop").style.display = "flex";
+}
+
+function cerrarOpcionesExcel(){
+  document.getElementById("excelOptionsBackdrop").style.display = "none";
+}
+
+function obtenerInformeFabricantes(){
+  const mapa = new Map();
+  registros.forEach(r=>{
+    const nit = String(r.nit || "").trim();
+    const nombre = String(r.nombre || "").trim();
+    const key = normalizarTexto(nit) + "|" + normalizarTexto(nombre);
+    const actual = mapa.get(key) || {nit, nombre, valor:0, abono:0};
+    actual.valor += Number(r.valor || 0);
+    actual.abono += Number(r.abono || 0);
+    mapa.set(key, actual);
+  });
+
+  return Array.from(mapa.values())
+    .map(x=>({
+      nit:x.nit,
+      nombre:x.nombre,
+      deuda:x.valor - x.abono
+    }))
+    .sort((a,b)=> b.deuda - a.deuda || a.nombre.localeCompare(b.nombre));
+}
+
+function abrirInformeModal(){
+  const informe = obtenerInformeFabricantes();
+  const total = informe.reduce((s,x)=> s + Number(x.deuda || 0), 0);
+  document.getElementById("informeTotal").textContent = "$" + total.toLocaleString();
+
+  let html = `
+    <table style='width:100%;border-collapse:collapse;'>
+      <thead>
+        <tr>
+          <th>Fabricante</th>
+          <th>NIT</th>
+          <th>Deuda Total</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  informe.forEach(r=>{
+    html += `
+      <tr>
+        <td>${r.nombre}</td>
+        <td>${r.nit}</td>
+        <td>$${Number(r.deuda || 0).toLocaleString()}</td>
+      </tr>`;
+  });
+
+  html += "</tbody></table>";
+  document.getElementById("informeList").innerHTML = html;
+  document.getElementById("informeModalBackdrop").style.display = "flex";
+}
+
+function cerrarInformeModal(){
+  document.getElementById("informeModalBackdrop").style.display = "none";
+}
+
 /* =======================================================
    EXPORTAR EXCEL
 ======================================================= */
@@ -1410,9 +1567,9 @@ function exportarExcel(){
   const q = document.getElementById("buscar").value.trim().toLowerCase();
 
   const data = registros.filter(r =>
-    r.nit.toLowerCase().includes(q) ||
-    r.nombre.toLowerCase().includes(q) ||
-    r.numFactura.toLowerCase().includes(q)
+    normalizarTexto(r.nit).includes(q) ||
+    normalizarTexto(r.nombre).includes(q) ||
+    normalizarTexto(r.numFactura).includes(q)
   ).map(r=>({
     NIT:r.nit,
     NOMBRE:r.nombre,
