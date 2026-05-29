@@ -1262,21 +1262,6 @@ document.getElementById("btnGuardar").onclick = async function(){
         return;
       }
 
-      const duplicadoSnap = await db.collection(COLECCION)
-        .where("nit","==",nit)
-        .where("numFactura","==",numFactura)
-        .where("valor",">",0)
-        .get();
-
-      const duplicadoFirestore = duplicadoSnap.docs.some(d =>
-        normalizarTexto(d.data().nombre) === normalizarTexto(nombre)
-      );
-
-      if(duplicadoFirestore){
-        showAlert("Esta factura ya existe para este fabricante. Verifica el NIT, nombre y N° Factura.", "error");
-        return;
-      }
-
       const docRef = await db.collection(COLECCION).add({
         fecha, nit, nombre,
         numFactura,
@@ -1677,18 +1662,18 @@ async function guardarGrupo(numFactura){
   }
 
   // Buscar factura principal
-  const snap = await db.collection(COLECCION)
-    .where("nit","==",currentModalNit)
-    .where("numFactura","==",numFactura)
-    .where("valor",">",0)
-    .get();
+  const facturaPrincipal = registros.find(r => 
+    normalizarTexto(r.nit) === normalizarTexto(currentModalNit) && 
+    normalizarTexto(r.numFactura) === normalizarTexto(numFactura) && 
+    Number(r.valor || 0) > 0
+  );
 
-  if(snap.empty){
+  if(!facturaPrincipal){
     showAlert("Factura principal no encontrada.", "error");
     return;
   }
 
-  const docId = snap.docs[0].id;
+  const docId = facturaPrincipal.id;
 
   await db.collection(COLECCION).doc(docId).update({
     fecha, nit, nombre,
@@ -1720,13 +1705,20 @@ function cancelarEdicion(){
 ======================================================= */
 async function eliminarGrupo(numFactura){
   showConfirm("¿Eliminar la factura y TODOS sus abonos?", async () => {
-    const snap = await db.collection(COLECCION)
-      .where("nit","==",currentModalNit)
-      .where("numFactura","==",numFactura)
-      .get();
+    const matchDocs = registros.filter(r => 
+      normalizarTexto(r.nit) === normalizarTexto(currentModalNit) && 
+      normalizarTexto(r.numFactura) === normalizarTexto(numFactura)
+    );
+
+    if(matchDocs.length === 0){
+      showAlert("No se encontraron registros para eliminar.", "error");
+      return;
+    }
 
     const batch = db.batch();
-    snap.docs.forEach(d => batch.delete(d.ref));
+    matchDocs.forEach(d => {
+      batch.delete(db.collection(COLECCION).doc(d.id));
+    });
     await batch.commit();
 
     showAlert("Factura y abonos eliminados correctamente.", "success");
