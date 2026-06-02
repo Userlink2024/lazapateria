@@ -550,8 +550,8 @@ const firebaseConfig = {
                 _esSuperReadOnly = true;
                 return; // Puede ver, pero las funciones de escritura lo bloquearán
             }
-            if (rol !== 'administrador') {
-                alert('Acceso denegado. Solo administradores pueden gestionar usuarios.');
+            if (rol !== 'administrador' && rol !== 'gerente') {
+                alert('Acceso denegado. Solo administradores y gerentes pueden gestionar usuarios.');
                 window.location.href = 'index.html';
                 throw new Error('Acceso denegado');
             }
@@ -708,6 +708,7 @@ const firebaseConfig = {
                     <div>
                         <label for="permisos">Permisos:</label>
                         <select id="permisos" name="permisos">
+                            <option value="Gerente">Gerente</option>
                             <option value="Administrador">Administrador</option>
                             <option value="Supernumerario">Supernumerario</option>
                             <option value="Operador">Operador</option>
@@ -758,6 +759,8 @@ const firebaseConfig = {
                 showAlert("Por favor, complete todos los campos obligatorios.");
                 return;
             }
+
+            if (!(await validarClaveGerenteSiAplica(permisos))) return;
 
             if (nuevaEmpresa && !(await empresaExiste(nuevaEmpresa))) {
                 await db.collection('empresas').add({ nombre: nuevaEmpresa });
@@ -811,6 +814,8 @@ const firebaseConfig = {
                 return;
             }
 
+            if (!(await validarClaveGerenteSiAplica(permisos))) return;
+
             try {
                 await db.collection('usuarios').doc(usuarioId).update({
                     nombreCompleto,
@@ -849,6 +854,16 @@ const firebaseConfig = {
             } catch (error) {
                 console.error("Error eliminando usuario: ", error);
             }
+        }
+
+        async function validarClaveGerenteSiAplica(permisos) {
+            if (String(permisos || '').trim().toLowerCase() !== 'gerente') return true;
+            const clave = prompt('Para asignar el rol Gerente ingrese la contraseña de aprobación:');
+            if (clave !== 'JC1095826479*22') {
+                showAlert('Contraseña de aprobación incorrecta. No se puede asignar el rol Gerente.');
+                return false;
+            }
+            return true;
         }
     </script>
 
@@ -1064,6 +1079,7 @@ const firebaseConfig = {
                             <select id="sol_permisos_${doc.id}">
                                 <option value="Operador">Operador</option>
                                 <option value="Bodeguero">Bodeguero</option>
+                                <option value="Gerente">Gerente</option>
                                 <option value="Administrador">Administrador</option>
                                 <option value="Supernumerario">Supernumerario</option>
                                 <option value="Administrador de China">Administrador de China</option>
@@ -1093,6 +1109,8 @@ const firebaseConfig = {
                 showAlert('Debe asignar un Usuario (ID de acceso) antes de aceptar.');
                 return;
             }
+
+            if (!(await validarClaveGerenteSiAplica(permisos))) return;
 
             // Check if usuario already exists
             try {

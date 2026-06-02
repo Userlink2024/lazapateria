@@ -1619,7 +1619,8 @@ const db = firebase.firestore();
 /* ESTADO GLOBAL */
 const usuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
 if(!usuario){ showModal('Error', 'No hay sesión activa.', false, ()=>location.href='index.html'); }
-if(usuario.permisos !== 'Administrador' && usuario.permisos !== 'Supernumerario'){ showModal('Error', 'Acceso denegado.', false, ()=>location.href='index.html'); }
+const rolUsuario = usuario && usuario.permisos ? String(usuario.permisos).trim().toLowerCase() : '';
+if(rolUsuario !== 'administrador' && rolUsuario !== 'supernumerario' && rolUsuario !== 'gerente'){ showModal('Error', 'Acceso denegado.', false, ()=>location.href='index.html'); }
 const _esSuperReadOnlyCB = usuario.permisos === 'Supernumerario';
 
 $('user-info').textContent = usuario.usuario;
@@ -3090,6 +3091,7 @@ function buildExcelRowsFromConsigns(consigns) {
 
 // Función de exportación de cuenta seleccionada
 $('btn-export-excel').addEventListener('click', () => {
+  if(rolUsuario !== 'gerente') return showModal('Acceso restringido', "Solo usuarios con rol Gerente pueden exportar a Excel.", false);
   if(!selectedAccountId || currentConsignsSnapshot.length === 0) return showModal('Atención', "No hay datos para exportar.", false);
 
   const dataForExcel = buildExcelRowsFromConsigns(currentConsignsSnapshot);
@@ -3108,7 +3110,7 @@ $('btn-export-excel').addEventListener('click', () => {
 
 // Función de exportación de maestra
 $('btn-export-master').addEventListener('click', async () => {
-  if (sessionRole !== 'Gerente') return;
+  if (rolUsuario !== 'gerente') return showModal('Acceso restringido', "Solo usuarios con rol Gerente pueden exportar a Excel.", false);
   
   try {
     await showPasswordModal(

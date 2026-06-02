@@ -349,7 +349,7 @@
     const safeStr = v => (v === undefined || v === null) ? '' : String(v);
     const escapeHtml = s => safeStr(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-    // === ACCESS CONTROL: Admin y Supernumerario (solo lectura) ===
+    // === ACCESS CONTROL: Gerente, Admin y Supernumerario (solo lectura) ===
     let _esSuperReadOnlyPM = false;
     (function enforceAdminAccess() {
         let datosUsuario = null;
@@ -364,8 +364,8 @@
             _esSuperReadOnlyPM = true;
             return; // Puede ver, pero las funciones de escritura lo bloquearán
         }
-        if (rol !== 'administrador') {
-            alert('Acceso denegado. Solo administradores pueden acceder al Panel Maestro.');
+        if (rol !== 'administrador' && rol !== 'gerente') {
+            alert('Acceso denegado. Solo administradores y gerentes pueden acceder al Panel Maestro.');
             window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
             throw new Error('Acceso denegado');
         }
@@ -1060,6 +1060,9 @@
 
     // ===== EXPORT EXCEL =====
     async function exportCollectionToExcel() {
+      const datosUsuario = JSON.parse(localStorage.getItem('datosUsuario') || 'null');
+      const rol = datosUsuario && datosUsuario.permisos ? String(datosUsuario.permisos).trim().toLowerCase() : '';
+      if (rol !== 'gerente') { toast('Acceso restringido', 'Solo usuarios con rol Gerente pueden exportar a Excel'); return; }
       if (!currentCollection || !allDocs.length) { toast('Error', 'No hay datos para exportar'); return; }
       try {
         const rows = allDocs.map(doc => {

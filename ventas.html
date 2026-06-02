@@ -196,7 +196,7 @@
             </div>
 
             <div class="summary">
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <div id="summaryNumbers" style="display:flex; gap:8px; flex-wrap:wrap;">
                     <div class="chip">Registros: <strong id="sumCount">0</strong></div>
                     <div class="chip">Pares: <strong id="sumPares">0</strong></div>
                     <div class="chip">Valor: <strong id="sumValor">$0</strong></div>
@@ -380,7 +380,7 @@
 
         function enforceAdminAccess() {
             const permisos = (datosUsuario && datosUsuario.permisos) ? String(datosUsuario.permisos).toLowerCase() : '';
-            if (permisos !== 'administrador' && permisos !== 'supernumerario') {
+            if (permisos !== 'administrador' && permisos !== 'supernumerario' && permisos !== 'gerente') {
                 modalAlert('Acceso restringido', 'Esta página es solo para administradores.').finally(() => {
                     window.location.href = 'https://userlink2024.github.io/lazapateria/index.html';
                 });
@@ -390,6 +390,7 @@
 
         enforceAdminAccess();
         const _esSuperReadOnlyVentas = (datosUsuario && datosUsuario.permisos) ? String(datosUsuario.permisos).toLowerCase() === 'supernumerario' : false;
+        const esGerenteVentas = (datosUsuario && datosUsuario.permisos) ? String(datosUsuario.permisos).trim().toLowerCase() === 'gerente' : false;
 
         const listEl = $('list');
         const liveStateEl = $('liveState');
@@ -402,6 +403,10 @@
         const sumCount = $('sumCount');
         const sumPares = $('sumPares');
         const sumValor = $('sumValor');
+        if (!esGerenteVentas) {
+            const summaryNumbers = $('summaryNumbers');
+            if (summaryNumbers) summaryNumbers.style.display = 'none';
+        }
 
         const paginationEl = $('pagination');
         const prevPageBtn = $('prevPage');
@@ -1102,9 +1107,11 @@
             if (!hasLoaded) {
                 listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">Selecciona un rango de fechas y pulsa <strong>Buscar</strong>.</div>';
                 paginationEl.style.display = 'none';
-                sumCount.textContent = '0';
-                sumPares.textContent = '0';
-                sumValor.textContent = '$0';
+                if (esGerenteVentas) {
+                    sumCount.textContent = '0';
+                    sumPares.textContent = '0';
+                    sumValor.textContent = '$0';
+                }
                 return;
             }
             const filtered = applyFilters(allRegistros);
@@ -1123,9 +1130,11 @@
                 totalPares += Number(r.num_pares || 0);
                 totalValor += Number(r.valor_total || 0);
             });
-            sumCount.textContent = String(filtered.length);
-            sumPares.textContent = String(totalPares);
-            sumValor.textContent = formatCurrency(totalValor);
+            if (esGerenteVentas) {
+                sumCount.textContent = String(filtered.length);
+                sumPares.textContent = String(totalPares);
+                sumValor.textContent = formatCurrency(totalValor);
+            }
 
             if (!filtered.length) {
                 listEl.innerHTML = '<div class="card" style="color:var(--muted); font-weight:700;">No hay registros con los filtros actuales.</div>';
@@ -1514,6 +1523,11 @@
 
         async function exportExcel() {
             closeToolsMenu();
+
+            if (!esGerenteVentas) {
+                await modalAlert('Acceso restringido', 'Solo usuarios con rol Gerente pueden exportar a Excel.');
+                return;
+            }
 
             if (!(window.XLSX && XLSX.utils && XLSX.writeFile)) {
                 await modalAlert('No disponible', 'No se pudo cargar la librería de Excel (xlsx).');
