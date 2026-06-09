@@ -37,6 +37,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .btn-warning{background:linear-gradient(135deg,var(--warning),#d97706);color:#fff}
 .btn-secondary{background:#f1f5f9;color:var(--text);border:1.5px solid var(--border)}
 .btn-secondary:hover{background:#e2e8f0}
+.btn-purple{background:rgba(139,92,246,.1);color:#7c3aed;border:1.5px solid rgba(139,92,246,.25)}
+.btn-purple:hover,.btn-purple.active{background:linear-gradient(135deg,var(--purple),#7c3aed);color:#fff;box-shadow:0 2px 8px rgba(139,92,246,.3)}
 .btn-ghost{background:transparent;color:var(--muted);padding:8px 12px}
 .btn-ghost:hover{background:rgba(255,255,255,.1);color:#fff}
 .btn-sm{padding:6px 12px;font-size:12px;border-radius:8px}
@@ -85,6 +87,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .order-card{background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;transition:all .2s;position:relative;overflow:hidden}
 .order-card:hover{border-color:var(--primary);box-shadow:0 4px 12px rgba(37,99,235,.08)}
 .order-card.dispatched{border-color:var(--success);background:rgba(34,197,94,.02)}
+.order-card.pago-en-casa{border:2px solid var(--purple);box-shadow:0 0 0 3px rgba(139,92,246,.08)}
 .order-card.retardo{border-left:4px solid var(--danger);animation:pulse-border 2s infinite}
 .order-card.bloqueado{border-left:4px solid var(--warning);background:rgba(245,158,11,.02)}
 @keyframes pulse-border{0%,100%{border-left-color:var(--danger)}50%{border-left-color:rgba(239,68,68,.3)}}
@@ -192,6 +195,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
     <select class="form-input" id="filterAsesor" style="min-width:160px">
       <option value="">Todos los asesores</option>
     </select>
+    <button class="btn btn-purple" id="filterPagoCasa" type="button"><i class="fas fa-house-chimney"></i> Pago en casa</button>
   </div>
 
   <!-- TABS -->
@@ -288,6 +292,7 @@ let unsubscribe = null;
 let unsubscribePrevDays = null;
 let audioCtx = null;
 let _startOfDay = null;
+let filterPagoCasaOnly = false;
 
 // ============================
 // UTILITIES
@@ -303,6 +308,17 @@ function fmtTime(date) {
 function fmtDate(date) {
     if (!date) return '';
     return date.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + fmtTime(date);
+}
+
+function isPagoEnCasa(r) {
+    return String(r && r.modalidad_envio || '').trim().toUpperCase() === 'PAGO_EN_CASA';
+}
+
+function formatModalidadEnvio(v) {
+    const s = String(v || '').trim().toUpperCase();
+    if (s === 'PAGO_EN_CASA') return 'Pago en casa';
+    if (s === 'ENVIO_NORMAL') return 'Envío normal';
+    return v || '';
 }
 
 function toast(msg, type = 'success') {
@@ -508,6 +524,7 @@ function applyFiltersAndRender() {
         if (q && !r._searchBlob.includes(q)) return false;
         if (tFilter && r.transportadora !== tFilter) return false;
         if (aFilter && r.asesor !== aFilter) return false;
+        if (filterPagoCasaOnly && !isPagoEnCasa(r)) return false;
         return true;
     };
 
@@ -637,6 +654,7 @@ function renderOrderCard(r) {
     const isBloqueado = r.bloqueado === true;
     const isRetardo = r._isRetardo;
     const isPrevDay = r._isPreviousDay === true;
+    const pagoEnCasa = isPagoEnCasa(r);
     const fecha = r._fechaHora ? (isPrevDay ? fmtDate(r._fechaHora) : fmtTime(r._fechaHora)) : '';
     const pares = parseInt(r.num_pares) || 0;
     const valor = parseFloat(r.valor_total) || 0;
@@ -687,6 +705,7 @@ function renderOrderCard(r) {
     const cardClass = [
         'order-card',
         isDespachado ? 'dispatched' : '',
+        pagoEnCasa ? 'pago-en-casa' : '',
         isRetardo ? 'retardo' : '',
         isBloqueado ? 'bloqueado' : '',
         isPrevDay ? 'old-pending' : ''
@@ -716,7 +735,7 @@ function renderOrderCard(r) {
                 <div class="order-code">${r.codigo_unico || ''} · ${fecha}</div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                ${oldDayHtml} ${retardoHtml} ${empaqueHtml} ${bloqueadoHtml}
+                ${pagoEnCasa ? '<span class="chip purple"><i class="fas fa-house-chimney"></i> Pago en casa</span>' : ''} ${oldDayHtml} ${retardoHtml} ${empaqueHtml} ${bloqueadoHtml}
             </div>
         </div>
         <div class="order-meta">
@@ -724,7 +743,7 @@ function renderOrderCard(r) {
             <span><i class="fas fa-truck" style="color:var(--primary)"></i> <strong>${r.transportadora || 'N/A'}</strong></span>
             <span><i class="fas fa-shoe-prints" style="color:var(--purple)"></i> <strong>${pares} pares</strong></span>
             <span><i class="fas fa-dollar-sign" style="color:var(--success)"></i> <strong>$${fmtCOP(valor)}</strong></span>
-            ${r.modalidad_envio ? `<span><i class="fas fa-box" style="color:var(--muted)"></i> ${r.modalidad_envio}</span>` : ''}
+            ${r.modalidad_envio ? `<span><i class="fas fa-box" style="color:var(--muted)"></i> ${formatModalidadEnvio(r.modalidad_envio)}</span>` : ''}
             ${bodegueros ? `<span><i class="fas fa-hard-hat" style="color:var(--warning)"></i> ${bodegueros}</span>` : ''}
         </div>
         ${productosHtml ? `<div class="order-products">${productosHtml}</div>` : ''}
@@ -905,6 +924,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 $('searchInput').addEventListener('input', applyFiltersAndRender);
 $('filterTransportadora').addEventListener('change', applyFiltersAndRender);
 $('filterAsesor').addEventListener('change', applyFiltersAndRender);
+$('filterPagoCasa').addEventListener('click', () => {
+    filterPagoCasaOnly = !filterPagoCasaOnly;
+    $('filterPagoCasa').classList.toggle('active', filterPagoCasaOnly);
+    applyFiltersAndRender();
+});
 $('btnExportar').addEventListener('click', exportToExcel);
 $('btnBulkDispatch').addEventListener('click', bulkDispatchSelected);
 $('btnBulkClear').addEventListener('click', () => { selectedIds.clear(); updateBulkBar(); renderOrders(); });
