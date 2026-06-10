@@ -3,62 +3,124 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>En Mantenimiento</title>
-
-<script>
-// Limpiar almacenamiento local
-try {
-    localStorage.clear();
-    sessionStorage.clear();
-
-    // Borrar IndexedDB si existe
-    if (window.indexedDB && indexedDB.databases) {
-        indexedDB.databases().then(dbs => {
-            dbs.forEach(db => {
-                if (db.name) {
-                    indexedDB.deleteDatabase(db.name);
-                }
-            });
-        });
-    }
-
-    // Limpiar caché del Service Worker
-    if ('caches' in window) {
-        caches.keys().then(names => {
-            names.forEach(name => caches.delete(name));
-        });
-    }
-
-    console.log('Datos locales eliminados');
-} catch(err) {
-    console.error('Error limpiando almacenamiento:', err);
-}
-</script>
+<title>Mantenimiento del Sistema</title>
 
 <style>
 body{
+    margin:0;
+    background:#1a1a1a;
+    color:white;
+    font-family:Arial, sans-serif;
     display:flex;
     justify-content:center;
     align-items:center;
-    height:100vh;
-    margin:0;
-    font-family:Arial,sans-serif;
-    background:#f5f5f5;
+    min-height:100vh;
 }
+
 .contenedor{
     text-align:center;
+    max-width:700px;
+    padding:40px;
 }
+
 h1{
-    color:#d32f2f;
+    color:#ff5252;
+    margin-bottom:20px;
+}
+
+.estado{
+    margin-top:25px;
+    padding:15px;
+    background:#2c2c2c;
+    border-radius:8px;
+    text-align:left;
+    font-size:18px;
+    line-height:1.8;
+}
+
+.ok{
+    color:#4caf50;
+}
+
+.info{
+    color:#ffd54f;
 }
 </style>
 </head>
 <body>
 
 <div class="contenedor">
-    <h1>FUERA DE SERVICIO</h1>
-    <p>Estamos realizando mantenimiento.</p>
+    <h1>🔧 FUERA DE SERVICIO</h1>
+    <p>Realizando mantenimiento y limpieza de datos locales...</p>
+
+    <div class="estado" id="estado">
+        Iniciando proceso...
+    </div>
 </div>
+
+<script>
+const estado = document.getElementById("estado");
+
+function agregarMensaje(texto, clase="info"){
+    estado.innerHTML += `<br><span class="${clase}">${texto}</span>`;
+}
+
+async function limpiarTodo(){
+
+    estado.innerHTML = "";
+
+    try{
+        localStorage.clear();
+        agregarMensaje("✅ LocalStorage eliminado", "ok");
+    }catch(e){
+        agregarMensaje("❌ Error eliminando LocalStorage");
+    }
+
+    try{
+        sessionStorage.clear();
+        agregarMensaje("✅ SessionStorage eliminado", "ok");
+    }catch(e){
+        agregarMensaje("❌ Error eliminando SessionStorage");
+    }
+
+    try{
+        if ('serviceWorker' in navigator){
+            const regs = await navigator.serviceWorker.getRegistrations();
+
+            for(const reg of regs){
+                await reg.unregister();
+            }
+
+            agregarMensaje("✅ Service Workers eliminados", "ok");
+        }else{
+            agregarMensaje("⚠️ Service Worker no soportado");
+        }
+    }catch(e){
+        agregarMensaje("❌ Error eliminando Service Workers");
+    }
+
+    try{
+        if ('caches' in window){
+            const keys = await caches.keys();
+
+            for(const key of keys){
+                await caches.delete(key);
+            }
+
+            agregarMensaje("✅ Caché eliminada", "ok");
+        }else{
+            agregarMensaje("⚠️ API Cache no soportada");
+        }
+    }catch(e){
+        agregarMensaje("❌ Error eliminando caché");
+    }
+
+    agregarMensaje("🎉 Limpieza finalizada", "ok");
+    agregarMensaje("Puede cerrar y volver a abrir la aplicación.", "ok");
+}
+
+limpiarTodo();
+</script>
 
 </body>
 </html>
