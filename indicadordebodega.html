@@ -1,73 +1,1643 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>En Mantenimiento</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Panel de Bodega</title>
 
-<style>
-    *{
-        margin:0;
-        padding:0;
-        box-sizing:border-box;
-        font-family: Arial, sans-serif;
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg-1: #f0f2f5;
+      --bg-2: #e3f2fd;
+      --accent-green-1: #2e7d32;
+      --accent-green-2: #43a047;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, var(--bg-1), var(--bg-2));
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+    .scale-wrap {
+      padding: 15px;
+      transform-origin: top center;
+      transition: transform 0.3s ease;
+    }
+    h1 {
+      text-align: center;
+      color: var(--accent-green-1);
+      font-size: 1.8em;
+      margin: 6px 0 18px;
+      animation: fadeInDown 0.9s ease;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 18px;
+      margin-top: 20px;
+      padding-bottom: 50px;
     }
 
-    body{
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        min-height:100vh;
-        background:#f5f5f5;
+    /* Tarjetas de bodegueros */
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.98));
+      border-radius: 18px;
+      box-shadow: 0 6px 15px rgba(22,28,37,0.08);
+      padding: 20px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      min-height: 120px;
+      cursor: default;
+      pointer-events: none; /* Desactiva clics */
+      transition: transform 0.32s cubic-bezier(.2,.9,.2,1), box-shadow 0.32s;
+    }
+    .card:hover {
+      transform: translateY(-6px) scale(1.02);
+      box-shadow: 0 12px 25px rgba(22,28,37,0.12);
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.12), transparent 60%);
+      transform: rotate(25deg) translateX(-30%);
+      animation: shimmer 6s linear infinite;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+    @keyframes shimmer {
+      0% { transform: rotate(25deg) translateX(-30%); opacity: 0.6; }
+      50% { transform: rotate(25deg) translateX(0%); opacity: 1; }
+      100% { transform: rotate(25deg) translateX(30%); opacity: 0.6; }
     }
 
-    .contenedor{
-        text-align:center;
-        background:white;
-        padding:50px;
-        border-radius:15px;
-        box-shadow:0 5px 20px rgba(0,0,0,0.1);
-        max-width:600px;
-        width:90%;
+    .nombre {
+      font-weight: 600;
+      font-size: 1.05em;
+      color: #30343a;
+      margin-bottom: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .contador {
+      font-size: 2.2em;
+      font-weight: 700;
+      margin: 10px 0;
+      border-radius: 50%;
+      width: 80px;
+      height: 80px;
+      line-height: 80px;
+      display: inline-block;
+      color: white;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      transition: transform 0.28s ease;
+    }
+    .contador:hover { transform: scale(1.08) rotate(4deg); }
+    .verde { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+    .naranja { background: linear-gradient(135deg, #fbc02d, #f57c00); }
+    .rojo { background: linear-gradient(135deg, #e53935, #b71c1c); }
+
+    .ultimo-update {
+      font-size: 0.95em;
+      color: #424749;
+      margin-top: 10px;
+      animation: fadeIn 0.9s ease;
     }
 
-    .icono{
-        font-size:80px;
-        margin-bottom:20px;
+    .contador.animated, .estado.animated {
+      animation: pulseGlow 1.6s infinite alternate;
+    }
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 0 6px rgba(255,255,255,0.25); transform: translateY(0); }
+      100% { box-shadow: 0 0 24px rgba(255,255,255,0.45); transform: translateY(-3px); }
     }
 
-    h1{
-        color:#d32f2f;
-        margin-bottom:15px;
-        font-size:2.5rem;
+    /* Responsive */
+    @media (max-width: 768px) {
+      body { padding: 10px; }
+      h1 { font-size: 1.4em; }
+      .grid { grid-template-columns: 1fr; gap: 14px; }
+      .card { border-radius: 14px; padding: 14px; min-height: 110px; }
+      .contador { width: 70px; height: 70px; font-size: 2em; }
     }
 
-    p{
-        color:#555;
-        font-size:1.2rem;
-        line-height:1.6;
+    @media (prefers-reduced-motion: reduce) {
+      .card::before, .contador.animated, .estado.animated { animation: none !important; }
+      .card, .scale-wrap { transition: none !important; }
+    }
+    html.smart-tv-legacy .card::before,
+    html.smart-tv-legacy .contador.animated,
+    html.smart-tv-legacy .estado.animated,
+    html.smart-tv-legacy .motivation-bar .motiv-text,
+    html.smart-tv-legacy .motivation-bar .motiv-icon,
+    html.smart-tv-legacy .overlay-emoji,
+    html.smart-tv-legacy .overlay-title,
+    html.smart-tv-legacy .overlay-msg,
+    html.smart-tv-legacy .dispatch-alert.active,
+    html.smart-tv-legacy .dispatch-alert-sign,
+    html.smart-tv-legacy .server-loading .server-spinner {
+      animation: none !important;
+    }
+    html.smart-tv-legacy .server-loading,
+    html.smart-tv-legacy .cfg-overlay,
+    html.smart-tv-legacy .overlay-aseo-names {
+      backdrop-filter: none !important;
+      background: rgba(5,20,35,0.94);
+    }
+    html.smart-tv-legacy body,
+    html.smart-tv-legacy .scale-wrap,
+    html.smart-tv-legacy .card,
+    html.smart-tv-legacy .settings-gear,
+    html.smart-tv-legacy .cfg-tab,
+    html.smart-tv-legacy .overlay-close {
+      transition: none !important;
+      box-shadow: none !important;
     }
 
-    .footer{
-        margin-top:25px;
-        color:#888;
-        font-size:0.9rem;
+    @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
+    @keyframes fadeInDown { from {opacity:0; transform:translateY(-18px);} to {opacity:1; transform:translateY(0);} }
+
+    /* ---------- MENSAJES MOTIVACIONALES ---------- */
+    .motivation-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-green-1), var(--accent-green-2));
+      color: white;
+      text-align: center;
+      padding: 10px 20px;
+      font-size: 0.9em;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      z-index: 90;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.1);
+      overflow: hidden;
     }
-</style>
+    .motivation-bar .motiv-text {
+      display: inline-block;
+      animation: motivSlideIn 0.6s ease;
+    }
+    @keyframes motivSlideIn {
+      0% { opacity: 0; transform: translateY(12px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .motivation-bar .motiv-icon {
+      margin-right: 8px;
+      animation: pulseIcon 2s ease-in-out infinite;
+    }
+
+    .dispatch-alert {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: radial-gradient(circle at center, rgba(255,245,157,0.24), rgba(0,0,0,0.72));
+      pointer-events: none;
+      opacity: 0;
+    }
+    .dispatch-alert.active {
+      display: flex;
+      animation: dispatchAlertFade 6s ease;
+    }
+    .dispatch-alert-sign {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(170px, 36vw, 560px);
+      line-height: 0.9;
+      color: #ffe600;
+      text-shadow:
+        0 0 22px rgba(255, 230, 0, 0.95),
+        0 0 44px rgba(255, 235, 59, 0.8),
+        0 0 76px rgba(255, 193, 7, 0.65);
+      animation: dispatchAlertPop 1.1s cubic-bezier(.2,.8,.2,1);
+    }
+    .dispatch-alert-text {
+      margin-top: 12px;
+      text-align: center;
+      color: #fffde7;
+      font-size: clamp(18px, 2.5vw, 36px);
+      font-weight: 700;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.45);
+      padding: 0 18px;
+      max-width: 900px;
+    }
+    @keyframes dispatchAlertFade {
+      0% { opacity: 0; }
+      15% { opacity: 1; }
+      82% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @keyframes dispatchAlertPop {
+      0% { transform: scale(0.2) rotate(-12deg); opacity: 0; }
+      35% { transform: scale(1.08) rotate(6deg); opacity: 1; }
+      65% { transform: scale(0.96) rotate(-4deg); }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+
+    .server-loading {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(67,160,71,0.24), transparent 32%),
+        radial-gradient(circle at 80% 35%, rgba(30,136,229,0.18), transparent 34%),
+        linear-gradient(135deg, rgba(5,20,35,0.92), rgba(10,38,32,0.9));
+      backdrop-filter: blur(12px) saturate(140%);
+      color: #fff;
+      text-align: center;
+      padding: 24px;
+    }
+    .server-loading.active { display: flex; }
+    .server-loading .server-spinner {
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, transparent, #64dd17, #29b6f6, transparent 72%);
+      animation: spinServer 0.9s linear infinite;
+      box-shadow: 0 0 34px rgba(100,221,23,0.38);
+      position: relative;
+    }
+    .server-loading .server-spinner::before {
+      content: "";
+      position: absolute;
+      inset: 9px;
+      border-radius: 50%;
+      background: rgba(5,20,35,0.94);
+    }
+    .server-loading .server-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(18px, 3vw, 30px);
+      font-weight: 700;
+      text-shadow: 0 0 18px rgba(41,182,246,0.42);
+    }
+    .server-loading .server-subtitle {
+      color: #b9f6ca;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    @keyframes spinServer { to { transform: rotate(360deg); } }
+
+    /* ---------- OVERLAY FULLSCREEN MESSAGES ---------- */
+    .fullscreen-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      text-align: center;
+      padding: 30px;
+      animation: overlayFadeIn 1.2s ease;
+    }
+    .fullscreen-overlay.active { display: flex; }
+    .fullscreen-overlay.lunch {
+      background: linear-gradient(135deg, #ff9800, #ff5722, #e65100);
+    }
+    .fullscreen-overlay.endday {
+      background: linear-gradient(135deg, #1a237e, #283593, #3949ab);
+    }
+    .fullscreen-overlay.trash {
+      background: linear-gradient(135deg, #2e7d32, #388e3c, #43a047);
+    }
+    .fullscreen-overlay.basura {
+      background: linear-gradient(135deg, #4e342e, #5d4037, #6d4c41);
+    }
+    .overlay-emoji {
+      font-size: 5em;
+      animation: overlayBounce 2s ease-in-out infinite;
+      margin-bottom: 10px;
+    }
+    .overlay-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.4em;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 3px 15px rgba(0,0,0,0.3);
+      margin-bottom: 14px;
+      animation: overlaySlideDown 1s ease;
+    }
+    .overlay-msg {
+      font-family: 'Inter', sans-serif;
+      font-size: 1.25em;
+      color: rgba(255,255,255,0.95);
+      max-width: 600px;
+      line-height: 1.7;
+      animation: overlaySlideUp 1.2s ease;
+    }
+    .overlay-brand {
+      margin-top: 24px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.95em;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      letter-spacing: 1px;
+      animation: overlaySlideUp 1.5s ease;
+    }
+    .overlay-timer {
+      position: absolute;
+      bottom: 20px;
+      right: 28px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.85em;
+      color: rgba(255,255,255,0.45);
+    }
+    .overlay-close {
+      position: absolute;
+      top: 18px;
+      right: 24px;
+      font-size: 2em;
+      color: rgba(255,255,255,0.5);
+      cursor: pointer;
+      transition: color 0.2s, transform 0.2s;
+      z-index: 10;
+    }
+    .overlay-close:hover { color: #fff; transform: scale(1.2); }
+    @keyframes overlayFadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+    @keyframes overlayBounce { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-18px) scale(1.1); } }
+    @keyframes overlaySlideDown { 0% { opacity: 0; transform: translateY(-40px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes overlaySlideUp { 0% { opacity: 0; transform: translateY(40px); } 100% { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 768px) {
+      .overlay-emoji { font-size: 3.5em; }
+      .overlay-title { font-size: 1.6em; }
+      .overlay-msg { font-size: 1em; padding: 0 10px; }
+    }
+
+    /* ── GEAR SETTINGS ── */
+    .settings-gear{
+      position:fixed;top:10px;right:10px;z-index:200;
+      width:38px;height:38px;border-radius:50%;border:none;
+      background:rgba(255,255,255,0.92);box-shadow:0 2px 10px rgba(0,0,0,0.12);
+      cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;
+      transition:transform 0.3s,box-shadow 0.3s;pointer-events:auto;
+    }
+    .settings-gear:hover{transform:rotate(90deg) scale(1.1);box-shadow:0 4px 15px rgba(0,0,0,0.2);}
+
+    /* ── INFO BARS ── */
+    .info-bars{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:8px;}
+    .info-bar{
+      background:rgba(255,255,255,0.95);border-radius:12px;padding:8px 18px;
+      box-shadow:0 3px 12px rgba(0,0,0,0.07);text-align:center;min-width:180px;
+      border-left:4px solid var(--accent-green-1);
+    }
+    .info-bar-title{font-size:0.65em;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:3px;font-weight:600;}
+    .info-bar-names{font-size:0.95em;font-weight:700;color:#2e7d32;}
+    .info-bar-sub{font-size:0.6em;color:#999;margin-top:2px;}
+
+    /* ── OVERLAY ASEO NAMES ── */
+    .overlay-aseo-names{
+      margin-top:16px;font-family:'Inter',sans-serif;font-size:1.3em;font-weight:700;
+      color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.3);line-height:1.8;
+      background:rgba(255,255,255,0.12);border-radius:14px;padding:14px 28px;
+      backdrop-filter:blur(4px);
+    }
+
+    /* ── SETTINGS MODAL ── */
+    .cfg-overlay{display:none;position:fixed;inset:0;z-index:50000;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;}
+    .cfg-overlay.active{display:flex;}
+    .cfg-card{
+      background:#fff;border-radius:18px;width:92%;max-width:860px;max-height:85vh;
+      overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);padding:20px 24px;
+    }
+    .cfg-card h2{color:#2e7d32;margin:0 0 14px;font-size:1.2em;text-align:center;}
+    .cfg-tabs{display:flex;gap:6px;margin-bottom:14px;justify-content:center;}
+    .cfg-tab{
+      padding:7px 16px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;
+      cursor:pointer;font-weight:600;font-size:0.8em;color:#555;transition:all 0.2s;
+    }
+    .cfg-tab.active{background:linear-gradient(135deg,#2e7d32,#43a047);color:#fff;border-color:#2e7d32;}
+    .cfg-pane{display:none;}
+    .cfg-pane.active{display:block;}
+    .cfg-section{margin-bottom:14px;border:1px solid #e8f5e9;border-radius:10px;padding:12px;}
+    .cfg-section h4{color:#2e7d32;margin:0 0 8px;font-size:0.9em;}
+    .cfg-grid{display:grid;grid-template-columns:80px 1fr 1fr;gap:4px 8px;align-items:center;font-size:0.8em;}
+    .cfg-grid label{font-weight:600;color:#555;}
+    .cfg-grid input{padding:4px 7px;border:1px solid #ddd;border-radius:5px;font-size:0.85em;width:100%;box-sizing:border-box;}
+    .cfg-grid input:focus{outline:none;border-color:#4CAF50;box-shadow:0 0 0 2px rgba(76,175,80,0.12);}
+    .cfg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+    .cfg-actions button{padding:8px 20px;border-radius:8px;border:none;font-weight:600;cursor:pointer;font-size:0.85em;}
+    .cfg-btn-save{background:linear-gradient(135deg,#2e7d32,#43a047);color:#fff;}
+    .cfg-btn-save:hover{opacity:0.9;}
+    .cfg-btn-cancel{background:#eee;color:#555;}
+    .cfg-btn-cancel:hover{background:#ddd;}
+    .cfg-week-sel{display:flex;gap:8px;align-items:center;margin-bottom:14px;justify-content:center;font-size:0.85em;font-weight:600;color:#2e7d32;}
+    .cfg-week-sel select{padding:4px 8px;border-radius:6px;border:1px solid #ccc;font-weight:600;}
+  </style>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script>
+    (function(){
+      var ua = navigator.userAgent || '';
+      var isSamsungTv = /SMART-TV|SmartTV|Tizen|Maple|SamsungBrowser\/1|SamsungBrowser\/2/i.test(ua);
+      if (isSamsungTv && document.documentElement) {
+        document.documentElement.className += (document.documentElement.className ? ' ' : '') + 'smart-tv-legacy';
+      }
+      if (!Number.isNaN) Number.isNaN = function(value) { return typeof value === 'number' && isNaN(value); };
+      if (!Array.from) Array.from = function(value) { return Array.prototype.slice.call(value); };
+      if (!Array.prototype.includes) {
+        Array.prototype.includes = function(searchElement) {
+          for (var i = 0; i < this.length; i++) if (this[i] === searchElement) return true;
+          return false;
+        };
+      }
+      if (!Array.prototype.find) {
+        Array.prototype.find = function(predicate) {
+          for (var i = 0; i < this.length; i++) if (predicate(this[i], i, this)) return this[i];
+          return undefined;
+        };
+      }
+      if (!String.prototype.padStart) {
+        String.prototype.padStart = function(targetLength, padString) {
+          targetLength = targetLength >> 0;
+          padString = String(padString || ' ');
+          if (this.length >= targetLength) return String(this);
+          targetLength = targetLength - this.length;
+          while (targetLength > padString.length) padString += padString;
+          return padString.substring(0, targetLength) + String(this);
+        };
+      }
+      if (!window.requestAnimationFrame) {
+        window.requestAnimationFrame = function(callback) {
+          return setTimeout(function() { callback(new Date().getTime()); }, 16);
+        };
+      }
+      if (!window.cancelAnimationFrame) {
+        window.cancelAnimationFrame = function(id) { clearTimeout(id); };
+      }
+    })();
+  </script>
+
+  <script>
+    // Configuración Firebase (igual que la original)
+    const firebaseConfig = {
+      apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+      authDomain: "lazapateria-c4157.firebaseapp.com",
+      projectId: "lazapateria-c4157",
+      storageBucket: "lazapateria-c4157.firebasestorage.app",
+      messagingSenderId: "300241769138",
+      appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+      measurementId: "G-HVG7615JEE"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    let panelUnsub = null;
+    let panelLoadingTimeout = null;
+
+    function showServerLoading(message = 'Sincronizando con la base de datos del servidor...') {
+      const overlay = document.getElementById('serverLoading');
+      const title = document.getElementById('serverLoadingTitle');
+      if (title) title.textContent = message;
+      if (overlay) overlay.classList.add('active');
+      if (panelLoadingTimeout) clearTimeout(panelLoadingTimeout);
+      panelLoadingTimeout = setTimeout(() => {
+        const subtitle = document.getElementById('serverLoadingSubtitle');
+        if (subtitle) subtitle.textContent = 'La carga está tardando más de lo normal. Seguimos esperando respuesta del servidor.';
+      }, 12000);
+    }
+
+    function hideServerLoading() {
+      const overlay = document.getElementById('serverLoading');
+      const subtitle = document.getElementById('serverLoadingSubtitle');
+      if (overlay) overlay.classList.remove('active');
+      if (subtitle) subtitle.textContent = 'Por favor espere.';
+      if (panelLoadingTimeout) {
+        clearTimeout(panelLoadingTimeout);
+        panelLoadingTimeout = null;
+      }
+    }
+
+    let cacheRegistros = [];
+    let bodeguerosDisponibles = [];
+    let prevActiveIds = new Set();
+    let firstSnapshotProcessed = false;
+    let dispatchAlertTimeout = null;
+
+    function showDispatchAlert(asignado, cantidadNuevos) {
+      const alertEl = document.getElementById('dispatchAlert');
+      const textEl = document.getElementById('dispatchAlertText');
+      if (!alertEl || !textEl) return;
+
+      const quien = asignado && asignado.trim() ? asignado : 'Sin asignar';
+      if (cantidadNuevos > 1) {
+        textEl.textContent = '!' + ' Entraron ' + cantidadNuevos + ' despachos. Uno asignado a: ' + quien;
+      } else {
+        textEl.textContent = '!' + ' Nuevo despacho asignado a: ' + quien;
+      }
+
+      alertEl.classList.remove('active');
+      void alertEl.offsetWidth;
+      alertEl.classList.add('active');
+
+      if (dispatchAlertTimeout) clearTimeout(dispatchAlertTimeout);
+      dispatchAlertTimeout = setTimeout(() => {
+        alertEl.classList.remove('active');
+      }, 6000);
+    }
+
+    function getRecordDate(data) {
+      if (!data) return null;
+      const candidates = ['fecha_hora', 'fechaHora', 'fecha', 'createdAt', 'timestamp', 'fecha_registro'];
+      for (const k of candidates) {
+        if (!(k in data)) continue;
+        const v = data[k];
+        if (!v) continue;
+        if (typeof v.toDate === 'function') {
+          const d = v.toDate();
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+        if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+        if (typeof v === 'number') {
+          const d = new Date(v);
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+        if (typeof v === 'string') {
+          const d = new Date(v);
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+      }
+      return null;
+    }
+
+    function isTodayDate(d) {
+      if (!d || Number.isNaN(d.getTime())) return false;
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      return d >= start && d <= end;
+    }
+
+    async function cargarBodegueros() {
+      const snapshot = await db.collection("usuarios").get();
+      bodeguerosDisponibles = snapshot.docs
+        .map(d => {
+          const data = d.data();
+          if (data.permisos === "Bodeguero") return data.nombreCompleto || d.id;
+          return null;
+        })
+        .filter(n => n !== null);
+    }
+
+    async function cargarPanelBodega() {
+      const contenedor = document.getElementById('panel');
+      showServerLoading();
+      contenedor.innerHTML = '<p>Cargando información...</p>';
+
+      try {
+        await cargarBodegueros();
+      } catch (error) {
+        hideServerLoading();
+        console.error('Error cargando bodegueros:', error);
+        contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo cargar la información de bodegueros. Verifique la conexión.</p>';
+        return;
+      }
+
+      if (panelUnsub) panelUnsub();
+      panelUnsub = db.collectionGroup('registros').onSnapshot(snapshot => {
+        const conteo = {};
+        cacheRegistros = [];
+        const activeIds = new Set();
+        const activeAssignments = new Map();
+
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const d = getRecordDate(data);
+          if (!d || !isTodayDate(d)) return;
+          cacheRegistros.push({ id: doc.id, ref: doc.ref, ...data });
+
+          const despachado = data.despachado === true || data.despachado === "si" || data.despachado === "despachado";
+          if (despachado) return; // Solo muestra activos
+
+          const currentId = String(doc.id);
+          activeIds.add(currentId);
+          const asignados = Array.isArray(data.bodegueros_encargados)
+            ? data.bodegueros_encargados.filter(n => typeof n === 'string' && n.trim() !== '').join(', ')
+            : '';
+          activeAssignments.set(currentId, asignados);
+
+          if (Array.isArray(data.bodegueros_encargados)) {
+            data.bodegueros_encargados.forEach(nombre => {
+              if (typeof nombre === "string" && nombre.trim() !== "") {
+                conteo[nombre] = conteo[nombre] || { totalDespachos: 0, totalPares: 0 };
+                conteo[nombre].totalDespachos += 1;
+                const paresField = Object.keys(data).find(k => k.toLowerCase().includes('pares'));
+                const pares = Number(data[paresField] || 0);
+                conteo[nombre].totalPares += pares;
+              }
+            });
+          }
+        });
+
+        if (firstSnapshotProcessed) {
+          const newIds = [];
+          activeIds.forEach(id => {
+            if (!prevActiveIds.has(id)) newIds.push(id);
+          });
+          if (newIds.length > 0) {
+            const primerAsignado = activeAssignments.get(newIds[0]) || '';
+            showDispatchAlert(primerAsignado, newIds.length);
+          }
+        }
+        prevActiveIds = activeIds;
+        firstSnapshotProcessed = true;
+
+        renderizarPanel(contenedor, conteo);
+        requestAnimationFrame(autoFitScreen);
+        hideServerLoading();
+      }, error => {
+        hideServerLoading();
+        console.error('Error escuchando registros de bodega:', error);
+        contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo sincronizar con la base de datos del servidor. Intente recargar la página.</p>';
+      });
+    }
+
+    function renderizarPanel(contenedor, conteo) {
+      contenedor.innerHTML = '';
+      const nombres = Object.keys(conteo);
+
+      if (nombres.length === 0) {
+        contenedor.innerHTML = '<p style="text-align:center;color:#666;">No hay registros activos en este momento.</p>';
+        return;
+      }
+
+      nombres.sort((a, b) => conteo[b].totalDespachos - conteo[a].totalDespachos);
+
+      nombres.forEach(nombre => {
+        const { totalDespachos, totalPares } = conteo[nombre];
+
+        let color = 'verde';
+        if (totalPares >= 123) color = 'rojo';
+        else if (totalPares >= 101) color = 'naranja';
+        else {
+          if (totalDespachos >= 23) color = 'rojo';
+          else if (totalDespachos >= 16) color = 'naranja';
+        }
+
+        const estadoText = color === 'verde' ? 'Disponible ✅' :
+                           color === 'naranja' ? 'Ocupado ⏳' :
+                           '⚠️ Colapsado ⚠️';
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="nombre" title="${nombre}">${nombre}</div>
+          <div class="contador ${color} ${color !== 'verde' ? 'animated' : ''}">${totalDespachos}</div>
+          <div class="ultimo-update estado ${color !== 'verde' ? 'animated' : ''}">${estadoText}</div>
+        `;
+        contenedor.appendChild(card);
+      });
+    }
+
+    function autoFitScreen() {
+      const wrap = document.getElementById('scaleWrap');
+      if (!wrap) return;
+      // Reset scale to measure natural height
+      wrap.style.transform = 'none';
+      const contentH = wrap.scrollHeight;
+      const motivH = 44; // fixed motivation bar height
+      const availH = window.innerHeight - motivH;
+      if (contentH > availH && availH > 0) {
+        const scale = availH / contentH;
+        wrap.style.transform = 'scale(' + scale + ')';
+      } else {
+        wrap.style.transform = 'none';
+      }
+    }
+
+    window.addEventListener('resize', autoFitScreen);
+
+    window.onload = cargarPanelBodega;
+  </script>
 </head>
 <body>
+  <div class="server-loading" id="serverLoading">
+    <div class="server-spinner"></div>
+    <div class="server-title" id="serverLoadingTitle">Sincronizando con la base de datos del servidor...</div>
+    <div class="server-subtitle" id="serverLoadingSubtitle">Por favor espere.</div>
+  </div>
 
-<div class="contenedor">
-    <div class="icono">🔧</div>
-    <h1>FUERA DE SERVICIO</h1>
-    <p>
-        Estamos realizando tareas de mantenimiento para mejorar nuestro sistema.
-        Por favor, intenta nuevamente más tarde.
-    </p>
-    <div class="footer">
-        Sistema temporalmente no disponible
+  <button class="settings-gear" onclick="openSettings()" title="Configuración">⚙️</button>
+
+  <div class="scale-wrap" id="scaleWrap">
+  <h1>Panel de Bodega</h1>
+  <div class="info-bars">
+    <div class="info-bar">
+      <div class="info-bar-title">📦 Empacadores del Día</div>
+      <div class="info-bar-names" id="infoEmpacadores">Cargando...</div>
+      <div class="info-bar-sub" id="infoSemana"></div>
     </div>
-</div>
+    <div class="info-bar">
+      <div class="info-bar-title">🧹 Aseo del Día</div>
+      <div class="info-bar-names" id="infoAseo">Cargando...</div>
+    </div>
+  </div>
+  <div id="panel" class="grid"></div>
+  </div>
 
+  <div class="motivation-bar" id="motivationBar">
+    <span class="motiv-icon">💪</span>
+    <span class="motiv-text" id="motivText">Cargando mensaje...</span>
+  </div>
+
+  <div class="dispatch-alert" id="dispatchAlert">
+    <div class="dispatch-alert-sign">⚠</div>
+    <div class="dispatch-alert-text" id="dispatchAlertText">¡Nuevo despacho asignado!</div>
+  </div>
+
+  <script>
+    (function(){
+      const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+      const ICONS = ['💪','🚀','⭐','🔥','✨','🏆','💎','🎯','👏','🌟'];
+      const MENSAJES = [
+'La calidad de nuestro trabajo es nuestra mejor firma.',
+        'Cada caja que sale lleva nuestro compromiso.',
+        'Un equipo unido es invencible en cualquier turno.',
+        'La rapidez es buena, pero la precisión es indispensable.',
+        'Ningún reto es demasiado grande si lo afrontamos juntos.',
+        'El ritmo lo marcamos todos, el éxito lo compartimos todos.',
+        'Detrás de cada gran entrega, hay un equipo increíble.',
+        'Tu energía positiva es contagiosa, ¡compártela!',
+        'No somos solo compañeros, somos el motor de este lugar.',
+        'Cada par revisado es un cliente feliz.',
+        'El orden exterior refleja nuestro enfoque interior.',
+        'La meta de hoy: superar nuestro propio récord.',
+        'Si el plan no funciona, cambia el plan, pero no la meta.',
+        'En este equipo, los problemas se convierten en soluciones.',
+        'No hay errores, solo lecciones para el próximo despacho.',
+        'El éxito de la empresa empieza en nuestras manos.',
+        'Un buen día comienza con una buena actitud.',
+        'Cada etiqueta pegada es un paso más hacia la meta.',
+        'La atención al detalle marca la diferencia entre lo bueno y lo excelente.',
+        'Trabajamos con propósito, entregamos con orgullo.',
+        'El mejor momento para dar el 100% es ahora mismo.',
+        'Confía en tu equipo, ellos confían en ti.',
+        'La eficiencia es hacer las cosas bien cuando nadie te está mirando.',
+        'Somos la pieza clave que hace que todo se mueva.',
+        'Cada movimiento cuenta, cada segundo vale.',
+        'El cansancio es temporal, el orgullo del trabajo bien hecho es para siempre.',
+        'Nuestra mejor herramienta es la comunicación.',
+        'Hoy es una nueva oportunidad para brillar en tu área.',
+        'El éxito no es suerte, es trabajo duro y constante.',
+        'Un despacho impecable habla por sí solo.',
+        'Sé el compañero con el que te gustaría trabajar.',
+        'Las grandes logísticas requieren grandes talentos como el tuyo.',
+        'No medimos el éxito en horas, lo medimos en resultados.',
+        'Celebremos las pequeñas victorias de cada día.',
+        'Tu esfuerzo invisible genera resultados visibles.',
+        'Mantén la calma y sigue despachando.',
+        'El respeto y la colaboración son nuestra mejor estrategia.',
+        'No te detengas cuando estés cansado, detente cuando hayas terminado.',
+        'Cada artículo empacado lleva una dosis de nuestra dedicación.',
+        'La fuerza del equipo está en cada uno de sus miembros.',
+        'Transformamos el esfuerzo diario en clientes leales.',
+        'Si puedes imaginar un proceso mejor, puedes crearlo.',
+        'Tu seguridad y la de tus compañeros es lo primero.',
+        'Hacerlo bien a la primera es nuestro mayor ahorro de tiempo.',
+        'El talento gana partidos, pero el trabajo en equipo gana campeonatos.',
+        'No hay pieza pequeña en un engranaje grande; todos somos vitales.',
+        'Cada día es un lienzo en blanco, pinta el mejor resultado.',
+        'El buen humor hace que el trabajo pesado se sienta ligero.',
+        'Somos creadores de buenas experiencias a través de nuestras entregas.',
+        'La excelencia de nuestro despacho es nuestra mejor tarjeta de presentación.',
+        'Un entorno organizado es una mente organizada.',
+        'Ayer fuimos buenos, hoy seremos mejores.',
+        'Nadie silba una sinfonía, se necesita una orquesta entera.',
+        'La precisión en el almacén es la satisfacción en la calle.',
+        'Hazlo con pasión o no lo hagas.',
+        'El verdadero liderazgo es ayudar a tu compañero a terminar su área.',
+        'Nuestras manos mueven la empresa.',
+        'Cada error detectado a tiempo es un cliente salvado.',
+        'Respira profundo, enfócate y da lo mejor de ti.',
+        'La rutina no existe cuando pones el corazón en lo que haces.',
+        'Despachar con excelencia es un arte, y nosotros somos los artistas.',
+        'Tu aportación hoy es el cimiento de nuestro futuro.',
+        'La diferencia entre ordinario y extraordinario es ese pequeño "extra".',
+        'Cuidamos cada producto como si fuera para nosotros mismos.',
+        'La sincronía del equipo es nuestra mejor melodía.',
+        'Enfócate en la solución, no en el problema.',
+        'Cada turno es una nueva página de éxito.',
+        'Trabajar aquí no es solo un empleo, es sumar a un gran proyecto.',
+        'La perseverancia es el combustible de los ganadores.',
+        'No hay meta inalcanzable si caminamos juntos hacia ella.',
+        'Tu enfoque determina tu realidad.',
+        'El éxito llega cuando la preparación se encuentra con la oportunidad.',
+        'Seamos la razón por la que la competencia nos admira.',
+        'Un buen compañero es el mejor activo de este almacén.',
+        'La agilidad física empieza con la agilidad mental.',
+        'Cada paquete que sale es una promesa cumplida.',
+        'Rompe tus propios límites hoy.',
+        'No busques excusas, busca resultados.',
+        'El optimismo es la fe que conduce al logro.',
+        'Las palabras convencen, pero el trabajo bien hecho arrastra.',
+        'Nos cuidamos entre nosotros para cuidar a nuestros clientes.',
+        'Tu actitud es como una llanta ponchada, no llegarás lejos hasta que la cambies.',
+        'Agradece la oportunidad de demostrar de qué estás hecho.',
+        'Un área limpia es el inicio de un trabajo impecable.',
+        'No importa cuán empinada sea la montaña, la subiremos juntos.',
+        'Cada proceso mejorado es una victoria para todos.',
+        'La energía fluye hacia donde va la atención.',
+        'Somos un equipo: caemos juntos, nos levantamos juntos.',
+        'El trabajo duro vence al talento cuando el talento no trabaja duro.',
+        'Visualiza el éxito antes de empezar tu turno.',
+        'La responsabilidad de uno es la tranquilidad de todos.',
+        'No hay tráfico en la milla extra.',
+        'Pon tu firma de calidad en cada caja.',
+        'El entusiasmo es el motor del esfuerzo.',
+        'No te conformes con lo bueno cuando puedes lograr lo grandioso.',
+        'Cada detalle cuenta, porque cada cliente cuenta.',
+        'Tu sonrisa es parte de tu uniforme.',
+        'En tiempos de estrés, el compañerismo es nuestro refugio.',
+        'Apunta a la luna; incluso si fallas, aterrizarás entre las estrellas.',
+        'El esfuerzo es la moneda con la que compramos el éxito.',
+        'La motivación nos impulsa, el hábito nos mantiene en marcha.',
+        'Somos más grandes que nuestros mayores retos.',
+        'Que tu trabajo hable más alto que tus palabras.',
+        'La proactividad es el superpoder de este equipo.',
+        'Cada ruta completada es una meta alcanzada.',
+        'No esperes oportunidades, créalas con tu esfuerzo.',
+        'Un equipo optimista encuentra un camino donde otros encuentran un muro.',
+        'La verdadera recompensa es sentir orgullo de lo que hiciste hoy.',
+        'El éxito tiene sabor a esfuerzo y dedicación.',
+        'Si no te reta, no te cambia.',
+        'Mantén la mirada en el objetivo y los pies en la acción.',
+        'Nuestra fuerza radica en nuestras diferencias y nuestro objetivo común.',
+        'Aporta soluciones, contagia energía.',
+        'El futuro pertenece a quienes trabajan duro por él hoy.',
+        'La excelencia es hacer cosas comunes de forma extraordinariamente bien.',
+        'Tu compromiso es el motor de nuestro progreso.',
+        'La calidad nunca es un accidente; siempre es el resultado de un esfuerzo inteligente.',
+        'Despachamos confianza, entregamos felicidad.',
+        'Nunca subestimes el impacto de tu trabajo diario.',
+        'La resiliencia es nuestra mejor respuesta ante los contratiempos.',
+        'Cada día nos da 24 horas nuevas para brillar.',
+        'Siembra esfuerzo hoy, cosecha recompensas mañana.',
+        'La velocidad sin precisión es solo prisa.',
+        'Eres el autor de tus propios logros.',
+        'El fracaso es solo la oportunidad de comenzar de nuevo de forma más inteligente.',
+        'Un clima laboral positivo lo construimos entre todos.',
+        'No cuentes los días, haz que los días cuenten.',
+        'Lo único imposible es aquello que no intentas.',
+        'Sé el líder que te gustaría seguir.',
+        'La integridad es hacer lo correcto aunque nadie nos esté viendo.',
+        'Nuestra logística es el corazón que bombea vida a la empresa.',
+        'Con pasión, hasta el trabajo más pesado se vuelve un logro satisfactorio.',
+        'No prometemos, demostramos con cada envío.',
+        'Sé tu mayor competencia.',
+        'El trabajo en equipo divide la tarea y multiplica el éxito.',
+        'Cree en ti mismo y serás imparable.',
+        'La suma de todos nuestros esfuerzos es lo que nos hace líderes.',
+        'Respeta el proceso, disfruta el resultado.',
+        'Cada obstáculo es una oportunidad disfrazada.',
+        'La actitud es una pequeña cosa que hace una gran diferencia.',
+        'Termina tu turno sabiendo que diste lo mejor de ti.',
+        'La eficiencia no es una opción, es nuestra forma de trabajar.',
+'Cada pedido bien preparado es una meta cumplida.',
+'El éxito se mide en entregas perfectas.',
+'Un almacén ordenado es un equipo enfocado.',
+'La rapidez nos define, la calidad nos distingue.',
+'Donde otros ven cajas, nosotros vemos clientes felices.',
+'Tu compromiso hoy es la clave del despacho de mañana.',
+'El trabajo bien hecho es nuestra mejor recompensa.',
+'Logística es el arte de estar en el lugar correcto al momento justo.',
+'Somos el corazón de la cadena de suministro.',
+'Ningún paquete es pequeño cuando la meta es la excelencia.',
+'La mejora continua empieza con tu iniciativa.',
+'Hoy es un gran turno para superar nuestros límites.',
+'La precisión en el inventario nos hace imparables.',
+'Cuidamos cada detalle porque cada cliente confía en nosotros.',
+'La fuerza de este almacén está en su gente.',
+'Entregamos soluciones, no solo productos.',
+'Tu actitud positiva acelera cualquier proceso.',
+'La excelencia operativa es el resultado de nuestra unión.',
+'Cada par despachado es un paso hacia el liderazgo.',
+'No hay meta inalcanzable para un equipo coordinado.',
+'La disciplina en el despacho nos ahorra tiempo a todos.',
+'Trabajamos con inteligencia para entregar con eficiencia.',
+'Tu esfuerzo es el motor que mueve esta empresa.',
+'La calidad es el sello que ponemos en cada envío.',
+'Un error evitado es una victoria ganada.',
+'Nuestra coordinación es nuestra mayor ventaja.',
+'Despachamos confianza en cada etiqueta.',
+'El flujo de trabajo perfecto depende de ti.',
+'Sé el apoyo que tu compañero necesita en el momento de carga.',
+'La seguridad en el trabajo es nuestra base para el éxito.',
+'Un despacho impecable es nuestra firma de orgullo.',
+'Cada segundo optimizado suma una hora de productividad.',
+'La resiliencia nos hace fuertes ante cualquier volumen de trabajo.',
+'Hacemos que lo difícil parezca sencillo gracias al equipo.',
+'La proactividad en el almacén marca la diferencia.',
+'Cada ruta completada es un triunfo compartido.',
+'Nuestra meta es la satisfacción, nuestro medio es el esfuerzo.',
+'El orden es el primer paso hacia la rapidez.',
+'Tu dedicación es el ingrediente secreto de nuestra logística.',
+'Cero errores, cien por ciento compromiso.',
+'La comunicación fluida evita el doble esfuerzo.',
+'Somos arquitectos de entregas exitosas.',
+'La constancia es la madre de todos los resultados.',
+'El ritmo de este equipo no conoce fronteras.',
+'Cada palet organizado es una muestra de profesionalismo.',
+'La eficiencia energética de tu esfuerzo logra milagros.',
+'No dejamos para después lo que podemos despachar ahora.',
+'Tu enfoque hoy determina la velocidad de mañana.',
+'La logística inteligente empieza con tu talento.',
+'Cada caja lleva una parte de nuestra dedicación.',
+'Superar los retos diarios es lo que nos hace grandes.',
+'La agilidad mental es tan importante como la física.',
+'Somos responsables del éxito de toda la cadena.',
+'La integridad en el manejo es nuestro valor principal.',
+'Un equipo que ríe mientras trabaja, produce mejor.',
+'La excelencia es un hábito que practicamos en cada turno.',
+'Tu rapidez es el alivio de un cliente que espera.',
+'No busques excusas, busca el siguiente pedido.',
+'La armonía en el equipo es nuestra mejor herramienta.',
+'Cada despacho cuenta una historia de esfuerzo.',
+'La puntualidad en la carga es respeto al cliente.',
+'Hacerlo bien a la primera es nuestra meta de oro.',
+'Tu energía transforma el almacén en un lugar de éxito.',
+'La visión de futuro se construye en el despacho de hoy.',
+'Somos expertos en hacer que las cosas sucedan.',
+'La logística no es solo mover cajas, es mover sueños.',
+'Un paso adelante siempre, con la meta clara.',
+'La precisión es nuestra brújula en el almacén.',
+'El talento individual brilla más en el trabajo grupal.',
+'Cada turno es una oportunidad para ser leyendas.',
+'La paciencia con el proceso trae gloria con el resultado.',
+'Despachar con pasión es nuestra ventaja competitiva.',
+'Tu compromiso no tiene precio, pero sí grandes resultados.',
+'La flexibilidad nos permite adaptarnos a cualquier reto.',
+'Cada artículo tratado con cuidado es respeto al cliente.',
+'La sinergia del equipo multiplica nuestra capacidad.',
+'No somos un grupo, somos una fuerza operativa.',
+'La claridad en las tareas nos hace más veloces.',
+'Tu trabajo invisible es lo que hace visible a la empresa.',
+'El éxito es la suma de muchos turnos bien hechos.',
+'La excelencia en el despacho es nuestra obsesión.',
+'Cada caja cerrada es una misión cumplida.',
+'Logramos lo imposible gracias a tu dedicación.',
+'La mejora de procesos nace de tus manos.',
+'Entregamos calidad en tiempo récord.',
+'Tu presencia en el equipo marca la diferencia.',
+'La logística es el combustible del progreso.',
+'Cuidamos el producto como si fuera nuestro.',
+'La fuerza de voluntad mueve montañas y almacenes.',
+'Un equipo motivado es un equipo rápido.',
+'La satisfacción del deber cumplido es el mejor descanso.',
+'Cada par cuenta, cada esfuerzo suma, cada envío triunfa.',
+'La perfección en el detalle es nuestra marca registrada.',
+'Somos el eslabón más fuerte de la cadena.',
+'Tu capacidad de resolución es nuestro mayor activo.',
+'Despachar es servir, y servimos con excelencia.',
+'La meta es el 100% de efectividad todos los días.',
+'Unidos somos el motor que nunca se detiene.',
+'Mañana seremos aún mejores que hoy.',
+        'La logística es el puente entre un deseo y una realidad.',
+'Cada movimiento estratégico nos acerca a la meta diaria.',
+'La rapidez es nuestra aliada, la precisión nuestra guía.',
+'No despachamos bultos, entregamos soluciones con nombre y apellido.',
+'Tu destreza en el área es lo que nos mantiene a la vanguardia.',
+'Un error detectado a tiempo es un éxito para todo el equipo.',
+'La mentalidad ganadora se demuestra en el último despacho del turno.',
+'Somos los arquitectos de la puntualidad.',
+'Cada par organizado es una batalla ganada al caos.',
+'La excelencia operativa nace del compromiso individual.',
+'No hay carga pesada cuando el equipo levanta unido.',
+'Tu atención al detalle es el filtro de nuestra calidad.',
+'La innovación en el almacén empieza con tu curiosidad.',
+'El flujo de trabajo es la sangre que da vida a este lugar.',
+'Despachar con orgullo es nuestra mejor estrategia de ventas.',
+'Hoy superaremos los números de ayer con la pasión de siempre.',
+'La coordinación milimétrica es lo que nos hace líderes.',
+'Tu energía en el turno es el motor que nos impulsa.',
+'La limpieza en tu estación es el reflejo de un trabajo profesional.',
+'Cada etiqueta es el mapa hacia un cliente satisfecho.',
+'La resiliencia transforma un turno difícil en una victoria épica.',
+'Somos más que un almacén, somos una familia de alto rendimiento.',
+'Tu capacidad para resolver imprevistos es nuestro mayor tesoro.',
+'La eficiencia no se hereda, se construye minuto a minuto.',
+'Cada envío a tiempo es un ladrillo en el muro de nuestra reputación.',
+'El silencio del trabajo duro habla más que mil palabras.',
+'La agilidad no es correr, es saber moverse con propósito.',
+'Tu firma de calidad está en cada caja que cierras.',
+'No buscamos la perfección, buscamos la excelencia constante.',
+'La logística inteligente es el alma del comercio moderno.',
+'Cada segundo ahorrado en el proceso es un regalo para el cliente.',
+'La sincronización perfecta es nuestra ventaja competitiva.',
+'Tu compromiso es la chispa que enciende la productividad.',
+'El éxito colectivo es el eco de tu esfuerzo personal.',
+'Un despacho impecable es nuestra carta de presentación al mundo.',
+'La disciplina es el combustible de los resultados extraordinarios.',
+'No te rindas cuando el flujo suba, fluye con él.',
+'Cada producto bien ubicado es tiempo ganado para todos.',
+'La visión clara del objetivo hace que el camino sea más fácil.',
+'Somos los guardianes de la calidad desde el primer minuto.',
+'Tu actitud positiva es el mejor equipo de protección personal.',
+'La grandeza se construye con acciones pequeñas pero constantes.',
+'Un almacén dinámico es un negocio próspero.',
+'Cada ruta optimizada es un respiro para el planeta.',
+'La comunicación asertiva elimina los cuellos de botella.',
+'Tu talento es la pieza que completa nuestro engranaje.',
+'No somos operarios, somos especialistas en cumplimiento.',
+'La pasión por el orden nos hace más veloces.',
+'Cada desafío logístico es una oportunidad de brillar.',
+'La confianza del cliente se gana en cada cinta adhesiva.',
+'Tu perseverancia es la base de nuestra estabilidad.',
+'El ritmo de trabajo lo dicta nuestro deseo de ser los mejores.',
+'Cada despacho cerrado es una promesa cumplida al 100%.',
+'La integridad es nuestra norma, la rapidez nuestro estándar.',
+'Un equipo informado es un equipo invencible.',
+'Tu enfoque en la tarea nos ahorra reprocesos.',
+'La logística es pasión por el movimiento constante.',
+'Cada palet es una oportunidad para demostrar nuestro orden.',
+'La excelencia es el resultado de la práctica diaria.',
+'No esperes a que el turno termine, haz que el turno valga.',
+'Tu esfuerzo invisible es lo que nos hace invencibles.',
+'La calidad no es un departamento, es una actitud de todos.',
+'Cada entrega exitosa es un aplauso silencioso del cliente.',
+'La agilidad mental nos permite anticiparnos al error.',
+'Somos maestros en el arte de la distribución.',
+'Tu compromiso con la seguridad nos cuida a todos.',
+'La eficiencia es el lenguaje que hablamos en este equipo.',
+'Cada caja lleva el ADN de nuestro esfuerzo compartido.',
+'No hay volumen que nos detenga si trabajamos en bloque.',
+'Tu iniciativa es lo que mejora nuestros procesos.',
+'La logística es la ciencia de la paciencia y la precisión.',
+'Cada meta alcanzada nos da permiso de soñar más alto.',
+'La unión de nuestras manos mueve el futuro de la empresa.',
+'Tu constancia es el ejemplo que todos queremos seguir.',
+'La precisión en el picking es el éxito del despacho.',
+'Somos los motores invisibles de la felicidad del cliente.',
+'Tu buen juicio es la brújula en momentos de presión.',
+'La excelencia es la suma de detalles que otros ignoran.',
+'Cada día es una nueva página de éxito en nuestro almacén.',
+'La fuerza de voluntad no tiene horario de salida.',
+'Tu dedicación es la garantía de nuestro crecimiento.',
+'Logramos juntos lo que solos parecía imposible.',
+'La logística es el arte de la invisibilidad perfecta.',
+'Cada paso que das en el almacén cuenta hacia el éxito.',
+'La mejora de un proceso es el triunfo de la inteligencia.',
+'Tu profesionalismo eleva el estándar de todo el equipo.',
+'La satisfacción de entregar a tiempo no tiene comparación.',
+'Somos expertos en transformar el caos en flujo constante.',
+'Tu mirada crítica es la que detecta la excelencia.',
+'La logística no se detiene y nosotros tampoco.',
+'Cada envío es un mensaje de confianza mutua.',
+'Tu energía es el activo más valioso de este turno.',
+'La perfección se busca, la excelencia se entrega.',
+'Cada segundo de concentración es un minuto ganado al error.',
+'Somos el equipo que hace que el mundo siga girando.',
+'Tu responsabilidad es el cimiento de nuestra estructura.',
+'La meta de hoy es el punto de partida de mañana.',
+'Cada par es una historia, cada despacho una victoria.',
+'La excelencia en el servicio empieza en tus manos.',
+'Nunca subestimes el poder de un equipo con un solo objetivo.'
+      ];
+      let msgIndex = Math.floor(Math.random() * MENSAJES.length);
+
+      function rotateMessage(){
+        msgIndex = (msgIndex + 1) % MENSAJES.length;
+        const iconIdx = msgIndex % ICONS.length;
+        const bar = document.getElementById('motivationBar');
+        const iconEl = bar.querySelector('.motiv-icon');
+        const textEl = document.getElementById('motivText');
+        iconEl.textContent = ICONS[iconIdx];
+        textEl.style.animation = 'none';
+        void textEl.offsetWidth;
+        textEl.textContent = MENSAJES[msgIndex];
+        textEl.style.animation = 'motivSlideIn 0.6s ease';
+      }
+
+      rotateMessage();
+      setInterval(rotateMessage, 8000);
+    })();
+  </script>
+
+  <!-- Overlay Almuerzo 11:59 AM -->
+  <div class="fullscreen-overlay lunch" id="overlayLunch">
+    <span class="overlay-close" onclick="document.getElementById('overlayLunch').classList.remove('active')">&times;</span>
+    <div class="overlay-emoji" id="lunchEmoji">🍽️</div>
+    <div class="overlay-title">¡Hora de Almorzar!</div>
+    <div class="overlay-msg" id="lunchMsg"></div>
+    <div class="overlay-brand">Con cariño — La Zapatería 👟</div>
+    <div class="overlay-timer" id="lunchTimer"></div>
+  </div>
+
+  <!-- Overlay Recordatorio de Basura 5:00 PM -->
+  <div class="fullscreen-overlay basura" id="overlayBasura">
+    <span class="overlay-close" onclick="document.getElementById('overlayBasura').classList.remove('active')">&times;</span>
+    <div class="overlay-emoji" id="basuraEmoji">🗑️</div>
+    <div class="overlay-title">¡Hora de Sacar la Basura!</div>
+    <div class="overlay-msg" id="basuraMsg"></div>
+    <div class="overlay-brand">No lo olvides — La Zapatería 👟</div>
+    <div class="overlay-timer" id="basuraTimer"></div>
+  </div>
+
+  <!-- Overlay Recordatorio de Aseo 5:45 PM -->
+  <div class="fullscreen-overlay trash" id="overlayTrash">
+    <span class="overlay-close" onclick="document.getElementById('overlayTrash').classList.remove('active')">&times;</span>
+    <div class="overlay-emoji" id="trashEmoji">🧹</div>
+    <div class="overlay-title">¡Hora del Aseo!</div>
+    <div class="overlay-msg" id="trashMsg"></div>
+    <div class="overlay-aseo-names" id="trashAseoNames"></div>
+    <div class="overlay-brand">A los que les toca hoy — La Zapatería 👟</div>
+    <div class="overlay-timer" id="trashTimer"></div>
+  </div>
+
+  <!-- Overlay Fin de Jornada 5:58 PM -->
+  <div class="fullscreen-overlay endday" id="overlayEndday">
+    <span class="overlay-close" onclick="document.getElementById('overlayEndday').classList.remove('active')">&times;</span>
+    <div class="overlay-emoji" id="enddayEmoji">🌙</div>
+    <div class="overlay-title">¡Jornada Finalizada!</div>
+    <div class="overlay-msg" id="enddayMsg"></div>
+    <div class="overlay-brand">Hasta mañana — La Zapatería 👟</div>
+    <div class="overlay-timer" id="enddayTimer"></div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="cfg-overlay" id="cfgOverlay">
+    <div class="cfg-card">
+      <h2>⚙️ Configuración de Turnos</h2>
+      <div class="cfg-tabs">
+        <button class="cfg-tab active" data-cfg-tab="emp" onclick="switchCfgTab('emp')">📦 Empacadores</button>
+        <button class="cfg-tab" data-cfg-tab="aseo" onclick="switchCfgTab('aseo')">🧹 Aseo</button>
+      </div>
+      <div id="cfgContent"></div>
+      <div class="cfg-actions">
+        <button class="cfg-btn-cancel" onclick="closeSettings()">❌ Cancelar</button>
+        <button class="cfg-btn-save" onclick="saveSettings()">💾 Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ══════════════════════════════════════
+  // SCHEDULE DATA & SETTINGS LOGIC (Firebase Firestore)
+  // ══════════════════════════════════════
+  const DIAS = ['','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+  const DEFAULT_EMPACADORES = {
+    '1':{'1':['Alejo','Santiago'],'2':['Jeremy','Justine'],'3':['Yeison','Alejo'],'4':['Santiago','Yeison']},
+    '2':{'1':['Jeremy','Justine'],'2':['Yeison','Alejo'],'3':['Santiago','Yeison'],'4':['Justine','Jeremy']},
+    '3':{'1':['Yeison','Alejo'],'2':['Santiago','Yeison'],'3':['Justine','Jeremy'],'4':['Alejo','Santiago']},
+    '4':{'1':['Santiago','Yeison'],'2':['Justine','Jeremy'],'3':['Alejo','Santiago'],'4':['Jeremy','Justine']},
+    '5':{'1':['Nicolás','Jeremy'],'2':['Alejo','Santiago'],'3':['Jeremy','Justine'],'4':['Yeison','Alejo']},
+    '6':{'1':['Alejo','Santiago'],'2':['Jeremy','Justine'],'3':['Yeison','Alejo'],'4':['Santiago','Yeison']}
+  };
+  const DEFAULT_ASEO_P1 = {
+    '1':['Heidy','Jeremy'],'2':['Edwin','Santiago'],'3':['Andrea Almeyda','Jessid'],
+    '4':['Carolina','Yeison'],'5':['Justine','Dayana'],'6':['Alejandro','Juliana']
+  };
+  const DEFAULT_ASEO_P2 = {
+    '1':['',''],'2':['Laura','Nayely S'],'3':['',''],
+    '4':['Nayely M','Marly'],'5':['',''],'6':['Andrea Parra','Silvia']
+  };
+
+  let scheduleCache = null;
+  let weekCache = null;
+  let scheduleLoadedVersion = 0;
+  let settingsBaseVersion = 0;
+  const turnosRef = db.collection('configuracion').doc('bodega_turnos');
+
+  function getMondayOf(d){
+    d = new Date(d); const day = d.getDay();
+    d.setDate(d.getDate() - day + (day===0?-6:1));
+    d.setHours(0,0,0,0); return d;
+  }
+  function calcDefaultWeek(){
+    const thisMonday = getMondayOf(new Date());
+    const refMonday = new Date(2026,2,2); refMonday.setHours(0,0,0,0);
+    const weeksDiff = Math.round((thisMonday - refMonday)/(7*864e5));
+    return ((weeksDiff%4)+4)%4+1;
+  }
+  function getTodayDayIndex(){
+    return new Date(new Date().toLocaleString('en-US',{timeZone:'America/Bogota'})).getDay();
+  }
+  function getSchedule(){
+    if(scheduleCache) return scheduleCache;
+    return { empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2 };
+  }
+  function getCurrentWeek(){
+    if(!weekCache) return calcDefaultWeek();
+    const thisMonday = getMondayOf(new Date());
+    const lastMonday = getMondayOf(new Date(weekCache.fecha));
+    const diff = Math.round((thisMonday - lastMonday)/(7*864e5));
+    if(diff > 0){
+      const nw = ((weekCache.semana-1+diff)%4)+1;
+      weekCache = { semana:nw, fecha:thisMonday.toISOString() };
+      turnosRef.update({
+        semana:nw,
+        semanaFecha:thisMonday.toISOString(),
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(()=>{});
+      return nw;
+    }
+    return weekCache.semana;
+  }
+
+  // ── Firestore real-time listener ──
+  turnosRef.onSnapshot(function(doc){
+    if(doc.exists){
+      const data = doc.data();
+      scheduleCache = {
+        empacadores: data.empacadores || DEFAULT_EMPACADORES,
+        aseoP1: data.aseoP1 || DEFAULT_ASEO_P1,
+        aseoP2: data.aseoP2 || DEFAULT_ASEO_P2
+      };
+      weekCache = {
+        semana: data.semana || calcDefaultWeek(),
+        fecha: data.semanaFecha || getMondayOf(new Date()).toISOString()
+      };
+      scheduleLoadedVersion = data.updatedAt && data.updatedAt.toMillis ? data.updatedAt.toMillis() : 0;
+    } else {
+      const dw = calcDefaultWeek();
+      turnosRef.set({
+        empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2,
+        semana:dw, semanaFecha:getMondayOf(new Date()).toISOString(),
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(function(e){ console.error('Error creando turnos:',e); });
+      scheduleCache = { empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2 };
+      weekCache = { semana:dw, fecha:getMondayOf(new Date()).toISOString() };
+      scheduleLoadedVersion = 0;
+    }
+    updateInfoBars();
+  }, function(err){
+    console.error('Error escuchando turnos:',err);
+    scheduleCache = { empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2 };
+    weekCache = { semana:calcDefaultWeek(), fecha:getMondayOf(new Date()).toISOString() };
+    updateInfoBars();
+  });
+
+  function updateInfoBars(){
+    const sch = getSchedule();
+    const dayIdx = getTodayDayIndex();
+    const wk = getCurrentWeek();
+    const d = String(dayIdx), w = String(wk);
+    const empEl = document.getElementById('infoEmpacadores');
+    const wkEl = document.getElementById('infoSemana');
+    const aseoEl = document.getElementById('infoAseo');
+    if(empEl){
+      if(dayIdx>=1 && dayIdx<=6 && sch.empacadores[d] && sch.empacadores[d][w]){
+        const p = sch.empacadores[d][w];
+        empEl.textContent = p[0]+' — '+p[1];
+      } else {
+        empEl.textContent = dayIdx===0?'Domingo — Descanso':'No asignados';
+      }
+    }
+    if(wkEl) wkEl.textContent = (DIAS[dayIdx]||'Domingo') + ' · Semana '+wk;
+    if(aseoEl){
+      let parts = [];
+      if(sch.aseoP1[d]) parts.push('1er Piso: '+sch.aseoP1[d].join(' y '));
+      if(sch.aseoP2[d]) parts.push('2do Piso: '+sch.aseoP2[d].join(' y '));
+      aseoEl.textContent = parts.length?parts.join(' · '):(dayIdx===0?'Domingo — Descanso':'Sin aseo hoy');
+    }
+  }
+
+  function getAseoNamesHTML(){
+    const sch = getSchedule();
+    const d = String(getTodayDayIndex());
+    let lines = [];
+    if(sch.aseoP1[d]) lines.push('🏢 1er Piso: <b>'+sch.aseoP1[d].join('</b> y <b>')+'</b>');
+    if(sch.aseoP2[d]) lines.push('🏢 2do Piso: <b>'+sch.aseoP2[d].join('</b> y <b>')+'</b>');
+    return lines.join('<br>');
+  }
+
+  // ── Settings Modal ──
+  function openSettings(){
+    settingsBaseVersion = scheduleLoadedVersion;
+    document.getElementById('cfgOverlay').classList.add('active');
+    buildSettingsUI();
+  }
+  function closeSettings(){
+    document.getElementById('cfgOverlay').classList.remove('active');
+  }
+  function switchCfgTab(tab){
+    document.querySelectorAll('.cfg-tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.cfg-pane').forEach(p=>p.classList.remove('active'));
+    document.querySelector('[data-cfg-tab="'+tab+'"]').classList.add('active');
+    document.getElementById(tab==='emp'?'cfgPaneEmp':'cfgPaneAseo').classList.add('active');
+  }
+  function buildSettingsUI(){
+    const sch = getSchedule();
+    const wk = getCurrentWeek();
+    const c = document.getElementById('cfgContent');
+    let h = '';
+    h += '<div class="cfg-week-sel">📅 Semana actual: <select id="cfgWeekSel">';
+    for(let w=1;w<=4;w++) h+='<option value="'+w+'"'+(w===wk?' selected':'')+'>Semana '+w+'</option>';
+    h += '</select> <span style="color:#888;font-size:0.8em">(avanza automáticamente cada lunes)</span></div>';
+    h += '<div id="cfgPaneEmp" class="cfg-pane active">';
+    for(let w=1;w<=4;w++){
+      h+='<div class="cfg-section"><h4>📦 Semana '+w+'</h4><div class="cfg-grid">';
+      for(let d=1;d<=6;d++){
+        const p=(sch.empacadores[String(d)]&&sch.empacadores[String(d)][String(w)])||['',''];
+        h+='<label>'+DIAS[d]+'</label>';
+        h+='<input data-emp="'+d+'-'+w+'-0" value="'+p[0]+'">';
+        h+='<input data-emp="'+d+'-'+w+'-1" value="'+p[1]+'">';
+      }
+      h+='</div></div>';
+    }
+    h+='</div>';
+    h+='<div id="cfgPaneAseo" class="cfg-pane">';
+    h+='<div class="cfg-section"><h4>🏢 Primer Piso (Lunes a Sábado)</h4><div class="cfg-grid">';
+    for(let d=1;d<=6;d++){
+      const p=sch.aseoP1[String(d)]||['',''];
+      h+='<label>'+DIAS[d]+'</label>';
+      h+='<input data-ap1="'+d+'-0" value="'+p[0]+'">';
+      h+='<input data-ap1="'+d+'-1" value="'+p[1]+'">';
+    }
+    h+='</div></div>';
+    h+='<div class="cfg-section"><h4>🏢 Segundo Piso (Lunes a Sábado)</h4><div class="cfg-grid">';
+    for(let d=1;d<=6;d++){
+      const p=sch.aseoP2[String(d)]||['',''];
+      h+='<label>'+DIAS[d]+'</label>';
+      h+='<input data-ap2="'+d+'-0" value="'+p[0]+'">';
+      h+='<input data-ap2="'+d+'-1" value="'+p[1]+'">';
+    }
+    h+='</div></div></div>';
+    c.innerHTML = h;
+  }
+  async function saveSettings(){
+    const ws = document.getElementById('cfgWeekSel');
+    const newWeek = ws ? parseInt(ws.value) : getCurrentWeek();
+    const sch = getSchedule();
+    const emp = JSON.parse(JSON.stringify(sch.empacadores));
+    const ap1 = JSON.parse(JSON.stringify(sch.aseoP1));
+    const ap2 = JSON.parse(JSON.stringify(sch.aseoP2));
+
+    document.querySelectorAll('[data-emp]').forEach(function(inp){
+      const parts=inp.dataset.emp.split('-'); const dk=parts[0],wk=parts[1],i=parseInt(parts[2]);
+      if(!emp[dk]) emp[dk]={};
+      if(!emp[dk][wk]) emp[dk][wk]=['',''];
+      emp[dk][wk][i]=inp.value.trim();
+    });
+    document.querySelectorAll('[data-ap1]').forEach(function(inp){
+      const parts=inp.dataset.ap1.split('-'); const dk=parts[0],i=parseInt(parts[1]);
+      if(!ap1[dk]) ap1[dk]=['',''];
+      ap1[dk][i]=inp.value.trim();
+    });
+    document.querySelectorAll('[data-ap2]').forEach(function(inp){
+      const parts=inp.dataset.ap2.split('-'); const dk=parts[0],i=parseInt(parts[1]);
+      if(!ap2[dk]) ap2[dk]=['',''];
+      ap2[dk][i]=inp.value.trim();
+    });
+
+    try {
+      await db.runTransaction(async function(transaction){
+        const freshDoc = await transaction.get(turnosRef);
+        const freshData = freshDoc.exists ? freshDoc.data() : {};
+        const freshVersion = freshData.updatedAt && freshData.updatedAt.toMillis ? freshData.updatedAt.toMillis() : 0;
+        if (freshDoc.exists && freshVersion !== settingsBaseVersion) {
+          throw new Error('CONFIG_DESACTUALIZADA');
+        }
+        transaction.set(turnosRef, {
+          empacadores:emp, aseoP1:ap1, aseoP2:ap2,
+          semana:newWeek, semanaFecha:getMondayOf(new Date()).toISOString(),
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge:true });
+      });
+      closeSettings();
+      requestAnimationFrame(autoFitScreen);
+    } catch(e) {
+      console.error('Error guardando turnos:',e);
+      if (e && e.message === 'CONFIG_DESACTUALIZADA') {
+        alert('La configuración fue actualizada en otro equipo. Para evitar sobrescribir información reciente, cierre y vuelva a abrir la configuración antes de guardar.');
+        return;
+      }
+      alert('Error al guardar. Verifica la conexión a internet.');
+    }
+  }
+  </script>
+
+  <script>
+    (function(){
+      const LUNCH_MSGS = [
+        '🙏 Que Dios bendiga tus alimentos y renueve tus fuerzas para la tarde. ¡Buen provecho!',
+        '🙏 Gracias a Dios por este día y por el alimento. Recarga energías, te lo mereces.',
+        '🙏 Que cada bocado te llene de gratitud y fortaleza. ¡Bendiciones para ti y tu familia!',
+        '🙏 Dios te bendice con salud y trabajo. Disfruta tu almuerzo con paz en el corazón.',
+        '🙏 Haz una pausa, agradece y aliméntate bien. Dios provee cada día. ¡Buen provecho!',
+        '🙏 Que la bendición de Dios esté en tu mesa y en tu corazón. ¡A disfrutar el almuerzo!',
+        '🙏 Gracias Señor por el pan de cada día. Descansa un momento y vuelve con toda la actitud.',
+        '🙏 Bendito sea Dios que nos da fuerza y alimento. ¡Disfruta cada momento de tu descanso!',
+        '🙏 Tu esfuerzo de la mañana merece un buen descanso. Que Dios bendiga tu comida.',
+        '🙏 Come con alegría y gratitud. Dios tiene cosas grandes preparadas para esta tarde.',
+        '🙏 Que este almuerzo renueve tu cuerpo y tu espíritu. ¡Bendiciones para todos!',
+        '🙏 Dios cuida de ti cada instante. Descansa, come bien y regresa con energía.',
+        '🙏 Que la paz de Dios acompañe tu almuerzo. Eres valioso para este equipo.',
+        '🙏 Gracias Padre por permitirnos llegar hasta aquí. ¡Buen provecho, equipo!',
+        '🙏 Alimento para el cuerpo, fe para el alma. Que Dios te bendiga grandemente.',
+        '🙏 Hoy es un regalo de Dios. Disfruta tu almuerzo y vuelve lleno de bendiciones.',
+        '🙏 Que cada día Dios te dé más razones para sonreír. ¡Buen provecho, campeón!',
+        '🙏 Descansa en la presencia de Dios mientras almuerzas. Él renueva tus fuerzas.',
+        '🙏 Bendice tu alimento, bendice tu trabajo, bendice este día. ¡A comer con gratitud!',
+        '🙏 Que Dios llene tu tarde de logros y tu mesa de abundancia. ¡Buen almuerzo!',
+        '🙏 Tu trabajo honra a Dios. Ahora descansa y recarga. ¡Mereces este respiro!',
+        '🙏 Señor, gracias por cada miembro de este equipo. Bendice su alimento y su camino.',
+        '🙏 Come tranquilo, Dios está al mando. La tarde será productiva y bendecida.',
+        '🙏 Que la gracia de Dios acompañe tu almuerzo y cada paso de tu tarde.',
+        '🙏 Un equipo bendecido es un equipo imparable. ¡Buen provecho a todos!',
+        '🙏 Dios no te trajo hasta aquí para dejarte. Almuerza con fe y agradecimiento.',
+        '🙏 Que las bendiciones de hoy superen las de ayer. ¡Disfruta tu comida!',
+        '🙏 La fidelidad de Dios se renueva cada mañana. Ahora disfruta tu merecido descanso.',
+        '🙏 Gracias a Dios por la salud para trabajar y el alimento para continuar. ¡Buen provecho!',
+        '🙏 Que Dios multiplique tus bendiciones como multiplica tu esfuerzo. ¡A almorzar!'
+      ];
+
+      const BASURA_MSGS = [
+        '🗑️ ¡Ey, campeón! La basura no se saca sola... aunque sería genial si lo hiciera, ¿no?',
+        '🗑️ Momento de sacar la basura. ¡Piensa que es tu entrenamiento de cardio del día!',
+        '🗑️ La basura te llama... literalmente. ¡Dale, que no muerden las bolsas!',
+        '🗑️ ¿Sabías que sacar la basura quema calorías? ¡Aprovecha este workout gratis!',
+        '🗑️ Hora de la misión imposible: llevar la basura sin que se rompa la bolsa. ¡Tú puedes!',
+        '🗑️ La basura está esperando su paseo diario. ¡No la decepciones!',
+        '🗑️ Recordatorio amistoso: la basura no desaparece por arte de magia... ¡todavía!',
+        '🗑️ ¡Alerta de basura! Esto no es un simulacro. Repito: NO es un simulacro.',
+        '🗑️ La basura dice: "¡Sácame de aquí, por favor!" ¿La escuchas?',
+        '🗑️ Momento zen de sacar la basura. Respira hondo y... ¡a la caneca!',
+        '🗑️ ¿Quién es el héroe que saca la basura? ¡TÚ! Ponte la capa imaginaria.',
+        '🗑️ La basura no se va sola al contenedor... aunque sería un invento revolucionario.',
+        '🗑️ ¡Ding dong! Tu cita con la basura está confirmada para YA.',
+        '🗑️ Sacar la basura: el deporte extremo de las 5 PM. ¡Vamos, atleta!',
+        '🗑️ La basura te extraña allá afuera. Dale, no seas tímido.',
+        '🗑️ Recordatorio: la basura acumulada no es decoración vintage.',
+        '🗑️ ¡Misión del día! Objetivo: basura fuera. Recompensa: ambiente fresco.',
+        '🗑️ La basura está lista para su gran salida. ¡Sé su escolta VIP!',
+        '🗑️ ¿Escuchas eso? Es la basura pidiendo libertad. ¡Libérala!',
+        '🗑️ Momento de brillar: saca la basura como el profesional que eres.',
+        '🗑️ La basura no va a salir bailando sola... o sí? Mejor no arriesgarse.',
+        '🗑️ ¡Alerta! La basura ha activado su modo "sácame ya, porfa".',
+        '🗑️ Tu buena acción del día: sacar la basura. Karma positivo garantizado.',
+        '🗑️ La basura te mira con ojos de "¿cuándo me sacas?" ¡No la hagas esperar!',
+        '🗑️ Ejercicio de hoy: 10 pasos hasta el contenedor con bolsa de basura. ¡Vamos!',
+        '🗑️ La basura está empacada y lista. Solo falta el chofer. ¿Adivina quién es?',
+        '🗑️ ¡Noticia de última hora! La basura necesita salir. Más detalles: AHORA.',
+        '🗑️ Sacar la basura: porque un ambiente limpio es un ambiente feliz.',
+        '🗑️ La basura no tiene patas para caminar sola. ¡Sé sus patas!',
+        '🗑️ ¿Listo para la aventura de las 5 PM? Destino: contenedor de basura. ¡Vamos!'
+      ];
+
+      const TRASH_MSGS = [
+        '🧹 ¡A los 2 que les toca hoy! Es hora de dejar todo reluciente. ¡Vamos equipo!',
+        '🧹 Dupla de limpieza activada. ¡Ustedes 2 son los héroes del orden!',
+        '🧹 ¡Atención pareja del día! El aseo los espera. Juntos son imparables.',
+        '🧹 A los 2 elegidos de hoy: ¡Hora de brillar... literalmente! 💫',
+        '🧹 Equipo de aseo del día, ¡es su momento! Un lugar limpio es un lugar feliz.',
+        '🧹 ¡Dúo dinámico del aseo! Ustedes 2 tienen el poder de transformar este espacio.',
+        '🧹 A los 2 que les corresponde: ¡Manos a la obra! La limpieza es trabajo en equipo.',
+        '🧹 ¡Alerta de aseo! Los 2 encargados de hoy, ¡es hora de la acción!',
+        '🧹 Pareja del día: el aseo no se hace solo. ¡Pero ustedes 2 lo hacen ver fácil!',
+        '🧹 A los 2 responsables de hoy: ¡Que comience la magia de la limpieza! ✨',
+        '🧹 ¡Equipo de limpieza! Ustedes 2 son la diferencia entre caos y orden.',
+        '🧹 Los 2 del turno de aseo: ¡Momento de dejar todo impecable!',
+        '🧹 ¡Dupla del día! El aseo los llama. Juntos hacen un gran equipo.',
+        '🧹 A los 2 que les toca: ¡La limpieza es su superpoder de hoy!',
+        '🧹 ¡Atención equipo de aseo! Ustedes 2 son los guardianes del orden.',
+        '🧹 Los 2 encargados: ¡Es hora de brillar! Un espacio limpio, un equipo feliz.',
+        '🧹 ¡Pareja de limpieza activada! Ustedes 2 saben cómo se hace.',
+        '🧹 A los 2 del día: El aseo es un arte, y ustedes son los artistas.',
+        '🧹 ¡Dúo del aseo! Juntos son la fórmula perfecta para un espacio impecable.',
+        '🧹 Los 2 responsables de hoy: ¡Manos a la escoba! El orden los espera.',
+        '🧹 ¡Equipo del día! Ustedes 2 tienen la misión de dejar todo reluciente.',
+        '🧹 A los 2 que les corresponde: ¡La limpieza es cosa de dos! Vamos.',
+        '🧹 ¡Dupla estrella del aseo! Ustedes 2 hacen que todo brille.',
+        '🧹 Los 2 del turno: ¡Es hora del aseo! Juntos lo logran en tiempo récord.',
+        '🧹 ¡Atención pareja del día! El aseo no espera. ¡Ustedes pueden!',
+        '🧹 A los 2 encargados: ¡Momento de acción! Un lugar limpio es su legado del día.',
+        '🧹 ¡Equipo de limpieza! Ustedes 2 son los campeones del orden.',
+        '🧹 Los 2 del día: ¡El aseo es su momento de brillar! ✨',
+        '🧹 ¡Dupla del aseo! Juntos hacen magia. ¡A limpiar se ha dicho!',
+        '🧹 A los 2 que les toca hoy: ¡La limpieza los espera! Equipo imparable.'
+      ];
+
+      const ENDDAY_MSGS = [
+        '🌟 ¡Excelente jornada! Gracias por dar lo mejor de ti. Descansa, mañana será aún mejor.',
+        '🌟 El esfuerzo de hoy construye el éxito de mañana. ¡Ve a casa con orgullo!',
+        '🌟 Cada día que das tu 100% es un día ganado. ¡Gracias por tu dedicación!',
+        '🌟 Tu trabajo hace la diferencia. Descansa bien y vuelve mañana con esa misma energía.',
+        '🌟 ¡Lo logramos! Otro día de trabajo duro terminado. Disfruta tu noche, campeón.',
+        '🌟 Gracias por ser parte de este gran equipo. Descansa, recarga y nos vemos mañana.',
+        '🌟 Hoy fuiste increíble. Ahora ve y disfruta con quienes más quieres. ¡Hasta mañana!',
+        '🌟 El éxito se construye día a día, y hoy pusiste un gran ladrillo. ¡Feliz noche!',
+        '🌟 Tu esfuerzo no pasa desapercibido. ¡Gracias por todo! Descansa merecidamente.',
+        '🌟 Cierra este día con una sonrisa. Diste todo y eso es admirable. ¡Hasta mañana!',
+        '🌟 La constancia es tu superpoder. Otro día cumplido con excelencia. ¡Buen descanso!',
+        '🌟 Hoy el equipo brilló gracias a ti. Ve a casa tranquilo, lo hiciste genial.',
+        '🌟 Cada jornada terminada es un logro. ¡Celebra lo que conseguiste hoy!',
+        '🌟 Gracias por tu entrega y compromiso. La Zapatería es grande gracias a ti.',
+        '🌟 Misión cumplida por hoy. Ahora a descansar, que mañana hay más victorias por lograr.',
+        '🌟 Que tu noche sea tan productiva en descanso como lo fue tu día en trabajo. ¡Adiós!',
+        '🌟 Eres pieza clave de este equipo. Descansa bien, te esperamos mañana con los brazos abiertos.',
+        '🌟 Un día menos hacia tus metas, un paso más hacia tus sueños. ¡Feliz noche!',
+        '🌟 Hoy dejaste huella con tu trabajo. Ahora deja que la noche te recargue. ¡Hasta pronto!',
+        '🌟 Gracias por cada minuto de esfuerzo. Tu familia te espera, ¡ve y disfruta!',
+        '🌟 Lo mejor de hoy fue contar contigo. ¡Descansa mucho y vuelve con toda!',
+        '🌟 Jornada terminada con éxito. Que tengas una noche llena de paz y alegría.',
+        '🌟 Tu dedicación inspira a todos. Ahora toca recargar pilas. ¡Nos vemos mañana!',
+        '🌟 Cada día que trabajas con pasión, dejas una marca. ¡Gracias y buenas noches!',
+        '🌟 Hoy diste un gran ejemplo. Descansa tranquilo, La Zapatería está orgullosa de ti.',
+        '🌟 Se cierra un día más de logros. Que tu noche esté llena de bendiciones.',
+        '🌟 Gracias por hacer de este lugar algo especial. ¡Feliz descanso, nos vemos pronto!',
+        '🌟 El que trabaja con amor, cosecha con abundancia. ¡Buenas noches, equipo!',
+        '🌟 Terminaste fuerte. Eso habla de tu carácter. ¡Que descanses, crack!',
+        '🌟 Otro día donde La Zapatería brilla por su gente. ¡Gracias y hasta mañana!'
+      ];
+
+      const LUNCH_EMOJIS = ['🍽️','🍲','🥘','🍛','🙏','☀️','🌮','🥗','🍜','🫕'];
+      const BASURA_EMOJIS = ['🗑️','♻️','🚮','🧹','🧺','💩','🦨','🪣','🫧','🍂'];
+      const TRASH_EMOJIS = ['🧹','🧼','✨','🪣','🫧','🧽',' ','🧹','🪥','💚'];
+      const ENDDAY_EMOJIS = ['🌙','🌅','🏠','💤','🌃','✨','🛌','🌠','🌇','💫'];
+
+      let lunchShown = false;
+      let basuraShown = false;
+      let trashShown = false;
+      let enddayShown = false;
+
+      function getDayOfYear(){
+        const now = new Date();
+        const start = new Date(now.getFullYear(), 0, 0);
+        return Math.floor((now - start) / 86400000);
+      }
+
+      function showOverlay(id, msgs, emojis, emojiId, msgId, timerId){
+        const overlay = document.getElementById(id);
+        const dayIdx = getDayOfYear() % msgs.length;
+        document.getElementById(msgId).textContent = msgs[dayIdx];
+        document.getElementById(emojiId).textContent = emojis[dayIdx % emojis.length];
+        overlay.classList.add('active');
+
+        let remaining = 180;
+        const timerEl = document.getElementById(timerId);
+        timerEl.textContent = 'Se cierra en ' + remaining + 's';
+        const iv = setInterval(() => {
+          remaining--;
+          timerEl.textContent = 'Se cierra en ' + remaining + 's';
+          if (remaining <= 0) {
+            clearInterval(iv);
+            overlay.classList.remove('active');
+          }
+        }, 1000);
+
+        return setTimeout(() => { overlay.classList.remove('active'); clearInterval(iv); }, 180000);
+      }
+
+      function checkScheduledMessages(){
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        const h = now.getHours();
+        const m = now.getMinutes();
+
+        if (h === 11 && m === 59 && !lunchShown) {
+          lunchShown = true;
+          showOverlay('overlayLunch', LUNCH_MSGS, LUNCH_EMOJIS, 'lunchEmoji', 'lunchMsg', 'lunchTimer');
+        }
+        if (h === 12 && m >= 0) lunchShown = false;
+
+        if (h === 17 && m === 0 && !basuraShown) {
+          basuraShown = true;
+          showOverlay('overlayBasura', BASURA_MSGS, BASURA_EMOJIS, 'basuraEmoji', 'basuraMsg', 'basuraTimer');
+        }
+        if (h === 17 && m >= 1) basuraShown = false;
+
+        if (h === 17 && m === 45 && !trashShown) {
+          trashShown = true;
+          showOverlay('overlayTrash', TRASH_MSGS, TRASH_EMOJIS, 'trashEmoji', 'trashMsg', 'trashTimer');
+          var aseoNamesEl = document.getElementById('trashAseoNames');
+          if (aseoNamesEl && typeof getAseoNamesHTML === 'function') {
+            aseoNamesEl.innerHTML = getAseoNamesHTML();
+          }
+        }
+        if (h === 17 && m >= 46) trashShown = false;
+
+        if (h === 17 && m === 58 && !enddayShown) {
+          enddayShown = true;
+          showOverlay('overlayEndday', ENDDAY_MSGS, ENDDAY_EMOJIS, 'enddayEmoji', 'enddayMsg', 'enddayTimer');
+        }
+        if (h === 17 && m >= 59) enddayShown = false;
+      }
+
+      setInterval(checkScheduledMessages, 1000);
+    })();
+  </script>
 </body>
 </html>
