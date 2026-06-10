@@ -453,9 +453,14 @@
     (function(){
       var ua = navigator.userAgent || '';
       var isSamsungTv = /SMART-TV|SmartTV|Tizen|Maple|SamsungBrowser\/1|SamsungBrowser\/2/i.test(ua);
-      if (isSamsungTv && document.documentElement) {
+      var hasLargeScreen = window.screen && Math.max(window.screen.width || 0, window.screen.height || 0) >= 960;
+      var hasTouch = (navigator.maxTouchPoints || 0) > 0 || ('ontouchstart' in window);
+      var isAndroidTv = /Android.*TV|AndroidTV|BrowseHere|Kalley|AFT|AFTM|AFTT|AFTB|AFTS|AFTN|FireTV|Fire TV/i.test(ua) || (/Android/i.test(ua) && hasLargeScreen && !hasTouch);
+      var isTvDevice = isSamsungTv || isAndroidTv;
+      if (isTvDevice && document.documentElement) {
         document.documentElement.className += (document.documentElement.className ? ' ' : '') + 'smart-tv-legacy';
       }
+      window._isTvDevice = isTvDevice;
       if (!Number.isNaN) Number.isNaN = function(value) { return typeof value === 'number' && isNaN(value); };
       if (!Array.from) Array.from = function(value) { return Array.prototype.slice.call(value); };
       if (!Array.prototype.includes) {
@@ -504,8 +509,17 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    if (window._isTvDevice) {
+      try {
+        db.settings({ experimentalForceLongPolling: true });
+      } catch (error) {
+        console.warn('No se pudo activar long polling para Firestore:', error);
+      }
+    }
     let panelUnsub = null;
     let panelLoadingTimeout = null;
+    let panelRealtimeWatchdog = null;
+    let panelPollingInterval = null;
 
     function showServerLoading(message = 'Sincronizando con la base de datos del servidor...') {
       const overlay = document.getElementById('serverLoading');
@@ -527,6 +541,13 @@
       if (panelLoadingTimeout) {
         clearTimeout(panelLoadingTimeout);
         panelLoadingTimeout = null;
+      }
+    }
+
+    function stopPanelPolling() {
+      if (panelPollingInterval) {
+        clearInterval(panelPollingInterval);
+        panelPollingInterval = null;
       }
     }
 
@@ -602,22 +623,7 @@
         .filter(n => n !== null);
     }
 
-    async function cargarPanelBodega() {
-      const contenedor = document.getElementById('panel');
-      showServerLoading();
-      contenedor.innerHTML = '<p>Cargando información...</p>';
-
-      try {
-        await cargarBodegueros();
-      } catch (error) {
-        hideServerLoading();
-        console.error('Error cargando bodegueros:', error);
-        contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo cargar la información de bodegueros. Verifique la conexión.</p>';
-        return;
-      }
-
-      if (panelUnsub) panelUnsub();
-      panelUnsub = db.collectionGroup('registros').onSnapshot(snapshot => {
+    function procesarSnapshotRegistros(snapshot, contenedor) {
         const conteo = {};
         cacheRegistros = [];
         const activeIds = new Set();
@@ -668,9 +674,70 @@
         renderizarPanel(contenedor, conteo);
         requestAnimationFrame(autoFitScreen);
         hideServerLoading();
+    }
+
+    async function cargarPanelBodegaPolling(contenedor, mostrarCarga) {
+      try {
+        if (mostrarCarga) showServerLoading('Modo compatible TV: sincronizando por consulta periódica...');
+        const snapshot = await db.collectionGroup('registros').get();
+        procesarSnapshotRegistros(snapshot, contenedor);
+      } catch (error) {
+        hideServerLoading();
+        console.error('Error consultando registros de bodega en modo TV:', error);
+        contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo sincronizar con la base de datos del servidor. Intente recargar la página.</p>';
+      }
+    }
+
+    async function cargarPanelBodega() {
+      const contenedor = document.getElementById('panel');
+      showServerLoading();
+      contenedor.innerHTML = '<p>Cargando información...</p>';
+
+      try {
+        await cargarBodegueros();
+      } catch (error) {
+        hideServerLoading();
+        console.error('Error cargando bodegueros:', error);
+        contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo cargar la información de bodegueros. Verifique la conexión.</p>';
+        return;
+      }
+
+      if (panelUnsub) panelUnsub();
+      stopPanelPolling();
+      if (panelRealtimeWatchdog) clearTimeout(panelRealtimeWatchdog);
+
+      let realtimeStarted = false;
+      panelRealtimeWatchdog = setTimeout(() => {
+        if (!window._isTvDevice || realtimeStarted) return;
+        if (panelUnsub) {
+          panelUnsub();
+          panelUnsub = null;
+        }
+        cargarPanelBodegaPolling(contenedor, true);
+        panelPollingInterval = setInterval(function() { cargarPanelBodegaPolling(contenedor, false); }, 30000);
+      }, 18000);
+
+      panelUnsub = db.collectionGroup('registros').onSnapshot(snapshot => {
+        realtimeStarted = true;
+        if (panelRealtimeWatchdog) {
+          clearTimeout(panelRealtimeWatchdog);
+          panelRealtimeWatchdog = null;
+        }
+        stopPanelPolling();
+        procesarSnapshotRegistros(snapshot, contenedor);
       }, error => {
+        if (panelRealtimeWatchdog) {
+          clearTimeout(panelRealtimeWatchdog);
+          panelRealtimeWatchdog = null;
+        }
         hideServerLoading();
         console.error('Error escuchando registros de bodega:', error);
+        if (window._isTvDevice) {
+          stopPanelPolling();
+          cargarPanelBodegaPolling(contenedor, true);
+          panelPollingInterval = setInterval(function() { cargarPanelBodegaPolling(contenedor, false); }, 30000);
+          return;
+        }
         contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo sincronizar con la base de datos del servidor. Intente recargar la página.</p>';
       });
     }
@@ -1131,7 +1198,7 @@
       }
 
       rotateMessage();
-      setInterval(rotateMessage, 8000);
+      setInterval(rotateMessage, window._isTvDevice ? 15000 : 8000);
     })();
   </script>
 
@@ -1257,8 +1324,10 @@
     return weekCache.semana;
   }
 
-  // ── Firestore real-time listener ──
-  turnosRef.onSnapshot(function(doc){
+  let turnosSnapshotStarted = false;
+  let turnosFallbackTimeout = null;
+
+  function aplicarTurnosDoc(doc) {
     if(doc.exists){
       const data = doc.data();
       scheduleCache = {
@@ -1283,8 +1352,42 @@
       scheduleLoadedVersion = 0;
     }
     updateInfoBars();
+  }
+
+  function cargarTurnosFallback() {
+    turnosRef.get().then(function(doc) {
+      aplicarTurnosDoc(doc);
+    }).catch(function(err) {
+      console.error('Error consultando turnos en modo compatible:',err);
+      scheduleCache = { empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2 };
+      weekCache = { semana:calcDefaultWeek(), fecha:getMondayOf(new Date()).toISOString() };
+      updateInfoBars();
+    });
+  }
+
+  turnosFallbackTimeout = setTimeout(function(){
+    if (!window._isTvDevice || turnosSnapshotStarted) return;
+    cargarTurnosFallback();
+  }, 12000);
+
+  // ── Firestore real-time listener ──
+  turnosRef.onSnapshot(function(doc){
+    turnosSnapshotStarted = true;
+    if (turnosFallbackTimeout) {
+      clearTimeout(turnosFallbackTimeout);
+      turnosFallbackTimeout = null;
+    }
+    aplicarTurnosDoc(doc);
   }, function(err){
+    if (turnosFallbackTimeout) {
+      clearTimeout(turnosFallbackTimeout);
+      turnosFallbackTimeout = null;
+    }
     console.error('Error escuchando turnos:',err);
+    if (window._isTvDevice) {
+      cargarTurnosFallback();
+      return;
+    }
     scheduleCache = { empacadores:DEFAULT_EMPACADORES, aseoP1:DEFAULT_ASEO_P1, aseoP2:DEFAULT_ASEO_P2 };
     weekCache = { semana:calcDefaultWeek(), fecha:getMondayOf(new Date()).toISOString() };
     updateInfoBars();
@@ -1566,7 +1669,7 @@
 
       const LUNCH_EMOJIS = ['🍽️','🍲','🥘','🍛','🙏','☀️','🌮','🥗','🍜','🫕'];
       const BASURA_EMOJIS = ['🗑️','♻️','🚮','🧹','🧺','💩','🦨','🪣','🫧','🍂'];
-      const TRASH_EMOJIS = ['🧹','🧼','✨','🪣','🫧','🧽',' ','🧹','🪥','💚'];
+      const TRASH_EMOJIS = ['🧹','🧼','✨','🪣','🫧','🧽','�','🧹','🪥','💚'];
       const ENDDAY_EMOJIS = ['🌙','🌅','🏠','💤','🌃','✨','🛌','🌠','🌇','💫'];
 
       let lunchShown = false;
@@ -1636,7 +1739,7 @@
         if (h === 17 && m >= 59) enddayShown = false;
       }
 
-      setInterval(checkScheduledMessages, 1000);
+      setInterval(checkScheduledMessages, window._isTvDevice ? 15000 : 1000);
     })();
   </script>
 </body>
