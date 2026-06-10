@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mantenimiento del Sistema</title>
+<title>Iniciando sesión...</title>
 
 <style>
 body{
@@ -16,110 +16,96 @@ body{
     align-items:center;
     min-height:100vh;
 }
-
 .contenedor{
     text-align:center;
-    max-width:700px;
+    max-width:600px;
     padding:40px;
 }
-
-h1{
-    color:#ff5252;
-    margin-bottom:20px;
-}
-
+h1{ color:#4caf50; margin-bottom:20px; }
 .estado{
     margin-top:25px;
     padding:15px;
     background:#2c2c2c;
     border-radius:8px;
-    text-align:left;
     font-size:18px;
     line-height:1.8;
 }
-
-.ok{
-    color:#4caf50;
-}
-
-.info{
-    color:#ffd54f;
-}
+.ok{ color:#4caf50; }
+.error{ color:#ff5252; }
 </style>
 </head>
 <body>
 
 <div class="contenedor">
-    <h1>🔧 FUERA DE SERVICIO</h1>
-    <p>Realizando mantenimiento y limpieza de datos locales...</p>
-
-    <div class="estado" id="estado">
-        Iniciando proceso...
-    </div>
+    <h1>🔑 Iniciando Sesión TV</h1>
+    <p>Conectando con el servidor...</p>
+    <div class="estado" id="estado">Iniciando...</div>
 </div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
 <script>
 const estado = document.getElementById("estado");
 
-function agregarMensaje(texto, clase="info"){
+function msg(texto, clase="ok"){
     estado.innerHTML += `<br><span class="${clase}">${texto}</span>`;
 }
 
-async function limpiarTodo(){
+const firebaseConfig = {
+    apiKey: "AIzaSyChvezwN6DrYXdnBvGLxnjhi4I9xUaxKfU",
+    authDomain: "lazapateria-c4157.firebaseapp.com",
+    projectId: "lazapateria-c4157",
+    storageBucket: "lazapateria-c4157.firebasestorage.app",
+    messagingSenderId: "300241769138",
+    appId: "1:300241769138:web:8ca1847de3c4fb5042afab",
+    measurementId: "G-HVG7615JEE"
+};
 
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+async function iniciarSesionTV(){
     estado.innerHTML = "";
 
     try{
-        localStorage.clear();
-        agregarMensaje("✅ LocalStorage eliminado", "ok");
-    }catch(e){
-        agregarMensaje("❌ Error eliminando LocalStorage");
-    }
+        msg("🔍 Buscando usuario TV...");
+        const snapshot = await db.collection("usuarios")
+            .where("usuario", "==", "TV")
+            .get();
 
-    try{
-        sessionStorage.clear();
-        agregarMensaje("✅ SessionStorage eliminado", "ok");
-    }catch(e){
-        agregarMensaje("❌ Error eliminando SessionStorage");
-    }
-
-    try{
-        if ('serviceWorker' in navigator){
-            const regs = await navigator.serviceWorker.getRegistrations();
-
-            for(const reg of regs){
-                await reg.unregister();
-            }
-
-            agregarMensaje("✅ Service Workers eliminados", "ok");
-        }else{
-            agregarMensaje("⚠️ Service Worker no soportado");
+        if(snapshot.empty){
+            msg("❌ Usuario TV no encontrado en la base de datos.", "error");
+            return;
         }
-    }catch(e){
-        agregarMensaje("❌ Error eliminando Service Workers");
-    }
 
-    try{
-        if ('caches' in window){
-            const keys = await caches.keys();
-
-            for(const key of keys){
-                await caches.delete(key);
+        let usuarioData = null;
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if(data.contraseña === "0000"){
+                usuarioData = data;
             }
+        });
 
-            agregarMensaje("✅ Caché eliminada", "ok");
-        }else{
-            agregarMensaje("⚠️ API Cache no soportada");
+        if(!usuarioData){
+            msg("❌ Contraseña incorrecta para el usuario TV.", "error");
+            return;
         }
-    }catch(e){
-        agregarMensaje("❌ Error eliminando caché");
-    }
 
-    agregarMensaje("🎉 Limpieza finalizada", "ok");
-    agregarMensaje("Puede cerrar y volver a abrir la aplicación.", "ok");
+        localStorage.setItem("datosUsuario", JSON.stringify(usuarioData));
+        msg("✅ Sesión iniciada correctamente como TV");
+        msg("🚀 Redirigiendo al Panel de Bodega...");
+
+        setTimeout(() => {
+            window.location.href = "indicadordebodega.html";
+        }, 2000);
+
+    }catch(e){
+        msg("❌ Error conectando con el servidor: " + e.message, "error");
+    }
 }
 
-limpiarTodo();
+iniciarSesionTV();
 </script>
 
 </body>
