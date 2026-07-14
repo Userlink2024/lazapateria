@@ -782,6 +782,12 @@
       stopPanelPolling();
       if (panelRealtimeWatchdog) clearTimeout(panelRealtimeWatchdog);
 
+      if (window._isTvDevice) {
+        cargarPanelBodegaPolling(contenedor, true);
+        panelPollingInterval = setInterval(function() { cargarPanelBodegaPolling(contenedor, false); }, 60000);
+        return;
+      }
+
       let realtimeStarted = false;
       panelRealtimeWatchdog = setTimeout(() => {
         if (!window._isTvDevice || realtimeStarted) return;
@@ -790,7 +796,7 @@
           panelUnsub = null;
         }
         cargarPanelBodegaPolling(contenedor, true);
-        panelPollingInterval = setInterval(function() { cargarPanelBodegaPolling(contenedor, false); }, 30000);
+        panelPollingInterval = setInterval(function() { cargarPanelBodegaPolling(contenedor, false); }, 60000);
       }, 18000);
 
       panelUnsub = db.collectionGroup('registros').onSnapshot(snapshot => {
@@ -811,7 +817,7 @@
         if (window._isTvDevice) {
           stopPanelPolling();
           cargarPanelBodegaPolling(contenedor, true);
-          panelPollingInterval = setInterval(function() { cargarPanelBodegaPolling(contenedor, false); }, 30000);
+          panelPollingInterval = setInterval(function() { cargarPanelBodegaPolling(contenedor, false); }, 60000);
           return;
         }
         contenedor.innerHTML = '<p style="text-align:center;color:#b71c1c;">No se pudo sincronizar con la base de datos del servidor. Intente recargar la página.</p>';
@@ -1564,6 +1570,9 @@
     c.innerHTML = h;
   }
   async function saveSettings(){
+    const saveBtn = document.querySelector('.cfg-btn-save');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando...'; }
+
     const ws = document.getElementById('cfgWeekSel');
     const newWeek = ws ? parseInt(ws.value) : getCurrentWeek();
     const sch = getSchedule();
@@ -1588,29 +1597,66 @@
       ap2[dk][i]=inp.value.trim();
     });
 
-    try {
-      await db.runTransaction(async function(transaction){
-        const freshDoc = await transaction.get(turnosRef);
-        const freshData = freshDoc.exists ? freshDoc.data() : {};
-        const freshVersion = freshData.updatedAt && freshData.updatedAt.toMillis ? freshData.updatedAt.toMillis() : 0;
-        if (freshDoc.exists && freshVersion !== settingsBaseVersion) {
-          throw new Error('CONFIG_DESACTUALIZADA');
-        }
-        transaction.set(turnosRef, {
-          empacadores:emp, aseoP1:ap1, aseoP2:ap2,
-          semana:newWeek, semanaFecha:getMondayOf(new Date()).toISOString(),
-          updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge:true });
+    function guardarEnTransaction() {
+      return db.runTransaction(function(transaction){
+        return transaction.get(turnosRef).then(function(freshDoc){
+          const freshData = freshDoc.exists ? freshDoc.data() : {};
+          const freshVersion = freshData.updatedAt && freshData.updatedAt.toMillis ? freshData.updatedAt.toMillis() : 0;
+          if (freshDoc.exists && freshVersion !== settingsBaseVersion) {
+            throw new Error('CONFIG_DESACTUALIZADA');
+          }
+          transaction.set(turnosRef, {
+            empacadores:emp, aseoP1:ap1, aseoP2:ap2,
+            semana:newWeek, semanaFecha:getMondayOf(new Date()).toISOString(),
+            updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge:true });
+        });
       });
+    }
+
+    function esperar(ms) { return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
+
+    var intento = 0;
+    var maxIntentos = 3;
+    var esperas = [1000, 2000, 4000];
+    var ultimoError = null;
+
+    try {
+      while (intento <= maxIntentos) {
+        try {
+          await guardarEnTransaction();
+          ultimoError = null;
+          break;
+        } catch(e) {
+          ultimoError = e;
+          var es429 = false;
+          if (e) {
+            if (e.code === 'resource-exhausted' || e.code === 'unavailable') es429 = true;
+            if (e.message && (
+              e.message.indexOf('429') !== -1 ||
+              e.message.indexOf('Too Many Requests') !== -1 ||
+              e.message.indexOf('RESOURCE_EXHAUSTED') !== -1 ||
+              e.message.indexOf('BatchGetDocuments failed') !== -1
+            )) es429 = true;
+            if (e.message === 'CONFIG_DESACTUALIZADA') throw e;
+          }
+          if (!es429 || intento >= maxIntentos) throw e;
+          await esperar(esperas[intento] || 4000);
+          intento += 1;
+        }
+      }
+      if (ultimoError) throw ultimoError;
       closeSettings();
       requestAnimationFrame(autoFitScreen);
     } catch(e) {
       console.error('Error guardando turnos:',e);
       if (e && e.message === 'CONFIG_DESACTUALIZADA') {
         alert('La configuración fue actualizada en otro equipo. Para evitar sobrescribir información reciente, cierre y vuelva a abrir la configuración antes de guardar.');
-        return;
+      } else {
+        alert('Error al guardar. Verifica la conexión a internet. Si persiste, espera un momento e intenta de nuevo.');
       }
-      alert('Error al guardar. Verifica la conexión a internet.');
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
     }
   }
   </script>
