@@ -1597,34 +1597,25 @@
       ap2[dk][i]=inp.value.trim();
     });
 
-    function guardarEnTransaction() {
-      return db.runTransaction(function(transaction){
-        return transaction.get(turnosRef).then(function(freshDoc){
-          const freshData = freshDoc.exists ? freshDoc.data() : {};
-          const freshVersion = freshData.updatedAt && freshData.updatedAt.toMillis ? freshData.updatedAt.toMillis() : 0;
-          if (freshDoc.exists && freshVersion !== settingsBaseVersion) {
-            throw new Error('CONFIG_DESACTUALIZADA');
-          }
-          transaction.set(turnosRef, {
-            empacadores:emp, aseoP1:ap1, aseoP2:ap2,
-            semana:newWeek, semanaFecha:getMondayOf(new Date()).toISOString(),
-            updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge:true });
-        });
-      });
+    function guardarDirecto() {
+      return turnosRef.set({
+        empacadores:emp, aseoP1:ap1, aseoP2:ap2,
+        semana:newWeek, semanaFecha:getMondayOf(new Date()).toISOString(),
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge:true });
     }
 
     function esperar(ms) { return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
 
     var intento = 0;
-    var maxIntentos = 3;
-    var esperas = [1000, 2000, 4000];
+    var maxIntentos = 5;
+    var esperas = [1000, 2000, 4000, 8000, 16000];
     var ultimoError = null;
 
     try {
       while (intento <= maxIntentos) {
         try {
-          await guardarEnTransaction();
+          await guardarDirecto();
           ultimoError = null;
           break;
         } catch(e) {
@@ -1635,13 +1626,11 @@
             if (e.message && (
               e.message.indexOf('429') !== -1 ||
               e.message.indexOf('Too Many Requests') !== -1 ||
-              e.message.indexOf('RESOURCE_EXHAUSTED') !== -1 ||
-              e.message.indexOf('BatchGetDocuments failed') !== -1
+              e.message.indexOf('RESOURCE_EXHAUSTED') !== -1
             )) es429 = true;
-            if (e.message === 'CONFIG_DESACTUALIZADA') throw e;
           }
           if (!es429 || intento >= maxIntentos) throw e;
-          await esperar(esperas[intento] || 4000);
+          await esperar(esperas[intento] || 16000);
           intento += 1;
         }
       }
@@ -1650,11 +1639,7 @@
       requestAnimationFrame(autoFitScreen);
     } catch(e) {
       console.error('Error guardando turnos:',e);
-      if (e && e.message === 'CONFIG_DESACTUALIZADA') {
-        alert('La configuración fue actualizada en otro equipo. Para evitar sobrescribir información reciente, cierre y vuelva a abrir la configuración antes de guardar.');
-      } else {
-        alert('Error al guardar. Verifica la conexión a internet. Si persiste, espera un momento e intenta de nuevo.');
-      }
+      alert('Error al guardar. El servidor está recibiendo demasiadas peticiones (429). Cierra otras pestañas del panel, espera 30 segundos e intenta de nuevo.');
     } finally {
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
     }
