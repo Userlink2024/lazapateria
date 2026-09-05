@@ -368,19 +368,14 @@ function subscribeConfig(){
 }
 
 /* ===== LOAD TODAY MOVEMENTS + CARRIED PENDING MOVEMENTS ===== */
+let todayMovsUnsub = null;
+
 async function loadDayData(){
+  if(todayMovsUnsub) todayMovsUnsub();
+  
   try {
-    const [todaySnap, carriedSnap] = await Promise.all([
-      COL_TOPES_MOV.where('fecha','==',currentDate).get(),
-      COL_TOPES_MOV.where('fecha','<=',currentDate).limit(1000).get()
-    ]);
-    todayMovs = todaySnap.docs.map(d=>({id:d.id,...d.data()}));
+    const carriedSnap = await COL_TOPES_MOV.where('fecha','<=',currentDate).limit(1000).get();
     carriedMovs = carriedSnap.docs.map(d=>({id:d.id,...d.data()}));
-    todayMovs.sort((a,b)=>{
-      const ta = a.createdAt ? a.createdAt.toMillis() : 0;
-      const tb = b.createdAt ? b.createdAt.toMillis() : 0;
-      return tb - ta;
-    });
     carriedMovs.sort((a,b)=>{
       const fa = a.fecha || '';
       const fb = b.fecha || '';
@@ -389,8 +384,19 @@ async function loadDayData(){
       const tb = b.createdAt ? b.createdAt.toMillis() : 0;
       return ta - tb;
     });
-  } catch(e){ console.error('loadDayData error:', e); todayMovs = []; carriedMovs = []; }
-  renderDashboard();
+  } catch(e){ console.error('loadDayData carried error:', e); carriedMovs = []; }
+
+  todayMovsUnsub = COL_TOPES_MOV.where('fecha','==',currentDate).onSnapshot(snap=>{
+    todayMovs = snap.docs.map(d=>({id:d.id,...d.data()}));
+    todayMovs.sort((a,b)=>{
+      const ta = a.createdAt ? a.createdAt.toMillis() : 0;
+      const tb = b.createdAt ? b.createdAt.toMillis() : 0;
+      return tb - ta;
+    });
+    renderDashboard();
+  }, err=>{
+    console.error('Error en listener movimientos hoy:', err);
+  });
 }
 
 function getCarriedProgress(accountId, tope){
@@ -655,7 +661,7 @@ async function saveIngreso(){
     });
     toast('Ingreso registrado');
     closeAddModal();
-    await loadDayData();
+    // No llamamos loadDayData() porque el listener real-time actualiza automáticamente
   } catch(e){
     toast('Error al guardar');
     console.error(e);
@@ -669,7 +675,7 @@ async function undoLast(accountId, movId){
   try {
     await COL_TOPES_MOV.doc(movId).delete();
     toast('Ingreso eliminado');
-    await loadDayData();
+    // No llamamos loadDayData() porque el listener real-time actualiza automáticamente
   } catch(e){
     toast('Error al eliminar');
     console.error(e);
