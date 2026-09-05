@@ -371,11 +371,13 @@ function subscribeConfig(){
 let todayMovsUnsub = null;
 
 async function loadDayData(){
+  console.log('[loadDayData] Cargando datos del día:', currentDate);
   if(todayMovsUnsub) todayMovsUnsub();
   
   try {
     const carriedSnap = await COL_TOPES_MOV.where('fecha','<=',currentDate).limit(1000).get();
     carriedMovs = carriedSnap.docs.map(d=>({id:d.id,...d.data()}));
+    console.log('[loadDayData] Movimientos acumulados cargados:', carriedMovs.length);
     carriedMovs.sort((a,b)=>{
       const fa = a.fecha || '';
       const fb = b.fecha || '';
@@ -384,18 +386,21 @@ async function loadDayData(){
       const tb = b.createdAt ? b.createdAt.toMillis() : 0;
       return ta - tb;
     });
-  } catch(e){ console.error('loadDayData carried error:', e); carriedMovs = []; }
+  } catch(e){ console.error('[loadDayData] Error cargando carried:', e); carriedMovs = []; }
 
+  console.log('[loadDayData] Iniciando listener real-time para movimientos de hoy');
   todayMovsUnsub = COL_TOPES_MOV.where('fecha','==',currentDate).onSnapshot(snap=>{
+    console.log('[loadDayData] Snapshot recibido, documentos:', snap.docs.length);
     todayMovs = snap.docs.map(d=>({id:d.id,...d.data()}));
     todayMovs.sort((a,b)=>{
       const ta = a.createdAt ? a.createdAt.toMillis() : 0;
       const tb = b.createdAt ? b.createdAt.toMillis() : 0;
       return tb - ta;
     });
+    console.log('[loadDayData] Movimientos hoy ordenados:', todayMovs.length);
     renderDashboard();
   }, err=>{
-    console.error('Error en listener movimientos hoy:', err);
+    console.error('[loadDayData] Error en listener movimientos hoy:', err);
   });
 }
 
@@ -632,9 +637,12 @@ function showTopeAlert(acc, monto, ingresado, tope){
 }
 
 async function saveIngreso(){
+  console.log('[saveIngreso] Iniciando guardado de ingreso...');
   const accountId = $('addAccountId').value;
   const monto = parseMoneda($('addMonto').value);
   const desc = ($('addDesc').value||'').trim();
+  console.log('[saveIngreso] Datos:', { accountId, monto, desc });
+  
   if(!monto || monto <= 0){ toast('Ingresa un monto valido'); return; }
 
   const acc = allAccounts.find(a=>a.id===accountId);
@@ -642,14 +650,17 @@ async function saveIngreso(){
   const tope = Number(cfg.tope) || 0;
   const progress = getCarriedProgress(accountId, tope);
   const ingresado = progress.total;
+  console.log('[saveIngreso] Validación tope:', { tope, ingresado, total: ingresado + monto });
 
   if(tope > 0 && (ingresado + monto) > tope){
+    console.log('[saveIngreso] Tope excedido, mostrando alerta');
     showTopeAlert(acc || {name:'Cuenta',number:''}, monto, ingresado, tope);
     return;
   }
 
   try {
-    await COL_TOPES_MOV.add({
+    console.log('[saveIngreso] Enviando a Firestore...');
+    const docRef = await COL_TOPES_MOV.add({
       accountId,
       accountName: acc ? acc.name : '',
       accountNumber: acc ? acc.number : '',
@@ -659,12 +670,13 @@ async function saveIngreso(){
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       createdBy: usuario ? (usuario.nombreCompleto||usuario.usuario||'') : ''
     });
+    console.log('[saveIngreso] Documento guardado con ID:', docRef.id);
     toast('Ingreso registrado');
     closeAddModal();
     // No llamamos loadDayData() porque el listener real-time actualiza automáticamente
   } catch(e){
+    console.error('[saveIngreso] Error al guardar:', e);
     toast('Error al guardar');
-    console.error(e);
   }
 }
 
